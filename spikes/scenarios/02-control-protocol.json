@@ -1,0 +1,26 @@
+{
+  "description": "Mock server: permission prompt for a Write (held 1.5s to see if the file exists yet), set_model, apply_flag_settings (effort), get_context_usage, a message queued during a text reply, and an interrupt. Free.",
+  "env": { "ANTHROPIC_BASE_URL": "${MOCK_URL}", "ANTHROPIC_API_KEY": "sk-ant-mock-000", "CLAUDE_CONFIG_DIR": "${CFG}", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1" },
+  "args": ["--model", "claude-haiku-4-5", "--permission-prompt-tool", "stdio", "--include-partial-messages"],
+  "before": [{ "removeFile": "${WORK}/a.txt" }],
+  "watchFile": "${WORK}/a.txt",
+  "autoPermission": "allow",
+  "permissionDelayMs": 1500,
+  "steps": [
+    { "control": { "subtype": "initialize", "hooks": null }, "waitFor": { "type": "control_response" } },
+    { "user": "WRITE_FILE ${WORK}/a.txt", "waitFor": { "type": "result" } },
+    { "control": { "subtype": "set_model", "model": "sonnet" }, "waitFor": { "type": "control_response", "response.request_id": "$last" }, "lastOf": "set_model" },
+    { "control": { "subtype": "apply_flag_settings", "settings": { "effortLevel": "low" } }, "waitFor": { "type": "control_response", "response.request_id": "$last" }, "lastOf": "apply_flag_settings" },
+    { "user": "hello after changes", "waitFor": { "type": "result" } },
+    { "control": { "subtype": "get_context_usage" }, "waitFor": { "type": "control_response", "response.request_id": "$last" }, "lastOf": "get_context_usage" },
+    { "user": "SLOW one" },
+    { "sleep": 1500 },
+    { "user": "queued while working" },
+    { "waitFor": { "type": "result" }, "timeoutMs": 60000 },
+    { "waitFor": { "type": "result" }, "timeoutMs": 60000 },
+    { "user": "SLOW two" },
+    { "sleep": 2000 },
+    { "control": { "subtype": "interrupt" }, "waitFor": { "type": "result" }, "timeoutMs": 30000 },
+    { "sleep": 1000 }
+  ]
+}

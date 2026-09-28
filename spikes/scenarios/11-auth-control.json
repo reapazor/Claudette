@@ -1,0 +1,11 @@
+{
+  "description": "Sign-in through the control protocol, using an isolated signed-out config. claude_authenticate returns automaticUrl and manualUrl without opening a browser. Never completes sign-in. Free.",
+  "env": { "CLAUDE_CONFIG_DIR": "${AUTHCFG}" },
+  "unsetEnv": ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY"],
+  "args": ["--permission-prompt-tool", "stdio", "--no-session-persistence"],
+  "steps": [
+    { "control": { "subtype": "initialize", "hooks": null }, "waitFor": { "type": "control_response" } },
+    { "control": { "subtype": "claude_authenticate", "loginWithClaudeAi": true }, "waitFor": { "type": "control_response", "response.request_id": "$last" }, "lastOf": "claude_authenticate", "timeoutMs": 15000 },
+    { "sleep": 3000 }
+  ]
+}

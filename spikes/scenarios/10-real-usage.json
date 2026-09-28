@@ -1,0 +1,17 @@
+{
+  "description": "REAL ACCOUNT, USES TOKENS (one small Haiku call). Plan usage sources: get_usage before and after, /usage as a prompt, the rate_limit_event after a turn, and whether a status line command runs in headless mode. No transcript is saved.",
+  "env": {},
+  "unsetEnv": ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY"],
+  "args": [
+    "--model", "haiku", "--effort", "low", "--permission-prompt-tool", "stdio", "--no-session-persistence",
+    "--settings", "{\"statusLine\":{\"type\":\"command\",\"command\":\"node ${SPIKES}/dump-statusline.cjs\"}}"
+  ],
+  "steps": [
+    { "control": { "subtype": "initialize", "hooks": null }, "waitFor": { "type": "control_response" } },
+    { "control": { "subtype": "get_usage" }, "waitFor": { "type": "control_response", "response.request_id": "$last" }, "lastOf": "get_usage", "timeoutMs": 20000 },
+    { "user": "/usage", "waitFor": { "type": "result" }, "timeoutMs": 30000 },
+    { "user": "Reply with only: ok", "waitFor": { "type": "result" }, "timeoutMs": 60000 },
+    { "sleep": 1500 },
+    { "control": { "subtype": "get_usage" }, "waitFor": { "type": "control_response", "response.request_id": "$last" }, "lastOf": "get_usage", "timeoutMs": 20000 }
+  ]
+}

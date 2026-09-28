@@ -1,0 +1,10 @@
+{
+  "description": "Mock server: Read then Edit an existing file in Accept edits mode. The Edit's tool_use_result carries originalFile and structuredPatch. Free.",
+  "env": { "ANTHROPIC_BASE_URL": "${MOCK_URL}", "ANTHROPIC_API_KEY": "sk-ant-mock-000", "CLAUDE_CONFIG_DIR": "${CFG}", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1" },
+  "args": ["--model", "claude-haiku-4-5", "--permission-prompt-tool", "stdio", "--permission-mode", "acceptEdits"],
+  "before": [{ "writeFile": { "path": "${WORK}/e.txt", "content": "first line\nORIGINAL LINE\nlast line\n" } }],
+  "steps": [
+    { "control": { "subtype": "initialize", "hooks": null }, "waitFor": { "type": "control_response" } },
+    { "user": "EDIT_FILE ${WORK}/e.txt", "waitFor": { "type": "result" } }
+  ]
+}

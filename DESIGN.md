@@ -75,7 +75,7 @@ From top to bottom:
 - A tab is one Claude Code session, run as its own `claude` process.
 - Every tab has a **working folder**, picked when the tab is opened, usually from the recent folders list ([Opening a tab](#opening-a-tab)). Several tabs can use the same folder.
 - **Naming**
-  - By default a tab uses the name Claude Code gives the session, the same name it shows as the terminal tab title (see [session naming](#integration-with-claude-code)).
+  - By default a tab uses the AI-generated title Claude Code gives the session, the same kind of name it shows as the terminal tab title. In headless mode Claudette has to ask for it after the first prompt (see [session naming](#integration-with-claude-code)).
   - Until Claude Code has named it, the tab shows the folder name.
   - The user can rename a tab (double-click, or right-click → Rename). A user-chosen name is never overwritten by Claude Code. "Reset name" goes back to the automatic name.
 - **Status icon** on each tab:
@@ -236,7 +236,9 @@ If a turn runs for a long time, Claudette can ask Claude how it's going, so a ta
 - **Limits.**
   - At most one check-in per interval. The timers restart after Claude replies.
   - No check-in while the tab is waiting on a permission prompt or question. That is waiting on the user, not on Claude.
-  - Claude only sees the message between steps. If a single command is running (for example a long test run), the check-in is delivered when that command finishes. After two check-ins in a row get no reply, Claudette stops sending them for that turn. It marks the tab as possibly stuck and offers **Stop**.
+  - Claude only sees the message between steps. The spike confirmed that a message sent during a tool call arrives with that tool's result, inside the same turn. So if a single command is running (for example a long test run), the check-in is delivered when that command finishes.
+  - If Claude is in the middle of a long text-only reply, the check-in runs as the next turn instead.
+  - After two check-ins in a row get no reply, Claudette stops sending them for that turn. It marks the tab as possibly stuck and offers **Stop**.
 - **Settings.** Configured in Settings → Check-ins, including the message text and an option to also send an OS notification when a check-in is sent. Each tab can override them ([§14](#per-tab-overrides)).
 - Check-ins use a small amount of usage, which is counted in the tab's token stats like any other message.
 
@@ -282,24 +284,31 @@ An OS notification (optional) when:
 
 ### Data source
 
-| Data | Source | Notes |
-|---|---|---|
-| Session (5-hour) and weekly (7-day) % used, reset times | Claude Code's `rate_limits` data: `five_hour` and `seven_day`, each with `used_percentage` and `resets_at` | Documented as status line input. Only present for Pro/Max subscriptions, and only after the session's first API response. |
-| Limit warnings and rejections | `rate_limit_event` in the stream-json output: `status` (`allowed`, `allowed_warning`, `rejected`), `utilization`, `resetsAt` | Doesn't say which window it refers to. Useful as an immediate signal between samples. |
-| Model-specific weekly limits (e.g. Fable) | Output of `/usage` | No structured source. `/usage` can be sent to a session as a prompt and comes back as text, which Claudette would parse. Brittle, so this meter is optional in Settings. |
-| Tokens per turn and per tab | `usage` and `modelUsage` on each `result` message; per-call `usage` on `assistant` messages (de-duplicated by message ID) | Documented. |
-| Context window % | The `get_context_usage` control request, or last-turn input tokens ÷ `contextWindow` | Documented. |
+Plan limits come from three sources, tried in order. All three were confirmed by the milestone 1 spike (2026-09-28, Claude Code 2.1.284), and none of them uses tokens.
 
-> **Spike (milestone 1):** `rate_limits` is documented as input to status line scripts, and the status line is a feature of the interactive terminal UI. Confirm how a headless session gets the same data. Options, in order of preference:
-> 1. A structured field in stream-json output.
-> 2. A status line command set through `--settings` that forwards its JSON input to Claudette over a local pipe, if the status line runs in headless mode.
-> 3. `rate_limit_event.utilization` plus a periodic `/usage` probe from one hidden session.
->
-> Don't use the undocumented endpoint behind `/usage` directly.
+| # | Source | What it gives | Notes |
+|---|---|---|---|
+| 1 | The `get_usage` control request | A `rate_limits.limits` list with one entry per limit: `kind` (`session`, `weekly_all`, or `weekly_scoped` with `scope.model.display_name` such as "Fable"), plus `percent`, `severity` (`normal` … `critical`), `resets_at` and `is_active` | Everything the header needs, including model-specific weekly limits. **Undocumented:** the TypeScript SDK exposes it as `usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET`. |
+| 2 | `rate_limit_event` messages, sent after model calls | `rateLimitType`, `status`, and `unifiedWindows.five_hour` / `seven_day`, each with `utilization` (0–1) and `resetsAt` (epoch seconds) | Session and weekly only, with no model-specific limits. The documented type only lists `status`, `utilization` and `resetsAt`; the window fields are undocumented. |
+| 3 | `/usage` sent as a prompt | Text such as `Current week (Fable): 100% used · resets Sep 30, 6:59am` | A local command, so it's free and makes no model call. Parsing the text is brittle; last resort only. |
 
-**Sampling.** All tabs share one account, so plan usage is tracked app-wide, not per tab. Every tab reports samples; the newest one wins.
+The status line's `rate_limits` data can't be used: the spike confirmed that status line commands don't run in headless mode.
 
-**Idle.** When no tab is running, nothing reports new values. Claudette keeps showing the last value with an "as of" time, and still advances the reset countdown locally.
+Token and context data are documented:
+
+| Data | Source |
+|---|---|
+| Tokens per turn and per tab | `usage` and `modelUsage` on each `result` message; per-call `usage` on `assistant` messages (de-duplicated by message ID). `modelUsage` also includes `costUSD` and `contextWindow`. |
+| Context window % | The `get_context_usage` control request, or last-turn input tokens ÷ `contextWindow` |
+
+**Sampling.**
+
+- All tabs share one account, so plan usage is tracked app-wide, not per tab.
+- Claudette calls `get_usage` on launch, after each turn (at most once a minute), and every 5 minutes otherwise. It uses a hidden **utility session** for this ([§13](#integration-with-claude-code)), so the header stays current even when no tab is working.
+- `rate_limit_event` messages from any tab update the header immediately between polls.
+- If `get_usage` fails or changes shape, Claudette falls back to `rate_limit_event`, and hides the model-specific meters unless the `/usage` fallback is turned on in Settings.
+
+**Extra data.** `get_usage` also reports what's contributing to usage, such as the share of requests at long context and the top skills and subagents over the last day and week. That could become a panel later; it's not in v1.
 
 ### Usage history
 
@@ -356,15 +365,25 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 - **Permission mode picker** per tab: Default, Accept edits, Plan, Bypass permissions. Bypass needs a confirmation and gives the tab a visible warning style.
 - Claude Code's own allow/deny rules in settings still apply; Claudette only shows prompts that Claude Code actually asks for.
 
+**How it works** (confirmed by the spike):
+
+- **The request.** Claude Code sends a `can_use_tool` control request with `tool_name`, `input`, `description`, `tool_use_id` and `permission_suggestions`.
+- **The suggested rule.** The suggestions include ready-made rules, for example `addRules` with `Bash(touch c.txt)` for `localSettings`, or `setMode: acceptEdits`. The first `addRules` suggestion is the default rule shown on the **Always allow** card.
+- **Allow:** `{ "behavior": "allow", "updatedInput": <input> }`.
+- **Always allow** adds `updatedPermissions: [{ "type": "addRules", "rules": [{ "toolName": "Bash", "ruleContent": "touch:*" }], "behavior": "allow", "destination": "localSettings" }]`. Claude Code then writes `Bash(touch:*)` to `.claude/settings.local.json` itself, and later matching commands don't prompt.
+- **Deny:** `{ "behavior": "deny", "message": "<text>" }`.
+- **Read-only commands** such as `sleep` never prompt at all.
+
 ## 8. File Changes / Diff View
 
 - A collapsible side panel lists the files changed in the selected tab's session: added, modified or deleted, with `+/−` line counts. It is built from the session's Edit/Write tool calls.
 - Selecting a file opens a diff view (side-by-side or inline) with syntax highlighting.
 - Actions: open in external diff tool, open in external editor, reveal in Finder/Explorer, copy path.
 - If the folder is a git repo, a toggle switches to **working tree vs HEAD**. This also shows changes made by Bash commands or by the user.
-- **Before content.** The first time Claude is about to change a file in a session, Claudette saves a copy of it. It does this when the Edit/Write tool call arrives, before the tool runs. That copy is the "before" side of the diff, so diffs are exact even outside a git repo.
-
-> **Spike:** Confirm that the tool call always reaches Claudette before the file is written, including in Accept edits mode where there's no permission prompt. If it doesn't, use a `PreToolUse` hook or Claude Code's file checkpoints as the source instead.
+- **Before content.** Claude Code reports it. The result of every Edit and Write tool call (the `tool_use_result` field on the `user` message that carries the tool result) includes:
+  - `originalFile`: the file's full content before the change, or `null` for a new file.
+  - `structuredPatch`: the change as diff hunks.
+- The "before" side of a file's diff is the `originalFile` from Claude's first change to that file in the session, so diffs are exact even outside a git repo. The spike confirmed this in Accept edits mode too. Claudette never has to snapshot files itself, so there's no race with the tool writing the file.
 
 ### External diff tool
 
@@ -441,7 +460,17 @@ Claude Code's credentials and settings are never copied.
 
 1. **Find the project.** Folder paths differ between machines (`D:\Repos\api` vs `/Users/me/src/api`), so the session record stores a project identity: the git remote URL, the branch, and the path inside the repo. Claudette looks for a matching folder among recent folders. If it can't find one, it asks the user to pick the folder and remembers the answer for that machine.
 2. **Check the code.** The library moves the conversation, not the code. If the branch or commit on this machine differs from what the other machine had, or the other machine had uncommitted changes, Claudette warns: *"This session was last used on DESKTOP-01 on branch `feature/auth` at `a1b2c3d`. This folder is on `main`. Claude's earlier file changes may not be here."* The user can continue anyway or cancel and sync the code first (push/pull).
-3. **Resume.** Claudette resumes from the library copy with `claude --resume <transcript-path>`, which Claude Code supports for a transcript at any absolute path.
+3. **Resume.**
+   - Claudette copies the library's `<session-id>.jsonl` to a local working folder (`<app data>/sessions/`) and resumes with `claude --resume <local path>`.
+   - After each turn, it copies the file back to the library.
+
+**How resuming from a file behaves** (confirmed by the spike):
+
+- `--resume <path>` loads the full history and keeps the same session ID.
+- Claude Code then writes the continued transcript, complete and not just the new turns, to `<session-id>.jsonl` in the **same folder** as the file it was given.
+- Because the local working copy already has that name, Claude Code keeps writing to it. Resuming straight from the library folder would make Claude Code write live into the synced folder in the middle of a turn, which the library is designed to avoid.
+
+> **Not yet tested:** resuming on macOS a transcript recorded on Windows, and the reverse. Transcripts store absolute paths (`cwd`, file paths in tool calls), so check this once a Mac is available.
 
 **One machine at a time.**
 
@@ -453,8 +482,6 @@ Claude Code's credentials and settings are never copied.
 - If the sync client creates conflict copies (for example `session (1).jsonl`), Claudette shows them in History as separate, forked entries. It never merges them.
 
 **Privacy.** Transcripts contain code, command output and anything else Claude read in the project. When the user picks a library folder inside a known cloud-sync location, Claudette says so and asks them to confirm.
-
-> **Spike:** When a session is resumed with `--resume <transcript-path>`, find out where Claude Code writes the new turns: back to that file, or to local project storage. If it writes locally, Claudette copies the updated local transcript back to the library after each turn, as it does for new sessions. Also confirm that transcripts recorded on one OS resume cleanly on another.
 
 **Rejected alternative.** Pointing Claude Code's whole config folder at the cloud drive (`CLAUDE_CONFIG_DIR`) would also sync credentials and settings, and have several machines writing the same live files at once. The library copies only transcripts, only between turns.
 
@@ -478,7 +505,10 @@ Claude Code keeps its own credentials. Claudette never reads or stores them; it 
 
 ### Detecting
 
-- **On launch**, before any tab starts, Claudette runs `claude auth status`. It prints JSON and exits with 0 when signed in and 1 when not.
+- **On launch**, before any tab starts, Claudette runs `claude auth status`. It prints JSON and exits with 0 when signed in and 1 when not. The spike confirmed these fields:
+  - `loggedIn` and `authMethod` (`claude.ai`, `none`, …).
+  - `email`, `orgName` and `subscriptionType`.
+  - `configDirectory`, and `projectsDirectory`, which is where Claude Code keeps its transcripts. History uses it.
 - **While running**, any of these from a session means "needs sign-in":
   - An `assistant` message with `error: "authentication_failed"`.
   - An `auth_status` message.
@@ -487,17 +517,21 @@ Claude Code keeps its own credentials. Claudette never reads or stores them; it 
 ### Signing in
 
 - At launch, Claudette shows a sign-in screen instead of the tabs. In the middle of a session, it shows a banner across all tabs: *"Claude Code needs you to sign in."* If Claudette isn't focused, it also sends an OS notification.
-- **Sign in** runs `claude auth login` as a child process, which opens the default browser to the sign-in page.
+- **Sign in** (main flow) uses the utility session's control protocol, as the Agent SDK does:
+  1. Claudette sends `claude_authenticate` with `loginWithClaudeAi: true`. Claude Code replies with two URLs and doesn't open a browser itself:
+     - `automaticUrl` redirects back to a local port Claude Code is listening on, so sign-in finishes without copying anything.
+     - `manualUrl` redirects to a page that shows a code to copy.
+  2. Claudette opens `automaticUrl` in the default browser and sends `claude_oauth_wait_for_completion`, which returns when sign-in finishes.
+  3. If that doesn't work (for example a browser on another device, or a firewall blocking the local port), the user can switch to **Enter a code instead**. Claudette opens `manualUrl`, shows a code field, and sends the code with `claude_oauth_callback`.
+- These control requests are **undocumented** (they exist in the TypeScript SDK but not its docs). The **fallback** is the documented `claude auth login`. The spike ran it with no terminal attached: it opened the browser itself and printed a fallback URL, but used the copy-a-code flow. With this fallback, the code field writes the code to the command's input (still to be confirmed when building it).
 - While it waits, Claudette shows *"Finish signing in in your browser"* and stays responsive. The screen has:
-  - **Open browser again**, which reopens the sign-in URL from the command's output, in case the browser didn't open or the tab was closed.
-  - A code field, shown only if the flow asks for a pasted code. Claudette writes the code to the command's input.
-  - **Cancel**, which stops the command.
-  - **More options**: sign in with SSO (`--sso`) or with an Anthropic Console account for API billing (`--console`).
-- When the command succeeds, Claudette runs `claude auth status` again and shows the account. Any tab that failed is restarted with `--resume`. Messages sent while signed out stay queued and are delivered once sign-in completes.
+  - **Open browser again**, which reopens the same URL, in case the browser didn't open or the tab was closed.
+  - **Enter a code instead**, as described above.
+  - **Cancel**.
+  - **More options**: sign in with an Anthropic Console account for API billing (`loginWithClaudeAi: false`, or `claude auth login --console`), or with SSO (`claude auth login --sso`).
+- When sign-in succeeds, Claudette runs `claude auth status` again and shows the account. Any tab that failed is restarted with `--resume`. Messages sent while signed out stay queued and are delivered once sign-in completes.
 - If sign-in fails (timed out, cancelled, organization not allowed), Claudette shows the command's message and a **Try again** button.
 - **Account menu** (in the header): the signed-in email and plan from `claude auth status`, and **Sign out**, which runs `claude auth logout`. Signing out asks for confirmation first, because every tab will stop working.
-
-> **Spike (milestone 1):** Confirm how `claude auth login` behaves with no terminal attached: whether it opens the browser itself, what it prints (the URL and any paste-a-code prompt), and whether it needs a pseudo-terminal. If it needs a terminal, run it inside a small embedded terminal view.
 
 ## 12. Claude Code Updates
 
@@ -575,50 +609,90 @@ Last update attempt: success → 2.1.284 (2026-09-28)
 
 There is no official .NET Agent SDK; the official ones are Python and TypeScript. Claudette drives Claude Code the same way those SDKs do: one long-running `claude` process per tab, in headless streaming mode, exchanging JSON lines over stdin and stdout. It doesn't pass `--bare`, so the user's `CLAUDE.md`, settings, hooks, MCP servers, skills and plugins load the same as in the terminal.
 
-Launch, with the tab's folder as the working directory:
+Everything in this section was confirmed by the milestone 1 spike on 2026-09-28 against Claude Code 2.1.284, unless marked otherwise.
+
+**Launch**, with the tab's folder as the working directory:
 
 ```
 claude -p --input-format stream-json --output-format stream-json --verbose
-          --include-partial-messages
+          --include-partial-messages --permission-prompt-tool stdio
           --model <model> --effort <level> --permission-mode <mode>
-          [--resume <session-id>]
+          [--resume <session-id or transcript path>]
 ```
 
-It also passes whatever flags the SDKs use to send permission prompts back to the host over stdio; take these from the SDK source.
+- `--permission-prompt-tool stdio` sends permission prompts to Claudette as control requests. The TypeScript SDK passes this flag when a `canUseTool` callback is set.
+- **Clean environment.** Claudette removes inherited `CLAUDECODE`, `CLAUDE_CODE_*` and `CLAUDE_AGENT_SDK_*` variables before launching. If Claudette was started from a terminal inside Claude Code, those variables make `claude` behave as a child session. In the spike this ignored the API key and reported "Not logged in".
 
-| Need | How (Agent SDK equivalent) | Documented |
+**Startup.** The first thing Claudette sends is an `initialize` control request. The reply contains:
+
+- `models`: each with `value`, `resolvedModel`, `displayName`, `description`, `supportsEffort` and `supportedEffortLevels`.
+- `commands`: slash commands, for autocomplete.
+- `account`: `email`, `organization`, `subscriptionType` and `tokenSource`.
+- Also `current_permission_mode`, `agents`, output styles and `pid`.
+
+The `system/init` message that follows gives `session_id`, `model`, `permissionMode`, `claude_code_version` and `capabilities`. In 2.1.284 the capabilities were `interrupt_receipt_v1`, `interrupt_cancel_queued_v1`, `msg_lifecycle_v1`, `mcp_read_resource_v1` and `mcp_tool_ui_meta_v1`.
+
+**Wire format.** Every control message is one JSON line:
+
+```
+→ {"type":"control_request","request_id":"req_1","request":{"subtype":"interrupt"}}
+← {"type":"control_response","response":{"subtype":"success","request_id":"req_1","response":{"still_queued":[]}}}
+```
+
+- Errors come back as `"subtype":"error"` with an `error` string.
+- Claude Code sends its own control requests the same way (for example `can_use_tool`), and Claudette answers with a `control_response` carrying the same `request_id`.
+- The wire names come from the Agent SDK sources. The SDK docs describe the matching methods but not the wire format.
+
+| Need | How | Documented |
 |---|---|---|
-| Send a message, with images | A `user` message as one JSON line on stdin. Messages sent while Claude is working are queued. | Yes |
-| Receive output | JSON lines on stdout: `system/init`, `assistant`, `user` (tool results), `stream_event` (partial text), `result`, `rate_limit_event`, `auth_status`, `permission_denied`, `api_retry`, `conversation_reset`, task and subagent events | Yes |
-| Stop the current turn | `interrupt()` control request. SIGINT as a fallback. Never SIGTERM: it leaves the turn unfinished with no result. | Yes |
-| Permission prompts | Claude Code sends a control request; Claudette replies allow, allow with a rule, or deny with a message (`canUseTool`). Prompts still pending after a reconnect are listed in the `initialize` response. | Behavior yes, wire format no |
-| Change model | `setModel()`: applied in place, even mid-turn; the conversation is kept | Yes |
-| Change effort | `applyFlagSettings({ effortLevel })`: applies from the next turn | Yes |
-| Change permission mode | `setPermissionMode()` | Yes |
-| Model list and effort levels | `supportedModels()`: `ModelInfo.supportedEffortLevels` | Yes |
-| Slash commands for autocomplete | `supportedCommands()`, refreshed by `commands_changed` messages | Yes |
-| Context window usage | `getContextUsage()` | Yes |
-| Account and plan | `accountInfo()`, or `claude auth status` | Yes |
-| Resume | `--resume <session-id>`; the ID is on `system/init` and `result` | Yes |
-| Feature detection | The `capabilities` array on `system/init` (for example `interrupt_receipt_v1`). Check this instead of comparing version numbers. | Yes |
+| Send a message, with images | A `user` message as one JSON line on stdin. See "Messages sent while Claude is working" below. | Yes |
+| Receive output | JSON lines on stdout: `system/init`, `system/status`, `assistant`, `user` (tool results, with `tool_use_result`), `stream_event` (partial text), `result`, `rate_limit_event`, `auth_status`, `permission_denied`, `api_retry`, `conversation_reset`, `task_started` / `task_notification`, `thinking_tokens` | Yes |
+| Stop the current turn | `interrupt`. The reply lists `still_queued` messages; the turn ends with a `result` of `error_during_execution` / `aborted_streaming`. SIGINT is a fallback. Never SIGTERM: it leaves the turn unfinished with no result. | Yes |
+| Permission prompts | Incoming `can_use_tool`; reply allow, allow with `updatedPermissions`, or deny with a message ([§7](#7-permission-prompts)) | Behavior yes, wire format no |
+| Change model | `set_model` with `model`. Applied in place, even mid-turn, and the conversation is kept. Claude Code also emits a `user` message containing `<local-command-stdout>Set model to …</local-command-stdout>`, which Claudette shows as a small system note. | Yes |
+| Change effort | `apply_flag_settings` with `settings: { effortLevel }`. Applies from the next request, which carries `output_config.effort`. | Yes |
+| Change permission mode | `set_permission_mode` with `mode`; also reported as a `system/status` message | Yes |
+| Context window usage | `get_context_usage`. Claude Code calls the API's token-counting endpoint for this, which costs nothing. | Yes |
+| Stop a background task | `stop_task` with `task_id` | Yes |
+| Plan usage limits | `get_usage` ([§6](#data-source)) | **No** (marked experimental) |
+| Sign-in | `claude_authenticate`, `claude_oauth_wait_for_completion`, `claude_oauth_callback` ([§11](#signing-in)) | **No** |
+| Session title | `generate_session_title`, `rename_session` (below) | **No** |
+| Resume | `--resume <session-id>`, or `--resume <path to a .jsonl>` ([§9](#session-library-sync-across-machines)) | Yes |
+| Feature detection | The `capabilities` array on `system/init`. Check this instead of comparing version numbers. | Yes |
 
-**Protocol risk.** The SDK docs describe the behavior and every message type, but not the wire format of control messages (a `control_request` / `control_response` pair matched by `request_id`). To contain that risk:
+Every **No** row has a fallback, listed in its section, and is marked `undocumented` in `compat/surface.yaml` ([§16](#16-tracking-claude-code-changes)).
 
-- Use the open-source Python Agent SDK as the reference for the wire format.
-- Keep all protocol code behind one interface (`IClaudeTransport`). Test it against recorded protocol traffic from real sessions.
-- Feature-detect with `capabilities`, and enforce a minimum Claude Code version ([§12](#12-claude-code-updates)).
-- **Fallback:** if the wire protocol changes too often, swap in a small Node sidecar that runs the official TypeScript Agent SDK and relays to Claudette over a local pipe. This means shipping Node.
+**Messages sent while Claude is working.**
+
+- **During a tool call:** the message is delivered inside the running turn, together with the next tool result, as a note that says *"The user sent a new message while you were working"*. This is what check-ins rely on ([§5](#check-ins-on-long-turns)).
+- **During a text-only reply:** there's no tool boundary, so the message waits and runs as the next turn.
+
+**Tool results.** The `user` message that carries a tool result also has a `tool_use_result` field with structured details:
+
+- Edit and Write: `originalFile`, `structuredPatch`, `oldString` / `newString`.
+- Bash: `stdout`, `stderr`, `interrupted`.
+
+The conversation view and diff view use these instead of parsing the tool result text.
 
 **Session naming.**
 
-- Claude Code names a session with an AI-generated title from the first prompt, or with a name set by `--name` or `/rename`.
-- The title isn't pushed on the stream-json output. It's saved in the session transcript (the SDK's session list returns it as `summary` / `customTitle`) and passed to hooks as `session_title`. Claudette reads it after each turn until the tab has a title.
-- A rename in Claudette is stored by Claudette. Optionally (a setting), Claudette also sends it to Claude Code with `/rename`, so `claude --resume <name>` in a terminal sees the same name.
+- Headless sessions don't get an AI-generated title on their own.
+- After a tab's first prompt, Claudette sends `generate_session_title` with `description` set to the prompt and `persist: true`. The reply's `title` becomes the tab name. This is one small model call per new session.
+- A rename in Claudette is stored by Claudette. Optionally (a setting), Claudette also sends `rename_session` with `title` and `source: "host"`, so `claude --resume <name>` in a terminal sees the same name.
+- Both are saved in the transcript, as `{"type":"ai-title","aiTitle":…}` and `{"type":"custom-title","customTitle":…}` entries. History reads them from there, and the last entry of each type wins.
+- **Fallback** if these requests stop working: name the tab from the first line of the first prompt.
 - A `conversation_reset` message (from `/clear`) clears the view and drops the cached title.
 
-**Transcripts.** Sessions are stored in `~/.claude/projects/<project>/<session-id>.jsonl`. The format is internal and changes between versions, so `TranscriptReader` is kept separate, ignores entries it doesn't recognize, and is tested against real files from several Claude Code versions.
+**Utility session.** Claudette keeps one hidden `claude` process with `--no-session-persistence` that never sends a prompt. It serves the requests that don't belong to a tab: `initialize` (model list and account), `get_usage`, and sign-in. It's started on launch and restarted if it exits.
 
-> **Spikes (milestone 1):** Confirm the control message wire format (interrupt, permission prompts, set model, apply flag settings) against the Python SDK. Find the cheapest reliable source of the session title. Also cover the usage data spike in [§6](#data-source) and the sign-in spike in [§11](#signing-in).
+**Transcripts.** Sessions are stored as `<session-id>.jsonl` in the `projectsDirectory` reported by `claude auth status` (normally `~/.claude/projects/<project>/`). The format is internal and changes between versions, so `TranscriptReader` is kept separate, ignores entries it doesn't recognize, and is tested against real files from several Claude Code versions.
+
+**Protocol risk.** To contain it:
+
+- Keep all protocol code behind one interface (`IClaudeTransport`), and test it against recorded protocol traffic.
+- Feature-detect with `capabilities`, and enforce a minimum Claude Code version ([§12](#12-claude-code-updates)).
+- Watch for changes daily ([§16](#16-tracking-claude-code-changes)).
+- **Fallback:** if the wire protocol changes too often, swap in a small Node sidecar that runs the official TypeScript Agent SDK and relays to Claudette over a local pipe. This means shipping Node.
 
 ## 14. Settings
 
@@ -645,7 +719,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Diff tool | Built-in, a preset or a custom command, with **Test**. See [§8](#external-diff-tool). |
 | Notifications | On/off for each type in [§10](#10-notifications). Dock/taskbar badge on/off. |
 | Keyboard | List of shortcuts, each one rebindable. |
-| Advanced | Protocol logging and **Open log folder**. Extra command-line arguments passed to `claude`. Minimum supported Claude Code version (read-only). |
+| Advanced | Protocol logging and **Open log folder**. **Diagnostics** page ([§16](#staying-tolerant-at-runtime)). Extra command-line arguments passed to `claude`. Minimum supported Claude Code version (read-only). |
 
 ### Per-tab overrides
 
@@ -667,16 +741,204 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 - The first time sync is turned on and the library already has settings from another machine, Claudette asks: **Use synced settings** or **Replace them with this machine's**.
 - Turning sync off keeps the current values on this machine and stops syncing.
 
-## 15. Milestones
+## 15. Testing
 
-1. **Skeleton.** Avalonia app, Claude Code detection and version check, sign-in, one tab: launch `claude`, send a prompt, stream the reply as Markdown, Stop. Includes the spikes in [§6](#data-source), [§11](#signing-in) and [§13](#integration-with-claude-code).
+The whole test suite runs without an Anthropic account and without using any tokens. Only a small, opt-in live suite talks to the real service.
+
+### Design rules that make this possible
+
+These apply from milestone 1:
+
+- `ClaudeSession` talks to Claude Code only through `IClaudeTransport`, never directly to a process, so tests can swap in a fake.
+- Processes are started through `IProcessLauncher`, so tests can check the exact command line and environment, and fake the process.
+- All time-based code (burn rate, check-ins, leases, usage retention, update checks, sampling) uses .NET's `TimeProvider`. Tests move the clock forward with `FakeTimeProvider` instead of waiting.
+- File locations (app data, the session library, Claude Code's config folder) are injected, so tests use temporary folders.
+
+### Test layers
+
+| Layer | What it covers | How | Tokens |
+|---|---|---|---|
+| Unit | Pure logic: burn rate and projection, check-in timers, usage retention, settings sync merging, suffix composition, diff command templates, recent folders, tab grouping, project identity matching, lease files | Plain unit tests with a fake clock and temporary folders | None |
+| Protocol replay | Turning Claude Code's output into events, and what Claudette writes back: messages, interrupts, permission replies, model and effort changes | Recorded stream-json traffic from real sessions, checked in as fixture files and replayed through a fake transport | None |
+| Fake CLI | Process handling: launch flags, stdin/stdout, interrupts, crashes, hangs, sign-in failures, `--version` and `doctor` output, child processes for the process monitor | A small `fake-claude` test program that speaks the stream-json protocol and follows a scenario file. Claudette points at it through the "path to `claude`" setting. | None |
+| Real CLI, fake model | End to end against the real `claude` binary: real tools, permission prompts, file edits, transcripts and resume | A local mock server that implements the Anthropic Messages API and returns scripted replies. `claude` points at it with `ANTHROPIC_BASE_URL` and a dummy `ANTHROPIC_API_KEY`. | None |
+| UI | View models, and views: tab strip, composer, chips, permission cards, meters | View-model tests with no UI; Avalonia.Headless for rendering and input; snapshot tests with Verify | None |
+| Live (opt-in) | What only the real service can confirm: `rate_limits` data, sign-in, real model output | Tests tagged `Live`, excluded by default and run manually before a release | A few cents |
+
+### Protocol fixtures
+
+- Recorded from real sessions by a **record** mode: the Live suite, or a developer session with protocol logging turned on.
+- Before they're checked in, they're cleaned of paths, emails, account details and session IDs.
+- Stored under `tests/fixtures/protocol/<claude-code-version>/`.
+- Scenarios covered:
+  - A simple reply, streaming text and thinking.
+  - Tool calls and subagents.
+  - A permission prompt that is allowed, and one that is denied.
+  - An interrupt.
+  - `rate_limit_event` and an authentication failure.
+  - `/clear` (conversation reset), compaction and API errors.
+- When a new Claude Code version comes out, recording the same scenarios again and diffing them against the old fixtures shows protocol changes before users hit them.
+
+### Fake CLI (`fake-claude`)
+
+- Each scenario file lists what the fake prints and what it expects to receive. It also controls timing (delays, and long silences to trigger check-ins), exit codes, crashes, and child processes to spawn.
+- It also answers the other commands Claudette runs: `--version`, `auth status`, `auth login` (with a fake browser step), `doctor` and `update`. That covers sign-in and update handling without the real CLI.
+
+### Real CLI against a fake model
+
+- The mock server implements the API format Claude Code expects from an LLM gateway, including streaming.
+- Each test scripts the model's side. For example: "reply with a `tool_use` for Edit on `a.txt`, then a short summary."
+- Claude Code then runs the real tool against a temporary git repo, so permission prompts, diffs, "before" snapshots, transcripts and `--resume` are all tested for real.
+- Every test runs `claude` with:
+  - `CLAUDE_CONFIG_DIR` set to a temporary folder, so it never touches the user's `~/.claude` settings, sessions or credentials.
+  - `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, so there's no auto-update or telemetry.
+- API-key mode doesn't produce subscription `rate_limits` data. The usage meters are covered by protocol fixtures instead.
+- These tests need Claude Code installed, so they're tagged `RealCli`. CI installs Claude Code before running them.
+
+**Confirmed by the spike** (Claude Code 2.1.284): the real `claude` runs complete sessions against a local mock server with a dummy key. It calls three endpoints:
+
+- `HEAD /api/hello`, a connectivity check.
+- `POST /v1/messages?beta=true`, streaming.
+- `POST /v1/messages/count_tokens?beta=true`, for context usage.
+
+Tool calls, permission prompts, file edits, interrupts, model and effort changes, titles and resume all worked with no tokens used. Two things to note:
+
+- The test runner must launch `claude` with a clean environment, the same as the app ([§13](#integration-with-claude-code)).
+- Each request carries the settings in effect, such as `model` and `output_config.effort`, so tests can check that those changes reached the API.
+
+The spike's Node scripts (a mock Messages API, a stream-json driver and the scenarios that were run) are kept in [`spikes/`](spikes/README.md). They're a working reference for the protocol until the .NET harness replaces them.
+
+### Live suite
+
+- A handful of tests using the cheapest settings: Haiku, low effort, one-line prompts.
+- Runs with a separate API key that has a spend limit, not someone's personal subscription.
+- Also used to record new protocol fixtures.
+
+### Tools and CI
+
+- xUnit v3, Avalonia.Headless.XUnit, Verify (snapshot testing) and Microsoft.Extensions.TimeProvider.Testing (`FakeTimeProvider`).
+- GitHub Actions runs everything except `Live` on Windows, macOS and Linux for every push and pull request.
+
+## 16. Tracking Claude Code Changes
+
+Claude Code ships new versions often. Claudette depends on its command-line flags, output messages, control protocol, settings, file locations and command output, and some of these aren't documented. This section is the plan for catching changes before users do.
+
+### The compatibility surface list
+
+`compat/surface.yaml` in the repo lists every Claude Code item Claudette relies on, one entry each. Examples: `--input-format stream-json`, `rate_limit_event.rate_limit_info.utilization`, the exit codes of `claude auth status`, the `~/.claude/projects/` layout, the "Config install method" line of `claude doctor`.
+
+Each entry records:
+
+- The exact identifier, used to match against diffs.
+- Where Claudette uses it (project and class).
+- The doc page that describes it, or **undocumented**.
+- The first Claude Code version that has it.
+- The test that covers it.
+- For undocumented items, the fallback if it breaks.
+
+**Rule:** any code that starts using a new Claude Code item adds an entry in the same pull request. Code review checks this.
+
+### What's watched
+
+| Source | What it tells us | Where |
+|---|---|---|
+| New releases | A new version exists | npm release tags for `@anthropic-ai/claude-code` (`latest` and `stable`) |
+| Changelog | What changed, in words | `CHANGELOG.md` in the `anthropics/claude-code` GitHub repo |
+| Agent SDK types | The exact shape of every message, option and control method | `sdk.d.ts` in the `@anthropic-ai/claude-agent-sdk` npm package, compared between versions |
+| Python Agent SDK source | The wire format of control messages, which isn't documented | The `anthropics/claude-agent-sdk-python` GitHub repo |
+| Docs pages | Documented behavior | The Markdown version of each page Claudette depends on (add `.md` to the URL); `llms.txt` lists every page |
+| The CLI itself | Flags, and actual output | `claude --help` and subcommand help, plus protocol output recorded against the mock model server ([§15](#real-cli-against-a-fake-model)) |
+
+### Daily compatibility check
+
+A scheduled GitHub Action runs once a day. When a new Claude Code version appears on either npm release tag, it:
+
+1. **Snapshots** the new version's changelog entry, SDK type definitions, the docs pages listed in the surface file, and `claude --help` output into `compat/snapshots/<version>/`.
+2. **Diffs** each one against the previous version's snapshot.
+3. **Matches** the diffs and changelog lines against the identifiers in `compat/surface.yaml`, so changes to things Claudette uses are listed first.
+4. **Tests** by installing that version and running the free test suite against it, including the real-CLI tests with the mock model. It also records the protocol output for the fixture scenarios again (this is free with the mock model) and diffs it against the previous version's.
+5. **Reports** by opening a GitHub issue, *"Claude Code 2.1.285 compatibility report"*, labeled `compat`. The issue shows test results first, then matched changes, then the full diffs in collapsed sections. If nothing matched and every test passed, the issue is closed automatically and kept as a record.
+
+For example, the 2.1.284 changelog says the status line's `rate_limits.spend_limit` gained `used_usd`, `limit_usd` and `period`. `rate_limits` is in the surface list, so that line would be flagged.
+
+### Tested versions
+
+- Claudette records two versions:
+  - `MinimumClaudeCodeVersion`: the hard floor from [§12](#applying-it).
+  - `LastTestedClaudeCodeVersion`: updated each time a compatibility report is handled.
+- A version newer than the last tested one is allowed. Settings → Claude Code shows a quiet note, *"Newer than the last tested version (2.1.284)"*, and nothing more intrusive.
+
+### Staying tolerant at runtime
+
+Claudette has to keep working when Claude Code adds things it doesn't know about yet:
+
+- Unknown fields are ignored. Unknown message types are skipped and counted. An unknown enum value (for example a new error category) is handled like `unknown`.
+- A line that fails to parse never ends a session. It's logged, and Claudette moves on.
+- With protocol logging on, a skipped message appears in the conversation as a collapsed *"Unsupported message from Claude Code"* row that shows the raw JSON.
+- Features are detected with the `capabilities` list from `system/init`, not by comparing version numbers.
+- Settings → Advanced has a **Diagnostics** page. It shows the Claude Code version and counts of unknown messages and fields seen, and has **Copy diagnostics** for bug reports.
+
+### Handling a report
+
+1. Read the matched changes and any failing tests. To see exactly what changed in the protocol, re-run the relevant scenario in [`spikes/`](spikes/README.md).
+2. Update the code, `compat/surface.yaml` and the protocol fixtures.
+3. Bump `LastTestedClaudeCodeVersion`.
+4. If the change breaks a released Claudette version, ship a patch release. Raise `MinimumClaudeCodeVersion` only if older Claude Code versions can no longer be supported.
+
+## 17. Milestones
+
+1. **Skeleton.** Avalonia app, Claude Code detection and version check, sign-in, one tab: launch `claude`, send a prompt, stream the reply as Markdown, Stop. Test harness: fake transport, `fake-claude`, mock model server, first protocol fixtures and CI. Start `compat/surface.yaml` and the daily compatibility check. Also includes the utility session, and turning the spike scripts in [`spikes/`](spikes/README.md) into the .NET test harness. The spikes themselves were done on 2026-09-28; their findings are recorded in the sections they affected.
 2. **Tool rendering.** Tool call cards, Edit diffs, Bash output, thinking, subagents, to-do list.
 3. **Tabs & settings.** Multiple sessions, folder per tab, automatic and user naming, status icons, model and effort indicators and pickers, per-tab token stats, pinned tabs and restore on launch, Settings window and per-tab overrides, check-ins, quick suffixes.
 4. **Permissions.** Inline prompts, permission mode picker.
 5. **Usage.** Header meters, local sample store, burn trendline and projection, Usage panel, alerts.
 6. **History, sync & diffs.** Session history and resume, session library and cross-machine restore, changed files panel, built-in diff view, external diff tools, process monitor.
 7. **Polish & ship.** Notifications, Claude Code update handling, keyboard shortcuts, platform chrome, packaging and signing for Windows and macOS.
+8. **Later.** The features in [§18](#18-future-features), in an order decided after v1 ships.
 
-## 16. Open Questions
+## 18. Future Features
+
+Planned for after v1. Each needs a fuller design before it's built.
+
+### Perforce ticket handling
+
+**The problem.**
+
+- In a Perforce workspace, Claude runs `p4` commands through Bash.
+- Perforce login tickets expire (often after 12 hours). After that, every `p4` command fails with *"Your session has expired, please login again."*
+- Claude can't log in by itself, because `p4 login` asks for a password, so a long-running tab gets stuck.
+
+**The goal.** Claudette keeps each Perforce tab logged in, so Claude can query and use Perforce without stopping. Claude never sees the password.
+
+**Detecting a Perforce workspace.**
+
+- When a tab opens, Claudette runs `p4 -ztag info` in the tab's folder. Perforce resolves the server, user and workspace from its usual sources (`P4CONFIG` files, `p4 set`, `P4ENVIRO`, environment variables), the same way Claude's own `p4` commands will.
+- If it is a Perforce workspace:
+  - The tab's tooltip shows the server, user and ticket status, for example *"Perforce: matt @ ssl:perforce:1666, ticket expires in 11h"*.
+  - Claudette adds a short note to the session with `--append-system-prompt`: this folder is a Perforce workspace, with its server, user and workspace name, and Claudette keeps the login fresh. That way Claude knows to use `p4` rather than assuming git.
+
+**Keeping the ticket fresh.**
+
+- **Ahead of time.** `p4 login -s` reports whether the ticket is valid and when it expires. Claudette checks when a tab starts, before each turn in a Perforce tab, and every 15 minutes. When the ticket has expired, or less than 30 minutes are left (configurable), Claudette logs in again.
+- **Just in time.** Claudette registers a `PreToolUse` hook for Bash commands that start with `p4`. It does this through the hooks field of the `initialize` request, the same way the Agent SDK registers hook callbacks, and Claude Code calls back with a `hook_callback` control request. Before the command runs, Claudette makes sure the ticket is valid. The hook never changes the command; it only lets it continue.
+- **Recovery.** If a `p4` command still fails with an expired-session or "P4PASSWD invalid or unset" error (visible in the Bash `tool_use_result`), Claudette logs in again. It then sends a mid-turn message: *"Perforce login renewed. Retry the last p4 command."*
+
+**Logging in.**
+
+- Claudette runs `p4 -p <server> -u <user> login` and writes the password to the command's standard input. The password never goes on the command line, where other processes and the process monitor could see it.
+- Optional setting: request a ticket valid on all hosts (`login -a`).
+- Perforce writes the ticket to its own tickets file (`P4TICKETS`) as usual; Claudette doesn't touch that file.
+
+**Where the password comes from** (Settings → Perforce → Password source):
+
+1. **Stored by Claudette** (recommended): saved in the OS credential store (Windows Credential Manager, macOS Keychain, Secret Service on Linux) under the server and user. It's never written to `settings.json`, never synced ([§14](#settings-sync-optional)), and never logged.
+2. **Perforce's own configuration**: `P4PASSWD` from the `P4CONFIG` file, `p4 set` or the environment. Claudette only reads it. Settings notes that these sources store the password in plain text.
+3. **Ask each time**: when a login is needed, Claudette sends a notification and shows a password prompt, and stores nothing. The `p4` command waits in the hook until the user answers or the hook times out.
+
+**Settings → Perforce** (off by default): turn ticket handling on or off, password source, renew-before-expiry time, all-hosts tickets, and per-folder overrides for server and user.
+
+**Not covered.** Servers that sign in through SSO (`P4LOGINSSO`) or multi-factor authentication. For those, Claudette sends a notification asking the user to log in themselves (in a terminal or P4V), then checks again.
+
+## 19. Open Questions
 
 None right now.

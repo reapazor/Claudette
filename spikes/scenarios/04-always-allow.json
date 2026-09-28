@@ -1,0 +1,19 @@
+{
+  "description": "Mock server: allow a Bash command with updatedPermissions (Always allow). Claude Code should write Bash(touch:*) to .claude/settings.local.json, and the second touch should not prompt. Free.",
+  "env": { "ANTHROPIC_BASE_URL": "${MOCK_URL}", "ANTHROPIC_API_KEY": "sk-ant-mock-000", "CLAUDE_CONFIG_DIR": "${CFG}", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1" },
+  "args": ["--model", "claude-haiku-4-5", "--permission-prompt-tool", "stdio"],
+  "before": [
+    { "removeFile": "${WORK}/.claude/settings.local.json" },
+    { "removeFile": "${WORK}/c.txt" },
+    { "removeFile": "${WORK}/d.txt" }
+  ],
+  "autoPermission": "allow",
+  "updatedPermissions": [
+    { "type": "addRules", "rules": [{ "toolName": "Bash", "ruleContent": "touch:*" }], "behavior": "allow", "destination": "localSettings" }
+  ],
+  "steps": [
+    { "control": { "subtype": "initialize", "hooks": null }, "waitFor": { "type": "control_response" } },
+    { "user": "RUN_BASH touch c.txt", "waitFor": { "type": "result" } },
+    { "user": "RUN_BASH touch d.txt", "waitFor": { "type": "result" } }
+  ]
+}

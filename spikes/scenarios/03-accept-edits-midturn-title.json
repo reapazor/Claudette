@@ -1,0 +1,21 @@
+{
+  "description": "Mock server: Write in Accept edits mode (no prompt), a message sent while a Bash command runs (delivered mid-turn), then generate_session_title and rename_session. Free.",
+  "env": { "ANTHROPIC_BASE_URL": "${MOCK_URL}", "ANTHROPIC_API_KEY": "sk-ant-mock-000", "CLAUDE_CONFIG_DIR": "${CFG}", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1" },
+  "args": ["--model", "claude-haiku-4-5", "--permission-prompt-tool", "stdio"],
+  "before": [{ "removeFile": "${WORK}/b.txt" }],
+  "watchFile": "${WORK}/b.txt",
+  "autoPermission": "allow",
+  "steps": [
+    { "control": { "subtype": "initialize", "hooks": null }, "waitFor": { "type": "control_response" } },
+    { "control": { "subtype": "set_permission_mode", "mode": "acceptEdits" }, "waitFor": { "type": "control_response", "response.request_id": "$last" }, "lastOf": "set_permission_mode" },
+    { "user": "WRITE_FILE ${WORK}/b.txt", "waitFor": { "type": "result" } },
+    { "user": "RUN_BASH sleep 6" },
+    { "sleep": 3000 },
+    { "user": "CHECKIN are you ok?" },
+    { "waitFor": { "type": "result" }, "timeoutMs": 60000 },
+    { "waitFor": { "type": "result" }, "timeoutMs": 8000 },
+    { "control": { "subtype": "generate_session_title", "description": "spike test session", "persist": true }, "waitFor": { "type": "control_response", "response.request_id": "$last" }, "lastOf": "generate_session_title" },
+    { "control": { "subtype": "rename_session", "title": "Renamed by host", "source": "host" }, "waitFor": { "type": "control_response", "response.request_id": "$last" }, "lastOf": "rename_session" },
+    { "sleep": 500 }
+  ]
+}

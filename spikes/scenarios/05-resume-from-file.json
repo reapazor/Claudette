@@ -1,0 +1,10 @@
+{
+  "description": "Mock server: copy the newest transcript into LIB and resume from that file path. The new turn goes to LIB/<session-id>.jsonl, not the copied file. Run another mock scenario first. Free.",
+  "env": { "ANTHROPIC_BASE_URL": "${MOCK_URL}", "ANTHROPIC_API_KEY": "sk-ant-mock-000", "CLAUDE_CONFIG_DIR": "${CFG}", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1" },
+  "before": [{ "copyLatestTranscriptTo": "${LIB}/copied-session.jsonl" }],
+  "args": ["--model", "claude-haiku-4-5", "--permission-prompt-tool", "stdio", "--resume", "${LIB}/copied-session.jsonl"],
+  "steps": [
+    { "control": { "subtype": "initialize", "hooks": null }, "waitFor": { "type": "control_response" } },
+    { "user": "hello again after resume", "waitFor": { "type": "result" } }
+  ]
+}
