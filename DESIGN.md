@@ -24,10 +24,10 @@ Claudette does not replace Claude Code. It runs the real `claude` CLI as a child
 | Area | Choice | Notes |
 |---|---|---|
 | Runtime | .NET 10 (LTS) | |
-| UI | Avalonia | One codebase for Windows, macOS and Linux. |
+| UI | Avalonia 12 | One codebase for Windows, macOS and Linux. |
 | Look & feel | Fluent theme on Windows, macOS-style theme on macOS | Follows the OS light/dark setting and accent color. Mica backdrop on Windows 11; native title bar, traffic lights and menu bar on macOS. |
 | Pattern | MVVM with CommunityToolkit.Mvvm | |
-| Markdown | Markdown.Avalonia (or similar) | For assistant messages. Code blocks need syntax highlighting. |
+| Markdown | LiveMarkdown.Avalonia | For assistant messages. Built for streaming: text is appended as it arrives instead of re-rendering the whole message. Includes syntax-highlighted code blocks. (Markdown.Avalonia only had an alpha for Avalonia 12.) |
 | Diffs | AvaloniaEdit with a diff renderer | |
 | Dependency | Claude Code CLI | Must already be installed. Claudette finds `claude` on `PATH` (or a path set in Settings), checks its version on launch against a minimum supported version, and shows a setup screen if it is missing or too old. Sign-in is handled inside Claudette (see [§11](#11-sign-in)). |
 | Packaging | Windows: MSIX or installer. macOS: signed, notarized `.app` in a `.dmg`. | |
@@ -137,6 +137,7 @@ Using the picker:
 **Other ways in.**
 
 - Dragging a folder from Finder or Explorer onto the tab strip opens a tab there.
+- The command line: `Claudette --folder <path>` opens a tab in that folder on startup. Open Recent and the jump list use this too.
 - On macOS, **File → Open Recent** and the Dock icon's menu list recent folders. On Windows, the taskbar jump list does the same.
 - Choosing any of these opens a new tab in that folder.
 
@@ -621,7 +622,10 @@ claude -p --input-format stream-json --output-format stream-json --verbose
 ```
 
 - `--permission-prompt-tool stdio` sends permission prompts to Claudette as control requests. The TypeScript SDK passes this flag when a `canUseTool` callback is set.
-- **Clean environment.** Claudette removes inherited `CLAUDECODE`, `CLAUDE_CODE_*` and `CLAUDE_AGENT_SDK_*` variables before launching. If Claudette was started from a terminal inside Claude Code, those variables make `claude` behave as a child session. In the spike this ignored the API key and reported "Not logged in".
+- **Clean environment.** Claude Code sets session variables for the processes it starts, such as `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_ENTRYPOINT` and `CLAUDE_CODE_MESSAGING_SOCKET`. If Claudette was started from a terminal inside Claude Code, those variables make `claude` behave as a child session; in the spike it ignored the API key and reported "Not logged in".
+  - Claudette removes exactly those variables. The full list is `ClaudeEnvironment.SessionVariables`, tracked in `compat/surface.yaml`.
+  - It doesn't strip by prefix, because variables like `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_USE_BEDROCK` are user configuration.
+  - The real-CLI tests run from inside Claude Code confirmed that the list is enough.
 
 **Startup.** The first thing Claudette sends is an `initialize` control request. The reply contains:
 
@@ -816,8 +820,21 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 
 ### Tools and CI
 
-- xUnit v3, Avalonia.Headless.XUnit, Verify (snapshot testing) and Microsoft.Extensions.TimeProvider.Testing (`FakeTimeProvider`).
-- GitHub Actions runs everything except `Live` on Windows, macOS and Linux for every push and pull request.
+- xUnit v3, Avalonia.Headless.XUnit, Verify (snapshot testing) and Microsoft.Extensions.TimeProvider.Testing (`FakeTimeProvider`). xunit.v3 stays on 3.2.x until Avalonia.Headless.XUnit supports 4.x.
+- GitHub Actions (`.github/workflows/ci.yml`):
+  - A build-and-test job on Windows, macOS and Linux runs everything except `RealCli` and `Live`, for every push and pull request.
+  - A second Linux job installs Claude Code and runs the `RealCli` tests.
+
+### Where things are (milestone 1)
+
+| Piece | Location |
+|---|---|
+| Fake transport and replay transport | `tests/Claudette.Core.Tests/Support/` |
+| Protocol fixtures | `tests/Claudette.Core.Tests/Fixtures/protocol/2.1.284/` (recorded in the spikes, with paths and personal details removed) |
+| `fake-claude` | `tools/Claudette.FakeClaude/`. Scripted by the prompt (`ASK_PERMISSION`, `SLOW`, `CRASH`) and by environment variables, rather than scenario files. |
+| Mock Messages API | `tools/Claudette.MockApi/`. Runs in-process in tests, or on its own with `dotnet run`. |
+| Tests against `fake-claude` and the real CLI | `tests/Claudette.IntegrationTests/`. The real-CLI tests are tagged `RealCli`. |
+| Conversation view tests | `tests/Claudette.App.Tests/` |
 
 ## 16. Tracking Claude Code Changes
 
@@ -851,21 +868,29 @@ Each entry records:
 
 ### Daily compatibility check
 
-A scheduled GitHub Action runs once a day. When a new Claude Code version appears on either npm release tag, it:
+A scheduled GitHub Action (`.github/workflows/compat.yml`) runs once a day. It uses `compat/check.mjs`, a dependency-free Node script. When npm's `latest` tag shows a Claude Code version newer than `lastTested` in `compat/surface.yaml`, and there's no report for it yet, it:
 
-1. **Snapshots** the new version's changelog entry, SDK type definitions, the docs pages listed in the surface file, and `claude --help` output into `compat/snapshots/<version>/`.
-2. **Diffs** each one against the previous version's snapshot.
-3. **Matches** the diffs and changelog lines against the identifiers in `compat/surface.yaml`, so changes to things Claudette uses are listed first.
-4. **Tests** by installing that version and running the free test suite against it, including the real-CLI tests with the mock model. It also records the protocol output for the fixture scenarios again (this is free with the mock model) and diffs it against the previous version's.
-5. **Reports** by opening a GitHub issue, *"Claude Code 2.1.285 compatibility report"*, labeled `compat`. The issue shows test results first, then matched changes, then the full diffs in collapsed sections. If nothing matched and every test passed, the issue is closed automatically and kept as a record.
+1. **Collects:**
+   - The changelog entries after `lastTested`.
+   - The Agent SDK type definitions (`sdk.d.ts`) for both versions. It finds the SDK release for each CLI version through the `claudeCodeVersion` field in the SDK's npm metadata.
+   - The docs pages listed in the surface file.
+   - `claude --help` from the new version.
+2. **Diffs:**
+   - The SDK types between the two versions.
+   - The docs pages and CLI help against the snapshots kept in `compat/docs/` and `compat/cli-help.txt`.
+3. **Matches** the changelog and changed diff lines against the identifiers in `compat/surface.yaml`, as whole tokens, so changes to things Claudette uses are listed first.
+4. **Tests** by installing that version and running the free test suite against it, including the real-CLI tests with the mock model.
+5. **Reports** by opening a GitHub issue, *"Claude Code 2.1.285 compatibility report"*, labeled `compat`.
+   - The issue shows test results first, then matched changes, then the full diffs in collapsed sections.
+   - If nothing matched and every test passed, the issue is closed automatically and kept as a record.
 
-For example, the 2.1.284 changelog says the status line's `rate_limits.spend_limit` gained `used_usd`, `limit_usd` and `period`. `rate_limits` is in the surface list, so that line would be flagged.
+A dry run against the two versions before 2.1.284 (`node compat/check.mjs report --from 2.1.281 --version 2.1.284`) flagged eight changes. One was a changelog line about `claude -p` startup; another was an Agent SDK doc comment change on `apply_flag_settings`.
 
 ### Tested versions
 
 - Claudette records two versions:
-  - `MinimumClaudeCodeVersion`: the hard floor from [§12](#applying-it).
-  - `LastTestedClaudeCodeVersion`: updated each time a compatibility report is handled.
+  - `ClaudeLocator.MinimumVersion` (`minimum` in `compat/surface.yaml`): the hard floor from [§12](#applying-it).
+  - `ClaudeLocator.LastTestedVersion` (`lastTested`): updated each time a compatibility report is handled.
 - A version newer than the last tested one is allowed. Settings → Claude Code shows a quiet note, *"Newer than the last tested version (2.1.284)"*, and nothing more intrusive.
 
 ### Staying tolerant at runtime
@@ -882,12 +907,22 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
 
 1. Read the matched changes and any failing tests. To see exactly what changed in the protocol, re-run the relevant scenario in [`spikes/`](spikes/README.md).
 2. Update the code, `compat/surface.yaml` and the protocol fixtures.
-3. Bump `LastTestedClaudeCodeVersion`.
-4. If the change breaks a released Claudette version, ship a patch release. Raise `MinimumClaudeCodeVersion` only if older Claude Code versions can no longer be supported.
+3. Bump `lastTested` in `compat/surface.yaml` and `ClaudeLocator.LastTestedVersion` together; a unit test checks they match.
+4. Refresh the snapshots: `node compat/check.mjs update-snapshots --help-file <output of claude --help>`.
+5. If the change breaks a released Claudette version, ship a patch release. Raise `minimum` (and `ClaudeLocator.MinimumVersion`) only if older Claude Code versions can no longer be supported.
 
 ## 17. Milestones
 
-1. **Skeleton.** Avalonia app, Claude Code detection and version check, sign-in, one tab: launch `claude`, send a prompt, stream the reply as Markdown, Stop. Test harness: fake transport, `fake-claude`, mock model server, first protocol fixtures and CI. Start `compat/surface.yaml` and the daily compatibility check. Also includes the utility session, and turning the spike scripts in [`spikes/`](spikes/README.md) into the .NET test harness. The spikes themselves were done on 2026-09-28; their findings are recorded in the sections they affected.
+1. **Skeleton.** ✅ Built 2026-09-28.
+   - **Scope:**
+     - Avalonia app, Claude Code detection and version check, sign-in.
+     - One tab: launch `claude`, send a prompt, stream the reply as Markdown, basic Allow/Deny permission cards, Stop.
+     - Status bar with model, mode and context window %.
+     - Test harness: fake transport, `fake-claude`, mock model server, first protocol fixtures and CI.
+     - `compat/surface.yaml` and the daily compatibility check.
+     - The utility session.
+   - **Still to verify:** completing an in-app sign-in (the `claude_oauth_*` requests), which needs a real sign-in into a throwaway config.
+   - The spikes were done on 2026-09-28. Their findings are recorded in the sections they affected; the scripts are in [`spikes/`](spikes/README.md).
 2. **Tool rendering.** Tool call cards, Edit diffs, Bash output, thinking, subagents, to-do list.
 3. **Tabs & settings.** Multiple sessions, folder per tab, automatic and user naming, status icons, model and effort indicators and pickers, per-tab token stats, pinned tabs and restore on launch, Settings window and per-tab overrides, check-ins, quick suffixes.
 4. **Permissions.** Inline prompts, permission mode picker.

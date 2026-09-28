@@ -1,0 +1,88 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             xmlns:views="using:Claudette.App.Views"
+             x:Class="Claudette.App.App"
+             RequestedThemeVariant="Default">
+  <!-- "Default" follows the OS light/dark setting (DESIGN.md §2). -->
+
+  <Application.DataTemplates>
+    <DataTemplate DataType="vm:BusyViewModel">
+      <views:BusyView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:SetupViewModel">
+      <views:SetupView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:SignInViewModel">
+      <views:SignInView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:WorkspaceViewModel">
+      <views:WorkspaceView />
+    </DataTemplate>
+  </Application.DataTemplates>
+
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://LiveMarkdown.Avalonia/Styles.axaml" />
+
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="24" />
+      <Setter Property="MaxWidth" Value="520" />
+    </Style>
+    <!-- :is() so the classes also apply to SelectableTextBlock. -->
+    <Style Selector=":is(TextBlock).title">
+      <Setter Property="FontSize" Value="22" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector=":is(TextBlock).muted">
+      <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+    </Style>
+    <Style Selector=":is(TextBlock).warning">
+      <Setter Property="Foreground" Value="{DynamicResource WarningTextBrush}" />
+    </Style>
+    <Style Selector=":is(TextBlock).error">
+      <Setter Property="Foreground" Value="{DynamicResource ErrorTextBrush}" />
+    </Style>
+  </Application.Styles>
+
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://LiveMarkdown.Avalonia/Defaults.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+
+      <!-- Claudette's color tokens, per theme. Views use only these, never Fluent's internal resource names. -->
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="MutedTextBrush" Color="#5F6368" />
+          <SolidColorBrush x:Key="DividerBrush" Color="#1F000000" />
+          <SolidColorBrush x:Key="CardBrush" Color="#FAFAFA" />
+          <SolidColorBrush x:Key="ToolCardBrush" Color="#F3F3F5" />
+          <SolidColorBrush x:Key="ErrorTextBrush" Color="#C42B1C" />
+          <SolidColorBrush x:Key="WarningTextBrush" Color="#9D5D00" />
+          <SolidColorBrush x:Key="CautionBorderBrush" Color="#D9A400" />
+          <SolidColorBrush x:Key="CautionBackgroundBrush" Color="#FFF6D6" />
+          <SolidColorBrush x:Key="UserBubbleBrush" Color="{DynamicResource SystemAccentColor}" />
+          <SolidColorBrush x:Key="UserBubbleTextBrush" Color="White" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="MutedTextBrush" Color="#A6A6A6" />
+          <SolidColorBrush x:Key="DividerBrush" Color="#2EFFFFFF" />
+          <SolidColorBrush x:Key="CardBrush" Color="#1F1F1F" />
+          <SolidColorBrush x:Key="ToolCardBrush" Color="#1A1A1C" />
+          <SolidColorBrush x:Key="ErrorTextBrush" Color="#FF99A4" />
+          <SolidColorBrush x:Key="WarningTextBrush" Color="#FCE100" />
+          <SolidColorBrush x:Key="CautionBorderBrush" Color="#8A6D00" />
+          <SolidColorBrush x:Key="CautionBackgroundBrush" Color="#2B2610" />
+          <SolidColorBrush x:Key="UserBubbleBrush" Color="{DynamicResource SystemAccentColorDark1}" />
+          <SolidColorBrush x:Key="UserBubbleTextBrush" Color="White" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+      <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Menlo, monospace</FontFamily>
+    </ResourceDictionary>
+  </Application.Resources>
+</Application>

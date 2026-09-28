@@ -1,0 +1,27 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Claudette.App.ViewModels"
+        x:Class="Claudette.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Claudette"
+        Width="1100" Height="800"
+        MinWidth="520" MinHeight="400"
+        WindowStartupLocation="CenterScreen">
+  <DockPanel>
+    <!-- Header. Milestone 5 adds the usage meters here (DESIGN.md §6). -->
+    <Border DockPanel.Dock="Top"
+            Padding="16,10"
+            BorderThickness="0,0,0,1"
+            BorderBrush="{DynamicResource DividerBrush}">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Text="Claudette" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1"
+                   Classes="muted"
+                   Text="{Binding AccountText}"
+                   IsVisible="{Binding AccountText, Converter={x:Static ObjectConverters.IsNotNull}}"
+                   VerticalAlignment="Center" />
+      </Grid>
+    </Border>
+    <ContentControl Content="{Binding CurrentPage}" />
+  </DockPanel>
+</Window>

@@ -13,15 +13,18 @@ A .NET desktop app that wraps Claude Code in a native GUI: one tab per Claude Co
 
 ## Stack
 
-- .NET 10, C# with nullable reference types on and warnings treated as errors.
-- Avalonia UI with MVVM (CommunityToolkit.Mvvm).
-- Projects (§13):
-  - `Claudette.Core`: sessions, protocol, sign-in, updates, session library.
-  - `Claudette.Usage`: usage sampling, burn rate, history.
-  - `Claudette.Platform`: notifications, window chrome, process monitor, external diff.
-  - `Claudette.App`: the Avalonia UI.
-- `Claudette.Core` and `Claudette.Usage` must not reference Avalonia.
-- Development happens on Windows, but the app must also run on macOS and Linux. Keep OS-specific code in `Claudette.Platform`, behind interfaces.
+- .NET 10, C# with nullable reference types on and warnings treated as errors. Package versions live in `Directory.Packages.props`.
+- Avalonia 12 with MVVM (CommunityToolkit.Mvvm). Markdown is rendered with LiveMarkdown.Avalonia.
+- Layout (§13):
+  - `src/Claudette.Core`: sessions, protocol, sign-in, install checks. Later also updates and the session library.
+  - `src/Claudette.App`: the Avalonia UI.
+  - `src/Claudette.Usage` and `src/Claudette.Platform` are created when the first code for them is written (milestones 5 and 6).
+  - `tests/`: `Claudette.Core.Tests` (unit and protocol replay), `Claudette.App.Tests`, `Claudette.IntegrationTests` (real processes).
+  - `tools/`: `Claudette.FakeClaude` (the `fake-claude` test double) and `Claudette.MockApi` (a mock Messages API).
+  - `compat/`: the compatibility surface list, check script and snapshots (§16).
+- `Claudette.Core` must not reference Avalonia.
+- Development happens on Windows, but the app must also run on macOS and Linux. Keep OS-specific code behind interfaces (in `Claudette.Platform` once it exists).
+- In XAML, use the app's own color tokens from `App.axaml` (`MutedTextBrush`, `DividerBrush` and so on), not Fluent's internal resource names.
 
 ## Rules that keep the code testable (§15)
 
@@ -34,7 +37,7 @@ A .NET desktop app that wraps Claude Code in a native GUI: one tab per Claude Co
 
 - Any new use of something from Claude Code goes in `compat/surface.yaml` in the same change. That includes flags, environment variables, message types or fields, control requests, settings keys, file paths and command output.
 - Prefer documented behavior. If you rely on undocumented behavior, mark the entry `undocumented` and record a fallback.
-- Always launch `claude` with a clean environment: remove inherited `CLAUDECODE`, `CLAUDE_CODE_*` and `CLAUDE_AGENT_SDK_*` variables (§13). This applies in the app and in tests. Otherwise a `claude` started from inside a Claude Code session behaves as a child session.
+- Always launch `claude` through `ClaudeEnvironment.Create`, which removes the session variables Claude Code sets for its child processes (`ClaudeEnvironment.SessionVariables`, §13). Otherwise a `claude` started from inside a Claude Code session behaves as a child session. Don't strip by prefix: `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_USE_BEDROCK` and similar are user configuration and must pass through.
 - Parse tolerantly:
   - Ignore unknown fields.
   - Skip unknown message types.
@@ -56,14 +59,36 @@ A .NET desktop app that wraps Claude Code in a native GUI: one tab per Claude Co
 
 ## Tests
 
-- Tests must never call the real model or use anyone's account or tokens. Use the fake transport, `fake-claude`, or the mock model server.
-- Tests that run the real `claude` binary must:
+- Tests must never call the real model or use anyone's account or tokens. Use the fake transport, `fake-claude`, or the mock Messages API.
+- Tests that run the real `claude` binary are tagged `[Trait("Category", "RealCli")]` and must:
+  - point it at `MockAnthropicApi` with `ANTHROPIC_BASE_URL` and a dummy `ANTHROPIC_API_KEY`,
   - set `CLAUDE_CONFIG_DIR` to a temporary folder,
   - set `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`,
-  - never read or write the real `~/.claude`.
-- Tests tagged `Live` use real tokens. Only run them when asked to.
+  - never read or write the real `~/.claude`,
+  - skip themselves (`Assert.SkipWhen`) when Claude Code isn't installed.
+- Tests tagged `[Trait("Category", "Live")]` use real tokens. Only run them when asked to.
 - Test time-based behavior with `FakeTimeProvider`, not sleeps.
+- Recorded protocol fixtures live in `tests/Claudette.Core.Tests/Fixtures/protocol/<claude-version>/`. Remove paths, emails and account details before checking one in.
+- xunit.v3 stays on 3.2.x until `Avalonia.Headless.XUnit` supports 4.x.
 
 ## Commands
 
-<!-- TODO: add build, run and test commands (including how to exclude Live tests) when the solution is scaffolded. -->
+```sh
+dotnet build Claudette.slnx
+dotnet test Claudette.slnx --filter "Category!=Live"                  # everything free (RealCli skips without Claude Code)
+dotnet test Claudette.slnx --filter "Category!=RealCli&Category!=Live" # no Claude Code needed
+dotnet run --project src/Claudette.App -- --folder <path>             # uses your real account: messages cost usage
+```
+
+Run the app without using tokens by pointing it at the mock API:
+
+```sh
+dotnet run --project tools/Claudette.MockApi -- 8787    # in one terminal
+# in another, with these set: ANTHROPIC_BASE_URL=http://127.0.0.1:8787  ANTHROPIC_API_KEY=sk-ant-mock
+#                             CLAUDE_CONFIG_DIR=<a temp folder>         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+dotnet run --project src/Claudette.App -- --folder <path>
+```
+
+Prompts the mock understands: `WRITE_FILE <path>`, `EDIT_FILE <path>`, `RUN_BASH <command>`, `SLOW`; anything else gets `pong`.
+
+Compatibility check (§16): `node compat/check.mjs detect`, then `report` or `update-snapshots`. See the header of `compat/check.mjs`.

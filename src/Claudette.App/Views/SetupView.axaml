@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             x:Class="Claudette.App.Views.SetupView"
+             x:DataType="vm:SetupViewModel">
+  <Border Classes="card" HorizontalAlignment="Center" VerticalAlignment="Center">
+    <StackPanel Spacing="12">
+      <TextBlock Classes="title" Text="{Binding Title}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" />
+      <SelectableTextBlock Classes="muted"
+                           Text="{Binding FoundPath}"
+                           IsVisible="{Binding HasFoundPath}"
+                           FontFamily="{StaticResource MonoFont}"
+                           TextWrapping="Wrap" />
+      <TextBlock Classes="muted" TextWrapping="Wrap"
+                 Text="Claudette runs your installed Claude Code. Install it, or point Claudette at the claude executable." />
+      <WrapPanel ItemSpacing="8" LineSpacing="8">
+        <Button Classes="accent" Content="Check again" Command="{Binding CheckAgainCommand}" />
+        <Button Content="Choose claude…" Command="{Binding BrowseCommand}" />
+        <Button Content="Install instructions" Command="{Binding OpenInstallDocsCommand}" />
+      </WrapPanel>
+    </StackPanel>
+  </Border>
+</UserControl>

@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Restore
+        run: dotnet restore Claudette.slnx
+      - name: Build
+        run: dotnet build Claudette.slnx --no-restore --configuration Release
+      # RealCli tests need Claude Code (next job); Live tests use real tokens and never run in CI.
+      - name: Test
+        run: dotnet test Claudette.slnx --no-build --configuration Release --filter "Category!=RealCli&Category!=Live"
+
+  real-cli:
+    name: Real Claude Code against the mock API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Claude Code version
+        run: claude --version
+      # The tests point claude at an in-process mock Messages API with a dummy key and a throwaway
+      # CLAUDE_CONFIG_DIR, so no account or tokens are involved (DESIGN.md §15).
+      - name: Test
+        run: dotnet test tests/Claudette.IntegrationTests --configuration Release --filter "Category=RealCli"

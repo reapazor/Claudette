@@ -1,0 +1,10 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             x:Class="Claudette.App.Views.BusyView"
+             x:DataType="vm:BusyViewModel">
+  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+    <ProgressBar IsIndeterminate="True" Width="220" />
+    <TextBlock Text="{Binding Message}" Classes="muted" HorizontalAlignment="Center" />
+  </StackPanel>
+</UserControl>

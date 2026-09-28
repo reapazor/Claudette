@@ -1,0 +1,58 @@
+using Claudette.Core.Sessions;
+using Claudette.Core.Tests.Support;
+
+namespace Claudette.Core.Tests.Sessions;
+
+/// <summary>Drives <see cref="ClaudeSession"/> through recorded real Claude Code traffic.</summary>
+public class ReplayTests
+{
+    [Fact]
+    public async Task Simple_turn()
+    {
+        var transport = new ReplayTransport(ProtocolFixture.Load("01-mock-basic"));
+        await using var session = new ClaudeSession(transport, TimeProvider.System);
+
+        var init = await session.InitializeAsync(TestContext.Current.CancellationToken);
+        await session.SendUserMessageAsync("hello", TestContext.Current.CancellationToken);
+        var (done, seen) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.NotEmpty(init.Models);
+        Assert.Contains(seen, e => e is TurnStarted);
+        Assert.Equal("pong", done.Result.Result);
+        Assert.Equal("claude-haiku-4-5", session.Model);
+        Assert.Equal("2.1.284", session.ClaudeCodeVersion);
+        Assert.Equal(0, session.UnknownMessageCount);
+        Assert.Equal(0, session.ProtocolErrorCount);
+    }
+
+    [Fact]
+    public async Task Edit_turn_reports_tool_use_and_original_file()
+    {
+        var transport = new ReplayTransport(ProtocolFixture.Load("06-edit-original-file"));
+        await using var session = new ClaudeSession(transport, TimeProvider.System);
+
+        await session.InitializeAsync(TestContext.Current.CancellationToken);
+        await session.SendUserMessageAsync("EDIT_FILE e.txt", TestContext.Current.CancellationToken);
+        var (_, seen) = await session.ReadUntilAsync<TurnCompleted>();
+
+        var toolNames = seen.OfType<AssistantMessageReceived>()
+            .SelectMany(a => a.Message.Content.OfType<Claudette.Core.Protocol.ToolUseBlock>())
+            .Select(t => t.Name);
+        Assert.Equal(["Read", "Edit"], toolNames);
+        Assert.Contains(seen.OfType<ToolResultsReceived>(), r => r.Message.ToolUseResult?["originalFile"] is not null);
+    }
+
+    [Fact]
+    public async Task Signed_out_turn_reports_authentication_required()
+    {
+        var transport = new ReplayTransport(ProtocolFixture.Load("signed-out"));
+        await using var session = new ClaudeSession(transport, TimeProvider.System);
+
+        await session.InitializeAsync(TestContext.Current.CancellationToken);
+        await session.SendUserMessageAsync("hello", TestContext.Current.CancellationToken);
+        var (done, seen) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.Contains(seen, e => e is AuthenticationRequired);
+        Assert.True(done.Result.IsError);
+    }
+}

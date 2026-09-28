@@ -1,0 +1,34 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             x:Class="Claudette.App.Views.SignInView"
+             x:DataType="vm:SignInViewModel">
+  <Border Classes="card" HorizontalAlignment="Center" VerticalAlignment="Center">
+    <StackPanel Spacing="12">
+      <TextBlock Classes="title" Text="Sign in to Claude" />
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+      <TextBlock Classes="error" Text="{Binding Error}" TextWrapping="Wrap"
+                 IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+      <!-- Not started -->
+      <WrapPanel ItemSpacing="8" LineSpacing="8" IsVisible="{Binding IsIdle}">
+        <Button Classes="accent" Content="Sign in" Command="{Binding SignInCommand}" />
+        <Button Content="I've already signed in" Command="{Binding CheckAgainCommand}" />
+      </WrapPanel>
+
+      <!-- Waiting for the browser -->
+      <StackPanel Spacing="12" IsVisible="{Binding IsWaiting}">
+        <ProgressBar IsIndeterminate="True" IsVisible="{Binding !ShowCodeEntry}" />
+        <StackPanel Spacing="8" IsVisible="{Binding ShowCodeEntry}">
+          <TextBox Text="{Binding Code}" PlaceholderText="Paste the code from the browser" FontFamily="{StaticResource MonoFont}" />
+          <Button Classes="accent" Content="Submit code" Command="{Binding SubmitCodeCommand}" />
+        </StackPanel>
+        <WrapPanel ItemSpacing="8" LineSpacing="8">
+          <Button Content="Open browser again" Command="{Binding OpenBrowserAgainCommand}" />
+          <Button Content="Enter a code instead" Command="{Binding EnterCodeInsteadCommand}" IsVisible="{Binding !ShowCodeEntry}" />
+          <Button Content="Cancel" Command="{Binding CancelCommand}" />
+        </WrapPanel>
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</UserControl>

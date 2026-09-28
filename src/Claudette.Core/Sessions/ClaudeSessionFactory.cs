@@ -1,0 +1,43 @@
+using Claudette.Core.Claude;
+using Claudette.Core.Processes;
+using Claudette.Core.Protocol;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Claudette.Core.Sessions;
+
+public interface IClaudeSessionFactory
+{
+    /// <summary>Starts a <c>claude</c> process and completes the <c>initialize</c> handshake.</summary>
+    Task<ClaudeSession> StartAsync(ClaudeLaunchOptions options, CancellationToken cancellationToken = default);
+}
+
+public sealed class ClaudeSessionFactory(
+    string claudePath,
+    IProcessLauncher launcher,
+    TimeProvider timeProvider,
+    ILoggerFactory? loggerFactory = null) : IClaudeSessionFactory
+{
+    private readonly ILoggerFactory _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
+
+    public async Task<ClaudeSession> StartAsync(ClaudeLaunchOptions options, CancellationToken cancellationToken = default)
+    {
+        var spec = new ProcessStartSpec(claudePath, ClaudeArguments.ForStreamingSession(options))
+        {
+            WorkingDirectory = options.WorkingDirectory,
+            Environment = ClaudeEnvironment.Create(options.EnvironmentOverrides),
+        };
+        var transport = new ProcessClaudeTransport(launcher.Start(spec), _loggerFactory.CreateLogger<ProcessClaudeTransport>());
+        var session = new ClaudeSession(transport, timeProvider, _loggerFactory.CreateLogger<ClaudeSession>());
+        try
+        {
+            await session.InitializeAsync(cancellationToken).ConfigureAwait(false);
+            return session;
+        }
+        catch
+        {
+            await session.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+}

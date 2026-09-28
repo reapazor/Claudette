@@ -1,0 +1,343 @@
+# Everything Claudette relies on from Claude Code (DESIGN.md §16, "The compatibility surface list").
+#
+# Rule: code that starts using something new from Claude Code adds an entry here in the same change.
+# The daily compatibility check (compat/check.mjs) matches each `id` against new changelog entries and diffs.
+#
+# Fields:
+#   id        the exact identifier, as it appears in Claude Code's output, docs or changelog
+#   kind      flag | command | env | message | field | control | file | behavior
+#   status    documented | undocumented | experimental
+#   usedIn    source file(s) that depend on it, relative to the repo root
+#   docs      the page that documents it (the check snapshots these pages)
+#   test      the test class that covers it
+#   fallback  what to do if it breaks (required for undocumented and experimental entries)
+
+versions:
+  minimum: 2.1.284     # ClaudeLocator.MinimumVersion
+  lastTested: 2.1.284  # ClaudeLocator.LastTestedVersion; bump when a compatibility report is handled
+
+items:
+  # --- Launch flags ------------------------------------------------------------------------------------
+  - id: "-p"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: RealCliTests
+  - id: "--input-format stream-json"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: RealCliTests
+  - id: "--output-format stream-json"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: RealCliTests
+  - id: "--verbose"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: RealCliTests
+  - id: "--include-partial-messages"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: RealCliTests
+  - id: "--permission-prompt-tool stdio"
+    kind: flag
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: RealCliTests
+    fallback: The flag is documented but the "stdio" value is taken from the Agent SDK source. If it changes, take the new value from the TypeScript SDK; last resort is the Node sidecar (DESIGN.md §13).
+  - id: "--model"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: RealCliTests
+  - id: "--effort"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: ClaudeEnvironmentTests
+  - id: "--permission-mode"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: RealCliTests
+  - id: "--resume"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/WorkspaceViewModel.cs
+    docs: https://code.claude.com/docs/en/sessions
+    test: RealCliTests
+  - id: "--no-session-persistence"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.Core/Sessions/UtilitySession.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: ClaudeEnvironmentTests
+
+  # --- Commands ----------------------------------------------------------------------------------------
+  - id: "claude --version"
+    kind: command
+    status: documented
+    usedIn: src/Claudette.Core/Installation/ClaudeLocator.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: FakeClaudeTests
+    fallback: Output is read as the first X.Y.Z in the text, so formatting changes are tolerated.
+  - id: "claude auth status"
+    kind: command
+    status: documented
+    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: InstallAndAuthTests
+  - id: "loggedIn"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: InstallAndAuthTests
+    fallback: The command and its exit code (0 signed in, 1 not) are documented; fall back to the exit code if the JSON changes.
+  - id: "projectsDirectory"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs
+    docs: https://code.claude.com/docs/en/sessions
+    test: InstallAndAuthTests
+    fallback: Use the documented default location (CLAUDE_CONFIG_DIR or ~/.claude, then projects/).
+  - id: "claude auth logout"
+    kind: command
+    status: documented
+    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: none yet
+
+  # --- Environment -------------------------------------------------------------------------------------
+  - id: "CLAUDECODE"
+    kind: env
+    status: undocumented
+    usedIn: src/Claudette.Core/Claude/ClaudeEnvironment.cs
+    test: CleanEnvironmentTests
+    fallback: One of the session variables Claude Code sets for its children; the full list is ClaudeEnvironment.SessionVariables. Re-check the list when Claude Code adds new ones (run env inside a Claude Code Bash tool call).
+  - id: "CLAUDE_CODE_CHILD_SESSION"
+    kind: env
+    status: undocumented
+    usedIn: src/Claudette.Core/Claude/ClaudeEnvironment.cs
+    test: CleanEnvironmentTests
+    fallback: See CLAUDECODE.
+  - id: "ANTHROPIC_BASE_URL"
+    kind: env
+    status: documented
+    usedIn: tests/Claudette.IntegrationTests/RealCliTests.cs
+    docs: https://code.claude.com/docs/en/env-vars
+    test: RealCliTests
+  - id: "CLAUDE_CONFIG_DIR"
+    kind: env
+    status: documented
+    usedIn: tests/Claudette.IntegrationTests/RealCliTests.cs
+    docs: https://code.claude.com/docs/en/env-vars
+    test: RealCliTests
+  - id: "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+    kind: env
+    status: documented
+    usedIn: tests/Claudette.IntegrationTests/RealCliTests.cs
+    docs: https://code.claude.com/docs/en/env-vars
+    test: RealCliTests
+
+  # --- Output messages ---------------------------------------------------------------------------------
+  - id: "system/init"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: MessageParserTests
+  - id: "capabilities"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    docs: https://code.claude.com/docs/en/headless
+    test: MessageParserTests
+  - id: "interrupt_receipt_v1"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+  - id: "stream_event"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: MessageParserTests
+  - id: "authentication_failed"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ReplayTests
+  - id: "tool_use_result"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    test: RealCliTests
+    fallback: Carries originalFile and structuredPatch for diffs (DESIGN.md §8). If it goes away, use the git working tree diff, or file checkpoints.
+  - id: "originalFile"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    test: RealCliTests
+    fallback: See tool_use_result.
+  - id: "<local-command-stdout>"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs
+    test: MessageParserTests
+    fallback: Only used to show local command output as a note. If the wrapper changes, the text shows as a tool result row instead.
+  - id: "result"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: MessageParserTests
+  - id: "aborted_streaming"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    test: RealCliTests
+    fallback: Only used to show "Stopped." instead of an error note.
+  - id: "rate_limit_event"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: none yet (milestone 5)
+  - id: "auth_status"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: none yet
+  - id: "control_cancel_request"
+    kind: message
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    test: ClaudeSessionTests
+    fallback: Without it, a withdrawn permission card stays open until the turn ends.
+
+  # --- Control requests (wire names come from the Agent SDK sources) -----------------------------------
+  - id: "control_request"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Protocol/ControlChannel.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+    fallback: The envelope matches the Python and TypeScript Agent SDKs. Follow their sources; last resort is the Node sidecar (DESIGN.md §13).
+  - id: "initialize"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/InitializeResult.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+    fallback: See control_request.
+  - id: "interrupt"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+    fallback: See control_request. SIGINT also ends a turn (documented in headless mode).
+  - id: "can_use_tool"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/PermissionRequest.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+    fallback: See control_request.
+  - id: "updatedPermissions"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+  - id: "set_model"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+    fallback: See control_request. Last resort is restarting the session with --model.
+  - id: "apply_flag_settings"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+    fallback: See control_request. Last resort is restarting the session with --effort.
+  - id: "set_permission_mode"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ClaudeSessionTests
+    fallback: See control_request.
+  - id: "get_context_usage"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/ContextUsage.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+    fallback: Last-turn input tokens divided by modelUsage.contextWindow from the result message.
+  - id: "get_usage"
+    kind: control
+    status: experimental
+    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs
+    test: none yet (milestone 5)
+    fallback: The SDK calls it usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET. Fall back to rate_limit_event, then parsing /usage (DESIGN.md §6).
+  - id: "claude_authenticate"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs
+    test: none yet (needs a real sign-in)
+    fallback: claude auth login (documented), with the pasted code written to its input (DESIGN.md §11).
+  - id: "claude_oauth_wait_for_completion"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs
+    test: none yet (needs a real sign-in)
+    fallback: See claude_authenticate.
+  - id: "claude_oauth_callback"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs
+    test: none yet (needs a real sign-in)
+    fallback: See claude_authenticate.
+
+  # --- Files and behavior ------------------------------------------------------------------------------
+  - id: "settings.local.json"
+    kind: file
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs
+    docs: https://code.claude.com/docs/en/settings
+    test: RealCliTests
+  - id: "resume from a transcript path writes <session-id>.jsonl next to it"
+    kind: behavior
+    status: undocumented
+    usedIn: DESIGN.md §9 (session library, milestone 6)
+    docs: https://code.claude.com/docs/en/sessions
+    test: RealCliTests
+    fallback: Copy the updated transcript from the projects folder back to the library after each turn.
+  - id: "HEAD /api/hello"
+    kind: behavior
+    status: undocumented
+    usedIn: tools/Claudette.MockApi/MockAnthropicApi.cs
+    test: RealCliTests
+    fallback: A connectivity check Claude Code makes against ANTHROPIC_BASE_URL. The mock answers 404 and Claude Code carries on; if that stops working, answer 200.

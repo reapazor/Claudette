@@ -1,0 +1,86 @@
+name: Claude Code compatibility check
+
+# Daily check for new Claude Code releases (DESIGN.md §16). When one appears, installs it, runs the free test suite
+# against it, and opens an issue with the changelog, Agent SDK type changes, docs and CLI help diffs, and every change
+# that mentions something in compat/surface.yaml.
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Claude Code version to check (defaults to npm's latest)
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Look for a new version
+        id: detect
+        run: node compat/check.mjs detect ${{ inputs.version && format('--version {0}', inputs.version) || '' }}
+
+      - name: Skip versions that already have a report
+        id: existing
+        if: steps.detect.outputs.new == 'true'
+        run: |
+          count=$(gh issue list --state all --search "\"Claude Code ${{ steps.detect.outputs.version }} compatibility report\" in:title" --json number --jq length)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-dotnet@v5
+        if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
+        with:
+          global-json-file: global.json
+
+      - name: Install Claude Code ${{ steps.detect.outputs.version }}
+        if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash -s "${{ steps.detect.outputs.version }}"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Capture CLI help
+        if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
+        run: |
+          claude --version
+          claude --help > cli-help-new.txt
+
+      # Everything except Live (real tokens). RealCli tests run the new version against the mock API.
+      - name: Run the tests against it
+        id: tests
+        if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          dotnet test Claudette.slnx --configuration Release --filter "Category!=Live" 2>&1 | tee test-output.txt
+
+      - name: Write the report
+        if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
+        run: >
+          node compat/check.mjs report
+          --version "${{ steps.detect.outputs.version }}"
+          --help-file cli-help-new.txt
+          --tests-file test-output.txt
+          --tests-outcome "${{ steps.tests.outcome }}"
+          --out report.md
+
+      - name: Open an issue
+        if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
+        run: |
+          version="${{ steps.detect.outputs.version }}"
+          gh label create compat --color 5319E7 --description "Claude Code compatibility" --force
+          url=$(gh issue create --title "Claude Code $version compatibility report" --label compat --body-file report.md)
+          echo "Opened $url"
+          if [ "$(jq -r .quiet compat-result.json)" = "true" ]; then
+            gh issue close "$url" --comment "Nothing in compat/surface.yaml changed and all tests passed. Closed automatically and kept as a record."
+          fi

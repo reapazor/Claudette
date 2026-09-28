@@ -1,0 +1,117 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             xmlns:conv="using:Claudette.App.Conversation"
+             xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
+             x:Class="Claudette.App.Views.WorkspaceView"
+             x:DataType="vm:WorkspaceViewModel">
+  <Grid RowDefinitions="*,Auto,Auto">
+
+    <!-- No folder yet -->
+    <StackPanel Grid.Row="0" Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center"
+                IsVisible="{Binding !HasFolder}">
+      <TextBlock Classes="title" Text="Start a Claude Code session" HorizontalAlignment="Center" />
+      <TextBlock Classes="muted" Text="Pick the folder Claude should work in." HorizontalAlignment="Center" />
+      <Button Classes="accent" Content="Choose folder…" HorizontalAlignment="Center" Command="{Binding ChooseFolderCommand}" />
+    </StackPanel>
+
+    <!-- Conversation (DESIGN.md §5) -->
+    <ScrollViewer Grid.Row="0" x:Name="ConversationScroll" IsVisible="{Binding HasFolder}"
+                  HorizontalScrollBarVisibility="Disabled">
+      <ItemsControl ItemsSource="{Binding Items}" Margin="20,16" MaxWidth="900">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Spacing="10" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.DataTemplates>
+
+          <DataTemplate DataType="conv:UserMessageItem">
+            <Border HorizontalAlignment="Right" MaxWidth="640" Padding="12,8" CornerRadius="10"
+                    Background="{DynamicResource UserBubbleBrush}">
+              <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource UserBubbleTextBrush}" />
+            </Border>
+          </DataTemplate>
+
+          <DataTemplate DataType="conv:AssistantTextItem">
+            <md:MarkdownRenderer MarkdownBuilder="{Binding Markdown}"
+                                 LinkCommand="{Binding $parent[ItemsControl].((vm:WorkspaceViewModel)DataContext).OpenLinkCommand}" />
+          </DataTemplate>
+
+          <DataTemplate DataType="conv:ToolUseItem">
+            <Border Padding="10,6" CornerRadius="6" BorderThickness="1"
+                    BorderBrush="{DynamicResource DividerBrush}"
+                    Background="{DynamicResource ToolCardBrush}">
+              <StackPanel Spacing="2">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding Summary}" Classes="muted" FontFamily="{StaticResource MonoFont}"
+                             TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <TextBlock Text="{Binding ResultSummary}" FontFamily="{StaticResource MonoFont}" FontSize="12"
+                           Classes="muted" Classes.error="{Binding IsError}" TextTrimming="CharacterEllipsis"
+                           IsVisible="{Binding ResultSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+
+          <DataTemplate DataType="conv:PermissionItem">
+            <Border Padding="12,10" CornerRadius="8" BorderThickness="1"
+                    BorderBrush="{DynamicResource CautionBorderBrush}"
+                    Background="{DynamicResource CautionBackgroundBrush}">
+              <StackPanel Spacing="8">
+                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                <SelectableTextBlock Text="{Binding Detail}" FontFamily="{StaticResource MonoFont}" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsPending}">
+                  <Button Classes="accent" Content="Allow" Command="{Binding AllowCommand}" />
+                  <Button Content="Deny" Command="{Binding DenyCommand}" />
+                </StackPanel>
+                <TextBlock Text="{Binding Outcome}" Classes="muted" IsVisible="{Binding !IsPending}" />
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+
+          <DataTemplate DataType="conv:NoteItem">
+            <SelectableTextBlock Text="{Binding Text}" FontStyle="Italic" TextWrapping="Wrap"
+                                 Classes="muted" Classes.error="{Binding IsError}" Classes.warning="{Binding IsWarning}" />
+          </DataTemplate>
+
+        </ItemsControl.DataTemplates>
+      </ItemsControl>
+    </ScrollViewer>
+
+    <!-- Status bar: folder, model, permission mode, context, state -->
+    <Border Grid.Row="1" Padding="12,6" BorderThickness="0,1,0,0"
+            BorderBrush="{DynamicResource DividerBrush}"
+            IsVisible="{Binding HasFolder}">
+      <StackPanel Orientation="Horizontal" Spacing="16">
+        <Button Content="{Binding FolderName}" ToolTip.Tip="{Binding Folder}" Command="{Binding ChooseFolderCommand}"
+                Padding="8,2" />
+        <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding ModelName}" />
+        <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding PermissionMode, StringFormat='Mode: {0}'}"
+                   IsVisible="{Binding PermissionMode, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <TextBlock Classes="muted" Classes.warning="{Binding IsContextHigh}" VerticalAlignment="Center"
+                   Text="{Binding ContextText}" ToolTip.Tip="{Binding ContextDetail}"
+                   IsVisible="{Binding ContextText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding StatusText}" />
+        <Button Content="Restart" Command="{Binding RestartCommand}" IsVisible="{Binding CanRestart}" Padding="8,2" />
+      </StackPanel>
+    </Border>
+
+    <!-- Composer -->
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="12" ColumnSpacing="8" IsVisible="{Binding HasFolder}">
+      <TextBox x:Name="Composer"
+               Text="{Binding ComposerText}"
+               AcceptsReturn="True"
+               TextWrapping="Wrap"
+               MinHeight="44" MaxHeight="220"
+               IsEnabled="{Binding HasSession}"
+               PlaceholderText="Message Claude…  (Enter to send, Shift+Enter for a new line, Esc to stop)" />
+      <Button Grid.Column="1" Classes="accent" Content="Send" VerticalAlignment="Bottom" MinHeight="44"
+              Command="{Binding SendCommand}" IsVisible="{Binding !IsWorking}" />
+      <Button Grid.Column="1" Content="■ Stop" VerticalAlignment="Bottom" MinHeight="44"
+              Command="{Binding StopCommand}" IsVisible="{Binding IsWorking}" />
+    </Grid>
+  </Grid>
+</UserControl>
