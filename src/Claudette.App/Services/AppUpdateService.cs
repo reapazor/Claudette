@@ -26,6 +26,7 @@ public sealed class AppUpdateService : IDisposable
     private readonly UpdateDownloader _downloader;
     private readonly Action? _stopListening;
     private readonly Action? _resumeListening;
+    private readonly System.Runtime.InteropServices.Architecture _architecture;
     private readonly ILogger _logger;
     private readonly Lock _checkLock = new();
     private ITimer? _timer;
@@ -36,8 +37,11 @@ public sealed class AppUpdateService : IDisposable
     /// <param name="isSourceBuild">A source build gets its new builds from the checkout, so it never checks releases.</param>
     /// <param name="stopListening">Stops taking later launches, so the new version can.</param>
     /// <param name="resumeListening">Takes them again, when the install didn't happen.</param>
-    public AppUpdateService(AppServices services, IRestartHost host, bool isSourceBuild, Action? stopListening = null, Action? resumeListening = null, ReleaseFeed? feed = null)
+    /// <param name="architecture">Which release package fits this machine; by default, this process's architecture.</param>
+    public AppUpdateService(AppServices services, IRestartHost host, bool isSourceBuild, Action? stopListening = null, Action? resumeListening = null, ReleaseFeed? feed = null,
+        System.Runtime.InteropServices.Architecture? architecture = null)
     {
+        _architecture = architecture ?? System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture;
         _services = services;
         _host = host;
         IsSourceBuild = isSourceBuild;
@@ -177,7 +181,7 @@ public sealed class AppUpdateService : IDisposable
             CheckError = error;
             if (releases is not null)
             {
-                var found = AvailableUpdate.Find(releases, CurrentVersion, includePrereleases, _installer.Kind, System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture);
+                var found = AvailableUpdate.Find(releases, CurrentVersion, includePrereleases, _installer.Kind, _architecture);
                 // The same release again keeps its download, finished or under way.
                 if (found?.Version != Available?.Version || found?.Asset != Available?.Asset)
                 {

@@ -157,7 +157,8 @@ public sealed class MacAppInstallerTests : IDisposable
     [Fact]
     public async Task A_translocated_app_is_sent_to_install_by_hand()
     {
-        var translocated = Path.Combine(_root, "private", "var", "folders", "AppTranslocation", "ABC", "d", "Claudette.app");
+        // A macOS path, whatever OS runs the test: it's refused before anything touches the disk.
+        const string translocated = "/private/var/folders/xy/T/AppTranslocation/ABC123/d/Claudette.app";
 
         var error = await Assert.ThrowsAsync<AppInstallException>(() =>
             Installer(new Tools(), translocated).PrepareAsync("/downloads/x.dmg", Version, TestContext.Current.CancellationToken));

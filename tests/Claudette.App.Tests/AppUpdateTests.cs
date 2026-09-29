@@ -143,7 +143,8 @@ public class AppUpdateTests
         IAppInstaller appInstaller = kind == AppInstallKind.Other ? new NoAppInstaller() : installer;
         var h = new TabTestHarness(appInstaller: appInstaller, http: gitHub, appVersion: version ?? Current);
         var host = new ShellHost(h.Shell);
-        var updates = new AppUpdateService(h.Services, host, isSourceBuild);
+        // The releases here have x64 packages, whatever machine runs the tests.
+        var updates = new AppUpdateService(h.Services, host, isSourceBuild, architecture: System.Runtime.InteropServices.Architecture.X64);
         return new Setup(h, gitHub, installer, host, updates, new AppUpdateViewModel(updates));
     }
 
