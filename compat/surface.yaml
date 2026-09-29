@@ -637,9 +637,9 @@ items:
   - id: "<session-id>/subagents/*.jsonl"
     kind: file
     status: undocumented
-    usedIn: src/Claudette.Core/History/HistoryIndex.cs, src/Claudette.Core/Library/SessionLibrary.cs, src/Claudette.App/Services/LibraryService.cs
-    test: HistoryIndexTests, SessionLibraryTests
-    fallback: History ignores the folder. If it moves, the library copies only the main transcript and a session restored on another machine loses subagent detail.
+    usedIn: src/Claudette.Core/History/HistoryIndex.cs, src/Claudette.Core/Library/SessionLibrary.cs, src/Claudette.App/Services/LibraryService.cs, src/Claudette.Core/Transcripts/TranscriptReader.cs
+    test: HistoryIndexTests, SessionLibraryTests, TranscriptReaderTests
+    fallback: History ignores the folder. If it moves, the library copies only the main transcript and a session restored on another machine loses subagent detail, and a restored tab's subagent groups and agent map show only the top-level subagents, without their activity.
   - id: "compact JSONL transcript lines"
     kind: behavior
     status: undocumented
@@ -710,6 +710,38 @@ items:
     usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: SidePanelTests
+  # --- Agent map (DESIGN.md §18) ------------------------------------------------------------------------
+  - id: "tool_progress"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: MessageParserTests
+  - id: "subagent_retry"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: MessageParserTests
+  - id: "heartbeat"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: MessageParserTests
+  - id: "<task-notification>"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs, src/Claudette.Core/Transcripts/TranscriptPrompts.cs
+    test: TranscriptReaderTests
+    fallback: How a transcript records a background task ending, as a user turn with <task-id>, <tool-use-id>, <status>, <result> and <usage>. If it changes, a restored tab shows a background subagent as "Didn't finish" and the notification as a user message; the entry's origin.kind "task-notification" (documented on SDKUserMessage) still marks it.
+  - id: "agent-<id>.meta.json"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs
+    test: TranscriptReaderTests
+    fallback: Its toolUseId says which Agent call a subagent transcript belongs to. Without it, a restored tab's subagent groups are empty and the agent map shows only the top-level subagents, without their activity.
+
   # --- Claude Code updates (DESIGN.md §12) --------------------------------------------------------------
   - id: "claude doctor"
     kind: command

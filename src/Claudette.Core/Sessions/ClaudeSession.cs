@@ -304,6 +304,10 @@ public sealed class ClaudeSession : IAsyncDisposable
                 Publish(new RateLimitUpdated(rateLimit));
                 break;
 
+            case ToolProgressMessage progress:
+                Publish(new ToolProgress(progress));
+                break;
+
             case AuthStatusMessage auth:
                 if (auth.Error is not null)
                 {

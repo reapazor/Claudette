@@ -5,8 +5,9 @@ namespace Claudette.Core.Transcripts;
 
 /// <summary>
 /// Decides which user entries in a transcript are things the user actually typed, with the same rules as
-/// <see cref="TranscriptReader"/>: tool results, slash command echoes, injected reminders, local command output and
-/// interrupt markers aren't prompts, and reminders prepended to a prompt are removed (DESIGN.md §9, "History").
+/// <see cref="TranscriptReader"/>: tool results, slash command echoes, injected reminders, local command output,
+/// background task notifications and interrupt markers aren't prompts, and reminders prepended to a prompt are
+/// removed (DESIGN.md §9, "History").
 /// </summary>
 internal static class TranscriptPrompts
 {
@@ -37,7 +38,8 @@ internal static class TranscriptPrompts
         if (trimmed.StartsWith("<local-command-stdout>", StringComparison.Ordinal)
             || trimmed.StartsWith("[Request interrupted by user", StringComparison.Ordinal)
             || trimmed.StartsWith("<command-", StringComparison.Ordinal)
-            || trimmed.StartsWith("<system-reminder>", StringComparison.Ordinal))
+            || trimmed.StartsWith("<system-reminder>", StringComparison.Ordinal)
+            || trimmed.StartsWith("<task-notification>", StringComparison.Ordinal))
         {
             return null;
         }

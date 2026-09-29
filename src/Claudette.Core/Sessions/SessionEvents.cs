@@ -38,6 +38,9 @@ public sealed record PermissionCancelled(string RequestId) : SessionEvent;
 
 public sealed record RateLimitUpdated(RateLimitEventMessage Message) : SessionEvent;
 
+/// <summary>A tool call is still running, for example a subagent (a heartbeat, or waiting out an API error).</summary>
+public sealed record ToolProgress(ToolProgressMessage Message) : SessionEvent;
+
 public sealed record AuthenticationRequired(string? Detail) : SessionEvent;
 
 /// <summary>The conversation was cleared (for example by <c>/clear</c>); drop the view and any cached title.</summary>
