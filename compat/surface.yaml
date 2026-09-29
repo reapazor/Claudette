@@ -447,7 +447,7 @@ items:
     usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/ContextUsage.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: RealCliTests
-    fallback: Last-turn input tokens divided by modelUsage.contextWindow from the result message.
+    fallback: The main agent's latest call (its message.usage) divided by modelUsage.contextWindow from the last result, warning near autocompact_state's threshold (CallUsage, TabViewModel.ShowEstimatedContext).
   - id: "get_usage"
     kind: control
     status: experimental
@@ -668,6 +668,38 @@ items:
     usedIn: src/Claudette.Core/Sessions/TokenTotals.cs, src/Claudette.Usage/UsageRecords.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: UsageStoreTests
+  - id: "contextWindow"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/CallUsage.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: CallUsageTests
+  - id: "message.usage"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/CallUsage.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: CallUsageTests
+    # Per-call usage on assistant messages: repeated on every content block of a call, so counted once by message id.
+  - id: "autocompact_state"
+    kind: message
+    status: undocumented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    test: ReplayTests
+    fallback: "Seen in 2.1.284 before each turn: value.enabled, value.effective_window, value.threshold. Only the context estimate uses it (when get_context_usage isn't available); without it the estimate warns at 80% of the context window."
+  - id: "active_goal"
+    kind: message
+    status: undocumented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    test: MessageParserTests
+    fallback: Seen in 2.1.284 ({"value":null} before each turn). Skipped on purpose, so Diagnostics doesn't count it as unknown; nothing depends on it.
+  - id: "supportedEffortLevels"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Services/AppServices.cs, src/Claudette.App/ViewModels/SettingsViewModel.Defaults.cs, src/Claudette.App/ViewModels/TabSettingsViewModel.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: SettingsDefaultsTests
+    # The models (and their effort levels) in the initialize reply, kept per machine for the lists in Settings.
 
   # --- History and the session library (DESIGN.md §9) --------------------------------------------------
   - id: "isMeta"
