@@ -34,6 +34,24 @@ public static class UiText
         }
     }
 
+    /// <summary>
+    /// Settles the window until <paramref name="condition"/> holds, for content that renders in the background, such as
+    /// Markdown, which LiveMarkdown parses off the UI thread.
+    /// </summary>
+    public static async Task SettleUntilAsync(Window window, Func<bool> condition, string what)
+    {
+        for (var i = 0; i < 100; i++)
+        {
+            Settle(window);
+            if (condition())
+            {
+                return;
+            }
+            await Task.Delay(20);
+        }
+        Assert.Fail($"Timed out waiting for {what} to render.");
+    }
+
     public static string Describe(Visual root, params (string From, string To)[] replacements)
     {
         var builder = new StringBuilder();
@@ -43,7 +61,8 @@ public static class UiText
         {
             text = text.Replace(from, to, StringComparison.Ordinal);
         }
-        return text.Replace('\\', '/');
+        // macOS shows Esc as ⎋ in shortcut hints; the rest of each hint reads the same everywhere.
+        return text.Replace('\\', '/').Replace("⎋", "Esc", StringComparison.Ordinal);
     }
 
     private static void Walk(Visual visual, int depth, StringBuilder builder)

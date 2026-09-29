@@ -18,6 +18,7 @@
   [button] Close tab
 [button] History
 [button] Settings
+"Found two problems in Parser.cs."
 "Opus"
 [field] "Message Claude…  (Enter to send, Shift+Enter for a new line, Esc to stop)"
 [button] Attach a file

@@ -36,7 +36,7 @@ public class MainWindowTests
 
         var window = new MainWindow { DataContext = main, Width = 1200, Height = 800 };
         window.Show();
-        UiText.Settle(window);
+        await UiText.SettleUntilAsync(window, () => UiText.Describe(window).Contains("Found two problems", StringComparison.Ordinal), "the reply");
 
         await Verify(UiText.Describe(window, (h.Root, "{root}")));
     }
