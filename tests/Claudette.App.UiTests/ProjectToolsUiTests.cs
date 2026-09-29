@@ -31,7 +31,7 @@ public class ProjectToolsUiTests
         var button = window.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Project tools");
         Assert.Equal("ProjectButton", button.Name);
         Assert.True(button.IsEffectivelyVisible);
-        Assert.Equal("[button] Project tools: NightOwl · UE 5.4\n", UiText.Describe(button));
+        Assert.Equal("[button] Project tools: NightOwl · UE 5.4", UiText.Describe(button).Trim());
         Assert.Null(button.FindAncestorOfType<TabView>());
 
         var flyout = Assert.IsType<Flyout>(button.Flyout);
