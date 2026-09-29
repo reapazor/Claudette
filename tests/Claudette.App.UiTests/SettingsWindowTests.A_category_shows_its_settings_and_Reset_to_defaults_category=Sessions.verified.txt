@@ -1,0 +1,15 @@
+﻿"Sessions"
+[ ] Also restore unpinned tabs when Claudette starts
+"Pinned tabs are always restored."
+"Name for this machine"
+[field] "{machine}"
+"Keep library sessions for"
+[choice] "Forever"
+"Session library folder"
+"Claudette copies each session's transcript here after every turn. Point it at a folder Google Drive, Dropbox or OneDrive keeps in sync, and your other machines can find and continue the same sessions in History."
+[field] "{root}/data/library"
+[button] Browse…
+[button] Move library…
+[ ] Sync Claudette's settings through the library
+"Appearance, new-tab defaults, usage thresholds, check-ins, quick suffixes, notifications and process monitor options. The path to claude, this machine's name, the library folder, the diff tool and your folders stay on each machine."
+[button] Reset to defaults

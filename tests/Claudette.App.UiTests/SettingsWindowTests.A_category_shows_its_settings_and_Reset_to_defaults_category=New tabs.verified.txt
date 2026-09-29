@@ -1,0 +1,21 @@
+﻿"New tabs"
+"Default model"
+[choice] "Claude Code's default"
+"Default effort"
+[choice] "The model's default"
+"Default permission mode"
+[choice] "Claude Code's default"
+"Recent folders to keep"
+[button] (icon)
+[button] (icon)
+[field] "20"
+[button] Clear recent folders
+"Favorites are kept."
+"Favorite folders"
+"api"
+"{root}/projects-favorite/api"
+[button] Move up
+[button] Move down
+[button] Remove
+[button] Add folder…
+[button] Reset to defaults

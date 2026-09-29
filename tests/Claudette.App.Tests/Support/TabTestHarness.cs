@@ -278,12 +278,13 @@ internal sealed class TabTestHarness : IAsyncDisposable
 
     /// <param name="updater">Claude Code's installation, for update tests; when given, update checks are set up too.</param>
     /// <param name="launcher">Starts processes other than Claude Code, which the scripted sessions stand in for.</param>
-    public TabTestHarness(Action<AppSettings>? configure = null, FakeClaudeUpdater? updater = null, IProcessLauncher? launcher = null)
+    /// <param name="dispatcher">The UI thread: an inline stand-in for view model tests, Avalonia's own for rendered UI tests.</param>
+    public TabTestHarness(Action<AppSettings>? configure = null, FakeClaudeUpdater? updater = null, IProcessLauncher? launcher = null, IUiDispatcher? dispatcher = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "work"));
         Directory.CreateDirectory(ProjectsDirectory);
         Trees = new FakeProcessTreeTracker(Time);
-        Services = new AppServices(AppPaths.Under(_root), launcher ?? new ProcessLauncher(), Time, Platform, new InlineDispatcher(), processTrees: Trees, notifier: Notifier);
+        Services = new AppServices(AppPaths.Under(_root), launcher ?? new ProcessLauncher(), Time, Platform, dispatcher ?? new InlineDispatcher(), processTrees: Trees, notifier: Notifier);
         Services.Notifications.UseBadge(Notifier);
         configure?.Invoke(Services.Settings);
         if (updater is not null)

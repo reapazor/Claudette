@@ -1,0 +1,2 @@
+# Verify snapshots: compared byte for byte, so keep them LF and UTF-8 everywhere.
+*.verified.txt text eol=lf working-tree-encoding=UTF-8

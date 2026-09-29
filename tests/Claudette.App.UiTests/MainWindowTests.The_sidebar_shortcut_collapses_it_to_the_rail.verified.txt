@@ -1,0 +1,7 @@
+﻿[button] Expand the sidebar
+[button] New tab
+[button] work
+[button] work
+  "W"
+[button] History
+[button] Settings
