@@ -135,7 +135,7 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
 ```
 
 1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. A chevron at its right draws it taller, with charts ([Detailed header](#detailed-header)). See [§6](#6-token-burn-awareness). At its right, before the account name, a dot shows Claude's service status, and while Claude has an incident a banner runs across the top under it ([§18](#service-status)).
-2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder, and under a tab's row, the runs of its project actions ([§18](#project-tools)). **New tab** is at its top; the selected tab's **Links** ([§18](#project-tools)), **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
+2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder, and under a tab's row, the runs of its project actions ([§18](#project-tools)). **New tab** is at its top; the selected tab's project and **Links** ([§18](#project-tools)), **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
 3. **Conversation.** The selected tab's conversation. See [§5](#5-conversation-view).
 4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), its project's tools and their output when it has any ([§18](#project-tools)), and optionally its running processes ([§4](#process-monitor)).
 5. **Composer.** Where you type to the selected tab, plus the Stop button and per-tab controls.
@@ -236,12 +236,12 @@ The tabs are listed in a sidebar on the left of the window, rather than a strip 
   - Closing the tab takes its entries away. They aren't saved, so they're gone when Claudette quits or restarts.
 - **A tab's menu** (right-click, in the full sidebar and the rail): Rename, Reset name, Pin, **Sync to other machines**, **Connect to the Claude app** (disabled, with the reason as its tip, when the account can't use it) and **Open in the Claude app** while it's connected ([§18](#remote-control-the-claude-app)), **Tab settings…**, the project's actions in a submenu named after the project (or **Add an action…** for a folder with none yet, [§18](#project-tools)), **Move up** and **Move down**, and Close.
 - **Top:** **New tab**, which opens the picker ([Opening a tab](#opening-a-tab)), and the button that collapses the sidebar.
-- **Foot:** the selected tab's **Links**, from its folder's `claudette.json`, when it has any ([§18](#project-tools)), **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), the Claudette update badge when there's a new release ([§2](#updating-claudette)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
+- **Foot:** the selected tab's project, a row that opens its menu of actions, when the tab has project tools, then its **Links**, from its folder's `claudette.json`, when it has any ([§18](#project-tools)), **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), the Claudette update badge when there's a new release ([§2](#updating-claudette)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
 - **Resizing.** Drag the sidebar's edge to make it wider or narrower (180 to 420 pixels; 248 by default). Double-click the edge for the default width. The width is remembered.
 - **Collapsing.** The collapse button, or `Ctrl/Cmd+B`, shrinks the sidebar to a rail:
   - The rail shows each group's color, then a square per tab with the first letter of its name and a small status icon. Hovering a square shows the tab info card. It doesn't list project runs.
   - A collapsed group shows only its color and its most urgent status.
-  - New tab, Links, History, the update badge and Settings stay as icons.
+  - New tab, the project, Links, History, the update badge and Settings stay as icons.
   - Whether the sidebar is collapsed is remembered.
 - **Narrow windows.** Below 900 pixels wide the sidebar collapses to the rail by itself, and expands again when the window is widened. Expanding it by hand in a narrow window lasts until the window is widened, when the remembered choice applies again; neither changes that choice.
 
@@ -356,8 +356,8 @@ Scrolling follows new output unless the user has scrolled up; a "Jump to latest"
 - You can type and send while Claude is working; the message is queued and delivered to the session.
 - `/` opens slash-command autocomplete (built-in plus the project's custom commands), and `@` file autocomplete for the tab's working folder. See [Autocomplete](#autocomplete).
 - Drag and drop, paste, or pick with the attach button images and files to attach them. See [Attachments](#attachments).
-- Per-tab controls in the bar above the composer: working folder (read-only), model, effort level, permission mode, the project chip when the tab has project tools (`◆ NightOwl · UE 5.4 ▾`, [§18](#project-tools)), the **Agents** button while the tab has subagents ([§18](#agent-map)), the **running tasks** chip while Claude Code has work going in the background (*"● 2 running tasks"*, [below](#running-tasks)), context window usage %, tokens used.
-- **The bar keeps Send in view.** The choices (model, effort, permission mode, the project chip) are at its left, and the counts (processes, Agents, running tasks, Files, context, tokens) with **Send** at its right. When they don't all fit on one line, as in a narrow window or with a long project chip or job name, the right-hand group moves to a second line under the choices, still at the right, rather than being pushed out of sight (`ControlBarPanel`).
+- Per-tab controls in the bar above the composer: working folder (read-only), model, effort level, permission mode, the **Agents** button while the tab has subagents ([§18](#agent-map)), the **running tasks** chip while Claude Code has work going in the background (*"● 2 running tasks"*, [below](#running-tasks)), context window usage %, tokens used.
+- **The bar keeps Send in view.** The choices (model, effort, permission mode) are at its left, and the counts (processes, Agents, running tasks, Files, context, tokens) with **Send** at its right. When they don't all fit on one line, as in a narrow window, the right-hand group moves to a second line under the choices, still at the right, rather than being pushed out of sight (`ControlBarPanel`).
 
 ### Working line
 
@@ -897,7 +897,7 @@ Clicking a notification brings Claudette to the front and goes to the relevant t
   - **Finished:** the first line of Claude's reply. Only a turn that ends normally counts; one you stopped, or that ended with an error, doesn't.
   - **Needs input:** what's waiting, such as *"Allow this command? npm test"*, *"Claude has a question: Which database?"* or *"Claude has a plan for you to review."* Perforce uses it too ([§18](#perforce-ticket-handling)): *"Perforce needs your password to log in as matt @ ssl:perforce:1666."*, or *"Perforce needs you to log in: run p4 login in a terminal, or log in with P4V."*
   - **Errors:** *"Claude Code stopped unexpectedly (exit code 3)."*, or why it couldn't start.
-  - **Project actions:** *"Build editor failed (exit code 6)."* Only while Claudette isn't in front, whichever tab is selected, since the chip already shows the job; a job the user stopped doesn't notify.
+  - **Project actions:** *"Build editor failed (exit code 6)."* Only while Claudette isn't in front, whichever tab is selected, since the sidebar already shows the job; a job the user stopped doesn't notify.
   - **Check-ins:** Settings → Check-ins → **Notify me when a check-in is sent** (off by default), which Tab settings can override ([§5](#check-ins-on-long-turns)).
 - **Skipping.** App-wide notifications (usage alerts, sign-in, updates) are skipped while Claudette is focused, because the header, the sign-in banner or the sign-in screen already shows them. Usage alerts also keep their line under the header.
 - **One per subject.** A newer notification replaces an older one of the same kind for the same tab. A tab's notifications are taken away once you look at it; a waiting-prompt notification also goes once the prompt is answered. An update is announced once per version; the version last announced is saved with this machine's state, so a restart doesn't announce it again.
@@ -1271,7 +1271,7 @@ Settings → Keyboard lists every shortcut Claudette handles, with its default f
 Below the categories, a divider and a group headed by the selected tab's project: its name when a provider found one ("NightOwl"), otherwise the folder's name, with the folder's path in a tooltip. It has three pages, **Links**, **Actions** and **Tools**, and resolves [issue #9](https://github.com/reapazor/Claudette/issues/9) (adding web links from Settings).
 
 - **Which tab.** The Settings window follows the tab that was selected when it opened (the window is modal, so that can't change while it's open), and each page says so in a small line at the top: "For the tab in D:\Games\NightOwl". With no tab open, the group is hidden. **Add an action…** from another tab's menu, or **Open** in its **Tab settings…**, selects that tab first.
-- **Saving.** Like the rest of Settings, a change is saved as it's made: each add, edit, removal or move rewrites the file it belongs to, and every tab in the folder reads its files again, so the sidebar's Links, the chip and the tab menu follow at once. Each page says that saving rewrites the file, so comments in it are dropped. A file that isn't valid JSON is never rewritten: the page shows its reason and the dialogs refuse to save to it. When a save fails, the page says why and goes back to what the files hold.
+- **Saving.** Like the rest of Settings, a change is saved as it's made: each add, edit, removal or move rewrites the file it belongs to, and every tab in the folder reads its files again, so the sidebar's Links, the project's menu and the tab menu follow at once. Each page says that saving rewrites the file, so comments in it are dropped. A file that isn't valid JSON is never rewritten: the page shows its reason and the dialogs refuse to save to it. When a save fails, the page says why and goes back to what the files hold.
 - **Links.** The links of both files in the order the sidebar shows them, `claudette.json`'s first, each with its name, its address and its file: "Shared (claudette.json)" or "Just me (claudette.local.json)". A link the sidebar won't open is listed with why, and one that can't be read with its reason (it can only be removed). **Add…**, **Edit…**, **Remove**, **Move up** and **Move down**; a link moves within its own file. The dialog has the name (empty shows the address), the address, and for a new link which file it goes in, just the user's by default. The address is checked as the sidebar opens links: only `https`, `http` and `mailto`, a full address, and only the placeholders, which a one-line hint explains: `{branch}`, `{changelist}` and `{folderName}` are filled in from the tab ([§18](#project-tools)).
 - **Actions.** The actions editor that was in **Tab settings…**, unchanged: a choice of the two files, and the chosen file's actions with **Add…**, **Edit…**, **Remove**, **Move up**, **Move down** and **Open file**. **Add an action…** in the chip's and the tab's menus opens Settings on this page with a new action started, its dialog asking which file it goes in. **Tab settings…** keeps a line, "Project actions are in Settings → NightOwl → Actions", with **Open**.
 - **Tools.** This machine's choices for the tab's project, the same ones the project menus make, and only those its provider has: the project, when the folder has several; the per-project choice (Unreal's editor configuration, Development or DebugGame; Unity's code optimization, Release or Debug); and what's picked with **Choose…** (Unreal's engine folder, the Unity editor, the Godot executable), with what's in use now, whether it was chosen or found, and **Clear** to forget the pick and find it again. It shows the project file or folder they're remembered by. Without a project it says "No Unreal, Unity or Godot project in this folder"; either way it links to Settings → Project tools for the defaults every project starts with.
@@ -1620,7 +1620,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Unreal Engine:** finding the project (in the folder, below and above it) and its engine (a parent folder, `LauncherInstalled.dat`, the registry, `Install.ini`, a chosen folder), Launch editor with Development or DebugGame per project, Generate project files, Build editor, Build and launch, Open solution with a chosen IDE, Open latest log, Clean intermediates and Kill all Unreal editors.
     - **Unity:** the editor for the project's version from Unity Hub's folders and lists, Open in Unity with Release or Debug code optimization, EditMode tests with their counts, regenerating the C# solution, the solution and logs, Clean Library, Kill all Unity editors, and the lock file rules.
     - **Godot:** finding the executable (a pick, Settings, the `PATH`, `Godot.app`, Scoop and WinGet) and checking for the .NET build, Open in Godot, Run project, Build C#, Open solution, Clean `.godot` or `.import`, and Kill all Godot editors.
-    - **The chip** in the composer bar, the project's submenu in the tab menu, the **Project** page with the job's output and Stop, the notification, and `Ctrl/Cmd+Shift+E`.
+    - **The chip** in the composer bar (since moved to the sidebar's foot, milestone 15), the project's submenu in the tab menu, the **Project** page with the job's output and Stop, the notification, and `Ctrl/Cmd+Shift+E`.
     - **Runs in the sidebar:** each job gets an entry under its tab's row with its own log, which stays until it's closed, with Stop while it runs.
     - **claudette.json** and **claudette.local.json:** a folder's own actions (shared ones run on a click, without a confirmation) and links, the links in the sidebar, and the in-app editor.
     - **Settings → Project tools**, and the notes to Claude about Unreal, Unity and Godot projects.
@@ -1644,6 +1644,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
       - **Still to verify** against a real Claude Code: the task messages for a backgrounded command, a Monitor watch (whether it sets `is_backgrounded`, and that its events don't end it), a command moved to the background by its timeout, a remote agent and a workflow; `ambient` tasks; and what `/clear` does to running tasks. Only foreground tasks have been recorded so far (the `03` and `12` fixtures).
     - **Project settings ([§14](#the-projects-pages)).** ✅ Built 2026-09-29. Below Settings' categories, a group for the selected tab's project, named after it, with three pages: **Links**, to add, edit, remove and reorder the links of `claudette.json` and `claudette.local.json`, with the address checked as the sidebar opens links (resolves [issue #9](https://github.com/reapazor/Claudette/issues/9)); **Actions**, the actions editor moved from **Tab settings…**, which **Add an action…** now opens; and **Tools**, the project's remembered choices (Unreal's configuration and engine folder, Unity's editor and code optimization, the Godot executable). Found by the search box.
       - **Still to verify:** how the group and pages look on real Windows, macOS and Linux desktops, in both styles and themes; so far they've only been rendered headlessly.
+    - **The project's menu moves to the sidebar.** The project chip left the composer's bar, which had grown crowded, for a row at the sidebar's foot above Links ([§18](#project-tools)). ✅ Built 2026-09-29.
 16. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features
@@ -1784,7 +1785,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
 
 **Where the actions are.**
 
-- **The project chip** in the composer bar ([§5](#composer)), for example `◆ NightOwl · UE 5.4 ▾`. It shows only when the tab has project tools: a detected project, or custom actions. With custom actions and no project it reads `◆ Actions ▾`. While a job runs, it shows a busy dot and the job's name instead (`● Build editor… ▾`). Its menu has:
+- **The project's row** at the sidebar's foot, above Links ([§4](#sidebar)), for the selected tab: a cube icon and the project's name and version, for example `NightOwl · UE 5.4 ›`. It shows only when the tab has project tools: a detected project, or custom actions. With custom actions and no project it reads `Actions`. While a job runs, a busy dot replaces the icon and the job's name replaces the project's (`● Build editor… ›`). In the rail it's the icon alone. A click opens its menu beside the sidebar. (It was a chip in the composer bar at first; it moved here to leave the composer's bar to the conversation's own controls.) Its menu has:
   - a header: the project's name and kind, the engine's version and kind, and the engine's folder, or what's wrong ("The engine for EngineAssociation "5.9" wasn't found on this machine");
   - entries of `claudette.json` that were skipped, and why;
   - **Projects in this folder**, when there are several, as radio items; the pick is remembered per tab folder on this machine;
@@ -1816,7 +1817,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - **Open**: a file or folder, opened with the OS's app, or for a solution with the IDE chosen in Settings.
   - **Destructive**: confirmed first, such as deleting folders.
 - Every command is built by a pure function that takes the OS, so all three OSes' commands are tested on any machine.
-- **Detection** runs off the UI thread when a tab opens and before its session starts, when its folder changes, when the chip menu opens, and on **Refresh**. It's cheap: a bounded walk and a few small files.
+- **Detection** runs off the UI thread when a tab opens and before its session starts, when its folder changes, when the project's menu opens, and on **Refresh**. It's cheap: a bounded walk and a few small files.
   - The tab's folder, its subfolders two levels down (for `Game/NightOwl/NightOwl.uproject`), and its parent folders up to the repository's root: a folder with `.git` (a folder, or a worktree's file), `.p4config` or the file `P4CONFIG` names, or six levels up (for a tab opened on `Source/`).
   - It never looks into `Intermediate`, `Saved`, `DerivedDataCache`, `Binaries`, `Content`, `Plugins`, `Source`, `Config`, `Engine`, `Templates`, `Library`, `Temp`, `obj`, `bin`, `node_modules`, hidden folders or links, and at most 2,000 folders.
   - Several projects are listed nearest first: the folder, then its subfolders, then its parents.
@@ -1839,7 +1840,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - **A version such as `5.4`:** a launcher install. On Windows, `%ProgramData%\Epic\UnrealEngineLauncher\LauncherInstalled.dat` (JSON: an `InstallationList` of `AppName` `UE_5.4` and `InstallLocation`), then the registry, `HKLM\SOFTWARE\EpicGames\Unreal Engine\5.4`, value `InstalledDirectory`, in the 64-bit and then the 32-bit view. On macOS, `~/Library/Application Support/Epic/UnrealEngineLauncher/LauncherInstalled.dat`. Linux has no launcher.
   - **Anything else, usually a GUID:** a build registered by UnrealVersionSelector. On Windows, `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds`, where each value's name is a build's id and its data the engine's folder. On Linux, `~/.config/Epic/UnrealEngine/Install.ini`, and on macOS `~/Library/Application Support/Epic/UnrealEngine/Install.ini`: the `[Installations]` section's `{GUID}=path` lines. GUIDs are compared with and without braces, ignoring case.
   - The registry is read in `Claudette.Platform` (`WindowsUnrealEngineRegistry`), behind `IUnrealEngineRegistry`.
-  - **The version** is `Build.version`'s `MajorVersion`, `MinorVersion` and `PatchVersion` (and `BranchName`), shown as "Unreal Engine 5.4.2". The chip shows `UE 5.4`, from the association when the engine isn't found.
+  - **The version** is `Build.version`'s `MajorVersion`, `MinorVersion` and `PatchVersion` (and `BranchName`), shown as "Unreal Engine 5.4.2". The project's row shows `UE 5.4`, from the association when the engine isn't found.
   - **Its kind:** "launcher install", "source build", "installed build" (one with `Engine/Build/InstalledBuild.txt` that isn't the launcher's), "engine in a parent folder", or "chosen by you".
   - **Unreal Engine 4** calls its editor `UE4Editor`; the build scripts are the same.
   - **Not found:** the menu says so, the engine's actions are disabled ("The engine wasn't found: choose its folder in this menu"), and **Choose engine folder…** is offered.
@@ -1876,13 +1877,13 @@ A tab can do things for the project in its folder: launch the editor, generate p
 **Unity.**
 
 - **Finding the project.** A folder with `ProjectSettings/ProjectVersion.txt` and `Assets/`, found as above. Its name is the folder's (the C# solution is named after it); `productName` and `companyName` from `ProjectSettings/ProjectSettings.asset` are shown and name the player log's folder.
-- **The version** is `m_EditorVersion` (`2022.3.20f1`), with the changeset from `m_EditorVersionWithRevision` when it's there. The chip shows `Unity 2022.3`.
+- **The version** is `m_EditorVersion` (`2022.3.20f1`), with the changeset from `m_EditorVersionWithRevision` when it's there. The project's row shows `Unity 2022.3`.
 - **Finding the editor** for that exact version (`UnityEditors`). Only an editor that exists counts.
   - A pick remembered for the project, from **Choose Unity editor…**: the executable, or a version's folder or `Unity.app` that holds it.
   - Unity Hub's default folder: `C:\Program Files\Unity\Hub\Editor\<version>\Editor\Unity.exe`, `/Applications/Unity/Hub/Editor/<version>/Unity.app/Contents/MacOS/Unity`, `~/Unity/Hub/Editor/<version>/Editor/Unity`.
   - Hub's custom install folder, `secondaryInstallPath.json` (a JSON string) in Hub's config folder: `%APPDATA%\UnityHub`, `~/Library/Application Support/UnityHub` or `~/.config/UnityHub`.
   - Editors added to Hub by hand: `editors-v2.json` (`{ "data": [ { "version", "location" } ] }`) or the older `editors.json` (`{ "<version>": { "version", "location" } }`) in the same folder, read tolerantly; a location can be a string or a list.
-  - When the version isn't installed, the chip menu's header says so and offers **Choose Unity editor…**.
+  - When the version isn't installed, the project menu's header says so and offers **Choose Unity editor…**.
 - **Whether Unity has the project open.** `Temp/UnityLockfile` exists and a `Unity` process's command line names the project. A lock left by a crashed editor doesn't count. Where processes can't be listed, or a Unity process's command line can't be read, the lock file alone counts, since Unity refuses a locked project anyway.
 - **Actions.**
   - **Open in Unity** (the main action), detached: `Unity -projectPath "<path>"`. The per-project radio **Code optimization: Release / Debug** (its default from Settings, Release) adds `-debugCodeOptimization` for Debug, and the label says "Open in Unity (Debug)". While the project is open it reads **Unity has this project open**, disabled.
@@ -1918,7 +1919,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
   4. on macOS, `/Applications/Godot.app` or `/Applications/Godot_mono.app`;
   5. on Windows, Scoop's shims (`~\scoop\shims\godot.exe`, `godot-mono.exe`), WinGet's `Links\godot.exe`, and the newest `Godot*.exe` in WinGet's `GodotEngine.GodotEngine*` package folder, not the console one.
   - **Detect** in Settings runs 3–5 and fills in the path.
-  - A C# project needs the .NET ("mono") build of Godot: one whose name has `mono` in it, or with a `GodotSharp` folder beside it (in `Contents/Resources` on macOS). When the Godot found isn't one, the chip menu's header says so.
+  - A C# project needs the .NET ("mono") build of Godot: one whose name has `mono` in it, or with a `GodotSharp` folder beside it (in `Contents/Resources` on macOS). When the Godot found isn't one, the project menu's header says so.
 - **Actions.**
   - **Open in Godot** (the main action), detached: `godot --editor --path "<folder>"`.
   - **Run project**, detached: `godot --path "<folder>"`.
@@ -1939,7 +1940,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
 
 - `claudette.json` is shared: committed with the project.
 - `claudette.local.json` is personal, and belongs in `.gitignore`. It has the same shape, and its entries come after the shared file's.
-- Both are read tolerantly, like everything else Claudette reads: comments and trailing commas are fine, unknown fields are ignored, and a bad entry is skipped with a reason, which the chip menu and the Project page show ("claudette.json: actions[2] has no command, so it was skipped."). A file that isn't JSON is skipped whole, with the parser's reason. A missing file means nothing.
+- Both are read tolerantly, like everything else Claudette reads: comments and trailing commas are fine, unknown fields are ignored, and a bad entry is skipped with a reason, which the project's menu and the Project page show ("claudette.json: actions[2] has no command, so it was skipped."). A file that isn't JSON is skipped whole, with the parser's reason. A missing file means nothing.
 
 ```json
 {
@@ -1961,8 +1962,8 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - `os` is optional: `windows`, `macos` or `linux`. An action whose `os` leaves out this machine isn't shown.
   - Commands run through the user's shell: `cmd.exe /d /s /c "<command>"` on Windows, `$SHELL -c` (or `/bin/sh -c`) elsewhere. Otherwise they run like built-in actions.
   - An action's id is its file and position, such as `shared:0`, which Stop and the notification use.
-  - They're listed in the chip menu after the project's actions, under a separator.
-- **Picking up edits.** The files are read again when the tab is selected, when Claudette comes to the front, when a turn ends (Claude may have edited them), when the chip menu opens, and after the in-app editor saves. Reads are numbered as they start, and one that finishes after a later one has been shown is dropped, so quick saves in a row never leave a tab showing an older file (and a detection from before a choice never undoes it). Claudette doesn't watch them with the file system: a watcher per tab runs into the OS's limits (128 inotify instances per user on many Linux machines) and doesn't work on some network drives, and these moments cover when an edit can matter.
+  - They're listed in the project's menu after the project's actions, under a separator.
+- **Picking up edits.** The files are read again when the tab is selected, when Claudette comes to the front, when a turn ends (Claude may have edited them), when the project's menu opens, and after the in-app editor saves. Reads are numbered as they start, and one that finishes after a later one has been shown is dropped, so quick saves in a row never leave a tab showing an older file (and a detection from before a choice never undoes it). Claudette doesn't watch them with the file system: a watcher per tab runs into the OS's limits (128 inotify instances per user on many Linux machines) and doesn't work on some network drives, and these moments cover when an edit can matter.
 - **The in-app editor.**
   - It's in Settings, on the tab's **Actions** page ([§14](#the-projects-pages)); it was in **Tab settings…** until milestone 15, which now points there.
   - **Add an action…** opens Settings on that page with a small dialog: name, command, working folder, **Run with output** or **Launch and forget**, and which file it goes in, **Just me (claudette.local.json)** (the default) or **Shared with the project (claudette.json)**.
@@ -1985,7 +1986,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
 
 **Settings → Project tools** ([§14](#14-settings)), kept on each machine like the diff tool:
 
-- Default editor configuration for Unreal: Development (the default) or DebugGame. A project's own choice in the chip menu wins.
+- Default editor configuration for Unreal: Development (the default) or DebugGame. A project's own choice in the project's menu wins.
 - Project files for: Visual Studio, VS Code or Xcode. The default is Visual Studio on Windows, Xcode on macOS and VS Code on Linux.
 - Open solutions with: the OS's default app, Rider, Visual Studio, VS Code, or another program (with **Browse…**).
 - Tell Claude about Unreal projects: on by default.

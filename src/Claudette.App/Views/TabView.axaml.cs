@@ -330,12 +330,6 @@ public partial class TabView : UserControl
         }
     }
 
-    /// <summary>
-    /// The project chip's menu opened: look at the project's files again, so what's enabled is current (a solution
-    /// generated from a terminal, say). The menu updates in place when that's done.
-    /// </summary>
-    private void OnProjectMenuOpened(object? sender, EventArgs e) => ViewModel?.RefreshProjectCommand.Execute(null);
-
     /// <summary>A project job's output follows its newest line, as a terminal does.</summary>
     private void OnProjectOutputChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {

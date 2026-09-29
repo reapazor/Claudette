@@ -1086,57 +1086,6 @@
                   </Flyout>
                 </Button.Flyout>
               </Button>
-
-              <!-- Project tools (DESIGN.md §18): "◆ NightOwl · UE 5.4 ▾", or "◆ Actions ▾" for a folder's own actions -->
-              <Button x:Name="ProjectChip" Classes="flat" IsVisible="{Binding HasProjectTools}" ToolTip.Tip="{Binding ProjectChipTip}"
-                      AutomationProperties.Name="Project tools">
-                <StackPanel Orientation="Horizontal" Spacing="4">
-                  <TextBlock Classes="muted small" Text="◆" VerticalAlignment="Center" IsVisible="{Binding !IsProjectJobRunning}" />
-                  <TextBlock Classes="status busy" Text="●" FontSize="9" VerticalAlignment="Center" IsVisible="{Binding IsProjectJobRunning}" />
-                  <TextBlock Classes="muted small" Text="{Binding ProjectChipText, StringFormat='{}{0} ▾'}" MaxWidth="240" TextTrimming="CharacterEllipsis" />
-                </StackPanel>
-                <Button.Flyout>
-                  <Flyout Placement="TopEdgeAlignedLeft" Opened="OnProjectMenuOpened">
-                    <StackPanel x:Name="ProjectMenu" MinWidth="300" MaxWidth="440" Spacing="1">
-                      <TextBlock Text="{Binding ProjectHeaderTitle}" FontWeight="SemiBold" Margin="8,2,8,0" />
-                      <ItemsControl ItemsSource="{Binding ProjectHeaderLines}" Margin="8,0,8,2">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="x:String">
-                            <TextBlock Classes="muted small" Text="{Binding}" TextWrapping="Wrap" />
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                      <!-- Entries of claudette.json that were skipped, and why (DESIGN.md §18) -->
-                      <ItemsControl ItemsSource="{Binding ProjectFileProblems}" Margin="8,0,8,2" IsVisible="{Binding HasProjectFileProblems}">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="x:String">
-                            <TextBlock Classes="small warning" Text="{Binding}" TextWrapping="Wrap" />
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                      <Separator Margin="0,2" />
-                      <ItemsControl ItemsSource="{Binding ProjectMenu}">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate DataType="vm:ProjectMenuEntry">
-                            <Panel>
-                              <Separator Margin="0,3" IsVisible="{Binding IsSeparator}" />
-                              <TextBlock Classes="muted small" Text="{Binding Label}" Margin="8,4,8,1" IsVisible="{Binding IsHeader}" />
-                              <Button Classes="flat row" IsVisible="{Binding IsButton}" IsEnabled="{Binding IsEnabled}" HorizontalContentAlignment="Stretch"
-                                      ToolTip.Tip="{Binding Tip}" ToolTip.ShowOnDisabled="True" Click="OnFlyoutItemPicked"
-                                      Command="{Binding Command}" CommandParameter="{Binding Parameter}">
-                                <Grid ColumnDefinitions="16,*">
-                                  <TextBlock Classes="small" Text="{Binding Mark}" VerticalAlignment="Center" IsVisible="{Binding HasMark}" />
-                                  <TextBlock Grid.Column="1" Text="{Binding Label}" />
-                                </Grid>
-                              </Button>
-                            </Panel>
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                    </StackPanel>
-                  </Flyout>
-                </Button.Flyout>
-              </Button>
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" Spacing="2">

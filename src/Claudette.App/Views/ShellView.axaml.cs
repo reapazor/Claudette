@@ -205,6 +205,15 @@ public partial class ShellView : UserControl
 
     private ShellViewModel? ViewModel => DataContext as ShellViewModel;
 
+    /// <summary>
+    /// The project's menu opened: look at the project's files again, so what's enabled is current (a solution generated
+    /// from a terminal, say). The menu updates in place when that's done (DESIGN.md §18).
+    /// </summary>
+    private void OnProjectMenuOpened(object? sender, EventArgs e) => ViewModel?.SelectedTab?.RefreshProjectCommand.Execute(null);
+
+    /// <summary>An entry of the project's menu was picked: the menu closes, as a menu does.</summary>
+    private void OnProjectMenuItemPicked(object? sender, RoutedEventArgs e) => ProjectButton.Flyout?.Hide();
+
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);

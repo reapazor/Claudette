@@ -453,7 +453,7 @@ public class ProjectSettingsTests
         var written = Read(Path.Combine(h.WorkFolder, ProjectFile.SharedName));
         Assert.Equal("https://example.com/board", written["links"]![0]!["url"]!.GetValue<string>());
         Assert.Equal(("Serve", "npm run dev", "launch"), (written["actions"]![0]!["name"]!.GetValue<string>(), written["actions"]![0]!["command"]!.GetValue<string>(), written["actions"]![0]!["mode"]!.GetValue<string>()));
-        await TabTestHarness.Eventually(() => tab.ProjectChipText == "Actions" && sibling.ProjectActions.Count == 1, "both tabs");
+        await TabTestHarness.Eventually(() => tab.ProjectButtonText == "Actions" && sibling.ProjectActions.Count == 1, "both tabs");
         Assert.Equal(ProjectActionKind.Launch, sibling.ProjectActions.Single().Kind);
     }
 

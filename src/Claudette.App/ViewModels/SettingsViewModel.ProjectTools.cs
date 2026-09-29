@@ -34,7 +34,7 @@ public sealed partial class SettingsViewModel
         new(Core.Settings.UnrealConfiguration.DebugGame, "DebugGame (loads the DebugGame modules)"),
     ];
 
-    /// <summary>The configuration a project uses until it's given its own in the chip menu.</summary>
+    /// <summary>The configuration a project uses until it's given its own in the project's menu.</summary>
     public SettingChoice<UnrealConfiguration> SelectedUnrealConfiguration
     {
         get => UnrealConfigurationChoices.First(c => c.Value == _settings.ProjectTools.UnrealConfiguration);
@@ -117,7 +117,7 @@ public sealed partial class SettingsViewModel
         new(UnityCodeOptimization.Debug, "Debug (-debugCodeOptimization, for stepping through scripts)"),
     ];
 
-    /// <summary>The code optimization a Unity project opens with until it's given its own in the chip menu.</summary>
+    /// <summary>The code optimization a Unity project opens with until it's given its own in the project's menu.</summary>
     public SettingChoice<UnityCodeOptimization> SelectedUnityOptimization
     {
         get => UnityOptimizationChoices.First(c => c.Value == _settings.ProjectTools.UnityCodeOptimization);

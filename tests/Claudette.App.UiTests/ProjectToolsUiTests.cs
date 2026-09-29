@@ -4,7 +4,6 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
-using Claudette.App.Controls;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
@@ -20,7 +19,7 @@ namespace Claudette.App.UiTests;
 public class ProjectToolsUiTests
 {
     [AvaloniaFact]
-    public async Task A_tab_in_an_Unreal_project_shows_the_project_chip_and_its_menu_lists_the_actions()
+    public async Task A_tab_in_an_Unreal_project_shows_the_project_at_the_sidebars_foot_and_its_menu_lists_the_actions()
     {
         await using var h = new TabTestHarness(settings => settings.ProjectTools.ProjectFileFormat = ProjectFileFormat.VisualStudio, dispatcher: new AvaloniaUiDispatcher());
         UnrealFixture.Write(h.Root, h.WorkFolder);
@@ -28,13 +27,15 @@ public class ProjectToolsUiTests
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
         await UiText.SettleUntilAsync(window, () => tab.Project is not null, "the project");
 
-        var chip = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ProjectChip");
-        Assert.True(chip.IsEffectivelyVisible);
-        Assert.Equal("Project tools", AutomationProperties.GetName(chip));
-        Assert.Contains("\"NightOwl · UE 5.4 ▾\"", UiText.Describe(chip), StringComparison.Ordinal);
+        // The project's row sits at the sidebar's foot, for the selected tab; the composer's bar has no project chip.
+        var button = window.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Project tools");
+        Assert.Equal("ProjectButton", button.Name);
+        Assert.True(button.IsEffectivelyVisible);
+        Assert.Equal("[button] Project tools: NightOwl · UE 5.4\n", UiText.Describe(button));
+        Assert.Null(button.FindAncestorOfType<TabView>());
 
-        var flyout = Assert.IsType<Flyout>(chip.Flyout);
-        flyout.ShowAt(chip);
+        var flyout = Assert.IsType<Flyout>(button.Flyout);
+        flyout.ShowAt(button);
         UiText.Settle(window);
         var menu = Assert.IsAssignableFrom<Control>(flyout.Content);
         await UiText.SettleUntilAsync(window, () => menu.IsEffectivelyVisible, "the menu");
@@ -123,34 +124,6 @@ public class ProjectToolsUiTests
         Assert.Equal([failed], list.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("runrow")).Select(r => r.DataContext));
 
         await Verify(shown);
-    }
-
-    /// <summary>
-    /// The composer's control bar keeps Send in view: when its chips (here the project's, while a build runs) don't fit
-    /// beside the right-hand group, that group moves to a line of its own under them, still at the right. The panel's
-    /// own layout is in <see cref="ControlBarPanelTests"/>.
-    /// </summary>
-    [AvaloniaFact]
-    public async Task The_Send_button_stays_in_view_when_the_control_bar_is_too_narrow_for_one_line()
-    {
-        var launcher = new FakeLauncher();
-        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher(), launcher: launcher);
-        UnrealFixture.Write(h.Root, h.WorkFolder);
-        var tab = await h.OpenTabAsync();
-        var window = UiText.Show(new ShellView { DataContext = h.Shell }, width: 900);
-        await UiText.SettleUntilAsync(window, () => tab.Project is not null, "the project");
-        await tab.RunProjectActionCommand.ExecuteAsync(tab.ProjectActions.Single(a => a.Id == "build-editor"));
-        UiText.Settle(window);
-        var send = window.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Send");
-        var attach = window.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Attach a file");
-        double Right(Control c) => c.TranslatePoint(new Point(c.Bounds.Width, 0), window)!.Value.X;
-        double Top(Control c) => c.TranslatePoint(default, window)!.Value.Y;
-        var bar = send.FindAncestorOfType<ControlBarPanel>()!;
-
-        Assert.True(send.IsEffectivelyVisible);
-        Assert.True(Right(send) <= window.Bounds.Width, $"Send ends at {Right(send)}, past the window's {window.Bounds.Width}");
-        Assert.True(bar.IsWrapped);
-        Assert.True(Top(send) > Top(attach) + attach.Bounds.Height, "The right-hand group should have moved under the chips");
     }
 
     [AvaloniaFact]

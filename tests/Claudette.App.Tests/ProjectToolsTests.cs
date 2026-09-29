@@ -56,12 +56,12 @@ public class ProjectToolsTests
 
         Assert.True(tab.HasProjectTools);
         Assert.False(tab.OffersFirstProjectAction);
-        Assert.Equal("NightOwl · UE 5.4", tab.ProjectChipText);
+        Assert.Equal("NightOwl · UE 5.4", tab.ProjectButtonText);
         Assert.Equal("NightOwl (UE 5.4)", tab.ProjectMenuTitle);
         Assert.Equal("NightOwl · Unreal Engine", tab.ProjectHeaderTitle);
         Assert.Equal(["Unreal Engine 5.4.2 · engine in a parent folder", h.Root], tab.ProjectHeaderLines);
         Assert.Contains(tab.ProjectDetails, d => d.Label == "Project" && d.Value == uproject);
-        Assert.Contains("Ctrl+Shift+E: Launch editor", tab.ProjectChipTip.Replace("⇧⌘E", "Ctrl+Shift+E"), StringComparison.Ordinal);
+        Assert.Contains("Ctrl+Shift+E: Launch editor", tab.ProjectButtonTip.Replace("⇧⌘E", "Ctrl+Shift+E"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -222,7 +222,7 @@ public class ProjectToolsTests
         Assert.False(spec.Detached);
         Assert.NotNull(spec.Environment);
         Assert.True(tab.IsProjectJobRunning);
-        Assert.Equal("Build editor…", tab.ProjectChipText);
+        Assert.Equal("Build editor…", tab.ProjectButtonText);
         Assert.False(Entry(tab, "Generate project files").IsEnabled);
         Assert.Contains("Stop it first", Entry(tab, "Generate project files").Tip, StringComparison.Ordinal);
         var build = LastRun(tab)!;
@@ -237,7 +237,7 @@ public class ProjectToolsTests
 
         Assert.Equal("Build editor succeeded.", build.Status);
         Assert.False(build.Failed);
-        Assert.Equal("NightOwl · UE 5.4", tab.ProjectChipText);
+        Assert.Equal("NightOwl · UE 5.4", tab.ProjectButtonText);
 
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "generate-project-files"));
         launcher.Processes.Last().Exit(6);
@@ -466,7 +466,7 @@ public class ProjectToolsTests
 
         var tab = await OpenWithProjectAsync(h);
 
-        Assert.Equal("work · Unity 2022.3", tab.ProjectChipText);
+        Assert.Equal("work · Unity 2022.3", tab.ProjectButtonText);
         Assert.StartsWith("This is a Unity 2022.3.20f1 project, work, at ", h.Factory.Launches.Single().AppendSystemPrompt, StringComparison.Ordinal);
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "run-editmode-tests"));
         var spec = launcher.Started.Last();
@@ -495,7 +495,7 @@ public class ProjectToolsTests
         await TabTestHarness.Eventually(() => tab.HasProjectTools, "the actions");
 
         Assert.True(tab.HasOnlyCustomActions);
-        Assert.Equal("Actions", tab.ProjectChipText);
+        Assert.Equal("Actions", tab.ProjectButtonText);
         Assert.Equal("Actions", tab.ProjectMenuTitle);
         Assert.Equal(["Run tests", "-", "Show output…", "Add an action…", "Refresh"], tab.ProjectMenu.Select(e => e.IsSeparator ? "-" : e.Label));
         Assert.Equal("Run tests", tab.MainProjectAction!.Label);

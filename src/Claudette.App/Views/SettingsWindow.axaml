@@ -393,7 +393,7 @@
         <StackPanel Spacing="12" IsVisible="{Binding IsProjectTools}">
           <TextBlock Classes="section" Text="Project tools" />
           <TextBlock Classes="muted small" TextWrapping="Wrap"
-                     Text="When a tab's folder holds a project Claudette knows, such as an Unreal Engine project, the composer bar gets a project chip with its actions: launch the editor, generate project files, build. These settings stay on this machine." />
+                     Text="When a tab's folder holds a project Claudette knows, such as an Unreal Engine project, the sidebar gets a row for the project, above Links, with its actions: launch the editor, generate project files, build. These settings stay on this machine." />
           <TextBlock Text="Unreal Engine" FontWeight="SemiBold" />
           <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto" RowSpacing="10">
             <TextBlock Classes="label" Text="Default editor configuration" />
@@ -402,7 +402,7 @@
             <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectFileFormatChoices}" SelectedItem="{Binding SelectedProjectFileFormat}" />
           </Grid>
           <TextBlock Classes="muted small" TextWrapping="Wrap"
-                     Text="The configuration is the default for projects that haven't been given their own in the chip's menu. Rider opens the Visual Studio solution, or the .uproject itself." />
+                     Text="The configuration is the default for projects that haven't been given their own in the project's menu. Rider opens the Visual Studio solution, or the .uproject itself." />
           <CheckBox Content="Tell Claude about Unreal projects" IsChecked="{Binding TellClaudeAboutUnreal}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                      Text="Adds a short note to the session: the engine version and folder, and the exact commands to build the editor and regenerate project files. Applies to tabs started after the change." />
@@ -763,7 +763,7 @@
             <TextBlock Classes="section" Text="Actions" />
             <TextBlock Classes="muted small" Text="{Binding ForTabText, FallbackValue=''}" TextWrapping="Wrap" Margin="0,-10,0,0" />
             <TextBlock Classes="muted small" TextWrapping="Wrap"
-                       Text="Commands of your own for this folder, in the project chip's menu, the tab's menu and on the Project page. Changes are saved as you make them." />
+                       Text="Commands of your own for this folder, in the project's menu in the sidebar, the tab's menu and on the Project page. Changes are saved as you make them." />
             <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectActionFiles}" SelectedItem="{Binding SelectedProjectActionFile}"
                       AutomationProperties.Name="Project actions file" />
             <TextBlock Classes="muted small" Text="{Binding ProjectActionsNote}" TextWrapping="Wrap" Margin="0,-4,0,0" />

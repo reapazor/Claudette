@@ -382,6 +382,8 @@
       <StreamGeometry x:Key="IconToolWrite">M2.5,1 L7,1 L9.5,3.5 L9.5,11 L2.5,11 Z M7,1 L7,3.5 L9.5,3.5 M6,5.5 L6,9 M4.25,7.25 L7.75,7.25</StreamGeometry>
       <StreamGeometry x:Key="IconToolBash">M1.5,2.5 L5,6 L1.5,9.5 M6,10 L10.5,10</StreamGeometry>
       <StreamGeometry x:Key="IconToolSearch">M5,1.5 A3.5,3.5 0 1 1 5,8.5 A3.5,3.5 0 1 1 5,1.5 M7.5,7.5 L10.5,10.5</StreamGeometry>
+      <!-- A project (DESIGN.md §18, "Project tools"): a cube, for the sidebar's project row -->
+      <StreamGeometry x:Key="IconProject">M6,1 L10.5,3.5 L10.5,8.5 L6,11 L1.5,8.5 L1.5,3.5 Z M1.5,3.5 L6,6 L10.5,3.5 M6,6 L6,11</StreamGeometry>
       <StreamGeometry x:Key="IconToolFolder">M1,2.5 L4.5,2.5 L5.5,4 L11,4 L11,10 L1,10 Z</StreamGeometry>
       <StreamGeometry x:Key="IconToolWeb">M6,1 A5,5 0 1 1 6,11 A5,5 0 1 1 6,1 M1,6 L11,6 M6,1 C3.6,3.6 3.6,8.4 6,11 M6,1 C8.4,3.6 8.4,8.4 6,11</StreamGeometry>
       <StreamGeometry x:Key="IconToolWebSearch">M5,1.5 A3.5,3.5 0 1 1 5,8.5 A3.5,3.5 0 1 1 5,1.5 M1.5,5 L8.5,5 M5,1.5 C3.7,3 3.7,7 5,8.5 M5,1.5 C6.3,3 6.3,7 5,8.5 M7.5,7.5 L10.5,10.5</StreamGeometry>

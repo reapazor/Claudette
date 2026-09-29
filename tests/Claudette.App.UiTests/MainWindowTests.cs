@@ -30,6 +30,29 @@ namespace Claudette.App.UiTests;
 /// </summary>
 public class MainWindowTests
 {
+    /// <summary>
+    /// The composer's control bar keeps Send in view (DESIGN.md §5): in a window too narrow for its choices and counts on
+    /// one line, the counts and Send move to a line of their own under the choices, still at the right. The panel's own
+    /// layout is in <see cref="ControlBarPanelTests"/>.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task The_Send_button_stays_in_view_when_the_control_bar_is_too_narrow_for_one_line()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell }, width: 900);
+        var send = window.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Send");
+        var attach = window.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Attach a file");
+        double Right(Control c) => c.TranslatePoint(new Point(c.Bounds.Width, 0), window)!.Value.X;
+        double Top(Control c) => c.TranslatePoint(default, window)!.Value.Y;
+        var bar = send.FindAncestorOfType<ControlBarPanel>()!;
+
+        Assert.True(send.IsEffectivelyVisible);
+        Assert.True(Right(send) <= window.Bounds.Width, $"Send ends at {Right(send)}, past the window's {window.Bounds.Width}");
+        Assert.True(bar.IsWrapped);
+        Assert.True(Top(send) > Top(attach) + attach.Bounds.Height, "The right-hand group should have moved under the chips");
+    }
+
     [AvaloniaFact]
     public async Task The_window_shows_the_usage_header_the_sidebar_and_the_conversation()
     {

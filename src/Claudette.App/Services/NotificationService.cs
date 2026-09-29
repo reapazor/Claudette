@@ -68,7 +68,7 @@ public sealed class NotificationService : IDisposable
         {
             return false;
         }
-        // A project action's end is news whichever tab is showing, until Claudette is in front: the chip already says it.
+        // A project action's end is news whichever tab is showing, until Claudette is in front: the sidebar already says it.
         if (IsAppActive && (tabId is null || tabId == SelectedTabId() || kind == NotificationKind.ProjectAction))
         {
             return false;

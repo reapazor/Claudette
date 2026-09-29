@@ -93,7 +93,7 @@ public sealed partial class ProjectSettingsViewModel
     public bool HasActionsError => ActionsError is not null;
 
     /// <summary>
-    /// <b>Add an action…</b> from the chip's or the tab's menu: the dialog asks which file the action goes in, as it did
+    /// <b>Add an action…</b> from the project's or the tab's menu: the dialog asks which file the action goes in, as it did
     /// over the main window, and the page shows that file once it's saved.
     /// </summary>
     internal void StartNewAction() => Editor = new ProjectActionEditorViewModel(Folder, null, (action, scope) =>

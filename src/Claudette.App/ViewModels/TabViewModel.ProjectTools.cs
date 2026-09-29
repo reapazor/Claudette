@@ -30,8 +30,8 @@ public enum ProjectMenuKind
 }
 
 /// <summary>
-/// One entry of the project menus (DESIGN.md §18, "Project tools"): the chip's menu in the composer bar and the
-/// project's submenu in the sidebar's tab menu list the same entries.
+/// One entry of the project menus (DESIGN.md §18, "Project tools"): the menu of the project's row at the sidebar's foot
+/// and the project's submenu in the sidebar's tab menu list the same entries.
 /// </summary>
 public sealed class ProjectMenuEntry
 {
@@ -55,7 +55,7 @@ public sealed class ProjectMenuEntry
 
     public bool IsOption => Kind == ProjectMenuKind.Option;
 
-    /// <summary>A button in the chip's menu: an action, a choice or a command.</summary>
+    /// <summary>A button in the project's menu: an action, a choice or a command.</summary>
     public bool IsButton => Kind is ProjectMenuKind.Action or ProjectMenuKind.Option or ProjectMenuKind.Command or ProjectMenuKind.Link;
 
     public bool IsLink => Kind == ProjectMenuKind.Link;
@@ -66,7 +66,7 @@ public sealed class ProjectMenuEntry
     /// <summary>For a menu item: <c>-</c> makes a separator.</summary>
     public string MenuHeader => IsSeparator ? "-" : Label;
 
-    /// <summary>A radio mark for choices in the chip's menu, and an arrow for links.</summary>
+    /// <summary>A radio mark for choices in the project's menu, and an arrow for links.</summary>
     public string Mark => Kind switch
     {
         ProjectMenuKind.Option => IsChecked ? "●" : "○",
@@ -81,7 +81,7 @@ public sealed class ProjectMenuEntry
 
 /// <summary>
 /// Project tools (DESIGN.md §18): the project detected for the tab's folder, its actions and the folder's custom ones,
-/// the chip in the composer bar, the Project page of the side panel, and the runs of its jobs, each with its log.
+/// the project's row at the sidebar's foot, the Project page of the side panel, and the runs of its jobs, each with its log.
 /// </summary>
 public sealed partial class TabViewModel
 {
@@ -108,8 +108,8 @@ public sealed partial class TabViewModel
     partial void OnProjectChanged(ProjectInfo? value) => ProjectToolsChanged();
 
     /// <summary>
-    /// The chip shows, and the sidebar has a project submenu: a detected project, custom actions, or a claudette.json
-    /// whose entries were skipped (the menu says why).
+    /// The sidebar shows the project's row, and the tab's menu has a project submenu: a detected project, custom
+    /// actions, or a claudette.json whose entries were skipped (the menu says why).
     /// </summary>
     public bool HasProjectTools => Project is not null || _customActions.Count > 0 || _projectFile.Problems.Count > 0;
 
@@ -120,12 +120,12 @@ public sealed partial class TabViewModel
     public bool OffersFirstProjectAction => !HasProjectTools;
 
     /// <summary>"NightOwl · UE 5.4", "Actions", or while a job runs, its name: "Build editor…".</summary>
-    public string ProjectChipText =>
+    public string ProjectButtonText =>
         RunningProjectRun is { } running ? $"{running.Name}…"
         : Project is { } project ? project.ShortVersion is { } version ? $"{project.Name} · {version}" : project.Name
         : "Actions";
 
-    public string ProjectChipTip
+    public string ProjectButtonTip
     {
         get
         {
@@ -140,7 +140,7 @@ public sealed partial class TabViewModel
     /// <summary>The project's submenu in the sidebar's tab menu: named after the project.</summary>
     public string ProjectMenuTitle => Project is { } project ? project.ShortVersion is { } version ? $"{project.Name} ({version})" : project.Name : "Actions";
 
-    /// <summary>The chip menu's header: the project and its kind.</summary>
+    /// <summary>The project menu's header: the project and its kind.</summary>
     public string ProjectHeaderTitle => Project is { } project ? $"{project.Name} · {project.KindName}" : "Actions for this folder";
 
     /// <summary>The engine's version, folder and kind, or what's wrong.</summary>
@@ -166,7 +166,7 @@ public sealed partial class TabViewModel
         Changelists.Current?.Number.ToString(CultureInfo.InvariantCulture),
         FolderName);
 
-    /// <summary>A link from the Links section or the chip menu: opened in the browser, when it's allowed to open.</summary>
+    /// <summary>A link from the Links section or the project's menu: opened in the browser, when it's allowed to open.</summary>
     [RelayCommand]
     private Task OpenProjectLinkAsync(ResolvedLink? link) =>
         link is { Url: { } url } ? _services.Platform.OpenUrlAsync(url) : Task.CompletedTask;
@@ -176,7 +176,7 @@ public sealed partial class TabViewModel
     /// <summary>The project's actions and the folder's own, for the Project page's buttons.</summary>
     public IReadOnlyList<ProjectAction> ProjectActions => [.. Project?.Actions.Select(ForJob) ?? [], .. _customActions.Select(c => ForJob(c.Action))];
 
-    /// <summary>The chip's menu and the sidebar's project submenu.</summary>
+    /// <summary>The project row's menu and the tab menu's project submenu.</summary>
     public IReadOnlyList<ProjectMenuEntry> ProjectMenu => BuildProjectMenu();
 
     public ProjectAction? MainProjectAction => Project?.MainAction ?? _customActions.Select(c => c.Action).FirstOrDefault();
@@ -309,7 +309,7 @@ public sealed partial class TabViewModel
     /// <summary>Settings → Project tools changed: the actions (and the note, from the next session) may be different.</summary>
     private void OnProjectToolSettingsChanged()
     {
-        OnPropertyChanged(nameof(ProjectChipTip));
+        OnPropertyChanged(nameof(ProjectButtonTip));
         if (ProjectSettingsKey() != _projectSettingsSeen)
         {
             _ = RefreshProjectAsync();
@@ -323,8 +323,8 @@ public sealed partial class TabViewModel
         OnPropertyChanged(nameof(HasProjectTools));
         OnPropertyChanged(nameof(HasOnlyCustomActions));
         OnPropertyChanged(nameof(OffersFirstProjectAction));
-        OnPropertyChanged(nameof(ProjectChipText));
-        OnPropertyChanged(nameof(ProjectChipTip));
+        OnPropertyChanged(nameof(ProjectButtonText));
+        OnPropertyChanged(nameof(ProjectButtonTip));
         OnPropertyChanged(nameof(ProjectMenuTitle));
         OnPropertyChanged(nameof(ProjectHeaderTitle));
         OnPropertyChanged(nameof(ProjectHeaderLines));
@@ -685,7 +685,7 @@ public sealed partial class TabViewModel
 
     /// <summary>The run whose job is running. One job runs at a time per tab.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsProjectJobRunning), nameof(ProjectChipText))]
+    [NotifyPropertyChangedFor(nameof(IsProjectJobRunning), nameof(ProjectButtonText))]
     public partial ProjectRunViewModel? RunningProjectRun { get; private set; }
 
     partial void OnRunningProjectRunChanged(ProjectRunViewModel? value) => UpdateProjectRunTicker();

@@ -12,7 +12,7 @@
        the Claude apps' shapes. -->
 
   <UserControl.Resources>
-    <!-- The project's submenu in a tab's menu (DESIGN.md §18): the same entries as the composer's project chip. -->
+    <!-- The project's submenu in a tab's menu (DESIGN.md §18): the same entries as the project's row at the sidebar's foot. -->
     <ControlTheme x:Key="ProjectMenuItem" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}" x:DataType="vm:ProjectMenuEntry">
       <Setter Property="Header" Value="{Binding MenuHeader}" />
       <Setter Property="Command" Value="{Binding Command}" />
@@ -262,7 +262,7 @@
                                                ToolTip.Tip="This tab has its own settings" />
                                     </MenuItem.Icon>
                                   </MenuItem>
-                                  <!-- Project tools (DESIGN.md §18): the chip's menu under the project's name, or the first custom action -->
+                                  <!-- Project tools (DESIGN.md §18): the project's menu under its name, or the first custom action -->
                                   <MenuItem Header="{Binding ProjectMenuTitle}" ItemsSource="{Binding ProjectMenu}" IsVisible="{Binding HasProjectTools}"
                                             ItemContainerTheme="{StaticResource ProjectMenuItem}" />
                                   <MenuItem Header="Add an action…" Command="{Binding AddProjectActionCommand}" IsVisible="{Binding OffersFirstProjectAction}" />
@@ -400,6 +400,64 @@
         <!-- The selected tab's links, History, the Claude Code update badge (DESIGN.md §12) and Settings -->
         <Border Grid.Row="2" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0" Padding="6">
           <StackPanel Spacing="2">
+            <!-- The selected tab's project tools (DESIGN.md §18, "Project tools"): the project's name and version, or while a
+                 job runs, its name; a click opens the project's menu -->
+            <Button x:Name="ProjectButton" Classes="flat side" HorizontalContentAlignment="Stretch" IsVisible="{Binding SelectedTab.HasProjectTools, FallbackValue=False}"
+                    ToolTip.Tip="{Binding SelectedTab.ProjectButtonTip}" ToolTip.Placement="Right" AutomationProperties.Name="Project tools">
+              <DockPanel>
+                <!-- As wide as the other icons, so the busy dot lines up with them -->
+                <Panel DockPanel.Dock="Left" Width="13" VerticalAlignment="Center">
+                  <Path Classes="icon" Data="{StaticResource IconProject}" IsVisible="{Binding !SelectedTab.IsProjectJobRunning, FallbackValue=True}" />
+                  <TextBlock Classes="status busy" Text="●" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center"
+                             IsVisible="{Binding SelectedTab.IsProjectJobRunning, FallbackValue=False}" />
+                </Panel>
+                <Path DockPanel.Dock="Right" Data="{StaticResource IconChevronRight}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="9" Height="9"
+                      Stretch="Uniform" VerticalAlignment="Center" Margin="6,0,0,0" IsVisible="{Binding IsSidebarExpanded}" />
+                <TextBlock Margin="10,0,0,0" Text="{Binding SelectedTab.ProjectButtonText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           IsVisible="{Binding IsSidebarExpanded}" />
+              </DockPanel>
+              <Button.Flyout>
+                <Flyout Placement="RightEdgeAlignedBottom" Opened="OnProjectMenuOpened">
+                  <StackPanel x:Name="ProjectMenu" MinWidth="300" MaxWidth="440" Spacing="1" DataContext="{Binding SelectedTab}" x:DataType="vm:TabViewModel">
+                    <TextBlock Text="{Binding ProjectHeaderTitle}" FontWeight="SemiBold" Margin="8,2,8,0" />
+                    <ItemsControl ItemsSource="{Binding ProjectHeaderLines}" Margin="8,0,8,2">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                          <TextBlock Classes="muted small" Text="{Binding}" TextWrapping="Wrap" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <!-- Entries of claudette.json that were skipped, and why (DESIGN.md §18) -->
+                    <ItemsControl ItemsSource="{Binding ProjectFileProblems}" Margin="8,0,8,2" IsVisible="{Binding HasProjectFileProblems}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                          <TextBlock Classes="small warning" Text="{Binding}" TextWrapping="Wrap" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Separator Margin="0,2" />
+                    <ItemsControl ItemsSource="{Binding ProjectMenu}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:ProjectMenuEntry">
+                          <Panel>
+                            <Separator Margin="0,3" IsVisible="{Binding IsSeparator}" />
+                            <TextBlock Classes="muted small" Text="{Binding Label}" Margin="8,4,8,1" IsVisible="{Binding IsHeader}" />
+                            <Button Classes="flat row" IsVisible="{Binding IsButton}" IsEnabled="{Binding IsEnabled}" HorizontalContentAlignment="Stretch"
+                                    ToolTip.Tip="{Binding Tip}" ToolTip.ShowOnDisabled="True" Click="OnProjectMenuItemPicked"
+                                    Command="{Binding Command}" CommandParameter="{Binding Parameter}">
+                              <Grid ColumnDefinitions="16,*">
+                                <TextBlock Classes="small" Text="{Binding Mark}" VerticalAlignment="Center" IsVisible="{Binding HasMark}" />
+                                <TextBlock Grid.Column="1" Text="{Binding Label}" />
+                              </Grid>
+                            </Button>
+                          </Panel>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
             <!-- Links from the selected tab's claudette.json files (DESIGN.md §18, "Links") -->
             <StackPanel x:Name="LinksSection" Spacing="1" IsVisible="{Binding HasLinks}">
               <StackPanel Spacing="1" IsVisible="{Binding IsSidebarExpanded}">

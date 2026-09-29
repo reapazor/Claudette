@@ -6,7 +6,7 @@ namespace Claudette.App.Controls;
 /// <summary>
 /// The composer's control bar (DESIGN.md §5): its first child at the start and its last at the end, on one line when
 /// both fit, or else the last on a line of its own under the first, still at the end. The chips on the left can outgrow
-/// a narrow window (a project's chip, a job's name), and Send, on the right, must never be pushed out of view.
+/// a narrow window, and Send, on the right, must never be pushed out of view.
 /// </summary>
 public sealed class ControlBarPanel : Panel
 {
