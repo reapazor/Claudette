@@ -9,7 +9,7 @@
   <string>Claudette</string>
   <!-- User Notifications need a bundle identifier (DESIGN.md §10). -->
   <key>CFBundleIdentifier</key>
-  <string>com.matthewdavey.claudette</string>
+  <string>com.reapazor.claudette</string>
   <key>CFBundleExecutable</key>
   <string>Claudette</string>
   <key>CFBundleIconFile</key>

@@ -9,7 +9,7 @@
          xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
          xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
          IgnorableNamespaces="uap desktop6 rescap">
-  <Identity Name="MatthewDavey.Claudette" Publisher="$PUBLISHER$" Version="$VERSION$" ProcessorArchitecture="$ARCHITECTURE$" />
+  <Identity Name="reapazor.Claudette" Publisher="$PUBLISHER$" Version="$VERSION$" ProcessorArchitecture="$ARCHITECTURE$" />
 
   <Properties>
     <DisplayName>Claudette</DisplayName>
