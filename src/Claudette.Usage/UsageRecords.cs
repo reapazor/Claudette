@@ -89,3 +89,13 @@ public sealed record TabTokenSum(string TabId, long Input, long Output, long Cac
 {
     public long Total => Input + Output + CacheWrite + CacheRead;
 }
+
+/// <summary>A plan window of the usage history: the 5-hour session or the week across all models.</summary>
+public enum UsageWindow
+{
+    Session,
+    Weekly,
+}
+
+/// <summary>A past window and the highest usage it reached.</summary>
+public sealed record WindowPeak(DateTimeOffset ResetsAt, double PeakPercent);

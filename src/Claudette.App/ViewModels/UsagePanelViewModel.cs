@@ -4,6 +4,7 @@ using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
 using Claudette.Usage;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace Claudette.App.ViewModels;
 
@@ -57,6 +58,50 @@ public sealed partial class UsagePanelViewModel : ViewModelBase
     [ObservableProperty]
     public partial IReadOnlyList<PastWindowRow> PastWeeks { get; set; } = [];
 
+    /// <summary>How many past sessions and weeks are listed before <b>Show more</b>.</summary>
+    public const int SessionsPage = 30;
+
+    public const int WeeksPage = 12;
+
+    private IReadOnlyList<PastWindowRow> _pastSessions = [];
+    private IReadOnlyList<PastWindowRow> _pastWeeks = [];
+    private int _sessionsShown = SessionsPage;
+    private int _weeksShown = WeeksPage;
+
+    public string MoreSessionsText => MoreText(_pastSessions.Count - _sessionsShown, SessionsPage);
+
+    public bool HasMoreSessions => _pastSessions.Count > _sessionsShown;
+
+    public string MoreWeeksText => MoreText(_pastWeeks.Count - _weeksShown, WeeksPage);
+
+    public bool HasMoreWeeks => _pastWeeks.Count > _weeksShown;
+
+    [RelayCommand]
+    private void ShowMoreSessions()
+    {
+        _sessionsShown += SessionsPage;
+        ShowPastWindows();
+    }
+
+    [RelayCommand]
+    private void ShowMoreWeeks()
+    {
+        _weeksShown += WeeksPage;
+        ShowPastWindows();
+    }
+
+    private void ShowPastWindows()
+    {
+        PastSessions = _pastSessions.Take(_sessionsShown).ToArray();
+        PastWeeks = _pastWeeks.Take(_weeksShown).ToArray();
+        OnPropertyChanged(nameof(MoreSessionsText));
+        OnPropertyChanged(nameof(HasMoreSessions));
+        OnPropertyChanged(nameof(MoreWeeksText));
+        OnPropertyChanged(nameof(HasMoreWeeks));
+    }
+
+    private static string MoreText(int left, int page) => left > page ? $"Show {page} more ({left} left)" : $"Show {left} more";
+
     public string HistoryNote => $"Usage history is kept for {_services.Settings.Usage.KeepHistory.Label().ToLowerInvariant()} (Settings → Usage).";
 
     public void Refresh()
@@ -87,22 +132,14 @@ public sealed partial class UsagePanelViewModel : ViewModelBase
             .ToArray();
         OnPropertyChanged(nameof(HasTabs));
 
-        // Past windows, from everything the history still holds.
-        var history = store.GetSamples(DateTimeOffset.MinValue, now);
-        PastSessions = history
-            .Where(s => s.SessionResetsAt is not null && s.SessionPercent is not null && s.SessionResetsAt <= now)
-            .GroupBy(s => s.SessionResetsAt!.Value)
-            .OrderByDescending(g => g.Key)
-            .Take(30)
-            .Select(g => Row($"Session ending {g.Key.ToLocalTime():ddd MMM d, t}", g.Max(s => s.SessionPercent!.Value)))
+        // Past windows, as far back as the history goes; the lists show a page at a time.
+        _pastSessions = store.GetPastWindows(UsageWindow.Session, now)
+            .Select(p => Row($"Session ending {p.ResetsAt.ToLocalTime():ddd MMM d, t}", p.PeakPercent))
             .ToArray();
-        PastWeeks = history
-            .Where(s => s.WeeklyResetsAt is not null && s.WeeklyPercent is not null && s.WeeklyResetsAt <= now)
-            .GroupBy(s => s.WeeklyResetsAt!.Value)
-            .OrderByDescending(g => g.Key)
-            .Take(12)
-            .Select(g => Row($"Week ending {g.Key.ToLocalTime():ddd MMM d}", g.Max(s => s.WeeklyPercent!.Value)))
+        _pastWeeks = store.GetPastWindows(UsageWindow.Weekly, now)
+            .Select(p => Row($"Week ending {p.ResetsAt.ToLocalTime():ddd MMM d}", p.PeakPercent))
             .ToArray();
+        ShowPastWindows();
         OnPropertyChanged(nameof(HistoryNote));
 
         static PastWindowRow Row(string when, double peak) => new(when, $"peaked at {peak:0}%", Math.Clamp(peak, 0, 100));

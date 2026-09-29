@@ -110,6 +110,7 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
+          <Button Classes="flat small" Content="{Binding MoreSessionsText}" Command="{Binding ShowMoreSessionsCommand}" IsVisible="{Binding HasMoreSessions}" />
         </StackPanel>
         <StackPanel Grid.Column="1" Spacing="6">
           <TextBlock Classes="section" Text="Past weeks" />
@@ -128,6 +129,7 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
+          <Button Classes="flat small" Content="{Binding MoreWeeksText}" Command="{Binding ShowMoreWeeksCommand}" IsVisible="{Binding HasMoreWeeks}" />
         </StackPanel>
       </Grid>
 

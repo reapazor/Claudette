@@ -50,6 +50,31 @@ public class UsageHeaderTests
     }
 
     [Fact]
+    public async Task The_usage_panel_lists_every_past_session_a_page_at_a_time()
+    {
+        await using var h = new TabTestHarness();
+        await using var tracker = new UsageTracker(h.Services, new UsageStore(Path.Combine(h.Root, "usage.db"), h.Time));
+        using var header = new UsageViewModel(h.Services, tracker);
+        for (var i = 0; i < 70; i++)
+        {
+            tracker.Store.AddSample(UsageSnapshotAt(h.Time.GetUtcNow(), 10 + (i % 50), h.Time.GetUtcNow().AddMinutes(1)));
+            h.Time.Advance(TimeSpan.FromHours(5));
+        }
+
+        var panel = new UsagePanelViewModel(h.Services, tracker, header, _ => null);
+
+        Assert.Equal(UsagePanelViewModel.SessionsPage, panel.PastSessions.Count);
+        Assert.Equal("Show 30 more (40 left)", panel.MoreSessionsText);
+        panel.ShowMoreSessionsCommand.Execute(null);
+        panel.ShowMoreSessionsCommand.Execute(null);
+        Assert.Equal(70, panel.PastSessions.Count);
+        Assert.False(panel.HasMoreSessions);
+    }
+
+    private static UsageSnapshot UsageSnapshotAt(DateTimeOffset asOf, double session, DateTimeOffset resetsAt) =>
+        new([new LimitReading(LimitKind.Session, "Session", session, resetsAt, null, false)], asOf, UsageSource.GetUsage);
+
+    [Fact]
     public async Task A_tab_turn_is_recorded_for_the_usage_panel()
     {
         await using var h = new TabTestHarness();
