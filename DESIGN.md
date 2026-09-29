@@ -357,6 +357,7 @@ Scrolling follows new output unless the user has scrolled up; a "Jump to latest"
 - `/` opens slash-command autocomplete (built-in plus the project's custom commands), and `@` file autocomplete for the tab's working folder. See [Autocomplete](#autocomplete).
 - Drag and drop, paste, or pick with the attach button images and files to attach them. See [Attachments](#attachments).
 - Per-tab controls in the bar above the composer: working folder (read-only), model, effort level, permission mode, the project chip when the tab has project tools (`◆ NightOwl · UE 5.4 ▾`, [§18](#project-tools)), the **Agents** button while the tab has subagents ([§18](#agent-map)), the **running tasks** chip while Claude Code has work going in the background (*"● 2 running tasks"*, [below](#running-tasks)), context window usage %, tokens used.
+- **The bar keeps Send in view.** The choices (model, effort, permission mode, the project chip) are at its left, and the counts (processes, Agents, running tasks, Files, context, tokens) with **Send** at its right. When they don't all fit on one line, as in a narrow window or with a long project chip or job name, the right-hand group moves to a second line under the choices, still at the right, rather than being pushed out of sight (`ControlBarPanel`).
 
 ### Working line
 

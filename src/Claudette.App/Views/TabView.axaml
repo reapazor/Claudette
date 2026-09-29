@@ -988,8 +988,9 @@
             </Border>
           </Popup>
 
-          <!-- Control bar -->
-          <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto">
+          <!-- Control bar: the chips on the left, and on the right the counts and Send, which move under the chips when
+               both don't fit on one line (DESIGN.md §5) -->
+          <controls:ControlBarPanel Grid.Row="2">
             <StackPanel Orientation="Horizontal" Spacing="2">
               <!-- Attach a file (DESIGN.md §5, "Attachments"); dropping and pasting work too -->
               <Button Classes="flat" Padding="6,4" ToolTip.Tip="Attach a file or image (or drop or paste one)" AutomationProperties.Name="Attach a file"
@@ -1138,7 +1139,7 @@
               </Button>
             </StackPanel>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+            <StackPanel Orientation="Horizontal" Spacing="2">
               <!-- Processes summary (DESIGN.md §4) -->
               <Button Classes="flat" IsVisible="{Binding ShowProcessSummary}"
                       ToolTip.Tip="Processes this tab started" Click="OnShowProcesses">
@@ -1297,7 +1298,7 @@
               </Button>
               <Button Classes="stop" Content="■" Margin="6,0,0,0" ToolTip.Tip="Stop (Esc)" AutomationProperties.Name="Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsWorking}" />
             </StackPanel>
-          </Grid>
+          </controls:ControlBarPanel>
         </Grid>
       </Border>
 
