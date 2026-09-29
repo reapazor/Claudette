@@ -47,7 +47,7 @@ public sealed record ConversationReset(string? Trigger) : SessionEvent;
 public sealed record SystemNotice(SystemMessage Message) : SessionEvent;
 
 /// <summary>A message type Claudette doesn't know yet (DESIGN.md §16, "Staying tolerant at runtime").</summary>
-public sealed record UnrecognizedMessage(string MessageType) : SessionEvent;
+public sealed record UnrecognizedMessage(string MessageType, System.Text.Json.Nodes.JsonObject Raw) : SessionEvent;
 
 /// <summary>A line that couldn't be parsed. The session keeps going.</summary>
 public sealed record ProtocolError(string Line, string Error) : SessionEvent;

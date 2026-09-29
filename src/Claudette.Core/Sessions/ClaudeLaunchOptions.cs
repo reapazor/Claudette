@@ -33,6 +33,9 @@ public sealed record ClaudeLaunchOptions
 
     public IReadOnlyList<string> AdditionalArguments { get; init; } = [];
 
+    /// <summary>Writes the session's raw protocol traffic to this file (DESIGN.md §13, "Logging"). Null: no log.</summary>
+    public string? ProtocolLogPath { get; init; }
+
     /// <summary>Applied on top of the clean environment. A null value removes the variable.</summary>
     public IReadOnlyDictionary<string, string?> EnvironmentOverrides { get; init; } = new Dictionary<string, string?>();
 }

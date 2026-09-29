@@ -75,7 +75,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _services = services;
         _shell = shell;
         State = state;
-        _conversation = new ConversationBuilder(Items, TodoList, ModelDisplayName) { ExpandThinking = services.Settings.Appearance.ExpandThinking };
+        _conversation = new ConversationBuilder(Items, TodoList, ModelDisplayName)
+        {
+            ExpandThinking = services.Settings.Appearance.ExpandThinking,
+            ShowUnsupportedMessages = services.Settings.Advanced.LogProtocol,
+        };
         _checkIns = new CheckInMonitor(services.Time, () => CheckInSettings, SendCheckInFromTimer, stuck => _services.Dispatcher.Post(() => IsPossiblyStuck = stuck));
         Status = TabStatus.NotStarted;
         _restoredTranscript = !isRestored;
@@ -659,6 +663,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(AvailableSuffixes));
         OnPropertyChanged(nameof(SuffixMenu));
         _conversation.ExpandThinking = _services.Settings.Appearance.ExpandThinking;
+        _conversation.ShowUnsupportedMessages = _services.Settings.Advanced.LogProtocol;
         UpdateSampler();
     }
 
@@ -834,6 +839,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 Effort = State.Overrides.Effort ?? settings.NewTabs.DefaultEffort,
                 PermissionMode = State.Overrides.PermissionMode ?? settings.NewTabs.DefaultPermissionMode,
                 AdditionalArguments = settings.Advanced.ExtraArguments.Split(' ', StringSplitOptions.RemoveEmptyEntries),
+                ProtocolLogPath = _services.ProtocolLogPath(FolderName),
             });
             _session = session;
             _sessionStartedAt = _services.Time.GetUtcNow();

@@ -16,7 +16,8 @@ public sealed class ClaudeSessionFactory(
     string claudePath,
     IProcessLauncher launcher,
     TimeProvider timeProvider,
-    ILoggerFactory? loggerFactory = null) : IClaudeSessionFactory
+    ILoggerFactory? loggerFactory = null,
+    ProtocolDiagnostics? diagnostics = null) : IClaudeSessionFactory
 {
     private readonly ILoggerFactory _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
 
@@ -28,8 +29,12 @@ public sealed class ClaudeSessionFactory(
             Environment = ClaudeEnvironment.Create(options.EnvironmentOverrides),
             TrackProcessTree = true,
         };
-        var transport = new ProcessClaudeTransport(launcher.Start(spec), _loggerFactory.CreateLogger<ProcessClaudeTransport>());
-        var session = new ClaudeSession(transport, timeProvider, _loggerFactory.CreateLogger<ClaudeSession>());
+        IClaudeTransport transport = new ProcessClaudeTransport(launcher.Start(spec), _loggerFactory.CreateLogger<ProcessClaudeTransport>());
+        if (options.ProtocolLogPath is { } logPath)
+        {
+            transport = new LoggingTransport(transport, new ProtocolLog(logPath, timeProvider));
+        }
+        var session = new ClaudeSession(transport, timeProvider, _loggerFactory.CreateLogger<ClaudeSession>(), diagnostics);
         try
         {
             await session.InitializeAsync(cancellationToken).ConfigureAwait(false);

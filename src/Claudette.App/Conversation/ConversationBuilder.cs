@@ -41,6 +41,9 @@ public sealed class ConversationBuilder
     /// <summary>Show thinking expanded rather than collapsed (Settings → Appearance).</summary>
     public bool ExpandThinking { get; set; }
 
+    /// <summary>Show messages Claudette skipped as rows with their JSON: protocol logging is on (DESIGN.md §16).</summary>
+    public bool ShowUnsupportedMessages { get; set; }
+
     public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false)
     {
         CloseOpen();
@@ -142,6 +145,11 @@ public sealed class ConversationBuilder
             case ConversationReset:
                 Clear();
                 AddNote("Conversation cleared.");
+                break;
+
+            case UnrecognizedMessage unrecognized when ShowUnsupportedMessages:
+                Items.Add(new UnsupportedMessageItem(unrecognized.MessageType,
+                    unrecognized.Raw.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true })));
                 break;
 
             case ProtocolError protocolError:

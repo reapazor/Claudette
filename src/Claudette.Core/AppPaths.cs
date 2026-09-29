@@ -10,6 +10,9 @@ public sealed record AppPaths(string DataDirectory, string SettingsDirectory)
 
     public string LogDirectory => Path.Combine(DataDirectory, "logs");
 
+    /// <summary>Raw protocol logs, one per session, when Settings → Advanced turns them on (DESIGN.md §13).</summary>
+    public string ProtocolLogDirectory => Path.Combine(LogDirectory, "protocol");
+
     public string StateFile => Path.Combine(DataDirectory, "state.json");
 
     public string SettingsFile => Path.Combine(SettingsDirectory, "settings.json");

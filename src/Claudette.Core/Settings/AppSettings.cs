@@ -253,4 +253,10 @@ public sealed class AdvancedSettings
 {
     /// <summary>Extra command-line arguments for every <c>claude</c> process, split on spaces.</summary>
     public string ExtraArguments { get; set; } = "";
+
+    /// <summary>
+    /// Writes each session's raw protocol traffic to the log folder, and shows messages Claudette skipped in the
+    /// conversation (DESIGN.md §13, "Logging"; §16).
+    /// </summary>
+    public bool LogProtocol { get; set; }
 }

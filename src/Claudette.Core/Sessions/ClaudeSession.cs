@@ -28,6 +28,7 @@ public sealed class ClaudeSession : IAsyncDisposable
     private readonly IClaudeTransport _transport;
     private readonly ControlChannel _control;
     private readonly ILogger _logger;
+    private readonly ProtocolDiagnostics? _diagnostics;
     private readonly Channel<SessionEvent> _events = Channel.CreateUnbounded<SessionEvent>(new UnboundedChannelOptions { SingleWriter = false, SingleReader = false });
     private readonly ConcurrentDictionary<string, PermissionRequest> _pendingPermissions = new();
     private readonly CancellationTokenSource _lifetime = new();
@@ -36,10 +37,12 @@ public sealed class ClaudeSession : IAsyncDisposable
     private int _protocolErrorCount;
     private SessionState _state = SessionState.Starting;
 
-    public ClaudeSession(IClaudeTransport transport, TimeProvider timeProvider, ILogger<ClaudeSession>? logger = null)
+    /// <param name="diagnostics">Counts what Claude Code sends that Claudette doesn't know yet (DESIGN.md §16).</param>
+    public ClaudeSession(IClaudeTransport transport, TimeProvider timeProvider, ILogger<ClaudeSession>? logger = null, ProtocolDiagnostics? diagnostics = null)
     {
         _transport = transport;
         _logger = logger ?? NullLogger<ClaudeSession>.Instance;
+        _diagnostics = diagnostics;
         _control = new ControlChannel(transport.SendAsync, timeProvider);
         _readLoop = Task.Run(ReadLoopAsync);
     }
@@ -186,18 +189,21 @@ public sealed class ClaudeSession : IAsyncDisposable
                 if (!MessageParser.TryParse(line, out var message, out var error))
                 {
                     Interlocked.Increment(ref _protocolErrorCount);
+                    _diagnostics?.RecordParseError();
                     _logger.LogWarning("Skipped a line from Claude Code: {Error}", error);
                     Publish(new ProtocolError(line, error));
                     continue;
                 }
                 try
                 {
+                    _diagnostics?.RecordFields(message);
                     Handle(message);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     // One bad message must never end the session (DESIGN.md §16).
                     Interlocked.Increment(ref _protocolErrorCount);
+                    _diagnostics?.RecordParseError();
                     _logger.LogError(ex, "Failed to handle a '{Type}' message.", message.Type);
                     Publish(new ProtocolError(line, ex.Message));
                 }
@@ -317,8 +323,9 @@ public sealed class ClaudeSession : IAsyncDisposable
 
             case UnknownMessage unknown:
                 Interlocked.Increment(ref _unknownMessageCount);
+                _diagnostics?.RecordUnknownMessage(unknown.MessageType);
                 _logger.LogDebug("Skipped unknown message type '{Type}'.", unknown.MessageType);
-                Publish(new UnrecognizedMessage(unknown.MessageType));
+                Publish(new UnrecognizedMessage(unknown.MessageType, unknown.Raw));
                 break;
         }
     }

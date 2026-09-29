@@ -43,7 +43,8 @@ public sealed class UtilitySession : IAsyncDisposable
 
     public Task Completion => _session.Completion;
 
-    public static async Task<UtilitySession> StartAsync(IClaudeSessionFactory factory, string workingDirectory, CancellationToken cancellationToken = default)
+    /// <param name="protocolLogPath">Where to log its protocol traffic, or null (DESIGN.md §13, "Logging").</param>
+    public static async Task<UtilitySession> StartAsync(IClaudeSessionFactory factory, string workingDirectory, CancellationToken cancellationToken = default, string? protocolLogPath = null)
     {
         Directory.CreateDirectory(workingDirectory);
         var session = await factory.StartAsync(new ClaudeLaunchOptions
@@ -51,6 +52,7 @@ public sealed class UtilitySession : IAsyncDisposable
             WorkingDirectory = workingDirectory,
             PersistSession = false,
             IncludePartialMessages = false,
+            ProtocolLogPath = protocolLogPath,
         }, cancellationToken).ConfigureAwait(false);
         return new UtilitySession(session);
     }

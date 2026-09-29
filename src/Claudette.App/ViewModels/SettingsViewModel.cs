@@ -198,6 +198,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Notifications", "Dock or taskbar badge"),
         .. KeyboardShortcuts.All.Select(c => new SettingsSearchResult("Keyboard", $"{c.Label} shortcut")),
         new("Advanced", "Extra arguments for every claude process"),
+        new("Advanced", "Log protocol traffic"),
+        new("Advanced", "Open log folder"),
+        new("Advanced", "Diagnostics"),
+        new("Advanced", "Copy diagnostics"),
+        new("Advanced", "Minimum supported Claude Code version"),
         new("Advanced", "Open data folder"),
     ];
 
@@ -1080,6 +1085,63 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     [RelayCommand]
     private Task OpenDataFolderAsync() => _services.Platform.RevealFolderAsync(_services.Paths.DataDirectory);
+
+    /// <summary>Each session's raw protocol traffic, to the log folder (DESIGN.md §13, "Logging").</summary>
+    public bool LogProtocol
+    {
+        get => _settings.Advanced.LogProtocol;
+        set => Set(value, v => _settings.Advanced.LogProtocol = v);
+    }
+
+    [RelayCommand]
+    private Task OpenLogFolderAsync()
+    {
+        Directory.CreateDirectory(_services.Paths.ProtocolLogDirectory);
+        return _services.Platform.RevealFolderAsync(_services.Paths.ProtocolLogDirectory);
+    }
+
+    // ---- Diagnostics (DESIGN.md §16, "Staying tolerant at runtime") -------------------------------------------------
+
+    public string MinimumVersionText => ClaudeLocator.MinimumVersion.ToString();
+
+    public string InstalledVersionText => _services.InstalledClaudeVersion?.ToString() ?? "Not found";
+
+    /// <summary>What Claude Code has sent this run that Claudette doesn't know, in words.</summary>
+    public string DiagnosticsText => DiagnosticsReport(includeHeader: false);
+
+    [RelayCommand]
+    private void RefreshDiagnostics()
+    {
+        OnPropertyChanged(nameof(DiagnosticsText));
+        OnPropertyChanged(nameof(InstalledVersionText));
+    }
+
+    [RelayCommand]
+    private Task CopyDiagnosticsAsync() => _services.Platform.SetClipboardTextAsync(DiagnosticsReport(includeHeader: true));
+
+    /// <summary>The Diagnostics page's contents, and with the header, the report copied for a bug report.</summary>
+    internal string DiagnosticsReport(bool includeHeader)
+    {
+        var snapshot = _services.Diagnostics.Snapshot();
+        var lines = new List<string>();
+        if (includeHeader)
+        {
+            lines.Add($"Claudette {typeof(SettingsViewModel).Assembly.GetName().Version}");
+            lines.Add($"OS: {System.Runtime.InteropServices.RuntimeInformation.OSDescription} ({System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier})");
+            lines.Add($"Claude Code: {InstalledVersionText}{(_services.Install is { } install ? $" at {install.Path}" : "")}");
+            lines.Add($"Minimum supported Claude Code: {MinimumVersionText}");
+            lines.Add($"Protocol logging: {(LogProtocol ? "on" : "off")}");
+            lines.Add("");
+        }
+        lines.Add(snapshot.UnknownMessageCount == 0
+            ? "Unknown message types: none"
+            : $"Unknown message types ({snapshot.UnknownMessageCount} skipped): " + string.Join(", ", snapshot.UnknownMessageTypes.Select(t => $"{t.Key} ×{t.Value}")));
+        lines.Add(snapshot.UnknownFields.Count == 0
+            ? "New fields: none"
+            : "New fields: " + string.Join(", ", snapshot.UnknownFields.Select(f => $"{f.Key} ×{f.Value}")));
+        lines.Add($"Lines that couldn't be read: {snapshot.ParseErrors}");
+        return string.Join(Environment.NewLine, lines);
+    }
 
     // ---- Helpers ----------------------------------------------------------------------------------------------------
 

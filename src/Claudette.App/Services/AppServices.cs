@@ -3,6 +3,7 @@ using Claudette.Core.Auth;
 using Claudette.Core.Git;
 using Claudette.Core.Installation;
 using Claudette.Core.Processes;
+using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
 using Claudette.Platform.Notifications;
@@ -59,6 +60,7 @@ public sealed class AppServices : IAsyncDisposable
         State = _stateStore.Load();
         Git = new GitWorkingTree(launcher, timeProvider);
         Library = new LibraryService(this);
+        ProtocolLog.DeleteOld(paths.ProtocolLogDirectory, timeProvider.GetUtcNow());
         Notifications = new NotificationService(this, notifier ?? NullNotifier.Instance);
         Tips = new ShortcutTips(Settings);
         UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time);
@@ -167,10 +169,17 @@ public sealed class AppServices : IAsyncDisposable
     public void UseInstall(ClaudeInstall install)
     {
         Install = install;
-        Sessions = new ClaudeSessionFactory(install.Path, _launcher, Time, Loggers);
+        Sessions = new ClaudeSessionFactory(install.Path, _launcher, Time, Loggers, Diagnostics);
         Auth = new ClaudeAuth(install.Path, _launcher, Time);
         ClaudeUpdates = new ClaudeUpdateService(this, CreateUpdater(install.Path), install.Version);
     }
+
+    /// <summary>What Claude Code has sent that Claudette doesn't know yet, for Settings → Advanced → Diagnostics (DESIGN.md §16).</summary>
+    public ProtocolDiagnostics Diagnostics { get; } = new();
+
+    /// <summary>A new protocol log for a session when Settings → Advanced turns logging on, otherwise null (DESIGN.md §13).</summary>
+    public string? ProtocolLogPath(string label) =>
+        Settings.Advanced.LogProtocol ? Path.Combine(Paths.ProtocolLogDirectory, ProtocolLog.FileName(Time.GetUtcNow(), label)) : null;
 
     /// <summary>For tests: sessions come from <paramref name="factory"/> instead of a real <c>claude</c>.</summary>
     internal void UseSessionFactory(IClaudeSessionFactory factory) => Sessions = factory;
@@ -247,7 +256,7 @@ public sealed class AppServices : IAsyncDisposable
                 await _utility.DisposeAsync().ConfigureAwait(false);
             }
             var factory = Sessions ?? throw new InvalidOperationException("Claude Code hasn't been found yet.");
-            _utility = await UtilitySession.StartAsync(factory, Paths.UtilityDirectory, cancellationToken).ConfigureAwait(false);
+            _utility = await UtilitySession.StartAsync(factory, Paths.UtilityDirectory, cancellationToken, ProtocolLogPath("utility")).ConfigureAwait(false);
             return _utility;
         }
         finally

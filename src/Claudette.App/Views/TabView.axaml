@@ -314,6 +314,13 @@
                            Classes.error="{Binding IsError}" Classes.warning="{Binding IsWarning}" />
     </DataTemplate>
 
+    <!-- Skipped by Claudette, shown while protocol logging is on (DESIGN.md §16) -->
+    <DataTemplate DataType="conv:UnsupportedMessageItem">
+      <Expander Header="{Binding Title}" IsExpanded="{Binding IsExpanded}" Padding="8,4">
+        <SelectableTextBlock Text="{Binding Json}" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
+      </Expander>
+    </DataTemplate>
+
     <DataTemplate DataType="conv:TurnSummaryItem">
       <TextBlock Classes="muted small" Text="{Binding Text}" Opacity="0.8" Margin="0,0,0,4" />
     </DataTemplate>

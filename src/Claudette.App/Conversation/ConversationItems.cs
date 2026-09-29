@@ -271,6 +271,20 @@ public sealed partial class NoteItem(string text, NoteKind kind) : ConversationI
     public bool IsWarning => Kind == NoteKind.Warning;
 }
 
+/// <summary>
+/// A message Claudette doesn't know and skipped, shown only while protocol logging is on (DESIGN.md §16): a collapsed
+/// row that expands to the raw JSON.
+/// </summary>
+public sealed partial class UnsupportedMessageItem(string messageType, string json) : ConversationItem
+{
+    public string Title => $"Unsupported message from Claude Code: {messageType}";
+
+    public string Json { get; } = json;
+
+    [ObservableProperty]
+    public partial bool IsExpanded { get; set; }
+}
+
 /// <summary>The small footer after each turn: duration, tokens and model (DESIGN.md §5).</summary>
 public sealed class TurnSummaryItem(string text) : ConversationItem
 {
