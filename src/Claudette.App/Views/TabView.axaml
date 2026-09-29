@@ -629,7 +629,8 @@
             <views:AgentDetails Grid.Row="3" IsVisible="{Binding HasAgents}" />
           </Grid>
 
-          <!-- Project (DESIGN.md §18, "Project tools"): the project's details, its actions, and the running or last job -->
+          <!-- Project (DESIGN.md §18, "Project tools"): the project's details, its actions, and the selected run's log: the
+               newest, or the one clicked in the sidebar -->
           <DockPanel x:Name="ProjectPage" IsVisible="{Binding IsProjectPage}">
             <StackPanel DockPanel.Dock="Top" Margin="12,0,12,6" Spacing="8">
               <TextBlock Text="{Binding ProjectHeaderTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
@@ -663,17 +664,18 @@
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" IsVisible="{Binding HasProjectJob}">
-                <TextBlock Classes="small" Classes.error="{Binding ProjectJobFailed}" Text="{Binding ProjectJobStatus}" TextWrapping="Wrap" VerticalAlignment="Center" />
-                <Button Grid.Column="1" Content="Stop" Command="{Binding StopProjectJobCommand}" IsVisible="{Binding IsProjectJobRunning}"
-                        ToolTip.Tip="Ends the job and every process it started" />
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" IsVisible="{Binding HasSelectedProjectRun}">
+                <TextBlock Classes="small" Classes.error="{Binding SelectedProjectRun.Failed, FallbackValue=False}" Text="{Binding SelectedProjectRun.Status, FallbackValue={x:Null}}"
+                           TextWrapping="Wrap" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Content="Stop" Command="{Binding SelectedProjectRun.StopCommand, FallbackValue={x:Null}}"
+                        IsVisible="{Binding SelectedProjectRun.IsRunning, FallbackValue=False}" ToolTip.Tip="Ends the job and every process it started" />
                 <Button Grid.Column="2" Content="Copy" Command="{Binding CopyProjectOutputCommand}" ToolTip.Tip="Copy the output" />
               </Grid>
-              <TextBlock Classes="muted small" Text="{Binding ProjectOutputNote}" TextWrapping="Wrap"
-                         IsVisible="{Binding ProjectOutputNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <TextBlock Classes="muted small" Text="{Binding SelectedProjectRun.OutputNote, FallbackValue={x:Null}}" TextWrapping="Wrap"
+                         IsVisible="{Binding SelectedProjectRun.OutputNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}, FallbackValue=False}" />
             </StackPanel>
-            <ListBox x:Name="ProjectOutputList" ItemsSource="{Binding ProjectOutput}" Background="Transparent" Margin="8,0,8,8"
-                     IsVisible="{Binding HasProjectJob}" AutomationProperties.Name="Output">
+            <ListBox x:Name="ProjectOutputList" ItemsSource="{Binding SelectedProjectRun.Output, FallbackValue={x:Null}}" Background="Transparent" Margin="8,0,8,8"
+                     IsVisible="{Binding HasSelectedProjectRun}" AutomationProperties.Name="Output">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="x:String">
                   <TextBlock Classes="mono small" Text="{Binding}" />

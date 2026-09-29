@@ -324,6 +324,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             // Its claudette.json may have changed while another tab was showing (DESIGN.md §18).
             _ = RefreshProjectFileAsync();
         }
+        UpdateShownProjectRun();
     }
 
     /// <summary>Two check-ins in a row got no reply (DESIGN.md §5, "Check-ins on long turns"); shown on the tab's row.</summary>
@@ -1644,7 +1645,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         StopAgentTicker();
         _services.Notifications.ClearTab(Id);
         StopPerforce();
-        StopProjectJobOnClose(killProcesses);
+        CloseProjectRuns(killProcesses);
         ReleaseLease();
         await StopSessionAsync(killProcesses);
         CleanUpDiffFiles();

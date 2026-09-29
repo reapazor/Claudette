@@ -69,6 +69,7 @@ public sealed partial class TabViewModel
         {
             _ = RefreshChangedFilesAsync();
         }
+        UpdateShownProjectRun();
     }
 
     /// <summary>Which page of the side panel shows.</summary>

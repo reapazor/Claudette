@@ -307,10 +307,10 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
                 }
                 break;
             case NotificationKind.ProjectAction:
-                // The tab's Project page, with the job's output (DESIGN.md §18, "Project tools").
+                // The tab's Project page, with the log of the run that finished (DESIGN.md §18, "Project tools").
                 if (target.TabId is { } jobTab && CurrentPage == _shell && _shell?.SelectTab(jobTab) == true)
                 {
-                    _shell.SelectedTab?.OpenProjectPageCommand.Execute(null);
+                    _shell.SelectedTab?.OpenNotifiedProjectRun();
                 }
                 break;
             default:
