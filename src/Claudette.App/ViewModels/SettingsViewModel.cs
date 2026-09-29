@@ -162,6 +162,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [
         new("General", "Confirm before closing a tab where Claude is working"),
         new("General", "Also rename the session in Claude Code when I rename a tab"),
+        new("General", "Show Claude's service status"),
         new("General", "Claudette version"),
         new("General", "Check for Claudette updates automatically"),
         new("General", "Include pre-releases"),
@@ -326,6 +327,15 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         set => Set(value, v => _settings.General.RenameInClaudeCode = v);
     }
 
+    /// <summary>
+    /// The header's dot and the banner, from status.claude.com (DESIGN.md §18, "Service status"). Off stops the checks.
+    /// </summary>
+    public bool ShowServiceStatus
+    {
+        get => _settings.General.ShowServiceStatus;
+        set => Set(value, v => _settings.General.ShowServiceStatus = v);
+    }
+
     /// <summary>Check GitHub for new Claudette releases (DESIGN.md §2, "Updating Claudette").</summary>
     public bool CheckForAppUpdates
     {
@@ -356,6 +366,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         Save();
         OnPropertyChanged(nameof(ConfirmCloseWorkingTab));
         OnPropertyChanged(nameof(RenameInClaudeCode));
+        OnPropertyChanged(nameof(ShowServiceStatus));
         OnPropertyChanged(nameof(CheckForAppUpdates));
         OnPropertyChanged(nameof(IncludePrereleases));
     }

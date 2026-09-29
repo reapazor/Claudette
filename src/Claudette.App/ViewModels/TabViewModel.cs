@@ -8,6 +8,7 @@ using Claudette.Core.Library;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
+using Claudette.Core.Status;
 using Claudette.Core.Transcripts;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -1367,6 +1368,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             ObserveForComposer(sessionEvent);
             OnPerforceSessionEvent(sessionEvent);
             TrackToolsForWorkingLine(sessionEvent);
+            if (ApiTrouble.Reports(sessionEvent))
+            {
+                // Claude's status may explain it: check now rather than at the next poll (DESIGN.md §18, "Service status").
+                _services.ServiceStatus.OnApiTrouble();
+            }
             switch (sessionEvent)
             {
                 case StateChanged { State: SessionState.Working }:

@@ -1,0 +1,14 @@
+﻿"Claudette"
+[button] Claude's service status: Claude has an outage
+[button] Account: me@example.com
+[button] Plan and billing: Max plan
+"Claude is having problems: Elevated errors on claude.ai, Claude Code, Claude Cowork and the Claude API (investigating)"
+[button] Status page
+[button] Dismiss
+[button] New tab
+[button] Collapse the sidebar
+[button] History
+[button] Settings
+"Start a Claude Code session"
+"Pick the folder Claude should work in."
+[button] New tab…

@@ -160,6 +160,12 @@ public sealed class GeneralSettings
 
     /// <summary>Offer pre-releases too, not only full releases.</summary>
     public bool IncludePrereleases { get; set; }
+
+    /// <summary>
+    /// Show Claude's service status from status.claude.com: a dot in the header, and a banner while Claude has an
+    /// incident (DESIGN.md §18, "Service status"). Off stops the checks too.
+    /// </summary>
+    public bool ShowServiceStatus { get; set; } = true;
 }
 
 public sealed class ClaudeCodeSettings
