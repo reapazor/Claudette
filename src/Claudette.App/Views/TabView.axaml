@@ -845,6 +845,12 @@
                 <TextBlock Classes="muted small" Text="{Binding ProcessSummaryText}" />
               </Button>
 
+              <!-- Agents (DESIGN.md §18, "Agent map"), while the tab has subagents -->
+              <Button Classes="flat" IsVisible="{Binding HasAgents}" ToolTip.Tip="What this tab's subagents are doing"
+                      Command="{Binding OpenAgentsPageCommand}">
+                <TextBlock Classes="muted small" Text="{Binding AgentsButtonText}" />
+              </Button>
+
               <!-- Changed files (DESIGN.md §8) -->
               <Button Classes="flat" ToolTip.Tip="Changed files" Command="{Binding ToggleSidePanelCommand}">
                 <TextBlock Classes="muted small" Text="{Binding ChangedFiles.Count, StringFormat='Files ({0})'}" />

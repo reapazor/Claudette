@@ -46,6 +46,12 @@ public class AgentMapTests
         Assert.Equal(AgentStatus.Running, map.Root.Status);
         Assert.True(tab.HasAgents);
         Assert.True(tab.HasActiveAgents);
+
+        // The composer bar's way in.
+        Assert.Equal("3 agents running", tab.AgentsButtonText);
+        tab.OpenAgentsPageCommand.Execute(null);
+        Assert.True(tab.IsSidePanelOpen);
+        Assert.True(tab.IsAgentsPage);
     }
 
     [Fact]

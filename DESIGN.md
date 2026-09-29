@@ -1438,6 +1438,7 @@ A live view of what a tab's subagents are doing. When Claude fans work out to se
 - **Where it lives.**
   - The **Agents** page of the side panel, between Changed files and Processes. The page button shows a busy dot while a subagent runs, and the page's header sums the tree up, for example *"2 agents running (1 waiting on you); 2 done"*.
   - **A window of its own**, from the button at the top of the page: the tree beside the details, for wide fan-outs. One per tab; it closes with the tab.
+  - An **Agents** button in the composer bar while the tab has subagents (*"2 agents running"*, or *"Agents (3)"* once they've finished) opens the side panel on the Agents page.
   - An **Agents** row in the tab info card ([§4](#4-tabs--sessions)): for example *"3 agents running"*, *"3 agents running (1 waiting on you)"* or *"4 agents: 3 done, 1 stopped"*. No row while a tab has no subagents.
   - The main agent's row shows whether a turn is running, and its latest tool call.
 - **Interaction.**

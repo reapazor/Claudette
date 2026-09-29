@@ -215,6 +215,17 @@ public class ConversationBuilderTests
     }
 
     [Fact]
+    public void An_error_sent_as_the_reply_too_is_shown_once()
+    {
+        Apply("""{"type":"assistant","message":{"model":"<synthetic>","content":[{"type":"text","text":"Not logged in · Please run /login"}]},"error":"authentication_failed"}""");
+        Apply("""{"type":"result","subtype":"success","is_error":true,"result":"Not logged in · Please run /login","terminal_reason":"api_error"}""");
+
+        var note = Assert.IsType<NoteItem>(Assert.Single(_items));
+        Assert.Equal(NoteKind.Error, note.Kind);
+        Assert.Equal("Not logged in · Please run /login", note.Text);
+    }
+
+    [Fact]
     public void Model_change_notes_are_shown_without_backticks()
     {
         Apply("""{"type":"user","message":{"role":"user","content":"<local-command-stdout>Set model to `sonnet`</local-command-stdout>"}}""");

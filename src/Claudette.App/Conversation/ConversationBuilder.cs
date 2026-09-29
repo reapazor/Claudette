@@ -336,6 +336,12 @@ public sealed class ConversationBuilder
         }
         if (result.IsError && result.Result is { Length: > 0 } error)
         {
+            // An error Claude Code also sent as the reply (such as "Not logged in · Please run /login") is shown once,
+            // as the error.
+            if (Items.Count > 0 && Items[^1] is AssistantTextItem reply && reply.Text.Trim() == error.Trim())
+            {
+                Items.RemoveAt(Items.Count - 1);
+            }
             AddNote(error, NoteKind.Error);
             return;
         }

@@ -31,6 +31,19 @@ public sealed partial class TabViewModel
     [RelayCommand]
     private void ShowAgentsPage() => IsAgentsPage = true;
 
+    /// <summary>The composer bar's way to the Agents page, while the tab has subagents: opens the side panel on it.</summary>
+    [RelayCommand]
+    private void OpenAgentsPage()
+    {
+        IsSidePanelOpen = true;
+        IsAgentsPage = true;
+    }
+
+    /// <summary>"2 agents running" while any are, else how many there were.</summary>
+    public string AgentsButtonText => Agents.ActiveCount is > 0 and var active
+        ? $"{active} agent{(active == 1 ? "" : "s")} running"
+        : $"Agents ({Agents.Subagents.Count()})";
+
     public bool HasAgents => Agents.HasSubagents;
 
     /// <summary>A subagent is running or waiting: the Agents page button shows a busy dot.</summary>
@@ -135,6 +148,7 @@ public sealed partial class TabViewModel
         OnPropertyChanged(nameof(AgentsHeader));
         OnPropertyChanged(nameof(HasAgents));
         OnPropertyChanged(nameof(HasActiveAgents));
+        OnPropertyChanged(nameof(AgentsButtonText));
         if (SelectedAgent is { } selected && !Agents.Root.DescendantsAndSelf().Contains(selected))
         {
             // Gone after /clear.
