@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -143,6 +144,10 @@ public partial class TabView : UserControl
             _tab.ScrollToRequested -= OnScrollToRequested;
             _tab.AgentWindowRequested -= OnAgentWindowRequested;
             _tab.ProjectOutput.CollectionChanged -= OnProjectOutputChanged;
+            _tab.PropertyChanged -= OnTabPropertyChanged;
+            // The list belonged to that tab.
+            TasksChip.Flyout?.Hide();
+            _tab.IsTaskListOpen = false;
         }
         _tab = ViewModel;
         if (_tab is not null)
@@ -151,10 +156,37 @@ public partial class TabView : UserControl
             _tab.ScrollToRequested += OnScrollToRequested;
             _tab.AgentWindowRequested += OnAgentWindowRequested;
             _tab.ProjectOutput.CollectionChanged += OnProjectOutputChanged;
+            _tab.PropertyChanged += OnTabPropertyChanged;
         }
     }
 
     private TabViewModel? _tab;
+
+    /// <summary>The last running task ended while its list was open: the list goes with the chip.</summary>
+    private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TabViewModel.HasRunningTasks) && _tab is { HasRunningTasks: false })
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => TasksChip.Flyout?.Hide());
+        }
+    }
+
+    /// <summary>The running tasks list is open, so its running times tick (DESIGN.md §5, "Running tasks").</summary>
+    private void OnTaskListOpened(object? sender, EventArgs e)
+    {
+        if (ViewModel is { } tab)
+        {
+            tab.IsTaskListOpen = true;
+        }
+    }
+
+    private void OnTaskListClosed(object? sender, EventArgs e)
+    {
+        if (ViewModel is { } tab)
+        {
+            tab.IsTaskListOpen = false;
+        }
+    }
 
     /// <summary>The built-in diff view, in its own window so it can stay open beside the conversation (DESIGN.md §8).</summary>
     private void OnDiffRequested(DiffSource source)

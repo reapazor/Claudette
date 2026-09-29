@@ -189,6 +189,7 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
   - When the session started (for a resumed session, its transcript's first entry; saved with the tab), tokens used and context %.
   - Later features add rows here: the Perforce login and changelist ([§18](#perforce-ticket-handling)), the **Project** the tab's folder holds and whether Claude was told about it ([§18](#project-tools)), and the **Claude app** connection: connected at the session's address, connecting, or why not ([§18](#remote-control-the-claude-app)), for example.
   - **Agents**, while the tab has subagents: how many are running or waiting on you, or how they ended ([§18](#agent-map)).
+  - **Running tasks**, while Claude Code has work going in the background: one line each, such as *Shell command: Start the dev server*, up to four and then *and 2 more* ([§5](#running-tasks)).
   - The same card opens from an **ⓘ** button in the composer bar, for the selected tab.
 - **Token stats per tab.** Each tab keeps a running count of the tokens it has used:
   - Input, output, cache write and cache read tokens, split by model when the session used more than one.
@@ -219,7 +220,7 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
 The tabs are listed in a sidebar on the left of the window, rather than a strip across the top, so long session names, a status line and many tabs all fit.
 
 - **A tab's row** has two lines:
-  - The status icon, a pin icon if pinned, a sync icon if it syncs to the session library (muted, with the tip *"Synced to the session library"*), a phone icon while it's connected to the Claude app (*"Connected to the Claude app"*, dimmed while it connects or reconnects; [§18](#remote-control-the-claude-app)), a gear while a process it started is busy ([Process monitor](#process-monitor)), and the name, cut short with an ellipsis if it doesn't fit. With **Show changelist on tabs** on, a `CL 12345` badge sits at the end of the line ([§18](#perforce-changelist-in-the-tab-title)).
+  - The status icon, a pin icon if pinned, a sync icon if it syncs to the session library (muted, with the tip *"Synced to the session library"*), a phone icon while it's connected to the Claude app (*"Connected to the Claude app"*, dimmed while it connects or reconnects; [§18](#remote-control-the-claude-app)), a gear while a process it started is busy ([Process monitor](#process-monitor)), a small count of its running tasks once its turn is over (*"2 tasks still running"*, [§5](#running-tasks)), and the name, cut short with an ellipsis if it doesn't fit. With **Show changelist on tabs** on, a `CL 12345` badge sits at the end of the line ([§18](#perforce-changelist-in-the-tab-title)).
   - The model and effort, or instead what needs attention: *Needs your input*, the error, or *Possibly stuck* when check-ins get no reply ([§5](#check-ins-on-long-turns)).
   - **Context ring.** A small ring at the end of the row, level with the second line and under the close button, fills up with the tab's context window ([§6](#per-tab-context)).
     - It's muted, amber when the context indicator warns (near auto-compact), and red from 95%.
@@ -348,7 +349,7 @@ Scrolling follows new output unless the user has scrolled up; a "Jump to latest"
 - You can type and send while Claude is working; the message is queued and delivered to the session.
 - `/` opens slash-command autocomplete (built-in plus the project's custom commands), and `@` file autocomplete for the tab's working folder. See [Autocomplete](#autocomplete).
 - Drag and drop, paste, or pick with the attach button images and files to attach them. See [Attachments](#attachments).
-- Per-tab controls in the bar above the composer: working folder (read-only), model, effort level, permission mode, the project chip when the tab has project tools (`◆ NightOwl · UE 5.4 ▾`, [§18](#project-tools)), context window usage %, tokens used.
+- Per-tab controls in the bar above the composer: working folder (read-only), model, effort level, permission mode, the project chip when the tab has project tools (`◆ NightOwl · UE 5.4 ▾`, [§18](#project-tools)), the **Agents** button while the tab has subagents ([§18](#agent-map)), the **running tasks** chip while Claude Code has work going in the background (*"● 2 running tasks"*, [below](#running-tasks)), context window usage %, tokens used.
 
 ### Working line
 
@@ -374,6 +375,33 @@ While Claude works, a line above the composer says so, the way Claude Code's ter
   - It's read as the tab's session starts, so a change shows from the next session.
 - **Turning it off.** **Show fun words while Claude works** (Settings → Appearance, on by default). Off, the line says *"✻ Working…"* with a still glyph, and still shows the time, tokens and Stop shortcut.
 - Claude Code's spinner tips (`spinnerTipsEnabled`, `spinnerTipsOverride`) aren't shown.
+
+### Running tasks
+
+Claude Code keeps some work going after a turn ends, and its own UIs count it (*"1 running task"*). So does Claudette.
+
+- **What counts.** What Claude Code reports with `system/task_started` and runs in the background:
+  - a shell command run with `run_in_background`, or moved there later;
+  - a background subagent (a foreground one is part of the turn, and only on the Agents page, [§18](#agent-map));
+  - a Monitor watch;
+  - a remote agent or a workflow, and a kind Claudette doesn't know yet.
+  - Not a foreground command or subagent, and not Claude Code's own work (`ambient: true`), which the Agent SDK says to leave out of activity indicators.
+- **How it's read.**
+  - `task_started` gives the task's id, its tool call (`tool_use_id`), `task_type`, `description` and `is_backgrounded`.
+  - `local_bash` covers both commands and Monitor watches, so the tool call's name tells them apart. A Monitor always counts. Without `is_backgrounded`, the call's own `run_in_background` decides.
+  - A `task_updated` patch with `is_backgrounded: true` moves a foreground task to the background, and a new `description` renames it.
+  - A subagent follows its node on the agent map, so the two agree: one whose `Agent` call returns `async_launched` counts from then on, and one the map sees end has ended.
+  - A task runs until a `task_updated` or `task_notification` with `completed`, `failed`, `stopped` or `killed`. Other statuses (`pending`, `running`, or ones Claude Code adds later) leave it running.
+  - When the tab's `claude` exits or is restarted, its tasks go with it and the count clears. `/clear` keeps them, without their cards.
+  - Claude Code also sends `background_tasks_changed` with the whole live set. Claudette doesn't use it yet: the Agent SDK says not to pair it with the per-task messages, and nothing recorded shows it from 2.1.284.
+- **The chip.** In the composer bar, next to **Agents**: a pulsing dot and *"1 running task"* or *"3 running tasks"*. It's hidden at none. Clicking it lists the tasks, oldest first:
+  - an icon for the kind (a prompt for a command, a pulse for a Monitor, the agents icon for a subagent or workflow, a cloud for a remote agent);
+  - the description, else the command, else the subagent type, with the kind under it (*Shell command*, *Monitor*, *Subagent*, *Remote agent*, *Workflow*, *Task*);
+  - how long it's been running, from the app's clock, ticking every second while the list is open;
+  - **Stop**, after a confirmation, through `stop_task` as the process monitor and the agent map stop tasks. A subagent's Stop is the agent map's own. The task stays listed until Claude Code says it ended.
+  - Clicking a task scrolls to the card of the call that started it and opens it, expanding the subagent groups it's in. Its tooltip has the command in full.
+- **Elsewhere.** The tab's row counts them once the turn is over ([§4](#sidebar)), and the info card lists them ([§4](#4-tabs--sessions)). The process monitor's **Stop** finds a process's task through the same record ([§4](#process-monitor)).
+- **Code and tests.** `Conversation/RunningTasks.cs`, kept by `ConversationBuilder` beside the agent map; `TabViewModel.Tasks.cs`. `RunningTasksTests` (the view model) and `RunningTasksUiTests` (the chip, its list, and the row's count in both styles and densities).
 
 ### Autocomplete
 
@@ -1588,7 +1616,10 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
       - Push delivery to the phone, and the presence file holding pushes off while Claudette is in front.
       - `enabled: false` disconnecting cleanly, and a restarted or restored tab reconnecting.
       - Keeping the computer awake on real Windows, macOS and Linux machines (the Windows call and `caffeinate` only run in CI).
-15. **Later.** New features go in [§18](#18-future-features) first.
+15. **Running tasks, service status and project settings.**
+    - **Running tasks ([§5](#running-tasks)).** ✅ Built 2026-09-29. A chip in the composer bar counts the work Claude Code keeps going in the background (shell commands, background subagents, Monitor watches, remote agents), and lists each with its icon, running time, **Stop** and a link to its card; the tab's row counts them once the turn is over, and the info card lists them.
+      - **Still to verify** against a real Claude Code: the task messages for a backgrounded command, a Monitor watch (whether it sets `is_backgrounded`, and that its events don't end it), a command moved to the background by its timeout, a remote agent and a workflow; `ambient` tasks; and what `/clear` does to running tasks. Only foreground tasks have been recorded so far (the `03` and `12` fixtures).
+16. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features
 

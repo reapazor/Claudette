@@ -229,6 +229,22 @@
       <Setter Property="Padding" Value="4,0" />
       <Setter Property="MinHeight" Value="0" />
     </Style>
+    <!-- The running tasks list (DESIGN.md §5, "Running tasks"), under the chip in the composer bar -->
+    <Style Selector="StackPanel.tasklist">
+      <Setter Property="Spacing" Value="2" />
+    </Style>
+    <Style Selector=".compact StackPanel.tasklist">
+      <Setter Property="Spacing" Value="0" />
+    </Style>
+    <Style Selector="Button.taskrow">
+      <Setter Property="Padding" Value="6,4" />
+    </Style>
+    <Style Selector=".compact Button.taskrow">
+      <Setter Property="Padding" Value="6,2" />
+    </Style>
+    <Style Selector=".claude Button.taskrow">
+      <Setter Property="CornerRadius" Value="8" />
+    </Style>
     <!-- The / and @ autocomplete (DESIGN.md §5, "Composer") -->
     <Style Selector="Button.completion.selected /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource SelectedRowBrush}" />
@@ -1133,6 +1149,46 @@
                 <TextBlock Classes="muted small" Text="{Binding AgentsButtonText}" />
               </Button>
 
+              <!-- Running tasks (DESIGN.md §5, "Running tasks"): what Claude Code keeps going in the background -->
+              <Button x:Name="TasksChip" Classes="flat" IsVisible="{Binding HasRunningTasks}" ToolTip.Tip="Work Claude Code keeps running in the background"
+                      AutomationProperties.Name="{Binding RunningTasksText}">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Classes="status busy" Text="●" FontSize="9" VerticalAlignment="Center" />
+                  <TextBlock Classes="muted small" Text="{Binding RunningTasksText}" />
+                </StackPanel>
+                <Button.Flyout>
+                  <Flyout Placement="TopEdgeAlignedRight" Opened="OnTaskListOpened" Closed="OnTaskListClosed">
+                    <StackPanel x:Name="TaskList" Classes="tasklist" MinWidth="320" MaxWidth="480">
+                      <TextBlock Text="{Binding RunningTasksText}" FontWeight="SemiBold" Margin="6,2,6,0" />
+                      <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="6,0,6,4"
+                                 Text="Claude Code keeps these going after the turn, and tells Claude when each one ends." />
+                      <ItemsControl ItemsSource="{Binding Tasks.Running}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="conv:RunningTask">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                              <Button Classes="flat row taskrow" ToolTip.Tip="{Binding Tooltip}" Click="OnFlyoutItemPicked"
+                                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ShowTaskCommand}" CommandParameter="{Binding}">
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                  <Path Classes="toolicon" Data="{Binding IconKey, Converter={x:Static conv:ToolIcons.Geometry}}" Margin="0,0,8,0" />
+                                  <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Classes="muted small" Text="{Binding KindText}" />
+                                  </StackPanel>
+                                  <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding RunningText}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                </Grid>
+                              </Button>
+                              <Button Grid.Column="1" Classes="flat" Content="Stop" VerticalAlignment="Center" Click="OnFlyoutItemPicked"
+                                      ToolTip.Tip="Stop it through Claude Code, which tells Claude it ended"
+                                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).StopTaskCommand}" CommandParameter="{Binding}" />
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Flyout>
+                </Button.Flyout>
+              </Button>
+
               <!-- Changed files (DESIGN.md §8) -->
               <Button Classes="flat" ToolTip.Tip="Changed files" Command="{Binding ToggleSidePanelCommand}">
                 <TextBlock Classes="muted small" Text="{Binding ChangedFiles.Count, StringFormat='Files ({0})'}" />
@@ -1204,7 +1260,7 @@
                       <ItemsControl ItemsSource="{Binding InfoRows}">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate DataType="vm:InfoRow">
-                            <Grid ColumnDefinitions="72,*" Margin="0,1">
+                            <Grid ColumnDefinitions="88,*" Margin="0,1">
                               <TextBlock Classes="muted small" Text="{Binding Label}" />
                               <SelectableTextBlock Grid.Column="1" Classes="small" Text="{Binding Value}" TextWrapping="Wrap" />
                             </Grid>

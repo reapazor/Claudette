@@ -22,6 +22,7 @@ public sealed class ConversationBuilder
     private ThinkingItem? _openThinking;
     private NoteItem? _retryNote;
     private AgentMap? _agents;
+    private RunningTasks? _tasks;
 
     // The agent whose stream this builder shows: the main agent, or the subagent whose group it fills.
     private AgentNode? _agent;
@@ -77,6 +78,16 @@ public sealed class ConversationBuilder
             _agents = value;
             _agent = value?.Root;
         }
+    }
+
+    /// <summary>
+    /// The tab's running tasks (DESIGN.md §5, "Running tasks"): Claude Code's task messages, matched to the cards of the
+    /// calls that started them.
+    /// </summary>
+    public RunningTasks? Tasks
+    {
+        get => _tasks;
+        init => _tasks = value;
     }
 
     public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null) =>
@@ -145,6 +156,7 @@ public sealed class ConversationBuilder
         _todoToolUses.Clear();
         _todoList?.Clear();
         _agents?.Clear();
+        _tasks?.OnConversationCleared();
         _openText = null;
         _openThinking = null;
         _retryNote = null;
@@ -196,6 +208,7 @@ public sealed class ConversationBuilder
 
             case SystemNotice { Message.Subtype: "task_started" or "task_progress" or "task_notification" or "task_updated" } task:
                 _agents?.OnTask(task.Message);
+                _tasks?.OnTask(task.Message, FindToolUse);
                 break;
 
             case ToolProgress progress:
@@ -257,6 +270,7 @@ public sealed class ConversationBuilder
                 var detail = string.IsNullOrWhiteSpace(exited.Exit.StandardErrorTail) ? "" : $"\n{LastLines(exited.Exit.StandardErrorTail, 5)}";
                 AddNote($"Claude Code exited (code {code}).{detail}", exited.Exit.ExitCode == 0 ? NoteKind.Info : NoteKind.Error);
                 _agents?.OnSessionExited();
+                _tasks?.Clear();
                 break;
         }
     }
@@ -329,16 +343,19 @@ public sealed class ConversationBuilder
                         var child = new ConversationBuilder(subagent.Items, todoList: null, _modelName) { ExpandThinking = ExpandThinking, _parent = this };
                         // Its traffic fills its group and its node in the agent map, under this agent.
                         child._agents = _agents;
+                        child._tasks = _tasks;
                         child._agent = _agent is not null ? _agents?.Add(_agent, subagent) : null;
                         _subagents[toolUse.Id] = child;
                         _toolUses[toolUse.Id] = subagent;
                         Items.Add(subagent);
+                        _tasks?.OnToolUse(subagent);
                     }
                     else
                     {
                         var tool = new ToolUseItem(toolUse.Id, toolUse.Name, toolUse.Input);
                         _toolUses[toolUse.Id] = tool;
                         Items.Add(tool);
+                        _tasks?.OnToolUse(tool);
                     }
                     break;
             }
@@ -437,6 +454,23 @@ public sealed class ConversationBuilder
         >= 1_000 => $"{count / 1_000.0:0.#}k",
         _ => count.ToString(),
     };
+
+    /// <summary>The card of a tool call, in this conversation or any subagent group in it.</summary>
+    internal ToolUseItem? FindToolUse(string toolUseId)
+    {
+        if (_toolUses.TryGetValue(toolUseId, out var direct))
+        {
+            return direct;
+        }
+        foreach (var child in _subagents.Values)
+        {
+            if (child.FindToolUse(toolUseId) is { } nested)
+            {
+                return nested;
+            }
+        }
+        return null;
+    }
 
     private ConversationBuilder? FindSubagent(string toolUseId)
     {

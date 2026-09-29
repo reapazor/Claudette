@@ -111,6 +111,9 @@ public sealed class AgentMap
 
     public AgentNode? FindByTask(string taskId) => _byTask.GetValueOrDefault(taskId);
 
+    /// <summary>The agent that made a tool call, whose group holds its card; null when Claudette hasn't seen the call.</summary>
+    public AgentNode? OwnerOf(string toolUseId) => _toolCallOwners.GetValueOrDefault(toolUseId);
+
     /// <summary>A subagent's <c>Agent</c> call appeared in <paramref name="parent"/>'s stream.</summary>
     internal AgentNode Add(AgentNode parent, SubagentItem item)
     {

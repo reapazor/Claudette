@@ -90,11 +90,14 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         State = state;
         Agents = new AgentMap(services.Time, ModelDisplayName);
         Agents.Changed += OnAgentsChanged;
+        Tasks = new RunningTasks(services.Time, Agents);
+        Tasks.Changed += OnTasksChanged;
         _conversation = new ConversationBuilder(Items, TodoList, ModelDisplayName)
         {
             ExpandThinking = services.Settings.Appearance.ExpandThinking,
             ShowUnsupportedMessages = services.Settings.Advanced.LogProtocol,
             Agents = Agents,
+            Tasks = Tasks,
             Time = services.Time,
         };
         // A prompt the phone answered is withdrawn by Claude Code (DESIGN.md §18, "Remote Control").
@@ -207,7 +210,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     // ---- Status (DESIGN.md §4, "Status icon") ------------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StatusGlyph), nameof(StatusTip), nameof(InfoRows), nameof(IsWorking), nameof(NeedsInput), nameof(IsBusyStatus), nameof(IsAlertStatus), nameof(IsErrorStatus), nameof(IsUnread), nameof(RowDetail))]
+    [NotifyPropertyChangedFor(nameof(StatusGlyph), nameof(StatusTip), nameof(InfoRows), nameof(IsWorking), nameof(NeedsInput), nameof(IsBusyStatus), nameof(IsAlertStatus), nameof(IsErrorStatus), nameof(IsUnread), nameof(RowDetail), nameof(ShowTaskBadge))]
     [NotifyCanExecuteChangedFor(nameof(StopCommand), nameof(SendCommand), nameof(RestartCommand), nameof(CompactCommand))]
     public partial TabStatus Status { get; set; }
 
@@ -283,6 +286,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             if (Agents.Summary is { } agents)
             {
                 rows.Add(new InfoRow("Agents", agents));
+            }
+            if (Tasks.Summary is { } tasks)
+            {
+                rows.Add(new InfoRow("Running tasks", tasks));
             }
             AddProjectRows(rows);
             AddPerforceRows(rows);
@@ -1057,6 +1064,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 EnvironmentOverrides = _services.RemoteControl.ClaudeVariables,
             })));
             _session = session;
+            // A new claude has none of the old one's tasks.
+            Tasks.Clear();
             _ = LoadSpinnerVerbsAsync();
             _services.RememberModels(session.Initialization?.Models);
             State.SessionStartedAt ??= _services.Time.GetUtcNow();
@@ -1411,9 +1420,6 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 case PermissionCancelled:
                     PermissionResolved();
                     break;
-                case SystemNotice { Message.Subtype: "task_started" } task:
-                    OnTaskStarted(task.Message);
-                    break;
                 case SystemNotice { Message.Subtype: "status" }:
                     // Claude Code reports mode changes it makes itself, such as leaving plan mode.
                     PermissionMode = session.PermissionMode ?? PermissionMode;
@@ -1599,6 +1605,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _session = null;
         ResetRemote();
         SetRunningVersion(null);
+        // Its events are no longer applied, so its exit won't clear them: its tasks end with it. On the UI thread, like
+        // the events, since closing can finish elsewhere.
+        _services.Dispatcher.Post(Tasks.Clear);
         if (session is null)
         {
             await EndProcessTreeAsync(killProcesses);
@@ -1642,6 +1651,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         _copied.Clear();
         StopAgentTicker();
+        StopTaskTicker();
         _services.Notifications.ClearTab(Id);
         StopPerforce();
         StopProjectJobOnClose(killProcesses);

@@ -900,15 +900,15 @@ items:
   - id: "task_started"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/ViewModels/TabViewModel.Processes.cs, src/Claudette.App/Conversation/AgentMap.cs
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs, src/Claudette.App/Conversation/AgentMap.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: SidePanelTests, AgentMapTests
+    test: SidePanelTests, AgentMapTests, RunningTasksTests
   - id: "stop_task"
     kind: control
     status: documented
     usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: SidePanelTests
+    test: SidePanelTests, RunningTasksTests
   # --- Agent map (DESIGN.md §18) ------------------------------------------------------------------------
   - id: "tool_progress"
     kind: message
@@ -949,15 +949,15 @@ items:
   - id: "task_notification"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs, src/Claudette.App/Conversation/RunningTasks.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: AgentMapTests
+    test: AgentMapTests, RunningTasksTests
   - id: "task_updated"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs, src/Claudette.App/Conversation/RunningTasks.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: AgentMapTests
+    test: AgentMapTests, RunningTasksTests
   - id: 'task_type: "local_agent"'
     kind: field
     status: documented
@@ -967,9 +967,9 @@ items:
   - id: "is_backgrounded"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentNode.cs
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs, src/Claudette.App/Conversation/RunningTasks.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: AgentMapTests
+    test: AgentMapTests, RunningTasksTests
   - id: "agent_id"
     kind: field
     status: undocumented
@@ -986,9 +986,9 @@ items:
   - id: "run_in_background"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentNode.cs
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs, src/Claudette.App/Conversation/RunningTasks.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: AgentMapTests
+    test: AgentMapTests, RunningTasksTests
   - id: 'status: "async_launched"'
     kind: field
     status: documented
@@ -1051,6 +1051,51 @@ items:
     docs: https://code.claude.com/docs/en/sub-agents
     test: RealCliTests
     fallback: User configuration, passed through to claude. The real-CLI test sets it so nesting is on whatever the machine's environment says.
+
+  # --- Running tasks (DESIGN.md §5, "Running tasks") ----------------------------------------------------
+  - id: 'task_type: "local_bash"'
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RunningTasksTests
+  - id: 'task_type: "remote_agent"'
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RunningTasksTests
+  - id: 'taskType: "local_workflow"'
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RunningTasksTests
+    fallback: Documented on the Workflow tool's output as the type of the task it registers; read as task_started's task_type. Any other type still counts as a running task, with the default icon.
+  - id: "Monitor"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs, src/Claudette.App/Conversation/ToolIcons.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RunningTasksTests, ComposerTests
+  - id: "ambient"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs, src/Claudette.Core/Protocol/ProtocolDiagnostics.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RunningTasksTests
+  - id: 'status: "killed"'
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs, src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RunningTasksTests, AgentMapTests
+  - id: "patch"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs, src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RunningTasksTests, AgentMapTests
 
   # --- Claude Code updates (DESIGN.md §12) --------------------------------------------------------------
   - id: "claude doctor"

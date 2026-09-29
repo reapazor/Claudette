@@ -31,9 +31,10 @@ public sealed class ProtocolDiagnostics
             "permissionMode", "plugins", "powershell_path", "product_feedback_disabled", "session_id", "skills", "slash_commands", "startup_timing", "subtype",
             "terminal_slash_commands", "tools", "type", "uuid", "view_mode"),
         ["system/status"] = Fields("compact_result", "permissionMode", "session_id", "status", "subtype", "type", "uuid"),
-        ["system/task_started"] = Fields("description", "is_backgrounded", "prompt", "session_id", "spawn_depth", "subagent_type", "subtype", "task_id",
-            "task_type", "tool_use_id", "type", "uuid"),
-        ["system/task_notification"] = Fields("output_file", "session_id", "status", "subtype", "summary", "task_id", "tool_use_id", "type", "usage", "uuid"),
+        ["system/task_started"] = Fields("ambient", "description", "is_backgrounded", "prompt", "session_id", "spawn_depth", "subagent_type", "subtype",
+            "task_id", "task_type", "tool_use_id", "type", "uuid"),
+        ["system/task_notification"] = Fields("ambient", "output_file", "session_id", "status", "subtype", "summary", "task_id", "tool_use_id", "type", "usage",
+            "uuid"),
     };
 
     private readonly Lock _lock = new();

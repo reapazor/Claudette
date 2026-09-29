@@ -26,6 +26,7 @@ public static class ToolIcons
         "Agent" or "Task" => "IconToolAgent",
         "TodoWrite" or "TaskCreate" or "TaskUpdate" or "TaskList" or "TaskGet" => "IconToolTodo",
         "Skill" => "IconToolSkill",
+        "Monitor" => "IconToolMonitor",
         "AskUserQuestion" => "IconToolQuestion",
         "ExitPlanMode" or "EnterPlanMode" => "IconToolPlan",
         "ListMcpResourcesTool" or "ReadMcpResourceTool" => "IconToolMcp",
