@@ -385,9 +385,14 @@ internal sealed class TabTestHarness : IAsyncDisposable
         return tab;
     }
 
+    /// <summary>
+    /// Waits until <paramref name="condition"/> holds, checking every 10 ms. The deadline is generous because some
+    /// waits are on real processes (git, for the file index), which a busy CI machine can take seconds to start.
+    /// </summary>
     public static async Task Eventually(Func<bool> condition, string? what = null)
     {
-        for (var i = 0; i < 200; i++)
+        var deadline = System.Diagnostics.Stopwatch.StartNew();
+        while (deadline.Elapsed < TimeSpan.FromSeconds(10))
         {
             if (InlineDispatcher.Read(condition))
             {
