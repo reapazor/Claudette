@@ -59,7 +59,7 @@ public sealed class SettingsAndStateTests : IDisposable
     public async Task Tabs_round_trip_with_their_token_totals()
     {
         var store = new JsonFileStore<AppState>(Path.Combine(_root, "state.json"));
-        var tab = new TabState { Folder = "/work/api", SessionId = "s1", UserName = "Refactor", IsPinned = true };
+        var tab = new TabState { Folder = "/work/api", SessionId = "s1", UserName = "Refactor", IsPinned = true, SyncToLibrary = true };
         tab.Tokens.Models["claude-opus-5-5"] = new ModelTokenTotals { Input = 100, Output = 20 };
         tab.Overrides.Effort = "high";
 
@@ -68,6 +68,7 @@ public sealed class SettingsAndStateTests : IDisposable
 
         Assert.Equal("Refactor", loaded.UserName);
         Assert.True(loaded.IsPinned);
+        Assert.True(loaded.SyncToLibrary);
         Assert.Equal("high", loaded.Overrides.Effort);
         Assert.Equal(120, loaded.Tokens.Total);
     }

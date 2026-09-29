@@ -1,16 +1,19 @@
 using System.Text.Json.Nodes;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 using Claudette.App.Views;
 using Claudette.Core.Auth;
+using Claudette.Core.Library;
 using Claudette.Usage;
 
 namespace Claudette.App.UiTests;
@@ -143,6 +146,55 @@ public class MainWindowTests
         // Picking a command doesn't send it.
         Assert.DoesNotContain(h.Transport.Sent, m => m["type"]?.GetValue<string>() == "user");
         await Verify(listed);
+    }
+
+    [AvaloniaFact]
+    public async Task Sync_to_other_machines_ticks_in_the_tab_menu_and_marks_the_row()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        var icon = window.GetVisualDescendants().OfType<Border>().Single(b => AutomationProperties.GetName(b) == "Synced to the session library");
+        var menu = icon.FindAncestorOfType<Button>()!.ContextMenu!;
+        menu.Open(icon.FindAncestorOfType<Button>()!);
+        UiText.Settle(window);
+        var item = menu.Items.OfType<MenuItem>().Single(m => m.Header as string == "Sync to other machines");
+        Assert.False(icon.IsEffectivelyVisible);
+        Assert.False(item.IsChecked);
+
+        ClickMenuItem(window, item);
+
+        Assert.True(tab.SyncToLibrary);
+        Assert.True(item.IsChecked);
+        Assert.True(icon.IsEffectivelyVisible);
+
+        ClickMenuItem(window, item);
+
+        Assert.False(tab.SyncToLibrary);
+        Assert.False(item.IsChecked);
+        Assert.False(icon.IsEffectivelyVisible);
+
+        // Another machine has the session open, so it can't sync from here too: the item unticks again.
+        tab.State.SessionId = "held-1";
+        var source = Path.Combine(h.Root, "held-1.jsonl");
+        File.WriteAllText(source, "{}\n");
+        await h.Services.Library.Library.SaveAsync(new SessionRecord { SessionId = "held-1", Machine = "LAPTOP-02", LastUsed = h.Time.GetUtcNow() }, source, subagentsDirectory: null);
+        File.WriteAllText(Path.Combine(h.Services.Library.Library.GetSessionFolder("held-1"), LeaseManager.FileName),
+            new JsonObject { ["machine"] = "LAPTOP-02", ["owner"] = "other", ["updatedAt"] = h.Time.GetUtcNow().ToString("O") }.ToJsonString());
+
+        ClickMenuItem(window, item);
+
+        Assert.False(tab.SyncToLibrary);
+        Assert.False(item.IsChecked);
+        Assert.False(icon.IsEffectivelyVisible);
+    }
+
+    /// <summary>What the menu does with a click on a check item: it ticks or unticks the item, then raises Click.</summary>
+    private static void ClickMenuItem(Window window, MenuItem item)
+    {
+        item.SetCurrentValue(MenuItem.IsCheckedProperty, !item.IsChecked);
+        item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        UiText.Settle(window);
     }
 
     private static void Click(Window window, Control target)

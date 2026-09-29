@@ -6,10 +6,12 @@
 "Keep library sessions for"
 [choice] "Forever"
 "Session library folder"
-"Claudette copies each session's transcript here after every turn. Point it at a folder Google Drive, Dropbox or OneDrive keeps in sync, and your other machines can find and continue the same sessions in History."
+"Tabs that sync copy their session's transcript here after every turn. Point it at a folder Google Drive, Dropbox or OneDrive keeps in sync, and your other machines can find and continue those sessions in History."
 [field] "{root}/data/library"
 [button] Browse…
 [button] Move library…
+[ ] Sync new tabs to the session library
+"Any tab can be switched on or off with Sync to other machines in its menu. Sessions opened from the library keep syncing."
 [ ] Sync Claudette's settings through the library
 "Appearance, new-tab defaults, usage thresholds, check-ins, quick suffixes, notifications and process monitor options. The path to claude, this machine's name, the library folder, the diff tool and your folders stay on each machine."
 [button] Reset to defaults

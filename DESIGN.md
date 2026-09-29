@@ -10,7 +10,7 @@ Claudette does not replace Claude Code. It runs the real `claude` CLI as a child
 - **Many sessions at once.** Each tab is an independent Claude Code session with its own working folder.
 - **Token burn awareness.** Always show how much of the current session, weekly and model-specific limits you've used, how fast you're using them, and when you'll run out at the current rate.
 - **Easy to stop.** It should always be one click (or one key) to stop what Claude is doing in the current tab.
-- **Pick up where you left off.** Tabs come back when Claudette restarts, and a session library in a synced folder lets another machine continue the same sessions.
+- **Pick up where you left off.** Tabs come back when Claudette restarts, and a session library in a synced folder lets another machine continue the sessions you choose to sync.
 
 ### Non-goals (v1)
 
@@ -192,6 +192,7 @@ The visual reference is Claude Code's own Visual Studio Code extension:
   - **Close group** and **Close other tabs** skip pinned tabs.
   - Closing a pinned tab asks *"This tab is pinned. Close and unpin it?"*
   - Unpinned tabs aren't restored unless **Also restore unpinned tabs** is on in Settings. See [§9](#restore-on-launch) for what's restored.
+- **Syncing.** **Sync to other machines** in the tab's right-click menu (a check item), or in its **Tab settings…**, turns copying the tab's session to the session library on or off ([§9](#session-library-sync-across-machines)). It's off for a new tab unless Settings → Sessions says otherwise. A tab that syncs shows a small sync icon in its row.
 - Keyboard: `Ctrl/Cmd+T` new tab, `Ctrl/Cmd+W` close, `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle, `Ctrl/Cmd+1…9` jump to a tab, `Ctrl/Cmd+B` collapse or expand the sidebar.
 
 ### Sidebar
@@ -199,7 +200,7 @@ The visual reference is Claude Code's own Visual Studio Code extension:
 The tabs are listed in a sidebar on the left of the window, rather than a strip across the top, so long session names, a status line and many tabs all fit.
 
 - **A tab's row** has two lines:
-  - The status icon, a pin icon if pinned, a gear while a process it started is busy ([Process monitor](#process-monitor)), and the name, cut short with an ellipsis if it doesn't fit. With **Show changelist on tabs** on, a `CL 12345` badge sits at the end of the line ([§18](#perforce-changelist-in-the-tab-title)).
+  - The status icon, a pin icon if pinned, a sync icon if it syncs to the session library (muted, with the tip *"Synced to the session library"*), a gear while a process it started is busy ([Process monitor](#process-monitor)), and the name, cut short with an ellipsis if it doesn't fit. With **Show changelist on tabs** on, a `CL 12345` badge sits at the end of the line ([§18](#perforce-changelist-in-the-tab-title)).
   - The model and effort, or instead what needs attention: *Needs your input*, the error, or *Possibly stuck* when check-ins get no reply ([§5](#check-ins-on-long-turns)).
   - The close button shows on hover and on the selected tab. Hovering the row shows the tab info card; double-clicking renames it.
 - **Top:** **New tab**, which opens the picker ([Opening a tab](#opening-a-tab)), and the button that collapses the sidebar.
@@ -619,12 +620,12 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 - **Pinned tabs** ([§4](#4-tabs--sessions)) are always restored.
 - **Unpinned tabs** that were open when Claudette quit are only restored if **Also restore unpinned tabs** is on in Settings → Sessions. It's off by default.
 - **What's restored** for each tab:
-  - Folder, name, pinned state and group order.
+  - Folder, name, pinned state, whether it syncs, and group order.
   - Session ID, model, effort and per-tab overrides.
   - Suffixes kept on the tab, and token stats.
 - Tabs come back in the same order and resume their sessions, with the earlier conversation loaded so you can scroll back.
 - **Starting fast.** Restored tabs don't start their `claude` process until you first select them or send them a message. Launching with many pinned tabs is quick, and tabs you don't touch use no resources.
-- **Old sessions.** Claude Code deletes local transcripts after 30 days by default. A pinned tab you haven't used in a while could lose its transcript, so Claudette resumes from its session library copy, which isn't affected by that cleanup. If neither copy exists, the tab says so and waits: **Start a new session** starts one in the same folder, keeping the tab's name, pinned state, overrides and suffixes, and **Unpin and close** (**Close tab**) closes it. It doesn't start a new session by itself.
+- **Old sessions.** Claude Code deletes local transcripts after 30 days by default. A pinned tab you haven't used in a while could lose its transcript, so Claudette resumes from its session library copy, which isn't affected by that cleanup. Only a tab that syncs, or once did, has a library copy. If there is one, it's used whether or not the tab syncs now. If neither copy exists, the tab says so and waits: **Start a new session** starts one in the same folder, keeping the tab's name, pinned state, overrides and suffixes, and **Unpin and close** (**Close tab**) closes it. It doesn't start a new session by itself.
 - **Missing folder.** If a restored tab's folder no longer exists (for example a deleted clone), the tab shows an error as soon as it's restored, with **Choose folder…** and **Unpin and close** (**Close tab** for an unpinned tab).
   - **Choose folder…** is for a folder that moved, or another clone of the same project. The tab moves to the chosen folder's group and its session carries on there.
   - Claude Code finds sessions by folder, so Claudette copies the transcript to its local working folder and resumes from that file, as for a session from another machine ([Session library](#session-library-sync-across-machines)).
@@ -634,7 +635,7 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 
 - **History** (`Ctrl/Cmd+Shift+H`, or from the new tab menu) lists past sessions, grouped by folder. Each entry shows the name/title, the machine it was last used on, last activity time, first prompt and message count.
 - Search by title, folder and prompt text: every prompt of a session, not just the first (up to about 1,000 characters of each and 16,000 per session, kept in History's cache).
-- Opening an entry resumes that session in a new tab. The earlier conversation is loaded into the view so you can scroll back through it. A session that's already open in a tab just selects that tab.
+- Opening an entry resumes that session in a new tab. The earlier conversation is loaded into the view so you can scroll back through it. A session that's already open in a tab just selects that tab. The tab syncs if the session came from the library or has a library record ([Which tabs sync](#session-library-sync-across-machines)).
 - History combines two sources:
   - Claude Code's own session storage on this machine, so it includes sessions started in the terminal.
   - Claudette's session library (below), which can include sessions from other machines.
@@ -646,6 +647,16 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 
 Claudette keeps its own **session library** in a folder the user chooses (Settings → Sessions). By default it's in the app data folder. Pointing it at a folder that a sync client keeps up to date, such as Google Drive for desktop, Dropbox or OneDrive, lets other machines see and restore the same sessions. Claudette doesn't talk to Google Drive or any cloud API; it just reads and writes files, and the sync client does the rest.
 
+**Which tabs sync.** Syncing is per tab, and opt-in. It's for work you know you'll pick up on another machine, without bringing everything over.
+
+- A tab that doesn't sync never writes to the library: no transcript copy, no record and no lease.
+- **Sync to other machines**, in the tab's menu and in **Tab settings…**, turns it on or off ([§4](#4-tabs--sessions)). It's the tab's own state, saved with it, not a per-tab override.
+- **Turning it on** copies the session to the library straight away, or when the turn ends if one is running. The tab takes the lease with that copy, as a new library session does. If another machine has the session open (a live lease), sync stays off and the tab says so, since copying from here would overwrite what the other machine wrote.
+- **Turning it off** stops the copying and releases this tab's lease. The copy already in the library stays as it was, so other machines can still open it.
+- **New tabs** follow **Sync new tabs to the session library** (Settings → Sessions, off by default), however they're opened: the new tab picker, a group's `+`, `--folder`, Open Recent and the jump list, or a dropped folder.
+- **Opening from History.** A session from the library (another machine's, or one continued elsewhere) or one with a library record opens with sync on: someone chose to sync it, so it keeps syncing wherever it's opened. So does **Open a copy** of one, under the copy's own id once its first turn gives it one. A session that only ever lived on this machine opens with sync off.
+- A tab that doesn't sync also doesn't get the library's longer-term archive: once Claude Code cleans up its transcript, the session is gone ([Old sessions](#restore-on-launch)).
+
 **What's in the library.** One folder per session holding:
 
 - A **session record** (JSON): the tab name, model, effort, per-tab overrides, token stats, which machine last used it and when, and the project identity (below).
@@ -655,10 +666,10 @@ Claude Code's credentials and settings are never copied.
 
 **Writing.**
 
-- Claudette copies the transcript into the library after each turn finishes, never while Claude Code is writing it. It waits a second after the turn's result, so Claude Code has finished writing.
+- For a tab that syncs, Claudette copies the transcript into the library after each turn finishes, never while Claude Code is writing it. It waits a second after the turn's result, so Claude Code has finished writing. Turning sync on waits the same second.
 - Each file is written to a temporary name, then renamed, so a sync client never uploads a half-written file. The record is written last, so a record in the library means its transcript is there too.
 - A file that hasn't changed (same size, and a modified time within 2 seconds, since some synced drives store coarse times) isn't copied again.
-- Library copies aren't affected by Claude Code's own cleanup of local transcripts (30 days by default), so the library also works as a longer-term archive. It has its own retention setting.
+- Library copies aren't affected by Claude Code's own cleanup of local transcripts (30 days by default), so the library also works as a longer-term archive for the sessions that sync. It has its own retention setting.
 
 **Restoring on another machine.**
 
@@ -670,7 +681,7 @@ Claude Code's credentials and settings are never copied.
 2. **Check the code.** The library moves the conversation, not the code. If the branch or commit on this machine differs from what the other machine had, or the other machine had uncommitted changes, Claudette warns: *"This session was last used on DESKTOP-01 on branch `feature/auth` at `a1b2c3d`. This folder is on `main`. Claude's earlier file changes may not be here."* The user can continue anyway or cancel and sync the code first (push/pull).
 3. **Resume.**
    - Claudette copies the library's `<session-id>.jsonl` to a local working folder (`<app data>/sessions/`) and resumes with `claude --resume <local path>`.
-   - After each turn, it copies the file back to the library.
+   - After each turn, it copies the file back to the library. The tab syncs, as any session opened from the library does, until it's turned off.
 
 **How resuming from a file behaves** (confirmed by the spike):
 
@@ -682,8 +693,8 @@ Claude Code's credentials and settings are never copied.
 
 **One machine at a time.**
 
-- While a session is open, Claudette keeps a small lease file next to it ("in use on DESKTOP-01", refreshed every minute). A tab takes the lease when it starts a session that's in the library; a new session gets one with its first library copy.
-- A restored tab whose session another machine holds a live lease on (it was taken over while Claudette was closed) becomes read-only instead of starting, and says where the session continued.
+- While a tab that syncs has its session open, Claudette keeps a small lease file next to it ("in use on DESKTOP-01", refreshed every minute). The tab takes the lease when it starts a session that's in the library; a new session gets one with its first library copy. A tab that doesn't sync ignores leases.
+- A restored tab that syncs, whose session another machine holds a live lease on (it was taken over while Claudette was closed), becomes read-only instead of starting, and says where the session continued. A restored tab that doesn't sync starts from this machine's transcript as usual.
 - Opening a session from History that another machine is actively using, whether its transcript is on this machine or only in the library, asks the user to either:
   - **Open a copy**, which forks it into a new session with `--fork-session`, or
   - **Take over**, after which the other machine's tab becomes read-only on its next sync.
@@ -693,7 +704,7 @@ Claude Code's credentials and settings are never copied.
 - If the sync client creates conflict copies (for example `session (1).jsonl`), Claudette shows them in History as separate, forked entries. It never merges them.
   - It recognizes the numbered copies Google Drive and OneDrive make, Dropbox's "conflicted copy", Syncthing's `.sync-conflict-…`, and `<id>-<machine>.jsonl`.
   - Opening one copies it to a folder of its own and resumes it with `--fork-session`, so it can't overwrite the working copy of the original.
-- Library retention (Settings → Sessions) never deletes a session that's open here or held by a live lease.
+- Library retention (Settings → Sessions) never deletes a session that's open here in a tab that syncs, or held by a live lease. An old library copy of a tab that no longer syncs is pruned like any other.
 
 **Privacy.** Transcripts contain code, command output and anything else Claude read in the project. When the user picks a library folder inside a known cloud-sync location, Claudette says so and asks them to confirm.
 
@@ -715,7 +726,7 @@ Claudette can host the Claude Code session that works on Claudette's own source.
   - **Restart when idle**, while a tab is working: it waits until no tab is starting, working or waiting on the user.
   - **Restart into new builds by itself when no tab is working**, remembered on this machine. With it on, a Claude Code session that rebuilds Claudette sees the restart as soon as its turn ends.
 - **What's kept:**
-  - Every open tab, pinned or not, in order, with its session, name, overrides, kept suffixes and token stats.
+  - Every open tab, pinned or not, in order, with its session, name, overrides, whether it syncs, kept suffixes and token stats.
   - The message typed in each tab, with its one-off suffixes.
   - The selected tab, and the window's position and size.
   - Tabs whose Claude Code was running start again straight away and resume their sessions. The others start when selected, as on launch.
@@ -1045,7 +1056,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Category | Settings |
 |---|---|
 | General | Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. Claudette's version and updates: check for updates automatically (on by default), include pre-releases (off), **Check now**, and the update's actions. See [Updating Claudette](#updating-claudette). |
-| Sessions | Also restore unpinned tabs on launch (off by default; pinned tabs are always restored). Session library folder (with **Browse…** and **Move library…**, which copies existing sessions to the new folder). Name for this machine, as shown in History. How long to keep sessions in the library. Sync Claudette's settings through the library (off by default). See [§9](#session-library-sync-across-machines) and [Settings sync](#settings-sync-optional). |
+| Sessions | Also restore unpinned tabs on launch (off by default; pinned tabs are always restored). Session library folder (with **Browse…** and **Move library…**, which copies existing sessions to the new folder). Sync new tabs to the session library (off by default; each tab can be switched with **Sync to other machines** in its menu). Name for this machine, as shown in History. How long to keep sessions in the library. Sync Claudette's settings through the library (off by default). See [§9](#session-library-sync-across-machines) and [Settings sync](#settings-sync-optional). |
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
 | Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. |
 | New tabs | Default model, effort level and permission mode. The model and effort lists are what Claude Code offered in its last `initialize` reply on this machine (the models and each one's effort levels, kept with the machine's state), with a built-in list only until a session has started; Tab settings… lists them the same way. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (**Add folder…**, **Move up**, **Move down**, **Remove**), in the order the new tab picker shows them. See [Opening a tab](#opening-a-tab). |
@@ -1076,6 +1087,8 @@ Settings → Keyboard lists every shortcut Claudette handles, with its default f
 ### Per-tab overrides
 
 Some settings can be changed for a single tab from the tab's right-click menu, under **Tab settings…**: model, effort level, permission mode, the process monitor ([§4](#process-monitor)), and the check-in settings. A tab with overrides shows a small dot next to its settings entry, and **Use defaults** clears them. Overrides are saved with the tab.
+
+**Tab settings…** also has **Sync to other machines** ([§9](#session-library-sync-across-machines)), the same switch as the tab menu's. It isn't an override: the new-tab setting only applies when a tab opens, **Use defaults** leaves it as it is, and it doesn't count toward the dot.
 
 ### Storage
 
@@ -1385,8 +1398,10 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Still to verify:** a real Perforce server (including SSO and multi-factor), P4V, and the Windows and macOS credential stores in the running app.
 11. **Agent map.** ✅ Built 2026-09-29 ([§18](#agent-map)): the Agents page of the side panel and its own window, with live status, activity, running time, tool calls and tokens for each subagent, the prompt it was given and the report it returned, clicking through to its group or its waiting prompt, Stop for one subagent through `stop_task`, the info card's Agents row, and restored tabs replaying the finished tree from the subagents' own transcripts.
     - **Still to verify:** clicking through it in a real window, and `subagent_retry` against real API errors.
-12. **Updating Claudette.** ✅ Built 2026-09-29. An installed Claudette checks its GitHub releases, downloads the package for its platform, checks it, and restarts into it with every tab as it was, through the source builds' handover ([§2](#updating-claudette)). Settings → General has the version, the checks and pre-releases.
-
+12. **Updates and syncing by choice.** ✅ Built 2026-09-29.
+    - **Updating Claudette ([§2](#updating-claudette)).** An installed Claudette checks its GitHub releases, downloads the package for its platform, checks it, and restarts into it with every tab as it was, through the source builds' handover. Settings → General has the version, the checks and pre-releases.
+    - **Per-tab sync ([§9](#session-library-sync-across-machines)).** Syncing to the session library is opt-in per tab: **Sync to other machines** in the tab menu and **Tab settings…**, a sync icon on the tab's row, and **Sync new tabs to the session library** in Settings → Sessions (off by default). Sessions opened from the library keep syncing; a tab that doesn't sync writes nothing to the library and ignores leases.
+    - **Still to verify:** installing an update on a real Windows and Mac, which needs signed packages from a published release.
 13. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features

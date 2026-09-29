@@ -215,6 +215,12 @@ public sealed class SessionSettings
     /// <summary>How long sessions stay in the library after they were last used.</summary>
     public RetentionPeriod KeepLibrarySessions { get; set; } = RetentionPeriod.Forever;
 
+    /// <summary>
+    /// New tabs start with <see cref="TabState.SyncToLibrary"/> on (DESIGN.md §9, "Session library"). Off by default,
+    /// so a tab copies its session to the library only when it opts in.
+    /// </summary>
+    public bool SyncNewTabs { get; set; }
+
     /// <summary>Sync Claudette's settings through the library (DESIGN.md §14, "Settings sync").</summary>
     public bool SyncSettings { get; set; }
 }
