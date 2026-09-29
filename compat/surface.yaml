@@ -130,9 +130,9 @@ items:
   - id: "claude auth logout"
     kind: command
     status: documented
-    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs
+    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs, src/Claudette.App/ViewModels/AccountViewModel.cs
     docs: https://code.claude.com/docs/en/cli-reference
-    test: SignInTests, FakeClaudeSignInTests
+    test: SignInTests, FakeClaudeSignInTests, AccountAndSignInTests
 
   # --- Environment -------------------------------------------------------------------------------------
   - id: "CLAUDECODE"
@@ -457,20 +457,20 @@ items:
   - id: "claude_authenticate"
     kind: control
     status: undocumented
-    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs
-    test: FakeClaudeSignInTests against fake-claude; a real sign-in hasn't completed through it yet
+    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs, src/Claudette.App/ViewModels/SignInViewModel.cs
+    test: FakeClaudeSignInTests, AccountAndSignInTests (against fakes; no real sign-in has completed through it yet)
     fallback: claude auth login (documented), which Claudette runs whenever claude_authenticate is rejected or gives no address, with the pasted code written to its input (DESIGN.md §11).
   - id: "claude_oauth_wait_for_completion"
     kind: control
     status: undocumented
-    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs
-    test: FakeClaudeSignInTests against fake-claude; a real sign-in hasn't completed through it yet
+    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs, src/Claudette.App/ViewModels/SignInViewModel.cs
+    test: FakeClaudeSignInTests, AccountAndSignInTests (against fakes; no real sign-in has completed through it yet)
     fallback: See claude_authenticate.
   - id: "claude_oauth_callback"
     kind: control
     status: undocumented
-    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs
-    test: FakeClaudeSignInTests against fake-claude; a real sign-in hasn't completed through it yet
+    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs, src/Claudette.App/ViewModels/SignInViewModel.cs
+    test: FakeClaudeSignInTests, AccountAndSignInTests (against fakes; no real sign-in has completed through it yet)
     fallback: See claude_authenticate.
   - id: "generate_session_title"
     kind: control
@@ -536,9 +536,9 @@ items:
   - id: "claude auth login"
     kind: command
     status: documented
-    usedIn: src/Claudette.Core/Auth/ClaudeLogin.cs, src/Claudette.Core/Auth/ClaudeAuth.cs
+    usedIn: src/Claudette.Core/Auth/ClaudeLogin.cs, src/Claudette.Core/Auth/ClaudeAuth.cs, src/Claudette.App/ViewModels/SignInViewModel.cs
     docs: https://code.claude.com/docs/en/cli-reference
-    test: SignInTests, FakeClaudeSignInTests
+    test: SignInTests, FakeClaudeSignInTests, AccountAndSignInTests
     fallback: The fallback for the sign-in control requests, and the only way to sign in with SSO. Success is read from its exit code (0), which isn't documented; claude auth status then confirms the sign-in either way.
   - id: "--console"
     kind: flag
@@ -567,8 +567,8 @@ items:
   - id: "loginWithClaudeAi"
     kind: field
     status: undocumented
-    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs
-    test: FakeClaudeSignInTests
+    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs, src/Claudette.App/ViewModels/SignInViewModel.cs
+    test: FakeClaudeSignInTests, AccountAndSignInTests
     fallback: The claude_authenticate field that picks a Claude subscription (true) or an Anthropic Console account (false), as the TypeScript SDK's claudeAuthenticate sends it. If it goes away, sign in to a Console account with claude auth login --console.
   - id: "oauth_org_not_allowed"
     kind: field
@@ -579,29 +579,29 @@ items:
   - id: "Please run /login"
     kind: behavior
     status: undocumented
-    usedIn: src/Claudette.Core/Auth/SignInErrors.cs
-    test: SignInTests, FakeClaudeSignInTests
+    usedIn: src/Claudette.Core/Auth/SignInErrors.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    test: SignInTests, FakeClaudeSignInTests, AccountAndSignInTests
     fallback: A session that can't start without a sign-in is recognized from the words of its error ("/login", "Not logged in", "Invalid API key", "OAuth token"…). If the wording changes, the tab shows an ordinary start error with Restart, and a session that starts anyway still reports authentication_failed, which is documented, with its first message.
   - id: "subscriptionType"
     kind: field
     status: undocumented
-    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs
+    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs, src/Claudette.App/ViewModels/AccountViewModel.cs
     docs: https://code.claude.com/docs/en/cli-reference
-    test: InstallAndAuthTests
+    test: InstallAndAuthTests, AccountAndSignInTests
     fallback: With email, orgName and authMethod from claude auth status, for the account menu and Settings. Only shown; without them the menu says "Signed in".
   - id: "orgName"
     kind: field
     status: undocumented
-    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs
+    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs, src/Claudette.App/ViewModels/AccountViewModel.cs
     docs: https://code.claude.com/docs/en/cli-reference
     test: InstallAndAuthTests
     fallback: See subscriptionType.
   - id: "authMethod"
     kind: field
     status: undocumented
-    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs
+    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs, src/Claudette.App/ViewModels/AccountViewModel.cs
     docs: https://code.claude.com/docs/en/cli-reference
-    test: InstallAndAuthTests
+    test: InstallAndAuthTests, AccountAndSignInTests
     fallback: See subscriptionType. 2.1.284 reports none, claude.ai, api_key, api_key_helper, oauth_token or third_party; an unknown value is shown as it is.
 
   # --- Plan usage (DESIGN.md §6) ------------------------------------------------------------------------

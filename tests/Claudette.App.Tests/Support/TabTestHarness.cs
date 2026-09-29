@@ -15,9 +15,22 @@ namespace Claudette.App.Tests.Support;
 /// <summary>Plays Claude Code's side of one session for view model tests.</summary>
 internal sealed class ScriptedTransport : IClaudeTransport
 {
-    private readonly Channel<string> _output = Channel.CreateUnbounded<string>();
-    private readonly TaskCompletionSource<TransportExit> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private Channel<string> _output = Channel.CreateUnbounded<string>();
+    private TaskCompletionSource<TransportExit> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly List<JsonObject> _sent = [];
+
+    /// <summary>
+    /// After the pretend process exited, stands in for the next one, so a tab can restart (after a sign-in, say).
+    /// Everything sent so far is kept.
+    /// </summary>
+    public void RestartIfExited()
+    {
+        if (_completion.Task.IsCompleted)
+        {
+            _output = Channel.CreateUnbounded<string>();
+            _completion = new TaskCompletionSource<TransportExit>(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+    }
 
     /// <summary>Answers to control requests by subtype; null leaves the request unanswered, an exception answers with an error.</summary>
     public Dictionary<string, Func<JsonObject, JsonObject?>> Answers { get; } = new()
@@ -137,9 +150,17 @@ internal sealed class ScriptedSessionFactory(ScriptedTransport transport, TimePr
 {
     public List<ClaudeLaunchOptions> Launches { get; } = [];
 
+    /// <summary>While set, starts fail with this, as a <c>claude</c> that couldn't start would.</summary>
+    public Exception? StartFailure { get; set; }
+
     public async Task<ClaudeSession> StartAsync(ClaudeLaunchOptions options, CancellationToken cancellationToken = default)
     {
         Launches.Add(options);
+        if (StartFailure is { } failure)
+        {
+            throw failure;
+        }
+        transport.RestartIfExited();
         var session = new ClaudeSession(transport, time);
         await session.InitializeAsync(cancellationToken);
         return session;
@@ -294,8 +315,11 @@ internal sealed class TabTestHarness : IAsyncDisposable
         Services.ProjectsDirectory = ProjectsDirectory;
         Factory = new ScriptedSessionFactory(Transport, Time);
         Services.UseSessionFactory(Factory);
-        Shell = new ShellViewModel(Services, () => { });
+        Shell = new ShellViewModel(Services, () => OnAuthenticationRequired());
     }
+
+    /// <summary>What the main window does when a tab finds Claude Code signed out (DESIGN.md §11).</summary>
+    public Action OnAuthenticationRequired { get; set; } = () => { };
 
     public FakeProcessTreeTracker Trees { get; }
 

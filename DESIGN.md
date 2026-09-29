@@ -651,11 +651,11 @@ Clicking a notification brings Claudette to the front and goes to the relevant t
   - **Needs input:** what's waiting, such as *"Allow this command? npm test"*, *"Claude has a question: Which database?"* or *"Claude has a plan for you to review."*
   - **Errors:** *"Claude Code stopped unexpectedly (exit code 3)."*, or why it couldn't start.
   - **Check-ins:** Settings → Check-ins → **Notify me when a check-in is sent** (off by default), which Tab settings can override ([§5](#check-ins-on-long-turns)).
-- **Skipping.** App-wide notifications (usage alerts, sign-in, updates) are skipped while Claudette is focused, because the header or the sign-in screen already shows them. Usage alerts also keep their line under the header.
+- **Skipping.** App-wide notifications (usage alerts, sign-in, updates) are skipped while Claudette is focused, because the header, the sign-in banner or the sign-in screen already shows them. Usage alerts also keep their line under the header.
 - **One per subject.** A newer notification replaces an older one of the same kind for the same tab. A tab's notifications are taken away once you look at it; a waiting-prompt notification also goes once the prompt is answered. An update is announced once per version.
 - **Clicking.**
   - A tab notification selects the tab, expanding its group if it's collapsed.
-  - A usage alert opens the Usage panel, and an update opens the update dialog.
+  - A usage alert opens the Usage panel, an update opens the update dialog, and the sign-in notification opens the sign-in dialog ([§11](#signing-in)).
 - **Badge.** Settings → Notifications → **Show the number of tabs needing input on the Dock or taskbar icon**. On Windows it's an overlay icon on the taskbar button, drawn by Claudette.
 - **How each OS does it** (the code is in `Claudette.Platform/Notifications`):
   - **Windows:** WinRT toasts (`ToastNotificationManager`), called through source-generated COM interop so the app stays a plain `net10.0` build. A click raises the toast's `Activated` event in the running Claudette. An MSIX install has package identity. Run unpackaged, Claudette sets its AppUserModelID (`reapazor.Claudette`) and registers it under `HKCU\Software\Classes\AppUserModelId`, as the Windows App SDK does. The badge uses `ITaskbarList3::SetOverlayIcon`.
@@ -671,32 +671,43 @@ Claude Code keeps its own credentials. Claudette never reads or stores them; it 
 ### Detecting
 
 - **On launch**, before any tab starts, Claudette runs `claude auth status`. It prints JSON and exits with 0 when signed in and 1 when not. The spike confirmed these fields:
-  - `loggedIn` and `authMethod` (`claude.ai`, `none`, …).
+  - `loggedIn` and `authMethod` (`claude.ai`, `none`, …; 2.1.284's source also has `api_key`, `api_key_helper`, `oauth_token` and `third_party`).
   - `email`, `orgName` and `subscriptionType`.
   - `configDirectory`, and `projectsDirectory`, which is where Claude Code keeps its transcripts. History uses it.
 - **While running**, any of these from a session means "needs sign-in":
-  - An `assistant` message with `error: "authentication_failed"`.
-  - An `auth_status` message.
-  - A session that fails to start with an authentication error.
+  - An `assistant` message with `error: "authentication_failed"`, or `"oauth_org_not_allowed"` (an account from an organization that isn't allowed, which signing in with another account fixes). This is what a signed-out Claude Code sends: it starts normally and answers the first message with *"Not logged in · Please run /login"* (the `signed-out` protocol fixture).
+  - An `auth_status` message with an `error`. Claude Code 2.1.284 only sends `auth_status` with the hidden `--enable-auth-status` flag, which Claudette doesn't pass, to report cloud credential helpers such as `awsAuthRefresh`, so in practice it doesn't arrive.
+  - A session that fails to start with an authentication error. Its wording isn't documented, so Claudette matches the error and the end of the process's error output loosely: `/login`, "Not logged in", "Invalid API key", "OAuth token" and the like. Anything else stays an ordinary start error with **Restart**.
 
 ### Signing in
 
-- At launch, Claudette shows a sign-in screen instead of the tabs. In the middle of a session, it shows a banner across all tabs: *"Claude Code needs you to sign in."* If Claudette isn't focused, it also sends an OS notification.
+- At launch, Claudette shows a sign-in screen instead of the tabs. In the middle of a session, it shows a banner across all tabs, which stay open: *"Claude Code needs you to sign in."*, with a **Sign in** button. If Claudette isn't focused, it also sends an OS notification, once however many tabs find Claude Code signed out. Clicking the notification opens the sign-in dialog.
+- The banner's **Sign in** opens the same sign-in screen as a dialog over the window, and starts signing in straight away. The dialog can be closed.
 - **Sign in** (main flow) uses the utility session's control protocol, as the Agent SDK does:
   1. Claudette sends `claude_authenticate` with `loginWithClaudeAi: true`. Claude Code replies with two URLs and doesn't open a browser itself:
      - `automaticUrl` redirects back to a local port Claude Code is listening on, so sign-in finishes without copying anything.
      - `manualUrl` redirects to a page that shows a code to copy.
-  2. Claudette opens `automaticUrl` in the default browser and sends `claude_oauth_wait_for_completion`, which returns when sign-in finishes.
-  3. If that doesn't work (for example a browser on another device, or a firewall blocking the local port), the user can switch to **Enter a code instead**. Claudette opens `manualUrl`, shows a code field, and sends the code with `claude_oauth_callback`.
-- These control requests are **undocumented** (they exist in the TypeScript SDK but not its docs). The **fallback** is the documented `claude auth login`. The spike ran it with no terminal attached: it opened the browser itself and printed a fallback URL, but used the copy-a-code flow. With this fallback, the code field writes the code to the command's input (still to be confirmed when building it).
+  2. Claudette opens `automaticUrl` in the default browser and sends `claude_oauth_wait_for_completion`, which returns when sign-in finishes: with the new `account`, or with the sign-in's error.
+  3. If that doesn't work (for example a browser on another device, or a firewall blocking the local port), the user can switch to **Enter a code instead**. Claudette opens `manualUrl`, shows a code field, and sends the code with `claude_oauth_callback`, as `authorizationCode` and `state`: the two halves of the `code#state` the page shows. The sign-in keeps waiting meanwhile, so it finishes whichever way the browser gets there.
+- These control requests are **undocumented**. The TypeScript SDK sends them from `claudeAuthenticate`, `claudeOAuthCallback` and `claudeOAuthWaitForCompletion` (SDK 0.3.284, which bundles Claude Code 2.1.284), and the answers above are from Claude Code 2.1.284's source. Claude Code refuses `claude_authenticate` when managed settings' `forceLoginMethod` rules out the kind of account asked for. No real sign-in has completed through them yet.
+- **Fallback: `claude auth login`** (documented). Claudette runs it when `claude_authenticate` is rejected or returns no address, and for SSO. What it does with no terminal attached was confirmed from 2.1.284's source and the spike, but not yet with a completed sign-in:
+  - It opens the browser itself, at the address that finishes on its own, and prints the other one: `If the browser didn't open, visit: <url>`, then `Paste code here if prompted >`. Claudette takes the first web address in its output, with terminal escape codes removed.
+  - **Open browser again** and **Enter a code instead** open that printed address, whose page shows a code, and show the code field. The code field writes the code to the command's input, which reads one `code#state` per line. A line without both halves gets *"Invalid code. Please make sure the full code was copied."* on its error output, which Claudette shows while the command keeps waiting.
+  - It exits with 0 and prints `Login successful.` once signed in, and exits with 1 and prints `Login failed: …` (or the organization's message) if not. Claudette goes by the exit code, and `claude auth status` then has the last word.
+  - It's started through `IProcessLauncher` with `ClaudeEnvironment.Create`, like every `claude`, and stopped after 10 minutes.
 - While it waits, Claudette shows *"Finish signing in in your browser"* and stays responsive. The screen has:
   - **Open browser again**, which reopens the same URL, in case the browser didn't open or the tab was closed.
   - **Enter a code instead**, as described above.
-  - **Cancel**.
-  - **More options**: sign in with an Anthropic Console account for API billing (`loginWithClaudeAi: false`, or `claude auth login --console`), or with SSO (`claude auth login --sso`).
-- When sign-in succeeds, Claudette runs `claude auth status` again and shows the account. Any tab that failed is restarted with `--resume`. Messages sent while signed out stay queued and are delivered once sign-in completes.
-- If sign-in fails (timed out, cancelled, organization not allowed), Claudette shows the command's message and a **Try again** button.
-- **Account menu** (in the header): the signed-in email and plan from `claude auth status`, and **Sign out**, which runs `claude auth logout`. Signing out asks for confirmation first, because every tab will stop working.
+  - **Cancel**, which also ends `claude auth login`.
+  - **More options**: sign in with an Anthropic Console account for API usage billing (`claude_authenticate` with `loginWithClaudeAi: false`, or `claude auth login --console`), or with SSO (`claude auth login --sso`; the control request has no option for it). The screen offers them before signing in, too.
+- **I've already signed in**, for a sign-in done in a terminal, runs `claude auth status` again, and says so if Claude Code still reports no sign-in.
+- When sign-in succeeds, Claudette runs `claude auth status` again, shows the account, and restarts the utility session, so plan usage comes from the new sign-in. Any tab that failed is restarted with `--resume`. A tab that couldn't start isn't tried again until then, but still takes messages.
+- **Messages sent while signed out** stay queued and are delivered, in order, once sign-in completes. The message that found Claude Code signed out is one of them: a message nothing came back for before the sign-in error never reached the model, so it's sent again. One that was answered before the error isn't.
+- If sign-in fails (timed out, cancelled, organization not allowed), Claudette shows Claude Code's message, from the control request or the command, and a **Try again** button, which repeats the same kind of sign-in.
+- **Account menu** (in the header, on the right): the signed-in email, plan and organization from `claude auth status`, or how Claude Code is signed in when there's no plan (an API key, say), and **Sign out…**, which runs `claude auth logout`. Signed out, it offers **Sign in**.
+  - Signing out asks for confirmation first, because every tab will stop working, and Claude Code is signed out in the terminal too.
+  - Afterwards Claudette runs `claude auth status`. If Claude Code still reports a sign-in (an API key in the environment, which logging out doesn't remove), it says so. Otherwise the banner shows, without a notification, messages are held, and every tab that was running restarts on its session after the next sign-in, since that may be a different account.
+- **Settings → Claude Code** shows the same account with **Sign in** and **Sign out…**, wired to the same flows. Because Settings is a separate window, the sign-in screen and the confirmation show inside it.
 
 ## 12. Claude Code Updates
 
@@ -915,7 +926,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | General | Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. |
 | Sessions | Also restore unpinned tabs on launch (off by default; pinned tabs are always restored). Session library folder (with **Browse…** and **Move library…**, which copies existing sessions to the new folder). Name for this machine, as shown in History. How long to keep sessions in the library. Sync Claudette's settings through the library (off by default). See [§9](#session-library-sync-across-machines) and [Settings sync](#settings-sync-optional). |
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
-| Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account, with **Sign in** / **Sign out**. Check for Claude Code updates automatically. |
+| Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. |
 | New tabs | Default model, effort level and permission mode. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (add, remove, reorder). See [Opening a tab](#opening-a-tab). |
 | Appearance | Theme: follow system, light or dark. Font and size for the conversation, and for code. Show thinking expanded or collapsed by default. |
 | Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
@@ -1053,7 +1064,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 |---|---|
 | Fake transport and replay transport | `tests/Claudette.Core.Tests/Support/` |
 | Protocol fixtures | `tests/Claudette.Core.Tests/Fixtures/protocol/2.1.284/` (recorded in the spikes, with paths and personal details removed) |
-| `fake-claude` | `tools/Claudette.FakeClaude/`. Scripted by the prompt (`ASK_PERMISSION`, `SLOW`, `CRASH`) and by environment variables, rather than scenario files. |
+| `fake-claude` | `tools/Claudette.FakeClaude/`. Scripted by the prompt (`ASK_PERMISSION`, `SLOW`, `CRASH`, `AUTH_FAIL`) and by environment variables, rather than scenario files. Its sign-in (`auth login`, `auth logout`, the sign-in control requests) is kept in a file in `CLAUDE_CONFIG_DIR`, so a sign-in sticks; see the header of its `Program.cs`. |
 | Mock Messages API | `tools/Claudette.MockApi/`. Runs in-process in tests, or on its own with `dotnet run`. |
 | Tests against `fake-claude` and the real CLI | `tests/Claudette.IntegrationTests/`. The real-CLI tests are tagged `RealCli`. |
 | View model tests | `tests/Claudette.App.Tests/`. `Support/TabTestHarness.cs` gives a tab a scripted Claude Code connection, a fake clock, a temporary data folder and a fake process tracker. |

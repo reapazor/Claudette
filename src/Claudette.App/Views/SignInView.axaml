@@ -3,31 +3,54 @@
              xmlns:vm="using:Claudette.App.ViewModels"
              x:Class="Claudette.App.Views.SignInView"
              x:DataType="vm:SignInViewModel">
+  <!-- DESIGN.md §11, "Signing in": the launch screen, and the dialog the sign-in banner opens. -->
   <Border Classes="card" HorizontalAlignment="Center" VerticalAlignment="Center">
     <StackPanel Spacing="12">
       <TextBlock Classes="title" Text="Sign in to Claude" />
       <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
-      <TextBlock Classes="error" Text="{Binding Error}" TextWrapping="Wrap"
-                 IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      <TextBlock Classes="muted small" Text="{Binding MethodText}" TextWrapping="Wrap"
+                 IsVisible="{Binding MethodText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      <SelectableTextBlock Classes="error" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
 
-      <!-- Not started -->
+      <!-- Not started, or failed: "Try again" repeats the same kind of sign-in -->
       <WrapPanel ItemSpacing="8" LineSpacing="8" IsVisible="{Binding IsIdle}">
-        <Button Classes="accent" Content="Sign in" Command="{Binding SignInCommand}" />
+        <Button Classes="accent" Content="{Binding SignInText}" Command="{Binding SignInCommand}" />
+        <Button Content="More options">
+          <Button.Flyout>
+            <MenuFlyout>
+              <MenuItem Header="Sign in with an Anthropic Console account (API usage billing)" Command="{Binding SignInWithConsoleCommand}" />
+              <MenuItem Header="Sign in with SSO" Command="{Binding SignInWithSsoCommand}" />
+            </MenuFlyout>
+          </Button.Flyout>
+        </Button>
         <Button Content="I've already signed in" Command="{Binding CheckAgainCommand}" />
+        <Button Content="Close" Command="{Binding CloseCommand}" IsVisible="{Binding CanClose}" />
       </WrapPanel>
 
       <!-- Waiting for the browser -->
       <StackPanel Spacing="12" IsVisible="{Binding IsWaiting}">
         <ProgressBar IsIndeterminate="True" IsVisible="{Binding !ShowCodeEntry}" />
         <StackPanel Spacing="8" IsVisible="{Binding ShowCodeEntry}">
-          <TextBox Text="{Binding Code}" PlaceholderText="Paste the code from the browser" FontFamily="{StaticResource MonoFont}" />
+          <TextBox Text="{Binding Code}" PlaceholderText="Paste the code from the browser" FontFamily="{StaticResource MonoFont}"
+                   AutomationProperties.Name="Code from the browser" />
           <Button Classes="accent" Content="Submit code" Command="{Binding SubmitCodeCommand}" />
         </StackPanel>
         <WrapPanel ItemSpacing="8" LineSpacing="8">
           <Button Content="Open browser again" Command="{Binding OpenBrowserAgainCommand}" />
           <Button Content="Enter a code instead" Command="{Binding EnterCodeInsteadCommand}" IsVisible="{Binding !ShowCodeEntry}" />
+          <Button Content="More options">
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="Sign in with a Claude subscription instead" Command="{Binding SignInCommand}" />
+                <MenuItem Header="Sign in with an Anthropic Console account (API usage billing)" Command="{Binding SignInWithConsoleCommand}" />
+                <MenuItem Header="Sign in with SSO" Command="{Binding SignInWithSsoCommand}" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
           <Button Content="Cancel" Command="{Binding CancelCommand}" />
         </WrapPanel>
+        <TextBlock Classes="muted small" TextWrapping="Wrap" IsVisible="{Binding IsUsingCommand}"
+                   Text="Signing in with claude auth login. It opens your browser itself." />
       </StackPanel>
     </StackPanel>
   </Border>

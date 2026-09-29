@@ -397,7 +397,7 @@ public partial class ShellView : UserControl
         {
             return;
         }
-        var settings = new SettingsViewModel(main.Services, main.AccountText, main.Updates);
+        var settings = new SettingsViewModel(main.Services, main.AccountText, main.Updates) { Account = main.Account };
         if (category is not null && SettingsViewModel.AllCategories.Contains(category))
         {
             settings.SelectedCategory = category;

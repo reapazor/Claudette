@@ -215,7 +215,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         TabStatus.Working => "Working",
         TabStatus.NeedsInput => "Needs your input",
         TabStatus.Unread => "Finished while in the background",
-        TabStatus.Error => IsFolderMissing ? "Its folder no longer exists" : "Claude Code stopped with an error",
+        TabStatus.Error => IsFolderMissing ? "Its folder no longer exists" : IsWaitingForSignIn ? "Waiting for you to sign in" : "Claude Code stopped with an error",
         TabStatus.Exited => "Not running",
         _ => "Idle",
     };
@@ -711,17 +711,25 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _ = RequestTitleAsync();
     }
 
-    private bool CanSend() => !IsReadOnly && Status is not (TabStatus.Starting or TabStatus.Error) && (ComposerText.Trim().Length > 0 || Chips.Count > 0);
+    private bool CanSend() => !IsReadOnly && (Status is not (TabStatus.Starting or TabStatus.Error) || IsWaitingForSignIn) && (ComposerText.Trim().Length > 0 || Chips.Count > 0);
 
     private async Task SendRawAsync(string message)
     {
+        // Held while Claude Code needs a sign-in, and sent once it's done (DESIGN.md §11).
+        if (HoldForSignIn(message))
+        {
+            return;
+        }
         try
         {
             await EnsureStartedAsync();
             if (_session is null)
             {
+                // It couldn't start because Claude Code needs a sign-in: the message waits for it.
+                HoldForSignIn(message);
                 return;
             }
+            _awaitingReply.Add(message);
             await _session.SendUserMessageAsync(message);
         }
         catch (Exception ex)
@@ -772,12 +780,17 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     public bool CanRestart => Status is TabStatus.Exited or TabStatus.Error && !IsFolderMissing;
 
     [RelayCommand(CanExecute = nameof(CanRestart))]
-    private Task RestartAsync() => EnsureStartedAsync();
+    private Task RestartAsync()
+    {
+        // By hand it tries again even while waiting for a sign-in, say after signing in from a terminal (DESIGN.md §11).
+        _restartAfterSignIn = false;
+        return EnsureStartedAsync();
+    }
 
     /// <summary>Starts the process if it isn't running: restored tabs start on first selection or message.</summary>
     public async Task EnsureStartedAsync()
     {
-        if (_session is not null || Status == TabStatus.Error && !Directory.Exists(Folder))
+        if (_session is not null || Status == TabStatus.Error && (!Directory.Exists(Folder) || WaitsForSignIn))
         {
             return;
         }
@@ -856,6 +869,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             Status = TabStatus.Idle;
             _pump = PumpAsync(session);
             _ = RefreshContextUsageAsync(session);
+        }
+        catch (Exception ex) when (Core.Auth.SignInErrors.IsSignInFailure(ex))
+        {
+            OnStartFailedForSignIn(ex);
         }
         catch (Exception ex)
         {
@@ -1064,6 +1081,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             _conversation.Apply(sessionEvent);
             RecordFileChanges(sessionEvent);
+            TrackReplies(sessionEvent);
             switch (sessionEvent)
             {
                 case StateChanged { State: SessionState.Working }:
@@ -1136,8 +1154,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     NameChanged();
                     break;
                 case AuthenticationRequired:
-                    _restartAfterSignIn = true;
-                    _shell.OnAuthenticationRequired();
+                    OnAuthenticationRequired();
                     break;
                 case SessionExited exited:
                     _session = null;
@@ -1213,19 +1230,6 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 ? usage.TotalTokens >= limit * 0.9
                 : usage.Percentage >= 80;
         });
-    }
-
-    /// <summary>After a sign-in: a session that hit an authentication error restarts on the same session.</summary>
-    public async Task OnSignedInAgainAsync()
-    {
-        if (!_restartAfterSignIn)
-        {
-            return;
-        }
-        _restartAfterSignIn = false;
-        await StopSessionAsync();
-        _conversation.AddNote("Signed in. Send your message again.");
-        await EnsureStartedAsync();
     }
 
     /// <summary>Applies changed per-tab overrides to the running session.</summary>
