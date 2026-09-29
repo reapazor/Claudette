@@ -16,6 +16,13 @@ internal static class LibraryFiles
     public static readonly TimeSpan TimestampTolerance = TimeSpan.FromSeconds(2);
 
     /// <summary>
+    /// How many times a rename over a library file, or a read of one, is tried. On Windows a rename fails while anything
+    /// has the file open (History reading a record, say), and a read fails while a rename is under way; either only
+    /// lasts a moment.
+    /// </summary>
+    private const int Attempts = 20;
+
+    /// <summary>
     /// Copies <paramref name="source"/> to <paramref name="target"/> unless the target already has the same length and
     /// last-write time. The copy gets the source's last-write time. The source is only read, and is shared so that
     /// another process can keep writing it.
@@ -54,7 +61,7 @@ internal static class LibraryFiles
                 }
             }
             File.SetLastWriteTimeUtc(temp, lastWrite);
-            File.Move(temp, target, overwrite: true);
+            Replace(temp, target);
             return true;
         }
         finally
@@ -71,7 +78,7 @@ internal static class LibraryFiles
         try
         {
             await File.WriteAllTextAsync(temp, text, cancellationToken).ConfigureAwait(false);
-            File.Move(temp, target, overwrite: true);
+            Replace(temp, target);
         }
         finally
         {
@@ -87,11 +94,31 @@ internal static class LibraryFiles
         try
         {
             File.WriteAllText(temp, text);
-            File.Move(temp, target, overwrite: true);
+            Replace(temp, target);
         }
         finally
         {
             DeleteQuietly(temp);
+        }
+    }
+
+    /// <summary>
+    /// Reads a library file written by <see cref="WriteText"/> or <see cref="WriteTextAsync"/>. It's opened without
+    /// sharing deletion: a rename that fails over a file open that way can leave the file deleted once it's closed.
+    /// </summary>
+    public static string ReadText(string path)
+    {
+        var spin = new SpinWait();
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return File.ReadAllText(path);
+            }
+            catch (IOException ex) when (ex is not (FileNotFoundException or DirectoryNotFoundException) && attempt < Attempts)
+            {
+                spin.SpinOnce(sleep1Threshold: -1);
+            }
         }
     }
 
@@ -102,6 +129,24 @@ internal static class LibraryFiles
 
     /// <summary>A unique name next to <paramref name="target"/>, so the rename stays on one volume.</summary>
     private static string TempPath(string target) => $"{target}.{Guid.NewGuid():N}{TempExtension}";
+
+    /// <summary>Renames <paramref name="temp"/> over <paramref name="target"/>, trying again while something has the target open.</summary>
+    private static void Replace(string temp, string target)
+    {
+        var spin = new SpinWait();
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Move(temp, target, overwrite: true);
+                return;
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException && attempt < Attempts)
+            {
+                spin.SpinOnce(sleep1Threshold: -1);
+            }
+        }
+    }
 
     private static void DeleteQuietly(string path)
     {

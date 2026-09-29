@@ -180,7 +180,7 @@ public sealed class LeaseManager : IDisposable
         try
         {
             var path = Path.Combine(sessionFolder, FileName);
-            if (!File.Exists(path) || JsonNode.Parse(File.ReadAllText(path)) is not JsonObject lease)
+            if (!File.Exists(path) || JsonNode.Parse(LibraryFiles.ReadText(path)) is not JsonObject lease)
             {
                 return null;
             }

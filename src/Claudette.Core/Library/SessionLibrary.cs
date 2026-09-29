@@ -313,7 +313,7 @@ public sealed class SessionLibrary(string libraryFolder, TimeProvider time)
     {
         try
         {
-            return File.Exists(path) ? JsonSerializer.Deserialize<SessionRecord>(File.ReadAllText(path), Json) : null;
+            return File.Exists(path) ? JsonSerializer.Deserialize<SessionRecord>(LibraryFiles.ReadText(path), Json) : null;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)
         {

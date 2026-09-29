@@ -857,7 +857,7 @@ Claude Code's credentials and settings are never copied.
 **Writing.**
 
 - For a tab that syncs, Claudette copies the transcript into the library after each turn finishes, never while Claude Code is writing it. It waits a second after the turn's result, so Claude Code has finished writing. Turning sync on, and **Sync now**, wait the same second.
-- Each file is written to a temporary name, then renamed, so a sync client never uploads a half-written file. The record is written last, so a record in the library means its transcript is there too.
+- Each file is written to a temporary name, then renamed, so a sync client never uploads a half-written file. The record is written last, so a record in the library means its transcript is there too. On Windows the rename fails while anything has the file open, such as History reading a record, so it's tried again for a moment, and so is a read that meets a rename under way.
 - A file that hasn't changed (same size, and a modified time within 2 seconds, since some synced drives store coarse times) isn't copied again, except by **Sync now**.
 - Ticking a changed file as reviewed ([§8](#8-file-changes--diff-view)) copies the session 2 seconds after the last tick, so ticking several files writes the record once. Only the record has changed, so the transcript isn't copied again. During a turn, the copy as the turn ends carries the ticks.
 - Library copies aren't affected by Claude Code's own cleanup of local transcripts (30 days by default), so the library also works as a longer-term archive for the sessions that sync. It has its own retention setting.
