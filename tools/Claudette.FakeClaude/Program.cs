@@ -16,6 +16,9 @@
 //   FAKE_CLAUDE_LOGGED_IN     "0" to report signed out (default signed in)
 //   FAKE_CLAUDE_RECORD        path: write {args, cwd, env} there at startup
 //   FAKE_CLAUDE_EXIT_AFTER_INITIALIZE  "1": exit with code 3 right after answering initialize
+//   FAKE_CLAUDE_USAGE         answers get_usage (DESIGN.md §6): a path to a recorded response, or "demo" for a plan
+//                             whose session use starts at 35% and climbs 0.6% a minute, so the header's meters,
+//                             sparkline and projection can be seen without an account. Unset: get_usage fails.
 //
 // Session prompts:
 //   ASK_PERMISSION   asks can_use_tool for a Bash command, then reports whether it was allowed
@@ -186,6 +189,7 @@ internal sealed class FakeSession(string version)
             "interrupt" => new JsonObject { ["still_queued"] = new JsonArray() },
             "set_model" or "apply_flag_settings" or "set_permission_mode" => new JsonObject(),
             "get_context_usage" => new JsonObject { ["totalTokens"] = 1000, ["maxTokens"] = 200000, ["percentage"] = 0.5 },
+            "get_usage" => Usage(),
             _ => null,
         };
         if (subtype == "interrupt")
@@ -201,6 +205,45 @@ internal sealed class FakeSession(string version)
             await Console.Error.WriteLineAsync("fake-claude: exiting after initialize");
             Environment.Exit(3);
         }
+    }
+
+    private static readonly DateTimeOffset Started = DateTimeOffset.UtcNow;
+
+    /// <summary>The get_usage response FAKE_CLAUDE_USAGE asks for, or null to fail the request.</summary>
+    private static JsonObject? Usage()
+    {
+        var setting = Environment.GetEnvironmentVariable("FAKE_CLAUDE_USAGE");
+        if (setting is not { Length: > 0 })
+        {
+            return null;
+        }
+        if (setting != "demo")
+        {
+            return JsonNode.Parse(File.ReadAllText(setting))?.AsObject();
+        }
+        var session = Math.Min(100, 35 + 0.6 * (DateTimeOffset.UtcNow - Started).TotalMinutes);
+        static JsonObject Limit(string kind, double percent, DateTimeOffset resets, string? model = null) => new()
+        {
+            ["kind"] = kind,
+            ["group"] = kind == "session" ? "session" : "weekly",
+            ["percent"] = Math.Round(percent),
+            ["severity"] = percent >= 90 ? "critical" : percent >= 75 ? "warning" : "normal",
+            ["resets_at"] = resets.ToString("o"),
+            ["scope"] = model is null ? null : new JsonObject { ["model"] = new JsonObject { ["id"] = null, ["display_name"] = model }, ["surface"] = null },
+            ["is_active"] = percent >= 100,
+        };
+        return new JsonObject
+        {
+            ["subscription_type"] = "max",
+            ["rate_limits_available"] = true,
+            ["rate_limits"] = new JsonObject
+            {
+                ["limits"] = new JsonArray(
+                    Limit("session", session, Started.AddHours(2)),
+                    Limit("weekly_all", 57, Started.AddDays(3)),
+                    Limit("weekly_scoped", 20, Started.AddDays(3), "Fable")),
+            },
+        };
     }
 
     private async Task RunTurnsAsync()

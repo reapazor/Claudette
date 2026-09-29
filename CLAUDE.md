@@ -106,6 +106,8 @@ Stop the app by closing its window, not by killing the process: closing interrup
 
 View model tests use `tests/Claudette.App.Tests/Support/TabTestHarness.cs`: a scripted Claude Code connection, a fake clock and an inline dispatcher.
 
+To see the usage header (meters, sparkline, projection) without a subscription, set Settings → Claude Code → Path to claude to `fake-claude` (built next to the integration tests) and run with `FAKE_CLAUDE_USAGE=demo`: its plan starts at 35% of the session and climbs 0.6% a minute. `FAKE_CLAUDE_USAGE=<path>` answers with a recorded `get_usage` response instead.
+
 Prompts the mock understands: `WRITE_FILE <path>`, `EDIT_FILE <path>`, `RUN_BASH <command>`, `ASK_QUESTION`, `EXIT_PLAN` (in Plan mode), `SLOW`; anything else gets `pong`. An API key has no plan limits, so the usage header stays empty against the mock; the usage tests cover it.
 
 Compatibility check (§16): `node compat/check.mjs detect`, then `report` or `update-snapshots`. See the header of `compat/check.mjs`.
