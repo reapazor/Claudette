@@ -12,4 +12,10 @@ public sealed record ProcessStartSpec(string FileName, IReadOnlyList<string> Arg
 
     /// <summary>Put the process and everything it starts in a tracked tree (DESIGN.md §4, Process monitor).</summary>
     public bool TrackProcessTree { get; init; }
+
+    /// <summary>
+    /// Start it with this process's standard streams instead of redirected ones, for a program that outlives Claudette,
+    /// such as Claudette starting itself from a copy of its build (DESIGN.md §9). Its output channels are empty.
+    /// </summary>
+    public bool Detached { get; init; }
 }

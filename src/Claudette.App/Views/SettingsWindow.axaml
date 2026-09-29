@@ -20,7 +20,7 @@
 
   <!-- DESIGN.md §14: a sidebar of categories; changes apply immediately. -->
   <Grid ColumnDefinitions="190,*">
-    <Border Background="{DynamicResource TabStripBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,1,0">
+    <Border Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,1,0">
       <DockPanel>
         <!-- DESIGN.md §14: a search box filters settings by name -->
         <TextBox DockPanel.Dock="Top" Margin="8,8,8,2" Text="{Binding SearchText}" PlaceholderText="Search settings"

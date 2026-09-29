@@ -184,7 +184,7 @@ public sealed partial class ClaudeUpdateViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>Asks the header to open the update dialog, for a clicked notification.</summary>
+    /// <summary>Asks the sidebar to open the update dialog, for a clicked notification.</summary>
     public event Action? OpenRequested;
 
     public void RequestOpen() => OpenRequested?.Invoke();

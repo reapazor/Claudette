@@ -42,15 +42,11 @@ public partial class MainWindow : Window
         {
             usage.ShowUsagePanel = ShowUsagePanelAsync;
         }
-        if (e.PropertyName == nameof(MainWindowViewModel.Updates) && _viewModel?.Updates is { } updates)
-        {
-            updates.OpenRequested += OpenUpdateDialog;
-        }
     }
 
     /// <summary>
     /// The Mica backdrop on Windows 11 (DESIGN.md §2). Only once Windows actually grants it does the window's background
-    /// go transparent: the header, tab strip and title bar then show Mica, and the page keeps an opaque background.
+    /// go transparent: the header, sidebar and title bar then show Mica, and the page keeps an opaque background.
     /// </summary>
     private void UseMicaOnWindows11()
     {
@@ -74,13 +70,13 @@ public partial class MainWindow : Window
         {
             Background = Brushes.Transparent;
             Resources["PageBackgroundBrush"] = this.FindResource(ActualThemeVariant, "MicaPageBrush");
-            Resources["TabStripBrush"] = this.FindResource(ActualThemeVariant, "MicaTabStripBrush");
+            Resources["SidebarBrush"] = this.FindResource(ActualThemeVariant, "MicaSidebarBrush");
         }
         else
         {
             ClearValue(BackgroundProperty);
             Resources.Remove("PageBackgroundBrush");
-            Resources.Remove("TabStripBrush");
+            Resources.Remove("SidebarBrush");
         }
     }
 
@@ -96,14 +92,6 @@ public partial class MainWindow : Window
         Topmost = true;
         Topmost = false;
         Activate();
-    }
-
-    private void OpenUpdateDialog()
-    {
-        if (UpdateBadge.IsVisible)
-        {
-            UpdateBadge.Flyout?.ShowAt(UpdateBadge);
-        }
     }
 
     /// <summary>The Usage panel (DESIGN.md §6). One at a time; clicking the header again brings it forward.</summary>

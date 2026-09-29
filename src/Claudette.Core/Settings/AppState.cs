@@ -26,6 +26,12 @@ public sealed class AppState
     /// <summary>Folder groups the user collapsed.</summary>
     public List<string> CollapsedGroups { get; set; } = [];
 
+    /// <summary>The user collapsed the sidebar to its rail of status icons (DESIGN.md §4, "Sidebar").</summary>
+    public bool SidebarCollapsed { get; set; }
+
+    /// <summary>The sidebar's width as the user dragged it, or null for the default.</summary>
+    public double? SidebarWidth { get; set; }
+
     /// <summary>
     /// Where a project from another machine lives on this one, keyed by normalized git remote and path in the repo
     /// (DESIGN.md §9, "Restoring on another machine").
@@ -40,6 +46,12 @@ public sealed class AppState
     /// because WinGet can't replace a running <c>claude</c> (DESIGN.md §12).
     /// </summary>
     public bool UpdateClaudeOnNextLaunch { get; set; }
+
+    /// <summary>
+    /// For a source build of Claudette: restart into a new build by itself once no tab is working, instead of asking
+    /// (DESIGN.md §9, "Working on Claudette").
+    /// </summary>
+    public bool RestartOnNewBuild { get; set; }
 }
 
 /// <summary>What's saved for one tab (DESIGN.md §9, "Restore on launch").</summary>
@@ -87,7 +99,10 @@ public sealed class TabOverrides
 
     public CheckInSettings? CheckIns { get; set; }
 
-    public bool HasAny => Model is not null || Effort is not null || PermissionMode is not null || CheckIns is not null;
+    /// <summary>The process monitor for this tab (DESIGN.md §4), or null for Settings → Processes.</summary>
+    public bool? ShowProcessMonitor { get; set; }
+
+    public bool HasAny => Model is not null || Effort is not null || PermissionMode is not null || CheckIns is not null || ShowProcessMonitor is not null;
 }
 
 public sealed class RecentFolder

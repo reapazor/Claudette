@@ -100,6 +100,10 @@ public sealed class ShortcutTips(AppSettings settings) : ObservableObject
 
     public string Suffixes => Tip("Quick suffixes", KeyboardShortcuts.Suffixes);
 
+    public string CollapseSidebar => Tip("Collapse the sidebar", KeyboardShortcuts.ToggleSidebar);
+
+    public string ExpandSidebar => Tip("Expand the sidebar", KeyboardShortcuts.ToggleSidebar);
+
     public string Allow => Text(KeyboardShortcuts.AllowPrompt) ?? "";
 
     public string Deny => Text(KeyboardShortcuts.DenyPrompt) ?? "";

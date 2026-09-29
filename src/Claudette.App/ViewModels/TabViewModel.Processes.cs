@@ -55,7 +55,8 @@ public sealed partial class TabViewModel
     private readonly Dictionary<int, string> _processTools = [];
     private readonly Dictionary<string, string> _backgroundTasks = [];
 
-    public bool IsProcessMonitorOn => _services.Settings.Processes.ShowMonitor && _tree is not null;
+    /// <summary>The monitor is on for this tab: its own setting in Tab settings…, or Settings → Processes.</summary>
+    public bool IsProcessMonitorOn => (State.Overrides.ShowProcessMonitor ?? _services.Settings.Processes.ShowMonitor) && _tree is not null;
 
     /// <summary>For example <c>3 procs · 42% CPU · 1.1 GB</c>, in the composer bar.</summary>
     [ObservableProperty]

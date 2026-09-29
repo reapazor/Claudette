@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
 using Claudette.App.Conversation;
 using Claudette.App.Services;
+using Claudette.Core.Development;
 using Claudette.Core.Git;
+using Claudette.Core.Library;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
@@ -173,13 +175,14 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         State.IsPinned = !State.IsPinned;
         OnPropertyChanged(nameof(IsPinned));
         OnPropertyChanged(nameof(PinMenuText));
+        OnPropertyChanged(nameof(CloseMissingText));
         _shell.OnPinChanged(this);
     }
 
     // ---- Status (DESIGN.md §4, "Status icon") ------------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StatusGlyph), nameof(StatusTip), nameof(InfoRows), nameof(IsWorking), nameof(NeedsInput), nameof(IsBusyStatus), nameof(IsAlertStatus), nameof(IsErrorStatus), nameof(IsUnread))]
+    [NotifyPropertyChangedFor(nameof(StatusGlyph), nameof(StatusTip), nameof(InfoRows), nameof(IsWorking), nameof(NeedsInput), nameof(IsBusyStatus), nameof(IsAlertStatus), nameof(IsErrorStatus), nameof(IsUnread), nameof(RowDetail))]
     [NotifyCanExecuteChangedFor(nameof(StopCommand), nameof(SendCommand), nameof(RestartCommand), nameof(CompactCommand))]
     public partial TabStatus Status { get; set; }
 
@@ -212,7 +215,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         TabStatus.Working => "Working",
         TabStatus.NeedsInput => "Needs your input",
         TabStatus.Unread => "Finished while in the background",
-        TabStatus.Error => "Claude Code stopped with an error",
+        TabStatus.Error => IsFolderMissing ? "Its folder no longer exists" : "Claude Code stopped with an error",
         TabStatus.Exited => "Not running",
         _ => "Idle",
     };
@@ -296,7 +299,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     public IReadOnlyList<ModelInfo> Models => _session?.Initialization?.Models.Where(m => m.Value != "default").ToArray() ?? [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ModelBadge), nameof(InfoRows), nameof(EffortLevels))]
+    [NotifyPropertyChangedFor(nameof(ModelBadge), nameof(InfoRows), nameof(EffortLevels), nameof(RowDetail))]
     public partial string? ModelName { get; set; }
 
     /// <summary>The model id Claude Code reports (for example <c>claude-opus-5-5[1m]</c>).</summary>
@@ -304,12 +307,18 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     /// <summary>The effort level in use. Null means the model's default; Claude Code doesn't report it.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(EffortName), nameof(ModelBadge), nameof(InfoRows))]
+    [NotifyPropertyChangedFor(nameof(EffortName), nameof(ModelBadge), nameof(InfoRows), nameof(RowDetail))]
     public partial string? Effort { get; set; }
 
     public string EffortName => Effort is null ? "Default effort" : Capitalize(Effort);
 
     public string ModelBadge => $"{ShortModel(ModelName)} · {(Effort is null ? "Default" : Capitalize(Effort))}";
+
+    /// <summary>
+    /// The second line of the tab's row in the sidebar (DESIGN.md §4): the model and effort, or what needs attention
+    /// when the tab is waiting on the user or has failed.
+    /// </summary>
+    public string RowDetail => Status is TabStatus.NeedsInput or TabStatus.Error ? StatusTip : ModelBadge;
 
     public IReadOnlyList<string> EffortLevels => CurrentModelInfo?.SupportedEffortLevels ?? [];
 
@@ -653,6 +662,26 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         UpdateSampler();
     }
 
+    // ---- Restarting into a new build (DESIGN.md §9, "Working on Claudette") -------------------------------
+
+    /// <summary>The message typed but not sent, with its one-off quick suffixes, or null when there's none.</summary>
+    public TabDraft? Draft => ComposerText.Length == 0 && Chips.All(c => c.IsKept)
+        ? null
+        : new TabDraft(ComposerText, Chips.Where(c => !c.IsKept).Select(c => c.Suffix.Id).ToList());
+
+    /// <summary>Puts back a draft from the build that restarted into this one.</summary>
+    public void RestoreDraft(TabDraft draft)
+    {
+        ComposerText = draft.Text;
+        foreach (var id in draft.SuffixIds)
+        {
+            AddSuffix(_services.Settings.QuickSuffixes.FirstOrDefault(s => s.Id == id));
+        }
+    }
+
+    /// <summary>Whether this tab's Claude Code is running.</summary>
+    public bool IsProcessRunning => _session is not null;
+
     private void SaveKeptSuffixes()
     {
         State.KeptSuffixes = Chips.Where(c => c.IsKept).Select(c => c.Suffix.Id).ToList();
@@ -740,7 +769,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     // ---- Lifecycle -----------------------------------------------------------------------------------------
 
-    public bool CanRestart => Status is TabStatus.Exited or TabStatus.Error;
+    public bool CanRestart => Status is TabStatus.Exited or TabStatus.Error && !IsFolderMissing;
 
     [RelayCommand(CanExecute = nameof(CanRestart))]
     private Task RestartAsync() => EnsureStartedAsync();
@@ -775,8 +804,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         if (!Directory.Exists(Folder))
         {
-            Status = TabStatus.Error;
-            _conversation.AddNote($"The folder '{Folder}' no longer exists. Close this tab, or open the folder again from the new tab picker.", NoteKind.Error);
+            MarkFolderMissing();
             return;
         }
 
@@ -835,6 +863,79 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             _conversation.AddNote($"Couldn't start Claude Code: {ex.Message}", NoteKind.Error);
             NotifyProcessError($"Couldn't start Claude Code: {ex.Message}");
         }
+    }
+
+    // ---- Missing folder (DESIGN.md §9, "Missing folder") -------------------------------------------------------
+
+    /// <summary>The tab's folder no longer exists, for example a deleted clone: the tab can't start until it's found.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FolderMissingText), nameof(StatusTip), nameof(RowDetail), nameof(InfoRows), nameof(CanRestart))]
+    [NotifyCanExecuteChangedFor(nameof(RestartCommand))]
+    public partial bool IsFolderMissing { get; set; }
+
+    public string FolderMissingText => $"The folder {Folder} no longer exists. If it moved, choose where it is now and the session carries on there.";
+
+    public string CloseMissingText => IsPinned ? "Unpin and close" : "Close tab";
+
+    internal void MarkFolderMissing()
+    {
+        IsFolderMissing = true;
+        Status = TabStatus.Error;
+    }
+
+    /// <summary><b>Choose folder…</b>: where the folder is now, or another clone of the same project.</summary>
+    [RelayCommand]
+    private async Task ChooseFolderAsync()
+    {
+        if (await _services.Platform.PickFolderAsync($"Where is {FolderName} now?") is { } folder)
+        {
+            await MoveToFolderAsync(folder);
+        }
+    }
+
+    /// <summary>
+    /// Moves the tab to <paramref name="folder"/> and starts it there, resuming its session from a working copy of the
+    /// transcript: Claude Code finds sessions by folder, so a plain resume wouldn't find it from the new one.
+    /// </summary>
+    internal async Task MoveToFolderAsync(string folder)
+    {
+        if (!Directory.Exists(folder))
+        {
+            return;
+        }
+        if (State.SessionId is { } sessionId && _services.Library.FindTranscript(sessionId, State.TranscriptPath) is { } transcript)
+        {
+            try
+            {
+                State.TranscriptPath = await SessionLibrary.CopyToWorkingFolderAsync(transcript, sessionId, _services.Paths.LocalSessionsDirectory);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _conversation.AddNote($"Couldn't copy the session to carry it on in the new folder: {ex.Message}", NoteKind.Error);
+                return;
+            }
+        }
+        _shell.MoveTabToFolder(this, folder);
+        IsFolderMissing = false;
+        Status = TabStatus.NotStarted;
+        OnPropertyChanged(nameof(Folder));
+        OnPropertyChanged(nameof(FolderName));
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(InfoRows));
+        OnPropertyChanged(nameof(IsGitRepository));
+        _conversation.AddNote($"Now working in {State.Folder}.");
+        await EnsureStartedAsync();
+    }
+
+    /// <summary><b>Unpin and close</b> (or <b>Close tab</b>) for a tab whose folder is gone. It's not working, so nothing to confirm.</summary>
+    [RelayCommand]
+    private void UnpinAndClose()
+    {
+        if (IsPinned)
+        {
+            TogglePin();
+        }
+        _shell.CloseTabCommand.Execute(this);
     }
 
     /// <summary>
@@ -1131,6 +1232,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     public async Task ApplyOverridesAsync(TabOverrides previous)
     {
         _services.SaveState();
+        UpdateSampler();
         if (_session is null)
         {
             return;

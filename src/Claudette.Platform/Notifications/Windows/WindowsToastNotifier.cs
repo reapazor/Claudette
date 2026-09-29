@@ -15,7 +15,7 @@ namespace Claudette.Platform.Notifications.Windows;
 public static unsafe class WindowsAppIdentity
 {
     /// <summary>Kept in step with the MSIX manifest's identity (packaging/windows).</summary>
-    public const string AppUserModelId = "MatthewDavey.Claudette";
+    public const string AppUserModelId = "reapazor.Claudette";
 
     /// <summary>True when running from an MSIX package.</summary>
     public static bool IsPackaged { get; } = HasPackageIdentity();

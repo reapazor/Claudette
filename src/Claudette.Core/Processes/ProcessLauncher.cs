@@ -9,17 +9,21 @@ public sealed class ProcessLauncher : IProcessLauncher
 {
     public IRunningProcess Start(ProcessStartSpec spec)
     {
+        var redirect = !spec.Detached;
         var startInfo = new ProcessStartInfo(spec.FileName)
         {
             UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardInputEncoding = new UTF8Encoding(false),
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
+            CreateNoWindow = redirect,
+            RedirectStandardInput = redirect,
+            RedirectStandardOutput = redirect,
+            RedirectStandardError = redirect,
         };
+        if (redirect)
+        {
+            startInfo.StandardInputEncoding = new UTF8Encoding(false);
+            startInfo.StandardOutputEncoding = Encoding.UTF8;
+            startInfo.StandardErrorEncoding = Encoding.UTF8;
+        }
         foreach (var argument in spec.Arguments)
         {
             startInfo.ArgumentList.Add(argument);
@@ -39,7 +43,7 @@ public sealed class ProcessLauncher : IProcessLauncher
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Could not start '{spec.FileName}'.");
-        return new RunningProcess(process);
+        return new RunningProcess(process, redirect);
     }
 
     private sealed class RunningProcess : IRunningProcess
@@ -50,9 +54,19 @@ public sealed class ProcessLauncher : IProcessLauncher
         private readonly SemaphoreSlim _writeLock = new(1, 1);
         private readonly Task<int> _exited;
 
-        public RunningProcess(Process process)
+        private readonly bool _redirected;
+
+        public RunningProcess(Process process, bool redirected)
         {
             _process = process;
+            _redirected = redirected;
+            if (!redirected)
+            {
+                _stdout.Writer.TryComplete();
+                _stderr.Writer.TryComplete();
+                _exited = WaitForExitAsync(Task.CompletedTask, Task.CompletedTask);
+                return;
+            }
             _process.StandardInput.NewLine = "\n";
             _process.StandardInput.AutoFlush = false;
             var stdoutPump = PumpAsync(process.StandardOutput, _stdout.Writer);
@@ -84,6 +98,10 @@ public sealed class ProcessLauncher : IProcessLauncher
 
         public void CloseStandardInput()
         {
+            if (!_redirected)
+            {
+                return;
+            }
             try
             {
                 _process.StandardInput.Close();

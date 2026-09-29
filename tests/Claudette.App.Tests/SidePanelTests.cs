@@ -71,6 +71,45 @@ public class SidePanelTests
     }
 
     [Fact]
+    public async Task One_tab_can_turn_the_process_monitor_on_or_off_for_itself()
+    {
+        await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = false);
+        var tab = await h.OpenTabAsync();
+        h.Trees.Trees[4242].Children.Add((5001, "node"));
+        Assert.False(tab.IsProcessMonitorOn);
+
+        // On for this tab only, from Tab settings….
+        var settings = new TabSettingsViewModel(h.Services, tab, () => { });
+        Assert.Equal("Default (off)", settings.SelectedMonitor.Label);
+        settings.SelectedMonitor = settings.MonitorChoices.Single(c => c.Label == "On");
+        await settings.ApplyCommand.ExecuteAsync(null);
+
+        Assert.True(tab.IsProcessMonitorOn);
+        Assert.True(tab.State.Overrides.ShowProcessMonitor);
+        Assert.True(tab.State.Overrides.HasAny);
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+        await TabTestHarness.Eventually(() => tab.ProcessSummaryText is not null, "a sample");
+
+        // Off for this tab while Settings has it on everywhere else.
+        h.Services.Settings.Processes.ShowMonitor = true;
+        settings = new TabSettingsViewModel(h.Services, tab, () => { });
+        Assert.Equal("On", settings.SelectedMonitor.Label);
+        settings.SelectedMonitor = settings.MonitorChoices.Single(c => c.Label == "Off");
+        await settings.ApplyCommand.ExecuteAsync(null);
+
+        Assert.False(tab.IsProcessMonitorOn);
+        Assert.Null(tab.ProcessSummaryText);
+        Assert.Empty(tab.Processes);
+
+        // Use defaults follows Settings again.
+        settings = new TabSettingsViewModel(h.Services, tab, () => { });
+        settings.UseDefaultsCommand.Execute(null);
+        await settings.ApplyCommand.ExecuteAsync(null);
+        Assert.Null(tab.State.Overrides.ShowProcessMonitor);
+        Assert.True(tab.IsProcessMonitorOn);
+    }
+
+    [Fact]
     public async Task A_background_task_is_stopped_through_Claude_Code()
     {
         await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true);

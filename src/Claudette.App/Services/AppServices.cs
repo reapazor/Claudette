@@ -179,13 +179,38 @@ public sealed class AppServices : IAsyncDisposable
     public void SaveSettings()
     {
         SettingsChanged?.Invoke(this, EventArgs.Empty);
-        Debounce(ref _pendingSettingsSave, () => JsonFileStore<AppSettings>.Serialize(Settings), _settingsStore);
+        if (!SuspendSaving)
+        {
+            Debounce(ref _pendingSettingsSave, () => JsonFileStore<AppSettings>.Serialize(Settings), _settingsStore);
+        }
     }
 
     public void SaveState()
     {
         StateChanged?.Invoke(this, EventArgs.Empty);
-        Debounce(ref _pendingStateSave, () => JsonFileStore<AppState>.Serialize(State), _stateStore);
+        if (!SuspendSaving)
+        {
+            Debounce(ref _pendingStateSave, () => JsonFileStore<AppState>.Serialize(State), _stateStore);
+        }
+    }
+
+    /// <summary>
+    /// Set while Claudette hands over to a new build of itself (DESIGN.md §9, "Working on Claudette"): the new build
+    /// owns the settings and state files then, so nothing is written from here, even at shutdown. Setting it drops
+    /// saves still waiting; <see cref="FlushAsync"/> first.
+    /// </summary>
+    public bool SuspendSaving
+    {
+        get;
+        set
+        {
+            field = value;
+            if (value)
+            {
+                _pendingSettingsSave?.Cancel();
+                _pendingStateSave?.Cancel();
+            }
+        }
     }
 
     /// <summary>Raised on the UI thread when the state changes, for example the recent folders.</summary>
@@ -194,6 +219,10 @@ public sealed class AppServices : IAsyncDisposable
     /// <summary>Writes anything still pending, for shutdown.</summary>
     public async Task FlushAsync()
     {
+        if (SuspendSaving)
+        {
+            return;
+        }
         _pendingSettingsSave?.Cancel();
         _pendingStateSave?.Cancel();
         await _settingsStore.SaveAsync(Settings);

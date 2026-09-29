@@ -83,13 +83,22 @@
       <Setter Property="Padding" Value="4,2" />
     </Style>
 
-    <!-- Tabs -->
+    <!-- Tabs: rows in the sidebar (DESIGN.md §4) -->
     <Style Selector="Button.tab">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Padding" Value="8,4" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="MinHeight" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <!-- A row's close button shows on hover and on the selected tab, so the list stays quiet and names get the room. -->
+    <Style Selector="Button.tab Button.closetab">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="Button.tab:pointerover Button.closetab, Button.tab.selected Button.closetab">
+      <Setter Property="IsVisible" Value="True" />
     </Style>
     <Style Selector="Button.tab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
@@ -184,13 +193,19 @@
       <StreamGeometry x:Key="IconPlus">M6,1 L6,11 M1,6 L11,6</StreamGeometry>
       <StreamGeometry x:Key="IconPin">M4,1 L8,1 L8,5 L10,7 L6.5,7 L6,11 L5.5,7 L2,7 L4,5 Z</StreamGeometry>
       <StreamGeometry x:Key="IconSettings">M1,3 L11,3 M1,9 L11,9 M4,1 L4,5 M8,7 L8,11</StreamGeometry>
+      <StreamGeometry x:Key="IconHistory">M6,1 A5,5 0 1 1 1.67,3.5 M1.2,1.2 L1.67,3.5 L4,3.2 M6,3.5 L6,6 L8,7.2</StreamGeometry>
+      <StreamGeometry x:Key="IconSidebar">M1.5,2 L10.5,2 L10.5,10 L1.5,10 Z M4.5,2 L4.5,10</StreamGeometry>
+      <StreamGeometry x:Key="IconChevronDown">M3,4.5 L6,7.5 L9,4.5</StreamGeometry>
+      <StreamGeometry x:Key="IconChevronRight">M4.5,3 L7.5,6 L4.5,9</StreamGeometry>
+      <StreamGeometry x:Key="IconUpdate">M6,10.5 L6,2 M2.5,5.5 L6,2 L9.5,5.5</StreamGeometry>
+      <StreamGeometry x:Key="IconRestart">M10.5,6 A4.5,4.5 0 1 1 9.18,2.82 M9.4,0.6 L9.18,2.82 L6.96,2.6</StreamGeometry>
 
       <!-- Claudette's color tokens, per theme. Views use only these, never Fluent's internal resource names. -->
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
-          <!-- With Mica on Windows 11 (MainWindow): the page stays opaque and the tab strip lets the backdrop through. -->
+          <!-- With Mica on Windows 11 (MainWindow): the page stays opaque and the sidebar lets the backdrop through. -->
           <SolidColorBrush x:Key="MicaPageBrush" Color="#FFFFFF" />
-          <SolidColorBrush x:Key="MicaTabStripBrush" Color="#66F3F3F3" />
+          <SolidColorBrush x:Key="MicaSidebarBrush" Color="#66F3F3F3" />
           <SolidColorBrush x:Key="MutedTextBrush" Color="#5F6368" />
           <SolidColorBrush x:Key="DividerBrush" Color="#1F000000" />
           <SolidColorBrush x:Key="CardBrush" Color="#FAFAFA" />
@@ -198,7 +213,7 @@
           <SolidColorBrush x:Key="SubtleBrush" Color="#F4F4F6" />
           <SolidColorBrush x:Key="HoverBrush" Color="#0F000000" />
           <SolidColorBrush x:Key="TabSelectedBrush" Color="#FFFFFF" />
-          <SolidColorBrush x:Key="TabStripBrush" Color="#F0F0F2" />
+          <SolidColorBrush x:Key="SidebarBrush" Color="#F0F0F2" />
           <SolidColorBrush x:Key="ComposerBrush" Color="#FFFFFF" />
           <SolidColorBrush x:Key="ComposerBorderBrush" Color="#2A000000" />
           <SolidColorBrush x:Key="DialogBrush" Color="#FFFFFF" />
@@ -223,7 +238,7 @@
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
           <SolidColorBrush x:Key="MicaPageBrush" Color="#202020" />
-          <SolidColorBrush x:Key="MicaTabStripBrush" Color="#66141416" />
+          <SolidColorBrush x:Key="MicaSidebarBrush" Color="#66141416" />
           <SolidColorBrush x:Key="MutedTextBrush" Color="#A6A6A6" />
           <SolidColorBrush x:Key="DividerBrush" Color="#2EFFFFFF" />
           <SolidColorBrush x:Key="CardBrush" Color="#1F1F1F" />
@@ -231,7 +246,7 @@
           <SolidColorBrush x:Key="SubtleBrush" Color="#1C1C1F" />
           <SolidColorBrush x:Key="HoverBrush" Color="#14FFFFFF" />
           <SolidColorBrush x:Key="TabSelectedBrush" Color="#2B2B2F" />
-          <SolidColorBrush x:Key="TabStripBrush" Color="#141416" />
+          <SolidColorBrush x:Key="SidebarBrush" Color="#141416" />
           <SolidColorBrush x:Key="ComposerBrush" Color="#1C1C1F" />
           <SolidColorBrush x:Key="ComposerBorderBrush" Color="#3DFFFFFF" />
           <SolidColorBrush x:Key="DialogBrush" Color="#202023" />
