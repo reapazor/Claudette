@@ -434,9 +434,15 @@ items:
     kind: field
     status: undocumented
     usedIn: src/Claudette.App/Conversation/PromptItems.cs
-    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    docs: https://code.claude.com/docs/en/hooks
     test: RealCliTests
-    fallback: ExitPlanMode's input schema is open ([k: string]: unknown); 2.1.284 sends the plan text as input.plan. Without it the card says Claude is ready to start and the plan stays in Claude's last message.
+    fallback: The model writes the plan to a plan file and calls ExitPlanMode with no plan; Claude Code reads the file and passes its text as input.plan, with planFilePath. The hooks reference documents this for hooks; the permission callback gets the same input (2.1.285 changelog), and 2.1.285 drops a plan the model passes itself. Without it the card says Claude is ready to start and the plan stays in Claude's last message.
+  - id: "create your plan at"
+    kind: behavior
+    status: undocumented
+    usedIn: tools/Claudette.MockApi/MockAnthropicApi.cs
+    test: RealCliTests
+    fallback: The plan mode reminder names the plan file ("You should create your plan at <path> using the Write tool."), and the mock's EXIT_PLAN writes the plan there. If the wording changes, match the new wording; without a path the mock passes the plan as input.plan, which 2.1.285 drops.
   - id: "permission_denied"
     kind: message
     status: documented
