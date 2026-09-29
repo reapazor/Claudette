@@ -8,29 +8,45 @@ using Claudette.Core.Settings;
 namespace Claudette.App.Themes;
 
 /// <summary>
-/// Settings → Appearance → Colors (DESIGN.md §3, "Visual style"). System accent is App.axaml's tokens and Fluent's own
-/// palette, with the OS's accent color. Claude puts <see cref="ClaudeColors"/> over those tokens, and gives Fluent a
-/// palette of Claude's warm greys, ivory and orange for what it draws itself: window backgrounds, text, controls and
-/// the accent, whose lighter and darker shades Fluent works out from it. Both work in light and dark.
+/// The colors of Settings → Appearance → Style (DESIGN.md §3, "Visual style"). Standard is App.axaml's tokens and
+/// Fluent's own palette, with the OS's accent color. Claude puts <see cref="ClaudeColors"/> over those tokens, and gives
+/// Fluent a palette of the Claude apps' warm greys, ivory and orange for what it draws itself: window backgrounds, text,
+/// controls and the accent, whose lighter and darker shades Fluent works out from it. Both work in light and dark. The
+/// Claude style's shapes are styles under the "claude" class, which ShellView takes.
 /// </summary>
 public sealed class AppColors(Application app)
 {
     /// <summary>Claude's orange.</summary>
     public static readonly Color ClaudeAccent = Color.Parse("#D97757");
 
-    private readonly Dictionary<(ThemeVariant Variant, object Key), object?> _system = [];
+    /// <summary>
+    /// Serifs close to the Claude apps' reply typeface, most alike first, with one on each OS: Charter on macOS (and
+    /// as Bitstream Charter on Linux), Georgia and Cambria on Windows, Noto Serif and DejaVu Serif on Linux.
+    /// </summary>
+    public const string SerifFonts = "Charter, Bitstream Charter, Georgia, Cambria, Noto Serif, DejaVu Serif";
+
+    private readonly Dictionary<(ThemeVariant Variant, object Key), object?> _standard = [];
     private ClaudeColors? _claude;
 
-    public ColorPalette Current { get; private set; } = ColorPalette.System;
+    public AppStyle Current { get; private set; } = AppStyle.Standard;
 
-    public void Apply(ColorPalette palette)
+    /// <summary>
+    /// The font of Claude's replies: the conversation font when one is set, otherwise a serif in the Claude style, as
+    /// the Claude apps set replies, and the app's own font in Standard.
+    /// </summary>
+    public static FontFamily ReplyFont(AppStyle style, string? conversationFont) =>
+        conversationFont is { } font ? new FontFamily($"{font}, {FontFamily.DefaultFontFamilyName}")
+        : style == AppStyle.Claude ? new FontFamily($"{SerifFonts}, {FontFamily.DefaultFontFamilyName}")
+        : FontFamily.Default;
+
+    public void Apply(AppStyle style)
     {
-        if (palette == Current)
+        if (style == Current)
         {
             return;
         }
-        Current = palette;
-        var claude = palette == ColorPalette.Claude;
+        Current = style;
+        var claude = style == AppStyle.Claude;
         _claude ??= new ClaudeColors();
         foreach (var (variant, provider) in _claude.ThemeDictionaries)
         {
@@ -42,15 +58,15 @@ public sealed class AppColors(Application app)
             }
             foreach (var key in claudeTokens.Keys.ToList())
             {
-                if (!_system.ContainsKey((variant, key)))
+                if (!_standard.ContainsKey((variant, key)))
                 {
-                    _system[(variant, key)] = tokens.TryGetValue(key, out var original) ? original : null;
+                    _standard[(variant, key)] = tokens.TryGetValue(key, out var original) ? original : null;
                 }
                 if (claude)
                 {
                     tokens[key] = claudeTokens[key];
                 }
-                else if (_system[(variant, key)] is { } original)
+                else if (_standard[(variant, key)] is { } original)
                 {
                     tokens[key] = original;
                 }
@@ -80,28 +96,28 @@ public sealed class AppColors(Application app)
     {
         Accent = ClaudeAccent,
         RegionColor = Color.Parse("#FAF9F5"),
-        BaseHigh = Color.Parse("#1F1E1D"),
-        BaseMediumHigh = Color.Parse("#CC1F1E1D"),
-        BaseMedium = Color.Parse("#991F1E1D"),
-        BaseMediumLow = Color.Parse("#661F1E1D"),
-        BaseLow = Color.Parse("#331F1E1D"),
-        ChromeAltLow = Color.Parse("#1F1E1D"),
-        ChromeBlackHigh = Color.Parse("#1F1E1D"),
-        ChromeBlackMedium = Color.Parse("#991F1E1D"),
-        ChromeBlackMediumLow = Color.Parse("#661F1E1D"),
-        ChromeBlackLow = Color.Parse("#331F1E1D"),
-        ChromeDisabledHigh = Color.Parse("#D1CFC5"),
-        ChromeDisabledLow = Color.Parse("#85827A"),
-        ChromeGray = Color.Parse("#7A776E"),
-        ChromeHigh = Color.Parse("#D1CFC5"),
-        ChromeLow = Color.Parse("#F0EEE6"),
-        ChromeMedium = Color.Parse("#E8E6DC"),
-        ChromeMediumLow = Color.Parse("#F5F4EF"),
+        BaseHigh = Color.Parse("#141413"),
+        BaseMediumHigh = Color.Parse("#CC141413"),
+        BaseMedium = Color.Parse("#99141413"),
+        BaseMediumLow = Color.Parse("#66141413"),
+        BaseLow = Color.Parse("#33141413"),
+        ChromeAltLow = Color.Parse("#141413"),
+        ChromeBlackHigh = Color.Parse("#141413"),
+        ChromeBlackMedium = Color.Parse("#99141413"),
+        ChromeBlackMediumLow = Color.Parse("#66141413"),
+        ChromeBlackLow = Color.Parse("#33141413"),
+        ChromeDisabledHigh = Color.Parse("#E8E6DC"),
+        ChromeDisabledLow = Color.Parse("#8A8880"),
+        ChromeGray = Color.Parse("#73726C"),
+        ChromeHigh = Color.Parse("#D6D3C8"),
+        ChromeLow = Color.Parse("#F5F4ED"),
+        ChromeMedium = Color.Parse("#EDEBE3"),
+        ChromeMediumLow = Color.Parse("#FAF9F5"),
         ListLow = Color.Parse("#141F1E1D"),
         ListMedium = Color.Parse("#291F1E1D"),
     };
 
-    /// <summary>Warm charcoal page, darker sidebar, off-white text.</summary>
+    /// <summary>Charcoal page, darker sidebar, off-white text.</summary>
     private static ColorPaletteResources DarkPalette() => new()
     {
         Accent = ClaudeAccent,
@@ -111,20 +127,20 @@ public sealed class AppColors(Application app)
         AltMedium = Color.Parse("#99262624"),
         AltMediumLow = Color.Parse("#66262624"),
         AltLow = Color.Parse("#33262624"),
-        BaseHigh = Color.Parse("#F5F4EF"),
-        BaseMediumHigh = Color.Parse("#CCF5F4EF"),
-        BaseMedium = Color.Parse("#99F5F4EF"),
-        BaseMediumLow = Color.Parse("#66F5F4EF"),
-        BaseLow = Color.Parse("#33F5F4EF"),
-        ChromeAltLow = Color.Parse("#F5F4EF"),
+        BaseHigh = Color.Parse("#FAF9F5"),
+        BaseMediumHigh = Color.Parse("#CCFAF9F5"),
+        BaseMedium = Color.Parse("#99FAF9F5"),
+        BaseMediumLow = Color.Parse("#66FAF9F5"),
+        BaseLow = Color.Parse("#33FAF9F5"),
+        ChromeAltLow = Color.Parse("#FAF9F5"),
         ChromeDisabledHigh = Color.Parse("#3A3935"),
         ChromeDisabledLow = Color.Parse("#8A8880"),
-        ChromeGray = Color.Parse("#85837C"),
+        ChromeGray = Color.Parse("#9C9A92"),
         ChromeHigh = Color.Parse("#6B6A65"),
         ChromeLow = Color.Parse("#1F1E1D"),
-        ChromeMedium = Color.Parse("#2B2B28"),
+        ChromeMedium = Color.Parse("#2B2A28"),
         ChromeMediumLow = Color.Parse("#30302E"),
-        ListLow = Color.Parse("#19F5F4EF"),
-        ListMedium = Color.Parse("#33F5F4EF"),
+        ListLow = Color.Parse("#19FAF9F5"),
+        ListMedium = Color.Parse("#33FAF9F5"),
     };
 }

@@ -190,13 +190,13 @@ public enum ThemeChoice
     Dark,
 }
 
-/// <summary>Settings → Appearance → Colors (DESIGN.md §3, "Visual style").</summary>
-public enum ColorPalette
+/// <summary>Settings → Appearance → Style (DESIGN.md §3, "Visual style").</summary>
+public enum AppStyle
 {
-    /// <summary>Neutral greys with the OS's accent color.</summary>
-    System,
+    /// <summary>Claudette's own look, after Claude Code's VS Code extension: neutral greys and the OS's accent color.</summary>
+    Standard,
 
-    /// <summary>Claude's warm greys and ivory, with its orange as the accent.</summary>
+    /// <summary>The Claude apps' look: ivory and warm greys, Claude's orange, message bubbles and serif replies.</summary>
     Claude,
 }
 
@@ -204,8 +204,8 @@ public sealed class AppearanceSettings
 {
     public ThemeChoice Theme { get; set; } = ThemeChoice.System;
 
-    /// <summary>The colors, in light and dark alike (DESIGN.md §3, "Visual style").</summary>
-    public ColorPalette Colors { get; set; } = ColorPalette.System;
+    /// <summary>The look, in light and dark alike (DESIGN.md §3, "Visual style").</summary>
+    public AppStyle Style { get; set; } = AppStyle.Standard;
 
     public double ConversationFontSize { get; set; } = 14;
 

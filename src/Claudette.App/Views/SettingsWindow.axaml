@@ -237,10 +237,11 @@
           <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
             <TextBlock Classes="label" Text="Theme" />
             <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" AutomationProperties.Name="Theme" />
-            <!-- Claude's warm greys and orange, or neutral greys with the OS's accent, in light and dark alike (DESIGN.md §3) -->
-            <TextBlock Grid.Row="1" Classes="label" Text="Colors" />
-            <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ColorOptions}" SelectedItem="{Binding Colors}"
-                      AutomationProperties.Name="Colors" ToolTip.Tip="Claude uses Claude's ivory, warm greys and orange. System accent uses neutral greys and your OS's accent color." />
+            <!-- Claudette's own look or the Claude apps', in light and dark alike (DESIGN.md §3) -->
+            <TextBlock Grid.Row="1" Classes="label" Text="Style" />
+            <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding StyleOptions}" SelectedItem="{Binding Style}"
+                      AutomationProperties.Name="Style"
+                      ToolTip.Tip="Claude looks like the Claude apps: ivory and warm greys, Claude's orange, message bubbles and serif replies. Standard uses neutral greys and your OS's accent color." />
             <!-- Compact tightens the conversation, the sidebar's rows and the composer (DESIGN.md §14) -->
             <TextBlock Grid.Row="2" Classes="label" Text="Density" />
             <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Densities}" SelectedItem="{Binding Density}"

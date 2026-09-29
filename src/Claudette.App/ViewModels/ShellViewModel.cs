@@ -27,9 +27,11 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         SidebarWidth = Math.Clamp(services.State.SidebarWidth ?? DefaultSidebarWidth, MinSidebarWidth, MaxSidebarWidth);
         _services.Notifications.SelectedTabId = () => SelectedTab?.Id;
         IsCompact = services.Settings.Appearance.Density == Density.Compact;
+        IsClaudeStyle = services.Settings.Appearance.Style == AppStyle.Claude;
         _services.SettingsChanged += (_, _) =>
         {
             IsCompact = _services.Settings.Appearance.Density == Density.Compact;
+            IsClaudeStyle = _services.Settings.Appearance.Style == AppStyle.Claude;
             foreach (var tab in AllTabs)
             {
                 tab.OnSettingsChanged();
@@ -787,6 +789,14 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     /// </summary>
     [ObservableProperty]
     public partial bool IsCompact { get; private set; }
+
+    /// <summary>
+    /// Settings → Appearance → Style is Claude (DESIGN.md §3, "Visual style"): the view takes the <c>claude</c> class,
+    /// whose styles give the conversation the Claude apps' shapes: your messages in bubbles, a rounded composer with a
+    /// round send button, rounder code blocks and cards. The colors and the replies' serif are app-wide resources.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsClaudeStyle { get; private set; }
 
     // ---- Sidebar (DESIGN.md §4, "Sidebar") ------------------------------------------------------------------
 

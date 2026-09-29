@@ -25,7 +25,7 @@ Claudette does not replace Claude Code. It runs the real `claude` CLI as a child
 |---|---|---|
 | Runtime | .NET 10 (LTS) | |
 | UI | Avalonia 12 | One codebase for Windows, macOS and Linux. |
-| Look & feel | Fluent theme on Windows, macOS-style theme on macOS | Follows the OS light/dark setting and accent color, or Claude's colors ([Visual style](#visual-style)). Mica backdrop on Windows 11 (not with Claude's colors, which are solid); native title bar, traffic lights and menu bar on macOS. Mica is used only once Windows grants it: the title bar, header and sidebar show it, and the page keeps an opaque background. The macOS-style theme isn't built yet; macOS uses the Fluent theme for now. |
+| Look & feel | Fluent theme on Windows, macOS-style theme on macOS | Follows the OS light/dark setting and accent color, or the Claude apps' look ([Visual style](#visual-style)). Mica backdrop on Windows 11 (not in the Claude style, which is solid); native title bar, traffic lights and menu bar on macOS. Mica is used only once Windows grants it: the title bar, header and sidebar show it, and the page keeps an opaque background. The macOS-style theme isn't built yet; macOS uses the Fluent theme for now. |
 | Pattern | MVVM with CommunityToolkit.Mvvm | |
 | Markdown | LiveMarkdown.Avalonia | For assistant messages. Built for streaming: text is appended as it arrives instead of re-rendering the whole message. Includes syntax-highlighted code blocks. (Markdown.Avalonia only had an alpha for Avalonia 12.) |
 | Diffs | Claudette's own line diff and diff view, highlighted with TextMateSharp | The TextMate grammars and themes LiveMarkdown already ships for code blocks. AvaloniaEdit was the plan, but a read-only diff doesn't need an editor. |
@@ -141,18 +141,32 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
 
 ### Visual style
 
-The visual reference is Claude Code's own Visual Studio Code extension:
+Settings → Appearance → **Style** picks one of two looks, in light and dark alike. It changes at once, without a restart, and syncs with the other Appearance settings.
 
-- A dense, calm layout that follows the OS light or dark theme.
+**Standard** (the default) takes Claude Code's own Visual Studio Code extension as its reference:
+
+- A dense, calm layout that follows the OS light or dark theme, with neutral greys and the OS's accent color for selection, meters and checked boxes.
 - Tool calls are compact one-line rows with a small status dot (running, done, failed), expandable for detail, not heavy cards. A row's summary is cut to fit; hovering it shows it in full (a whole command, with its line breaks, or a file's whole path).
 - Diffs are inline, in red and green.
 - Thinking is a collapsed row.
 - User prompts sit in a subtle bordered box rather than a chat bubble.
 - The composer is a rounded box with the mode and model controls beside it, and a square Stop button.
-- **Colors.** Settings → Appearance → Colors picks the palette, in light and dark alike:
-  - **System accent** (the default): neutral greys, with the OS's accent color for selection, meters and checked boxes.
-  - **Claude**: Claude's own colors. Light is an ivory page (`#FAF9F5`), a warm grey sidebar (`#F0EEE6`) and near-black text (`#1F1E1D`); dark is a warm charcoal page (`#262624`), a darker sidebar (`#1F1E1D`) and off-white text (`#F5F4EF`). The accent is Claude's orange (`#D97757`), with a darker orange for accent text on light and a lighter one on dark, so it stays readable. Errors, warnings, diffs and a tab group's own color keep their usual colors. Mica is off, so the sidebar and header stay warm rather than showing the desktop through.
-  - It changes at once, without a restart, and syncs with the other Appearance settings.
+- Inline code and code blocks use VS Code's Light+ and Dark+ colors.
+
+**Claude** takes the Claude apps (the iOS app and claude.ai) as its reference. The layout, tool rows, diffs and every control stay the same; the look changes:
+
+- **Colors**, from the Claude apps' scale:
+  - Light: an ivory page (`#FAF9F5`), a warmer sidebar (`#F5F4ED`), white cards and composer, near-black text (`#141413`) and warm grey muted text (`#73726C`).
+  - Dark: a charcoal page (`#262624`), a darker sidebar (`#1F1E1D`), lighter cards and composer (`#30302E`), off-white text (`#FAF9F5`) and warm grey muted text.
+  - The accent is Claude's orange (`#D97757`), with a darker orange for accent text on light and a lighter one on dark, so it stays readable. The working line's glyph and verb are orange, like the Claude apps' spark.
+  - Cautions (a waiting prompt, a usage alert, "Needs your input") are warm tints of the accent rather than yellow. Errors, diffs, the charts' model lines and a tab group's own color keep their usual colors.
+- **Your messages are bubbles** on the right (rounded, filled, no border), and Claude's replies run full width beside them.
+- **Claude's replies are set in a serif**, as the Claude apps set them. Their typeface isn't available, so it's the closest installed one: Charter on macOS, Georgia or Cambria on Windows, and Charter, Noto Serif or DejaVu Serif on Linux. A conversation font set in Settings wins.
+- **The composer** is a big rounded box lifted a little off the page, and Send and Stop are round buttons; Send is an arrow.
+- **Rounder corners** on code blocks, prompts and the sidebar's rows.
+- **No Mica**, so the sidebar and header stay warm rather than showing the desktop through.
+
+How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette's own tokens, and `Themes/AppColors` swaps them in and gives Fluent a matching palette (the window background, text, controls, and the accent it derives its shades from). Fluent reads most palette colors only when its resources are first used, so switching loads a fresh Fluent theme with the palette already set. The shapes are styles under the `claude` class, which the main view takes, as Density's are under `compact`. The replies' font is the `ReplyFont` resource.
 
 ## 4. Tabs & Sessions
 
@@ -1180,7 +1194,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
 | Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. Use my login shell's environment (macOS and Linux only, on by default; [§13](#login-shell-environment)). |
 | New tabs | Default model, effort level and permission mode. The model and effort lists are what Claude Code offered in its last `initialize` reply on this machine (the models and each one's effort levels, kept with the machine's state), with a built-in list only until a session has started; Tab settings… lists them the same way. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (**Add folder…**, **Move up**, **Move down**, **Remove**), in the order the new tab picker shows them. See [Opening a tab](#opening-a-tab). |
-| Appearance | Theme: follow system, light or dark. Colors: System accent (the default) or Claude ([Visual style](#visual-style)). Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. Show fun words while Claude works, and show what Claude is doing while it works (both on by default; [Working line](#working-line)). **Detailed usage header** (off by default): the same switch as the header's chevron, kept on this machine rather than synced ([Detailed header](#detailed-header)). Show context on tab rows (on by default; [§4](#sidebar)). **Density**: Comfortable (the default) or Compact, which tightens the conversation's spacing, message and card padding and tool rows, the sidebar's rows, and the composer's padding. It applies at once and syncs with the other Appearance settings. |
+| Appearance | Theme: follow system, light or dark. Style: Standard (the default) or Claude, the Claude apps' look ([Visual style](#visual-style)). Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. Show fun words while Claude works, and show what Claude is doing while it works (both on by default; [Working line](#working-line)). **Detailed usage header** (off by default): the same switch as the header's chevron, kept on this machine rather than synced ([Detailed header](#detailed-header)). Show context on tab rows (on by default; [§4](#sidebar)). **Density**: Comfortable (the default) or Compact, which tightens the conversation's spacing, message and card padding and tool rows, the sidebar's rows, and the composer's padding. It applies at once and syncs with the other Appearance settings. |
 | Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
 | Quick suffixes | The list of suffixes: label, text and optional shortcut. Add, edit, reorder, delete. See [§5](#quick-suffixes). |
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
@@ -1533,8 +1547,8 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Per-tab sync ([§9](#session-library-sync-across-machines)).** Syncing to the session library is opt-in per tab: **Sync to other machines** in the tab menu and **Tab settings…**, a sync icon on the tab's row, and **Sync new tabs to the session library** in Settings → Sessions (off by default). Sessions opened from the library keep syncing; a tab that doesn't sync writes nothing to the library and ignores leases.
     - **Working line ([§5](#working-line)).** A twinkling glyph, a fun verb (or what the running tool is doing), the turn's time and tokens above the composer while Claude works, with Claude Code's `spinnerVerbs`, and both options in Settings → Appearance.
     - **Login shell environment ([§13](#login-shell-environment)).** On macOS and Linux, a Claudette not started from a terminal reads the login shell's environment once in the background, and `claude`, git, `p4`, diff tools and Homebrew start with it merged in. **Use my login shell's environment** in Settings → Claude Code (on by default), and a Diagnostics line saying which shell was used, or why not.
-    - **Claude's colors ([§3](#visual-style)).** Settings → Appearance → Colors: System accent (the default) or Claude, whose ivory, warm greys and orange work in light and dark and switch without a restart.
-      - **Still to verify:** how it looks on a real Windows, macOS and Linux desktop. It has only been rendered headlessly so far.
+    - **The Claude style ([§3](#visual-style)).** Settings → Appearance → Style: Standard (the default) or Claude, the Claude apps' look: their ivory, warm greys and orange, your messages in bubbles on the right, serif replies, a big rounded composer with a round Send arrow, in light and dark, switching without a restart. Code blocks and inline code now follow the light or dark theme in both styles (they were always dark).
+      - **Still to verify:** how it looks on a real Windows, macOS and Linux desktop, and next to the Claude iOS app. It has only been rendered headlessly so far.
     - **Version ([§14](#version)).** The foot of the Settings sidebar shows Claudette's version (0.1.0, the first release), with the commit for a source build; clicking it copies the versions for a bug report, and **Report an issue** opens a new GitHub issue with them filled in.
     - **Detailed header ([§6](#detailed-header)).** The header's chevron, or **Detailed usage header** in Settings → Appearance, draws the header taller: charts of the session and the week with the thresholds, projections and a mark where the session crosses the critical threshold, the burn rate, the time to the limit and the busiest tabs. Remembered on this machine.
       - **Still to verify:** how it looks on real screens. So far it has only been rendered headlessly (Skia, light and dark, at several widths). Check it on Windows with Mica, on macOS, on high-DPI displays and with other accent colors.

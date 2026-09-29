@@ -63,7 +63,7 @@ public sealed partial class SettingsViewModel
         Save();
         DetailedUsageHeader = false;
         OnPropertyChanged(nameof(Theme));
-        OnPropertyChanged(nameof(Colors));
+        OnPropertyChanged(nameof(Style));
         OnPropertyChanged(nameof(ConversationFontSize));
         OnPropertyChanged(nameof(CodeFontSize));
         OnPropertyChanged(nameof(ConversationFont));

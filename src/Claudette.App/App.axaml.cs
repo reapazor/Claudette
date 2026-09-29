@@ -33,7 +33,7 @@ public partial class App : Application
     private bool _shutdownComplete;
     private MainWindow? _mainWindow;
 
-    /// <summary>Settings → Appearance → Colors (DESIGN.md §3, "Visual style").</summary>
+    /// <summary>Settings → Appearance → Style's colors (DESIGN.md §3, "Visual style").</summary>
     internal AppColors Colors { get; private set; } = null!;
 
     public override void Initialize()
@@ -178,7 +178,7 @@ public partial class App : Application
 
     private const string DefaultMonoFonts = "Cascadia Mono, Consolas, Menlo, monospace";
 
-    /// <summary>Applies Settings → Appearance: theme, colors, fonts and font sizes (DESIGN.md §14).</summary>
+    /// <summary>Applies Settings → Appearance: theme, style, fonts and font sizes (DESIGN.md §14).</summary>
     private void ApplyAppearance()
     {
         if (_services is null)
@@ -192,12 +192,13 @@ public partial class App : Application
             ThemeChoice.Dark => ThemeVariant.Dark,
             _ => ThemeVariant.Default,
         };
-        Colors.Apply(appearance.Colors);
-        _mainWindow?.UseMica(appearance.Colors == ColorPalette.System);
+        Colors.Apply(appearance.Style);
+        _mainWindow?.UseMica(appearance.Style == AppStyle.Standard);
         Resources["ConversationFontSize"] = appearance.ConversationFontSize;
         Resources["CodeFontSize"] = appearance.CodeFontSize;
         // A font that isn't installed falls back to the next name in the list.
         Resources["ConversationFont"] = appearance.ConversationFont is { } conversation ? new FontFamily($"{conversation}, {FontFamily.DefaultFontFamilyName}") : FontFamily.Default;
+        Resources["ReplyFont"] = AppColors.ReplyFont(appearance.Style, appearance.ConversationFont);
         Resources["MonoFont"] = new FontFamily(appearance.CodeFont is { } code ? $"{code}, {DefaultMonoFonts}" : DefaultMonoFonts);
     }
 

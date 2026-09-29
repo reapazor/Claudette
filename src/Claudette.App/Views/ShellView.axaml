@@ -4,9 +4,11 @@
              xmlns:views="using:Claudette.App.Views"
              x:Class="Claudette.App.Views.ShellView"
              x:DataType="vm:ShellViewModel"
-             Classes.compact="{Binding IsCompact}">
+             Classes.compact="{Binding IsCompact}"
+             Classes.claude="{Binding IsClaudeStyle}">
   <!-- Settings → Appearance → Density (DESIGN.md §14): "compact" tightens the rows, the conversation and the composer,
-       through the styles in App.axaml and TabView. -->
+       through the styles in App.axaml and TabView. Settings → Appearance → Style (DESIGN.md §3): "claude" gives them
+       the Claude apps' shapes. -->
 
   <UserControl.Resources>
     <!-- The tab info card (DESIGN.md §4), used as the tab tooltip. -->
