@@ -9,8 +9,7 @@ namespace Claudette.App.ViewModels;
 /// </summary>
 public sealed partial class MainWindowViewModel(AppServices services, string? initialFolder = null) : ViewModelBase, IAsyncDisposable
 {
-    private WorkspaceViewModel? _workspace;
-    private string? _initialFolder = initialFolder;
+    private ShellViewModel? _shell;
 
     [ObservableProperty]
     public partial ViewModelBase CurrentPage { get; set; } = new BusyViewModel("Starting…");
@@ -18,7 +17,12 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     [ObservableProperty]
     public partial string? AccountText { get; set; }
 
-    public Task StartAsync() => CheckInstallAsync(null);
+    /// <summary>The main UI, once Claude Code is installed and signed in.</summary>
+    public ShellViewModel? Shell => _shell;
+
+    public AppServices Services => services;
+
+    public Task StartAsync() => CheckInstallAsync(services.Settings.ClaudeCode.ClaudePath);
 
     private async Task CheckInstallAsync(string? path)
     {
@@ -28,6 +32,12 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         {
             CurrentPage = new SetupViewModel(result, services.Platform, CheckInstallAsync);
             return;
+        }
+        if (path is not null && path != services.Settings.ClaudeCode.ClaudePath)
+        {
+            // The user pointed Claudette at claude from the setup screen: remember it.
+            services.Settings.ClaudeCode.ClaudePath = path;
+            services.SaveSettings();
         }
         services.UseInstall(result.Install!);
         await CheckSignInAsync();
@@ -60,21 +70,20 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
             return;
         }
 
+        services.ProjectsDirectory = status.ProjectsDirectory
+            ?? (status.ConfigDirectory is { } config ? Path.Combine(config, "projects") : null);
         AccountText = string.Join(" · ", new[] { status.Email, PlanName(status.SubscriptionType) }.Where(s => !string.IsNullOrEmpty(s)));
-        if (_workspace is null)
+        if (_shell is null)
         {
-            _workspace = new WorkspaceViewModel(services, ShowSignIn);
+            _shell = new ShellViewModel(services, ShowSignIn);
+            OnPropertyChanged(nameof(Shell));
+            CurrentPage = _shell;
+            _shell.Restore(initialFolder);
         }
         else
         {
-            await _workspace.OnSignedInAgainAsync();
-        }
-        CurrentPage = _workspace;
-
-        if (_initialFolder is { } folder)
-        {
-            _initialFolder = null;
-            await _workspace.OpenFolderAsync(folder);
+            CurrentPage = _shell;
+            await _shell.OnSignedInAgainAsync();
         }
     }
 
@@ -97,9 +106,9 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
 
     public async ValueTask DisposeAsync()
     {
-        if (_workspace is not null)
+        if (_shell is not null)
         {
-            await _workspace.DisposeAsync();
+            await _shell.DisposeAsync();
         }
     }
 }

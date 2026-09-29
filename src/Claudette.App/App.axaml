@@ -4,7 +4,7 @@
              xmlns:views="using:Claudette.App.Views"
              x:Class="Claudette.App.App"
              RequestedThemeVariant="Default">
-  <!-- "Default" follows the OS light/dark setting (DESIGN.md §2). -->
+  <!-- "Default" follows the OS light/dark setting (DESIGN.md §2); Settings → Appearance can force one. -->
 
   <Application.DataTemplates>
     <DataTemplate DataType="vm:BusyViewModel">
@@ -16,8 +16,8 @@
     <DataTemplate DataType="vm:SignInViewModel">
       <views:SignInView />
     </DataTemplate>
-    <DataTemplate DataType="vm:WorkspaceViewModel">
-      <views:WorkspaceView />
+    <DataTemplate DataType="vm:ShellViewModel">
+      <views:ShellView />
     </DataTemplate>
   </Application.DataTemplates>
 
@@ -33,6 +33,7 @@
       <Setter Property="Padding" Value="24" />
       <Setter Property="MaxWidth" Value="520" />
     </Style>
+
     <!-- :is() so the classes also apply to SelectableTextBlock. -->
     <Style Selector=":is(TextBlock).title">
       <Setter Property="FontSize" Value="22" />
@@ -41,11 +42,117 @@
     <Style Selector=":is(TextBlock).muted">
       <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
     </Style>
+    <Style Selector=":is(TextBlock).small">
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector=":is(TextBlock).mono">
+      <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+      <Setter Property="FontSize" Value="{DynamicResource CodeFontSize}" />
+    </Style>
     <Style Selector=":is(TextBlock).warning">
       <Setter Property="Foreground" Value="{DynamicResource WarningTextBrush}" />
     </Style>
     <Style Selector=":is(TextBlock).error">
       <Setter Property="Foreground" Value="{DynamicResource ErrorTextBrush}" />
+    </Style>
+    <Style Selector=":is(TextBlock).ok">
+      <Setter Property="Foreground" Value="{DynamicResource OkTextBrush}" />
+    </Style>
+    <Style Selector=":is(TextBlock).added">
+      <Setter Property="Foreground" Value="{DynamicResource OkTextBrush}" />
+    </Style>
+    <Style Selector=":is(TextBlock).removed">
+      <Setter Property="Foreground" Value="{DynamicResource ErrorTextBrush}" />
+    </Style>
+
+    <!-- Flat buttons: rows, chips and toolbar items that only show a background on hover. -->
+    <Style Selector="Button.flat">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="6,3" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="Button.flat:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+    </Style>
+    <Style Selector="Button.row">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Padding" Value="4,2" />
+    </Style>
+
+    <!-- Tabs -->
+    <Style Selector="Button.tab">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="8,4" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="Button.tab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+    </Style>
+    <Style Selector="Button.tab.selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource TabSelectedBrush}" />
+    </Style>
+
+    <!-- Status dots and glyphs -->
+    <Style Selector="TextBlock.status">
+      <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.status.busy">
+      <Setter Property="Foreground" Value="{DynamicResource AccentStatusBrush}" />
+      <Style.Animations>
+        <Animation Duration="0:0:1.2" IterationCount="INFINITE" PlaybackDirection="Alternate">
+          <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.3" /></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector="TextBlock.status.alert">
+      <Setter Property="Foreground" Value="{DynamicResource WarningTextBrush}" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="TextBlock.status.failed">
+      <Setter Property="Foreground" Value="{DynamicResource ErrorTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.status.ok">
+      <Setter Property="Foreground" Value="{DynamicResource OkTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.status.unread">
+      <Setter Property="Foreground" Value="{DynamicResource AccentStatusBrush}" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
+    <!-- Composer box -->
+    <Style Selector="Border.composer">
+      <Setter Property="Background" Value="{DynamicResource ComposerBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ComposerBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="10,6,6,6" />
+    </Style>
+    <Style Selector="Border.composer TextBox, Border.composer TextBox:focus, Border.composer TextBox:pointerover">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Border.composer TextBox:focus /template/ Border#PART_BorderElement, Border.composer TextBox:pointerover /template/ Border#PART_BorderElement, Border.composer TextBox /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <!-- Overlays -->
+    <Style Selector="Border.overlay">
+      <Setter Property="Background" Value="{DynamicResource OverlayBrush}" />
+    </Style>
+    <Style Selector="Border.dialog">
+      <Setter Property="Background" Value="{DynamicResource DialogBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="20" />
+      <Setter Property="BoxShadow" Value="0 8 32 0 #40000000" />
     </Style>
   </Application.Styles>
 
@@ -55,6 +162,17 @@
         <ResourceInclude Source="avares://LiveMarkdown.Avalonia/Defaults.axaml" />
       </ResourceDictionary.MergedDictionaries>
 
+      <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Menlo, monospace</FontFamily>
+      <!-- Updated from Settings → Appearance. -->
+      <x:Double x:Key="ConversationFontSize">14</x:Double>
+      <x:Double x:Key="CodeFontSize">13</x:Double>
+
+      <!-- Small vector icons, so they look the same on every platform. -->
+      <StreamGeometry x:Key="IconClose">M2,2 L10,10 M10,2 L2,10</StreamGeometry>
+      <StreamGeometry x:Key="IconPlus">M6,1 L6,11 M1,6 L11,6</StreamGeometry>
+      <StreamGeometry x:Key="IconPin">M4,1 L8,1 L8,5 L10,7 L6.5,7 L6,11 L5.5,7 L2,7 L4,5 Z</StreamGeometry>
+      <StreamGeometry x:Key="IconSettings">M1,3 L11,3 M1,9 L11,9 M4,1 L4,5 M8,7 L8,11</StreamGeometry>
+
       <!-- Claudette's color tokens, per theme. Views use only these, never Fluent's internal resource names. -->
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
@@ -62,27 +180,54 @@
           <SolidColorBrush x:Key="DividerBrush" Color="#1F000000" />
           <SolidColorBrush x:Key="CardBrush" Color="#FAFAFA" />
           <SolidColorBrush x:Key="ToolCardBrush" Color="#F3F3F5" />
+          <SolidColorBrush x:Key="SubtleBrush" Color="#F4F4F6" />
+          <SolidColorBrush x:Key="HoverBrush" Color="#0F000000" />
+          <SolidColorBrush x:Key="TabSelectedBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="TabStripBrush" Color="#F0F0F2" />
+          <SolidColorBrush x:Key="ComposerBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="ComposerBorderBrush" Color="#2A000000" />
+          <SolidColorBrush x:Key="DialogBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="OverlayBrush" Color="#33000000" />
           <SolidColorBrush x:Key="ErrorTextBrush" Color="#C42B1C" />
           <SolidColorBrush x:Key="WarningTextBrush" Color="#9D5D00" />
+          <SolidColorBrush x:Key="OkTextBrush" Color="#107C10" />
+          <SolidColorBrush x:Key="AccentStatusBrush" Color="{DynamicResource SystemAccentColor}" />
           <SolidColorBrush x:Key="CautionBorderBrush" Color="#D9A400" />
           <SolidColorBrush x:Key="CautionBackgroundBrush" Color="#FFF6D6" />
-          <SolidColorBrush x:Key="UserBubbleBrush" Color="{DynamicResource SystemAccentColor}" />
-          <SolidColorBrush x:Key="UserBubbleTextBrush" Color="White" />
+          <SolidColorBrush x:Key="DiffAddedBrush" Color="#E6F4EA" />
+          <SolidColorBrush x:Key="DiffRemovedBrush" Color="#FCE8E6" />
+          <SolidColorBrush x:Key="DiffHunkBrush" Color="#EEF1F8" />
+          <SolidColorBrush x:Key="UserBoxBrush" Color="#F4F4F6" />
+          <SolidColorBrush x:Key="UserBoxBorderBrush" Color="#1F000000" />
+          <SolidColorBrush x:Key="SubagentLineBrush" Color="#33000000" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
           <SolidColorBrush x:Key="MutedTextBrush" Color="#A6A6A6" />
           <SolidColorBrush x:Key="DividerBrush" Color="#2EFFFFFF" />
           <SolidColorBrush x:Key="CardBrush" Color="#1F1F1F" />
           <SolidColorBrush x:Key="ToolCardBrush" Color="#1A1A1C" />
+          <SolidColorBrush x:Key="SubtleBrush" Color="#1C1C1F" />
+          <SolidColorBrush x:Key="HoverBrush" Color="#14FFFFFF" />
+          <SolidColorBrush x:Key="TabSelectedBrush" Color="#2B2B2F" />
+          <SolidColorBrush x:Key="TabStripBrush" Color="#141416" />
+          <SolidColorBrush x:Key="ComposerBrush" Color="#1C1C1F" />
+          <SolidColorBrush x:Key="ComposerBorderBrush" Color="#3DFFFFFF" />
+          <SolidColorBrush x:Key="DialogBrush" Color="#202023" />
+          <SolidColorBrush x:Key="OverlayBrush" Color="#66000000" />
           <SolidColorBrush x:Key="ErrorTextBrush" Color="#FF99A4" />
           <SolidColorBrush x:Key="WarningTextBrush" Color="#FCE100" />
+          <SolidColorBrush x:Key="OkTextBrush" Color="#6CCB5F" />
+          <SolidColorBrush x:Key="AccentStatusBrush" Color="{DynamicResource SystemAccentColorLight2}" />
           <SolidColorBrush x:Key="CautionBorderBrush" Color="#8A6D00" />
           <SolidColorBrush x:Key="CautionBackgroundBrush" Color="#2B2610" />
-          <SolidColorBrush x:Key="UserBubbleBrush" Color="{DynamicResource SystemAccentColorDark1}" />
-          <SolidColorBrush x:Key="UserBubbleTextBrush" Color="White" />
+          <SolidColorBrush x:Key="DiffAddedBrush" Color="#1D3B26" />
+          <SolidColorBrush x:Key="DiffRemovedBrush" Color="#46201F" />
+          <SolidColorBrush x:Key="DiffHunkBrush" Color="#23283A" />
+          <SolidColorBrush x:Key="UserBoxBrush" Color="#1E1E22" />
+          <SolidColorBrush x:Key="UserBoxBorderBrush" Color="#33FFFFFF" />
+          <SolidColorBrush x:Key="SubagentLineBrush" Color="#40FFFFFF" />
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
-      <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Menlo, monospace</FontFamily>
     </ResourceDictionary>
   </Application.Resources>
 </Application>

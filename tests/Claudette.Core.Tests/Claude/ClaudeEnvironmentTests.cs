@@ -59,7 +59,8 @@ public class ClaudeEnvironmentTests
 
         Assert.Equal(
             ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-prompt-tool", "stdio",
-             "--include-partial-messages", "--model", "sonnet", "--effort", "high", "--resume", "abc", "--no-session-persistence"],
+             "--include-partial-messages", "--thinking-display", "summarized", "--forward-subagent-text",
+             "--model", "sonnet", "--effort", "high", "--resume", "abc", "--no-session-persistence"],
             args);
     }
 

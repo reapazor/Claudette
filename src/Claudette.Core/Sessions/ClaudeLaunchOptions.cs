@@ -19,6 +19,15 @@ public sealed record ClaudeLaunchOptions
 
     public bool IncludePartialMessages { get; init; } = true;
 
+    /// <summary>
+    /// <c>summarized</c> returns thinking text; newer models otherwise send empty thinking blocks (DESIGN.md §5).
+    /// Null leaves Claude Code's default. The flag isn't in <c>--help</c>; the Agent SDKs pass it.
+    /// </summary>
+    public string? ThinkingDisplay { get; init; } = "summarized";
+
+    /// <summary>Sends subagents' text and thinking too, so subagent groups can show them (DESIGN.md §5).</summary>
+    public bool ForwardSubagentText { get; init; } = true;
+
     public IReadOnlyList<string> AdditionalArguments { get; init; } = [];
 
     /// <summary>Applied on top of the clean environment. A null value removes the variable.</summary>
@@ -42,6 +51,11 @@ public static class ClaudeArguments
         if (options.IncludePartialMessages)
         {
             args.Add("--include-partial-messages");
+        }
+        AddOption(args, "--thinking-display", options.ThinkingDisplay);
+        if (options.ForwardSubagentText)
+        {
+            args.Add("--forward-subagent-text");
         }
         AddOption(args, "--model", options.Model);
         AddOption(args, "--effort", options.Effort);

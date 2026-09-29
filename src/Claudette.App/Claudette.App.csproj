@@ -23,4 +23,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Claudette.Core\Claudette.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Claudette.App.Tests" />
+  </ItemGroup>
 </Project>

@@ -59,7 +59,11 @@ public sealed class FakeClaudeTests : IDisposable
         var recorded = JsonNode.Parse(await File.ReadAllTextAsync(record, TestContext.Current.CancellationToken))!;
         var args = recorded["args"]!.AsArray().Select(a => a!.GetValue<string>()).ToArray();
         Assert.Equal(ClaudeArguments.ForStreamingSession(new ClaudeLaunchOptions { WorkingDirectory = _work.Path }), args);
-        Assert.Equal(Path.GetFullPath(_work.Path).TrimEnd(Path.DirectorySeparatorChar), Path.GetFullPath(recorded["cwd"]!.GetValue<string>()).TrimEnd(Path.DirectorySeparatorChar), ignoreCase: OperatingSystem.IsWindows());
+        // Compare folders by identity, not by path text: on macOS the temp folder is under /var, a symlink to
+        // /private/var, and the child reports the resolved path.
+        var marker = $"marker-{Guid.NewGuid():N}";
+        await File.WriteAllTextAsync(_work.Combine(marker), "", TestContext.Current.CancellationToken);
+        Assert.True(File.Exists(Path.Combine(recorded["cwd"]!.GetValue<string>(), marker)), $"Expected the working folder to be {_work.Path}, was {recorded["cwd"]}");
     }
 
     [Fact]

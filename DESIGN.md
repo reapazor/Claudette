@@ -70,6 +70,17 @@ From top to bottom:
 4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), and optionally its running processes ([§4](#process-monitor)).
 5. **Composer.** Where you type to the selected tab, plus the Stop button and per-tab controls.
 
+### Visual style
+
+The visual reference is Claude Code's own Visual Studio Code extension:
+
+- A dense, calm layout that follows the OS light or dark theme.
+- Tool calls are compact one-line rows with a small status dot (running, done, failed), expandable for detail, not heavy cards.
+- Diffs are inline, in red and green.
+- Thinking is a collapsed row.
+- User prompts sit in a subtle bordered box rather than a chat bubble.
+- The composer is a rounded box with the mode and model controls beside it, and a square Stop button.
+
 ## 4. Tabs & Sessions
 
 - A tab is one Claude Code session, run as its own `claude` process.
@@ -85,7 +96,12 @@ From top to bottom:
   - Finished while in the background (unread dot)
   - Error or process exited
 - **Model and effort** are easy to see for every tab. The tab shows a small badge (for example `Opus · High`), and the composer bar shows the same thing in full for the selected tab. See [Model & effort](#model--effort).
-- The tooltip shows the full folder path, model, effort level, session start time and tokens used.
+- **Tab info card.** Hovering a tab shows a card with the tab's details. It's the one place features add per-tab information, rather than putting it in the tab name. It shows:
+  - The full folder path and git branch.
+  - Model and effort.
+  - Session start time, tokens used and context %.
+  - Later features add rows here, for example the Perforce changelist ([§18](#perforce-changelist-in-the-tab-title)).
+  - The same card opens from an **ⓘ** button in the composer bar, for the selected tab.
 - **Token stats per tab.** Each tab keeps a running count of the tokens it has used:
   - Input, output, cache write and cache read tokens, split by model when the session used more than one.
   - Two time spans: **this session window** (since the current 5-hour window started, which is the part that counts against the session limit) and **all time** for this tab's session.
@@ -617,11 +633,14 @@ Everything in this section was confirmed by the milestone 1 spike on 2026-09-28 
 ```
 claude -p --input-format stream-json --output-format stream-json --verbose
           --include-partial-messages --permission-prompt-tool stdio
+          --thinking-display summarized --forward-subagent-text
           --model <model> --effort <level> --permission-mode <mode>
           [--resume <session-id or transcript path>]
 ```
 
 - `--permission-prompt-tool stdio` sends permission prompts to Claudette as control requests. The TypeScript SDK passes this flag when a `canUseTool` callback is set.
+- `--thinking-display summarized` makes newer models return thinking text; by default they send empty thinking blocks. The flag isn't in `claude --help`, but the Agent SDKs pass it.
+- `--forward-subagent-text` includes subagents' text and thinking in the stream, so subagent groups can show them.
 - **Clean environment.** Claude Code sets session variables for the processes it starts, such as `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_ENTRYPOINT` and `CLAUDE_CODE_MESSAGING_SOCKET`. If Claudette was started from a terminal inside Claude Code, those variables make `claude` behave as a child session; in the spike it ignored the API key and reported "Not logged in".
   - Claudette removes exactly those variables. The full list is `ClaudeEnvironment.SessionVariables`, tracked in `compat/surface.yaml`.
   - It doesn't strip by prefix, because variables like `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_USE_BEDROCK` are user configuration.
@@ -923,8 +942,27 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
      - The utility session.
    - **Still to verify:** completing an in-app sign-in (the `claude_oauth_*` requests), which needs a real sign-in into a throwaway config.
    - The spikes were done on 2026-09-28. Their findings are recorded in the sections they affected; the scripts are in [`spikes/`](spikes/README.md).
-2. **Tool rendering.** Tool call cards, Edit diffs, Bash output, thinking, subagents, to-do list.
-3. **Tabs & settings.** Multiple sessions, folder per tab, automatic and user naming, status icons, model and effort indicators and pickers, per-tab token stats, pinned tabs and restore on launch, Settings window and per-tab overrides, check-ins, quick suffixes.
+2. **Tool rendering.** ✅ Built 2026-09-28.
+   - Tool rows with status dots, expandable to full input and output.
+   - Inline Edit and Write diffs from `structuredPatch`, and Bash command and output.
+   - Collapsed thinking.
+   - Subagents as nested groups, routed by `parent_tool_use_id`.
+   - The pinned to-do list, for both `TodoWrite` and the Task tools.
+   - A single retry note that updates in place, a summary after each turn, "Jump to latest", and clearing on `/clear`.
+3. **Tabs & settings.** ✅ Built 2026-09-28.
+   - **Tabs:** multiple tabs grouped by folder, with group colors, collapse and close. The new-tab picker has search, favorites and recents.
+   - **Tab details:** status icons, AI titles with the first-prompt fallback, rename, pin, and the tab info card.
+   - **Session controls:** model and effort pickers, with confirmation before a model switch, and token stats with a breakdown.
+   - **Persistence:** restore on launch, lazy start, and the earlier conversation reloaded from the transcript.
+   - **Settings:** the Settings window for the current categories, and per-tab overrides.
+   - **Composer:** check-ins and quick suffixes.
+   - **Keyboard shortcuts** for tabs and settings.
+   - **Deferred to later milestones:**
+     - Dragging tabs to reorder. Move left/right is in the tab menu for now.
+     - The Settings search box.
+     - Per-suffix shortcuts and number keys in the suffix menu.
+     - The "this session window" token split, which needs milestone 5's usage data.
+     - OS notifications for check-ins (milestone 7).
 4. **Permissions.** Inline prompts, permission mode picker.
 5. **Usage.** Header meters, local sample store, burn trendline and projection, Usage panel, alerts.
 6. **History, sync & diffs.** Session history and resume, session library and cross-machine restore, changed files panel, built-in diff view, external diff tools, process monitor.
@@ -973,6 +1011,22 @@ Planned for after v1. Each needs a fuller design before it's built.
 **Settings → Perforce** (off by default): turn ticket handling on or off, password source, renew-before-expiry time, all-hosts tickets, and per-folder overrides for server and user.
 
 **Not covered.** Servers that sign in through SSO (`P4LOGINSSO`) or multi-factor authentication. For those, Claudette sends a notification asking the user to log in themselves (in a terminal or P4V), then checks again.
+
+### Perforce changelist in the tab title
+
+When Claude is working in a specific Perforce changelist, Claudette shows its number. It's always a row in the tab info card ([§4](#4-tabs--sessions)), and optionally (a setting) a badge on the tab itself, for example *"fix login bug · CL 12345"*.
+
+- **Detecting the changelist.** Claudette watches the tab's Bash tool calls and their results:
+  - Commands that name a changelist: `p4 edit -c 12345`, `p4 add -c`, `p4 reopen -c`, `p4 shelve -c`, `p4 change -o 12345`, `p4 submit -c`.
+  - Output that creates one: *"Change 12345 created."*
+  - The most recently used changelist wins. The default changelist isn't shown.
+- **Showing it.**
+  - A "Perforce changelist" row in the tab info card.
+  - If **Show changelist on tabs** is on (Settings → Perforce), also a `CL 12345` badge after the tab name. The badge is separate from the name, so renaming the tab doesn't drop it.
+  - Several changelists in one session: the latest is shown, and the info card lists them all.
+- **Actions** (on the info card row or the badge): copy the number, or open it in P4V (`p4v -cmd "open changelist 12345"`).
+- **Saved with the tab**, so a restored tab shows it again.
+- **Resetting it.** When the changelist is submitted (*"Change 12345 submitted."*) or deleted, the badge changes to "submitted" or goes away.
 
 ## 19. Open Questions
 

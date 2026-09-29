@@ -40,6 +40,9 @@ public sealed record RateLimitUpdated(RateLimitEventMessage Message) : SessionEv
 
 public sealed record AuthenticationRequired(string? Detail) : SessionEvent;
 
+/// <summary>The conversation was cleared (for example by <c>/clear</c>); drop the view and any cached title.</summary>
+public sealed record ConversationReset(string? Trigger) : SessionEvent;
+
 /// <summary>Any other <c>system</c> message (status, tasks, retries, …).</summary>
 public sealed record SystemNotice(SystemMessage Message) : SessionEvent;
 

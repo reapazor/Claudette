@@ -1,0 +1,55 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             x:Class="Claudette.App.Views.NewTabPickerView"
+             x:DataType="vm:NewTabPickerViewModel">
+  <UserControl.Styles>
+    <!-- A folder that no longer exists is dimmed (DESIGN.md §4). -->
+    <Style Selector="Grid.missing">
+      <Setter Property="Opacity" Value="0.45" />
+    </Style>
+  </UserControl.Styles>
+
+  <UserControl.Resources>
+    <DataTemplate x:Key="FolderRow" DataType="vm:FolderEntry">
+      <Grid ColumnDefinitions="22,*,Auto" Background="Transparent" Classes.missing="{Binding !Exists}">
+        <TextBlock Classes="muted small" Text="{Binding NumberText}" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Spacing="1">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+            <TextBlock Classes="muted small" Text="{Binding Branch}" IsVisible="{Binding HasBranch}" VerticalAlignment="Bottom" />
+          </StackPanel>
+          <TextBlock Classes="muted small" Text="{Binding ShortPath}" TextTrimming="PathSegmentEllipsis" />
+        </StackPanel>
+        <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding Details}" VerticalAlignment="Center" Margin="12,0,0,0" />
+        <Grid.ContextMenu>
+          <ContextMenu>
+            <MenuItem Header="{Binding FavoriteMenuText}" Command="{Binding $parent[UserControl].((vm:NewTabPickerViewModel)DataContext).ToggleFavoriteCommand}" CommandParameter="{Binding}" />
+            <MenuItem Header="Remove from recents" Command="{Binding $parent[UserControl].((vm:NewTabPickerViewModel)DataContext).RemoveRecentCommand}" CommandParameter="{Binding}" />
+            <MenuItem Header="Reveal in Finder/Explorer" Command="{Binding $parent[UserControl].((vm:NewTabPickerViewModel)DataContext).RevealCommand}" CommandParameter="{Binding}" />
+            <MenuItem Header="Copy path" Command="{Binding $parent[UserControl].((vm:NewTabPickerViewModel)DataContext).CopyPathCommand}" CommandParameter="{Binding}" />
+          </ContextMenu>
+        </Grid.ContextMenu>
+      </Grid>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <Border Classes="dialog" Width="620" Padding="12">
+    <DockPanel>
+      <TextBox x:Name="SearchBox" DockPanel.Dock="Top" Text="{Binding Search}" PlaceholderText="Search folders, or press Browse…" Margin="0,0,0,8" />
+      <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+        <TextBlock Classes="muted small" VerticalAlignment="Center"
+                   Text="Enter opens · 1–9 picks · right-click for more" TextTrimming="CharacterEllipsis" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+          <Button Content="Cancel" Command="{Binding CloseCommand}" />
+          <Button Classes="accent" Content="Browse…" Command="{Binding BrowseCommand}" />
+        </StackPanel>
+      </Grid>
+      <StackPanel>
+        <TextBlock Classes="muted small" Text="No recent folders yet. Browse to pick one." IsVisible="{Binding IsEmpty}" Margin="4,12" />
+        <ListBox x:Name="Folders" ItemsSource="{Binding All}" SelectedItem="{Binding Selected}" MaxHeight="420"
+                 ItemTemplate="{StaticResource FolderRow}" DoubleTapped="OnFolderDoubleTapped" IsVisible="{Binding !IsEmpty}" />
+      </StackPanel>
+    </DockPanel>
+  </Border>
+</UserControl>

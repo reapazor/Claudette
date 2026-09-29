@@ -2,11 +2,13 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Styling;
 using Claudette.App.Services;
 using Claudette.App.ViewModels;
 using Claudette.App.Views;
 using Claudette.Core;
 using Claudette.Core.Processes;
+using Claudette.Core.Settings;
 
 namespace Claudette.App;
 
@@ -29,6 +31,8 @@ public partial class App : Application
                 TimeProvider.System,
                 new AvaloniaPlatformServices(() => TopLevel.GetTopLevel(window)),
                 new AvaloniaUiDispatcher());
+            ApplyAppearance();
+            _services.SettingsChanged += (_, _) => ApplyAppearance();
             _mainViewModel = new MainWindowViewModel(_services, FolderArgument(desktop.Args ?? []));
             window.DataContext = _mainViewModel;
             window.Closing += OnMainWindowClosing;
@@ -39,7 +43,25 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    /// <summary><c>--folder &lt;path&gt;</c> opens a session in that folder on startup.</summary>
+    /// <summary>Applies Settings → Appearance: theme and font sizes (DESIGN.md §14).</summary>
+    private void ApplyAppearance()
+    {
+        if (_services is null)
+        {
+            return;
+        }
+        var appearance = _services.Settings.Appearance;
+        RequestedThemeVariant = appearance.Theme switch
+        {
+            ThemeChoice.Light => ThemeVariant.Light,
+            ThemeChoice.Dark => ThemeVariant.Dark,
+            _ => ThemeVariant.Default,
+        };
+        Resources["ConversationFontSize"] = appearance.ConversationFontSize;
+        Resources["CodeFontSize"] = appearance.CodeFontSize;
+    }
+
+    /// <summary><c>--folder &lt;path&gt;</c> opens a tab in that folder on startup (DESIGN.md §4, "Other ways in").</summary>
     private static string? FolderArgument(string[] args)
     {
         var index = Array.IndexOf(args, "--folder");
@@ -63,6 +85,7 @@ public partial class App : Application
             }
             if (_services is not null)
             {
+                await _services.FlushAsync();
                 await _services.DisposeAsync();
             }
         }

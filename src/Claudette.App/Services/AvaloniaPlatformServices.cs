@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 
@@ -31,6 +32,22 @@ public sealed class AvaloniaPlatformServices(Func<TopLevel?> topLevel) : IPlatfo
         if (topLevel() is { } top && Uri.TryCreate(url, UriKind.Absolute, out var uri))
         {
             await top.Launcher.LaunchUriAsync(uri);
+        }
+    }
+
+    public async Task RevealFolderAsync(string path)
+    {
+        if (topLevel() is { } top)
+        {
+            await top.Launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(path));
+        }
+    }
+
+    public async Task SetClipboardTextAsync(string text)
+    {
+        if (topLevel()?.Clipboard is { } clipboard)
+        {
+            await clipboard.SetTextAsync(text);
         }
     }
 }

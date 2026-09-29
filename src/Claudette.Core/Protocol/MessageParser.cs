@@ -89,6 +89,7 @@ public static class MessageParser
                 obj),
             "control_response" => ParseControlResponse(obj),
             "control_cancel_request" => new ControlCancelRequestMessage(obj.GetString("request_id") ?? "", obj),
+            "conversation_reset" => new ConversationResetMessage(obj.GetString("new_conversation_id"), obj.GetString("trigger"), obj),
             _ => new UnknownMessage(type, obj),
         };
     }

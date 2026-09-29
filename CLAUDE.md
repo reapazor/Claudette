@@ -16,15 +16,19 @@ A .NET desktop app that wraps Claude Code in a native GUI: one tab per Claude Co
 - .NET 10, C# with nullable reference types on and warnings treated as errors. Package versions live in `Directory.Packages.props`.
 - Avalonia 12 with MVVM (CommunityToolkit.Mvvm). Markdown is rendered with LiveMarkdown.Avalonia.
 - Layout (§13):
-  - `src/Claudette.Core`: sessions, protocol, sign-in, install checks. Later also updates and the session library.
-  - `src/Claudette.App`: the Avalonia UI.
+  - `src/Claudette.Core`: sessions, protocol, sign-in, install checks, settings and state stores, transcripts, check-in timing. Later also updates and the session library.
+  - `src/Claudette.App`: the Avalonia UI. `ShellViewModel` holds the tab groups; `TabViewModel` is one session; `Conversation/ConversationBuilder` turns session events into conversation items.
   - `src/Claudette.Usage` and `src/Claudette.Platform` are created when the first code for them is written (milestones 5 and 6).
   - `tests/`: `Claudette.Core.Tests` (unit and protocol replay), `Claudette.App.Tests`, `Claudette.IntegrationTests` (real processes).
   - `tools/`: `Claudette.FakeClaude` (the `fake-claude` test double) and `Claudette.MockApi` (a mock Messages API).
   - `compat/`: the compatibility surface list, check script and snapshots (§16).
 - `Claudette.Core` must not reference Avalonia.
 - Development happens on Windows, but the app must also run on macOS and Linux. Keep OS-specific code behind interfaces (in `Claudette.Platform` once it exists).
-- In XAML, use the app's own color tokens from `App.axaml` (`MutedTextBrush`, `DividerBrush` and so on), not Fluent's internal resource names.
+- In XAML:
+  - Use the app's own color tokens from `App.axaml` (`MutedTextBrush`, `DividerBrush` and so on), not Fluent's internal resource names.
+  - Reference `Application.Resources` from `Application.Styles` with `DynamicResource`, because styles load before resources.
+  - Give icon-only buttons an `AutomationProperties.Name`.
+- The visual reference is Claude Code's VS Code extension (§3, "Visual style").
 
 ## Rules that keep the code testable (§15)
 
@@ -86,8 +90,13 @@ Run the app without using tokens by pointing it at the mock API:
 dotnet run --project tools/Claudette.MockApi -- 8787    # in one terminal
 # in another, with these set: ANTHROPIC_BASE_URL=http://127.0.0.1:8787  ANTHROPIC_API_KEY=sk-ant-mock
 #                             CLAUDE_CONFIG_DIR=<a temp folder>         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+#                             CLAUDETTE_HOME=<a temp folder>   (keeps Claudette's settings and saved tabs out of your profile)
 dotnet run --project src/Claudette.App -- --folder <path>
 ```
+
+Stop the app by closing its window, not by killing the process: closing interrupts running turns and stops the `claude` children. A killed app can leave them running until the process monitor's Job Objects arrive (§4).
+
+View model tests use `tests/Claudette.App.Tests/Support/TabTestHarness.cs`: a scripted Claude Code connection, a fake clock and an inline dispatcher.
 
 Prompts the mock understands: `WRITE_FILE <path>`, `EDIT_FILE <path>`, `RUN_BASH <command>`, `SLOW`; anything else gets `pong`.
 

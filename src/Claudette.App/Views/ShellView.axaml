@@ -1,0 +1,195 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             xmlns:views="using:Claudette.App.Views"
+             x:Class="Claudette.App.Views.ShellView"
+             x:DataType="vm:ShellViewModel">
+
+  <UserControl.Resources>
+    <!-- The tab info card (DESIGN.md §4), used as the tab tooltip. -->
+    <DataTemplate x:Key="InfoCard" DataType="vm:TabViewModel">
+      <StackPanel Spacing="4" MaxWidth="480">
+        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+        <ItemsControl ItemsSource="{Binding InfoRows}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="vm:InfoRow">
+              <Grid ColumnDefinitions="72,*">
+                <TextBlock Classes="muted small" Text="{Binding Label}" />
+                <TextBlock Grid.Column="1" Classes="small" Text="{Binding Value}" TextWrapping="Wrap" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <Grid RowDefinitions="Auto,*">
+
+    <!-- Tab strip, grouped by folder (DESIGN.md §4) -->
+    <Border Grid.Row="0" Background="{DynamicResource TabStripBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="8,6">
+      <Grid ColumnDefinitions="*,Auto">
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <ItemsControl ItemsSource="{Binding Groups}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" Spacing="8" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:TabGroupViewModel">
+                  <Border CornerRadius="8" Background="{Binding SoftBrush}" Padding="3">
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                      <!-- Group label: click to collapse; right-click for group actions -->
+                      <Button Classes="flat" ToolTip.Tip="{Binding Summary}"
+                              Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).ToggleGroupCollapsedCommand}"
+                              CommandParameter="{Binding}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <Ellipse Width="8" Height="8" Fill="{Binding Brush}" VerticalAlignment="Center" />
+                          <TextBlock Text="{Binding Label}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                          <TextBlock Classes="status alert" Text="{Binding UrgentGlyph}" IsVisible="{Binding IsCollapsed}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Button.ContextMenu>
+                          <ContextMenu>
+                            <MenuItem Header="New tab here" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewTabInGroupCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="{Binding CollapseMenuText}" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).ToggleGroupCollapsedCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Change color" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CycleGroupColorCommand}" CommandParameter="{Binding}" />
+                            <Separator />
+                            <MenuItem Header="Close group" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CloseGroupCommand}" CommandParameter="{Binding}" />
+                          </ContextMenu>
+                        </Button.ContextMenu>
+                      </Button>
+
+                      <!-- Tabs -->
+                      <ItemsControl ItemsSource="{Binding Tabs}" IsVisible="{Binding IsExpanded}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="2" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="vm:TabViewModel">
+                            <Button Classes="tab" Classes.selected="{Binding IsSelected}"
+                                    Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).SelectCommand}"
+                                    CommandParameter="{Binding}"
+                                    DoubleTapped="OnTabDoubleTapped"
+                                    ToolTip.ShowDelay="600">
+                              <ToolTip.Tip>
+                                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource InfoCard}" />
+                              </ToolTip.Tip>
+                              <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Classes="status" Classes.busy="{Binding IsBusyStatus}" Classes.alert="{Binding IsAlertStatus}"
+                                           Classes.failed="{Binding IsErrorStatus}" Classes.unread="{Binding IsUnread}"
+                                           Text="{Binding StatusGlyph}" ToolTip.Tip="{Binding StatusTip}" VerticalAlignment="Center" />
+                                <Path Data="{StaticResource IconPin}" Fill="{DynamicResource MutedTextBrush}" Width="8" Height="10" Stretch="Uniform"
+                                      IsVisible="{Binding IsPinned}" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding DisplayName}" MaxWidth="220" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                           IsVisible="{Binding !IsRenaming}" />
+                                <TextBox Text="{Binding RenameText}" IsVisible="{Binding IsRenaming}" MinWidth="140" Padding="4,1" MinHeight="0"
+                                         KeyDown="OnRenameKeyDown" LostFocus="OnRenameLostFocus" AttachedToVisualTree="OnRenameAttached" />
+                                <TextBlock Classes="muted small" Text="{Binding ModelBadge}" VerticalAlignment="Center" />
+                                <Button Classes="flat" Padding="3" VerticalAlignment="Center" ToolTip.Tip="Close tab" AutomationProperties.Name="Close tab"
+                                        Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CloseTabCommand}" CommandParameter="{Binding}">
+                                  <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
+                                </Button>
+                              </StackPanel>
+                              <Button.ContextMenu>
+                                <ContextMenu>
+                                  <MenuItem Header="Rename" Command="{Binding StartRenameCommand}" />
+                                  <MenuItem Header="Reset name" Command="{Binding ResetNameCommand}" IsVisible="{Binding HasUserName}" />
+                                  <MenuItem Header="{Binding PinMenuText}" Command="{Binding TogglePinCommand}" />
+                                  <MenuItem Header="Tab settings…" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).OpenTabSettingsCommand}" CommandParameter="{Binding}" />
+                                  <Separator />
+                                  <MenuItem Header="Move left" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MoveTabLeftCommand}" CommandParameter="{Binding}" />
+                                  <MenuItem Header="Move right" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MoveTabRightCommand}" CommandParameter="{Binding}" />
+                                  <Separator />
+                                  <MenuItem Header="Close" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CloseTabCommand}" CommandParameter="{Binding}" />
+                                  <MenuItem Header="Close other tabs" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CloseOtherTabsCommand}" CommandParameter="{Binding}" />
+                                </ContextMenu>
+                              </Button.ContextMenu>
+                            </Button>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+
+                      <Button Classes="flat" Padding="6" ToolTip.Tip="New tab in this folder" AutomationProperties.Name="New tab in this folder" IsVisible="{Binding IsExpanded}"
+                              Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewTabInGroupCommand}" CommandParameter="{Binding}">
+                        <Path Data="{StaticResource IconPlus}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="9" Height="9" Stretch="Uniform" />
+                      </Button>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Button Classes="flat" Padding="8" ToolTip.Tip="New tab (Ctrl/Cmd+T)" AutomationProperties.Name="New tab" Command="{Binding NewTabCommand}" VerticalAlignment="Center">
+              <Path Data="{StaticResource IconPlus}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.6" Width="10" Height="10" Stretch="Uniform" />
+            </Button>
+          </StackPanel>
+        </ScrollViewer>
+
+        <Button Grid.Column="1" Classes="flat" Padding="8" ToolTip.Tip="Settings (Ctrl/Cmd+,)" AutomationProperties.Name="Settings" Command="{Binding OpenSettingsCommand}" VerticalAlignment="Center">
+          <Path Data="{StaticResource IconSettings}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.6" Width="12" Height="12" Stretch="Uniform" />
+        </Button>
+      </Grid>
+    </Border>
+
+    <!-- Tabs: one view per tab, kept alive while hidden -->
+    <ItemsControl Grid.Row="1" ItemsSource="{Binding OpenTabs}">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <Panel />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate DataType="vm:TabViewModel">
+          <views:TabView IsVisible="{Binding IsSelected}" />
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <!-- No tabs -->
+    <StackPanel Grid.Row="1" Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasTabs}">
+      <TextBlock Classes="title" Text="Start a Claude Code session" HorizontalAlignment="Center" />
+      <TextBlock Classes="muted" Text="Pick the folder Claude should work in." HorizontalAlignment="Center" />
+      <Button Classes="accent" Content="New tab…" HorizontalAlignment="Center" Command="{Binding NewTabCommand}" />
+    </StackPanel>
+
+    <!-- New tab picker (DESIGN.md §4, "Opening a tab") -->
+    <Border Grid.Row="0" Grid.RowSpan="2" Classes="overlay" IsVisible="{Binding IsPickerOpen}" PointerPressed="OnOverlayPressed">
+      <ContentControl Content="{Binding Picker}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,70,0,0">
+        <ContentControl.DataTemplates>
+          <DataTemplate DataType="vm:NewTabPickerViewModel">
+            <views:NewTabPickerView />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+    </Border>
+
+    <!-- Tab settings (per-tab overrides) -->
+    <Border Grid.Row="0" Grid.RowSpan="2" Classes="overlay" IsVisible="{Binding HasTabSettings}">
+      <ContentControl Content="{Binding TabSettings}" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <ContentControl.DataTemplates>
+          <DataTemplate DataType="vm:TabSettingsViewModel">
+            <views:TabSettingsView />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+    </Border>
+
+    <!-- Confirmation -->
+    <Border Grid.Row="0" Grid.RowSpan="2" Classes="overlay" IsVisible="{Binding HasConfirmation}">
+      <Border Classes="dialog" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="440" DataContext="{Binding Confirmation}">
+        <StackPanel Spacing="14" x:DataType="vm:ConfirmationViewModel">
+          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="16" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="Cancel" Command="{Binding CancelCommand}" />
+            <Button Classes="accent" Content="{Binding ConfirmText}" Command="{Binding ConfirmCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Border>
+  </Grid>
+</UserControl>

@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Claudette.Core.Sessions;
@@ -10,9 +11,17 @@ namespace Claudette.App.Conversation;
 /// <summary>One row in a tab's conversation (DESIGN.md §5).</summary>
 public abstract class ConversationItem : ObservableObject;
 
-public sealed class UserMessageItem(string text) : ConversationItem
+public sealed class UserMessageItem(string text, string? suffixText = null, bool isCheckIn = false) : ConversationItem
 {
     public string Text { get; } = text;
+
+    /// <summary>Quick suffixes appended to the message, shown in a lighter style (DESIGN.md §5, "Quick suffixes").</summary>
+    public string? SuffixText { get; } = suffixText;
+
+    public bool HasSuffix => !string.IsNullOrEmpty(SuffixText);
+
+    /// <summary>Sent by Claudette as an automatic check-in (DESIGN.md §5, "Check-ins on long turns").</summary>
+    public bool IsCheckIn { get; } = isCheckIn;
 }
 
 /// <summary>Assistant text, streamed in as Markdown.</summary>
@@ -28,17 +37,101 @@ public sealed partial class AssistantTextItem : ConversationItem
     public void Append(string text) => Markdown.Append(text);
 }
 
-/// <summary>A tool call. Milestone 1 shows a one-line summary; milestone 2 adds full cards.</summary>
-public sealed partial class ToolUseItem(string toolUseId, string name, string summary) : ConversationItem
+/// <summary>Claude's thinking, collapsed by default.</summary>
+public sealed partial class ThinkingItem : ConversationItem
 {
-    public string ToolUseId { get; } = toolUseId;
-
-    public string Name { get; } = name;
-
-    public string Summary { get; } = summary;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasText))]
+    public partial string Text { get; set; } = "";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Header))]
+    public partial bool IsStreaming { get; set; } = true;
+
+    [ObservableProperty]
+    public partial bool IsExpanded { get; set; }
+
+    public bool HasText => Text.Length > 0;
+
+    public string Header => IsStreaming ? "Thinking…" : "Thinking";
+
+    [RelayCommand]
+    private void Toggle() => IsExpanded = !IsExpanded;
+}
+
+/// <summary>
+/// A tool call card: icon, name and one-line summary, expandable to the full input and output (DESIGN.md §5).
+/// Edit and Write show a diff; Bash shows its command and output.
+/// </summary>
+public partial class ToolUseItem : ConversationItem
+{
+    public ToolUseItem(string toolUseId, string name, JsonObject input)
+    {
+        ToolUseId = toolUseId;
+        Name = name;
+        Input = input;
+        Summary = Summarize(name, input);
+        Command = name == "Bash" ? Str(input, "command") : null;
+        Detail = DetailText(name, input);
+        if (name == "Edit" && Str(input, "old_string") is { } oldText && Str(input, "new_string") is { } newText)
+        {
+            Diff = DiffView.FromReplacement(oldText, newText);
+        }
+        else if (name == "Write" && Str(input, "content") is { } content)
+        {
+            Diff = DiffView.FromNewFile(content);
+        }
+    }
+
+    public string ToolUseId { get; }
+
+    public string Name { get; }
+
+    public JsonObject Input { get; }
+
+    public string Summary { get; }
+
+    public string Icon => Name switch
+    {
+        "Read" => "▤",
+        "Write" or "Edit" or "NotebookEdit" => "✎",
+        "Bash" => "❯",
+        "Grep" or "Glob" => "⌕",
+        "WebFetch" or "WebSearch" => "◍",
+        "Agent" or "Task" => "◈",
+        "Skill" => "✦",
+        _ => "•",
+    };
+
+    /// <summary>For Bash: the command, shown in full when expanded.</summary>
+    public string? Command { get; }
+
+    public bool IsBash => Command is not null;
+
+    /// <summary>The full input, for tools without a better view.</summary>
+    public string? Detail { get; }
+
+    public bool HasDetail => !string.IsNullOrEmpty(Detail);
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDiff), nameof(DiffStats))]
+    public partial DiffView? Diff { get; set; }
+
+    public bool HasDiff => Diff is { Lines.Count: > 0 };
+
+    public string? DiffStats => Diff?.Stats;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasOutput))]
+    public partial string? Output { get; set; }
+
+    public bool HasOutput => !string.IsNullOrEmpty(Output);
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasResultSummary))]
     public partial string? ResultSummary { get; set; }
+
+    public bool HasResultSummary => !string.IsNullOrEmpty(ResultSummary);
 
     [ObservableProperty]
     public partial bool IsError { get; set; }
@@ -46,19 +139,109 @@ public sealed partial class ToolUseItem(string toolUseId, string name, string su
     [ObservableProperty]
     public partial bool IsComplete { get; set; }
 
-    /// <summary>The most telling input field, such as the file path or command.</summary>
-    public static string Summarize(JsonObject input)
+    [ObservableProperty]
+    public partial bool IsExpanded { get; set; }
+
+    public bool CanExpand => HasDetail || HasDiff || HasOutput || IsBash;
+
+    [RelayCommand]
+    private void Toggle() => IsExpanded = !IsExpanded;
+
+    /// <summary>Fills in the result, using Claude Code's structured <c>tool_use_result</c> where it has one.</summary>
+    public void ApplyResult(string text, bool isError, JsonNode? toolUseResult)
     {
-        foreach (var key in new[] { "file_path", "command", "pattern", "path", "url", "query", "description", "prompt" })
+        IsComplete = true;
+        IsError = isError;
+        if (toolUseResult is JsonObject result)
         {
-            if (input[key] is JsonValue value && value.GetValueKind() == JsonValueKind.String)
+            if (result["structuredPatch"] is JsonArray { Count: > 0 } patch)
             {
-                var text = value.GetValue<string>().ReplaceLineEndings(" ");
-                return text.Length > 120 ? text[..117] + "…" : text;
+                Diff = DiffView.FromStructuredPatch(patch);
+            }
+            else if (Name == "Write" && result["type"]?.GetValue<string>() == "create" && Str(result, "content") is { } content)
+            {
+                Diff = DiffView.FromNewFile(content);
+            }
+            if (Name == "Bash")
+            {
+                var stdout = Str(result, "stdout") ?? "";
+                var stderr = Str(result, "stderr") ?? "";
+                Output = string.Join('\n', new[] { stdout, stderr }.Where(s => s.Length > 0));
+                ResultSummary = result["interrupted"]?.GetValue<bool>() == true ? "Interrupted" : FirstLine(Output) ?? FirstLine(text);
+                OnPropertyChanged(nameof(CanExpand));
+                return;
             }
         }
-        return "";
+        ResultSummary = HasDiff && !isError ? null : FirstLine(text);
+        if (!HasDiff && Name is not ("Read" or "Agent" or "Task"))
+        {
+            Output = text;
+        }
+        OnPropertyChanged(nameof(CanExpand));
     }
+
+    /// <summary>The most telling input field, such as the file path or command.</summary>
+    public static string Summarize(string name, JsonObject input)
+    {
+        var summary = name switch
+        {
+            "Read" when Str(input, "file_path") is { } path && input["offset"] is not null
+                => $"{path} (from line {input["offset"]})",
+            "Grep" when Str(input, "pattern") is { } pattern
+                => Str(input, "path") is { } where ? $"{pattern}  in {where}" : pattern,
+            "Agent" or "Task" => Str(input, "description"),
+            _ => null,
+        };
+        if (summary is null)
+        {
+            foreach (var key in new[] { "file_path", "notebook_path", "command", "pattern", "path", "url", "query", "skill", "description", "prompt" })
+            {
+                if (Str(input, key) is { } value)
+                {
+                    summary = value;
+                    break;
+                }
+            }
+        }
+        summary = (summary ?? "").ReplaceLineEndings(" ");
+        return summary.Length > 140 ? summary[..137] + "…" : summary;
+    }
+
+    private static string? DetailText(string name, JsonObject input) => name switch
+    {
+        "Bash" or "Edit" or "Write" or "Read" => null,
+        "Agent" or "Task" => Str(input, "prompt"),
+        "WebFetch" => Str(input, "prompt") is { } prompt ? $"{Str(input, "url")}\n\n{prompt}" : null,
+        _ => input.Count > 0 ? input.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) : null,
+    };
+
+    protected static string? Str(JsonObject obj, string name) =>
+        obj[name] is JsonValue value && value.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : null;
+
+    private static string? FirstLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+        var line = text.AsSpan().Trim();
+        var end = line.IndexOfAny('\r', '\n');
+        var first = (end >= 0 ? line[..end] : line).ToString();
+        return first.Length > 160 ? first[..157] + "…" : first;
+    }
+}
+
+/// <summary>A subagent: a collapsible group holding that agent's own text and tool calls (DESIGN.md §5).</summary>
+public sealed partial class SubagentItem : ToolUseItem
+{
+    public SubagentItem(string toolUseId, string name, JsonObject input) : base(toolUseId, name, input)
+    {
+        AgentType = Str(input, "subagent_type") ?? "agent";
+    }
+
+    public string AgentType { get; }
+
+    public ObservableCollection<ConversationItem> Items { get; } = [];
 }
 
 public enum PermissionState
@@ -76,7 +259,7 @@ public sealed partial class PermissionItem(PermissionRequest request) : Conversa
 
     public string Title { get; } = $"Allow {request.DisplayName ?? request.ToolName}?";
 
-    public string Detail { get; } = ToolUseItem.Summarize(request.Input) is { Length: > 0 } summary ? summary : request.Description ?? "";
+    public string Detail { get; } = ToolUseItem.Summarize(request.ToolName, request.Input) is { Length: > 0 } summary ? summary : request.Description ?? "";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPending), nameof(Outcome))]
@@ -92,6 +275,9 @@ public sealed partial class PermissionItem(PermissionRequest request) : Conversa
         _ => "",
     };
 
+    /// <summary>Raised when the user answers, so the tab can update its "needs input" status.</summary>
+    public event EventHandler? Answered;
+
     [RelayCommand]
     private void Allow()
     {
@@ -99,6 +285,7 @@ public sealed partial class PermissionItem(PermissionRequest request) : Conversa
         {
             Request.Allow();
             State = PermissionState.Allowed;
+            Answered?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -109,6 +296,7 @@ public sealed partial class PermissionItem(PermissionRequest request) : Conversa
         {
             Request.Deny("The user denied this action.");
             State = PermissionState.Denied;
+            Answered?.Invoke(this, EventArgs.Empty);
         }
     }
 }
@@ -120,14 +308,21 @@ public enum NoteKind
     Error,
 }
 
-/// <summary>A system note: a model change, an error, the process exiting.</summary>
-public sealed class NoteItem(string text, NoteKind kind) : ConversationItem
+/// <summary>A system note: a model change, an error, a retry, the process exiting.</summary>
+public sealed partial class NoteItem(string text, NoteKind kind) : ConversationItem
 {
-    public string Text { get; } = text;
+    [ObservableProperty]
+    public partial string Text { get; set; } = text;
 
     public NoteKind Kind { get; } = kind;
 
     public bool IsError => Kind == NoteKind.Error;
 
     public bool IsWarning => Kind == NoteKind.Warning;
+}
+
+/// <summary>The small footer after each turn: duration, tokens and model (DESIGN.md §5).</summary>
+public sealed class TurnSummaryItem(string text) : ConversationItem
+{
+    public string Text { get; } = text;
 }

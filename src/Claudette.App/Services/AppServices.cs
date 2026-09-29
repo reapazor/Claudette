@@ -3,35 +3,69 @@ using Claudette.Core.Auth;
 using Claudette.Core.Installation;
 using Claudette.Core.Processes;
 using Claudette.Core.Sessions;
+using Claudette.Core.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Claudette.App.Services;
 
 /// <summary>
-/// The app's composition root. Holds the shared services, and the ones that exist once Claude Code has been found.
+/// The app's composition root. Holds the shared services, settings and state, and the services that exist once
+/// Claude Code has been found.
 /// </summary>
-public sealed class AppServices(
-    AppPaths paths,
-    IProcessLauncher launcher,
-    TimeProvider timeProvider,
-    IPlatformServices platform,
-    IUiDispatcher dispatcher,
-    ILoggerFactory? loggerFactory = null) : IAsyncDisposable
+public sealed class AppServices : IAsyncDisposable
 {
+    private static readonly TimeSpan SaveDelay = TimeSpan.FromMilliseconds(400);
+
+    private readonly IProcessLauncher _launcher;
+    private readonly JsonFileStore<AppSettings> _settingsStore;
+    private readonly JsonFileStore<AppState> _stateStore;
+    private readonly Lock _saveLock = new();
+    private CancellationTokenSource? _pendingSettingsSave;
+    private CancellationTokenSource? _pendingStateSave;
     private UtilitySession? _utility;
 
-    public AppPaths Paths { get; } = paths;
+    public AppServices(
+        AppPaths paths,
+        IProcessLauncher launcher,
+        TimeProvider timeProvider,
+        IPlatformServices platform,
+        IUiDispatcher dispatcher,
+        ILoggerFactory? loggerFactory = null)
+    {
+        Paths = paths;
+        _launcher = launcher;
+        Time = timeProvider;
+        Platform = platform;
+        Dispatcher = dispatcher;
+        Loggers = loggerFactory ?? NullLoggerFactory.Instance;
+        Locator = new ClaudeLocator(launcher, timeProvider);
+        _settingsStore = new JsonFileStore<AppSettings>(paths.SettingsFile, Loggers.CreateLogger("Settings"));
+        _stateStore = new JsonFileStore<AppState>(paths.StateFile, Loggers.CreateLogger("State"));
+        Settings = _settingsStore.Load();
+        State = _stateStore.Load();
+    }
 
-    public TimeProvider Time { get; } = timeProvider;
+    public AppPaths Paths { get; }
 
-    public IPlatformServices Platform { get; } = platform;
+    public TimeProvider Time { get; }
 
-    public IUiDispatcher Dispatcher { get; } = dispatcher;
+    public IPlatformServices Platform { get; }
 
-    public ILoggerFactory Loggers { get; } = loggerFactory ?? NullLoggerFactory.Instance;
+    public IUiDispatcher Dispatcher { get; }
 
-    public ClaudeLocator Locator { get; } = new(launcher, timeProvider);
+    public ILoggerFactory Loggers { get; }
+
+    public ClaudeLocator Locator { get; }
+
+    /// <summary>Claudette's settings (DESIGN.md §14). Change them on the UI thread, then call <see cref="SaveSettings"/>.</summary>
+    public AppSettings Settings { get; }
+
+    /// <summary>Saved tabs, recent and favorite folders. Change on the UI thread, then call <see cref="SaveState"/>.</summary>
+    public AppState State { get; }
+
+    /// <summary>Raised on the UI thread after settings change.</summary>
+    public event EventHandler? SettingsChanged;
 
     public ClaudeInstall? Install { get; private set; }
 
@@ -39,11 +73,35 @@ public sealed class AppServices(
 
     public ClaudeAuth? Auth { get; private set; }
 
+    /// <summary>Where Claude Code keeps transcripts, from <c>claude auth status</c> (DESIGN.md §11).</summary>
+    public string? ProjectsDirectory { get; set; }
+
     public void UseInstall(ClaudeInstall install)
     {
         Install = install;
-        Sessions = new ClaudeSessionFactory(install.Path, launcher, Time, Loggers);
-        Auth = new ClaudeAuth(install.Path, launcher, Time);
+        Sessions = new ClaudeSessionFactory(install.Path, _launcher, Time, Loggers);
+        Auth = new ClaudeAuth(install.Path, _launcher, Time);
+    }
+
+    /// <summary>For tests: sessions come from <paramref name="factory"/> instead of a real <c>claude</c>.</summary>
+    internal void UseSessionFactory(IClaudeSessionFactory factory) => Sessions = factory;
+
+    /// <summary>Saves settings shortly, so a burst of changes (typing in a field) writes once.</summary>
+    public void SaveSettings()
+    {
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+        Debounce(ref _pendingSettingsSave, () => JsonFileStore<AppSettings>.Serialize(Settings), _settingsStore);
+    }
+
+    public void SaveState() => Debounce(ref _pendingStateSave, () => JsonFileStore<AppState>.Serialize(State), _stateStore);
+
+    /// <summary>Writes anything still pending, for shutdown.</summary>
+    public async Task FlushAsync()
+    {
+        _pendingSettingsSave?.Cancel();
+        _pendingStateSave?.Cancel();
+        await _settingsStore.SaveAsync(Settings);
+        await _stateStore.SaveAsync(State);
     }
 
     /// <summary>The hidden utility session, started on first use and restarted if it has exited.</summary>
@@ -69,5 +127,49 @@ public sealed class AppServices(
             await _utility.DisposeAsync();
             _utility = null;
         }
+    }
+
+    /// <summary>
+    /// Waits briefly, then serializes on the UI thread (which owns the objects) and writes the file in the background.
+    /// </summary>
+    private void Debounce<T>(ref CancellationTokenSource? pending, Func<string> serialize, JsonFileStore<T> store) where T : class, new()
+    {
+        CancellationTokenSource cts;
+        lock (_saveLock)
+        {
+            pending?.Cancel();
+            cts = new CancellationTokenSource();
+            pending = cts;
+        }
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(SaveDelay, Time, cts.Token);
+                Dispatcher.Post(() =>
+                {
+                    if (cts.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    var json = serialize();
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await store.WriteAsync(json);
+                        }
+                        catch (IOException ex)
+                        {
+                            Loggers.CreateLogger("Save").LogWarning(ex, "Couldn't save {Path}.", store.Path);
+                        }
+                    });
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // Superseded by a newer save.
+            }
+        });
     }
 }

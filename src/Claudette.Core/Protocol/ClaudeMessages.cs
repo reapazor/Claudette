@@ -82,7 +82,12 @@ public sealed record ResultMessage(
     double? TotalCostUsd,
     JsonObject? Usage,
     JsonObject? ModelUsage,
-    JsonObject Raw) : ClaudeMessage("result", Raw);
+    JsonObject Raw) : ClaudeMessage("result", Raw)
+{
+    public double? DurationMs => Raw.GetDouble("duration_ms");
+
+    public int? NumTurns => Raw.GetDouble("num_turns") is { } turns ? (int)turns : null;
+}
 
 public sealed record RateLimitEventMessage(JsonObject Info, JsonObject Raw) : ClaudeMessage("rate_limit_event", Raw);
 
@@ -96,6 +101,9 @@ public sealed record ControlResponseMessage(string RequestId, bool IsSuccess, Js
 
 /// <summary>Claude Code withdrawing a control request it sent earlier.</summary>
 public sealed record ControlCancelRequestMessage(string RequestId, JsonObject Raw) : ClaudeMessage("control_cancel_request", Raw);
+
+/// <summary>The conversation was replaced without ending the session, for example by <c>/clear</c> (DESIGN.md §13).</summary>
+public sealed record ConversationResetMessage(string? NewConversationId, string? Trigger, JsonObject Raw) : ClaudeMessage("conversation_reset", Raw);
 
 /// <summary>A message type Claudette doesn't know yet. Skipped, and counted for diagnostics (DESIGN.md §16).</summary>
 public sealed record UnknownMessage(string MessageType, JsonObject Raw) : ClaudeMessage(MessageType, Raw);

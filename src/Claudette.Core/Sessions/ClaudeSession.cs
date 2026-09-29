@@ -113,6 +113,23 @@ public sealed class ClaudeSession : IAsyncDisposable
         PermissionMode = mode;
     }
 
+    /// <summary>
+    /// Asks Claude Code for an AI-generated session title (DESIGN.md §13, "Session naming"). Headless sessions don't
+    /// get one on their own. One small model call. Undocumented request.
+    /// </summary>
+    public async Task<string?> GenerateSessionTitleAsync(string description, bool persist = true, CancellationToken cancellationToken = default)
+    {
+        var response = await SendControlRequestAsync(
+            new JsonObject { ["subtype"] = "generate_session_title", ["description"] = description, ["persist"] = persist },
+            TimeSpan.FromSeconds(60),
+            cancellationToken).ConfigureAwait(false);
+        return response.GetString("title");
+    }
+
+    /// <summary>Saves a custom session name, so <c>claude --resume &lt;name&gt;</c> finds it. Undocumented request.</summary>
+    public Task RenameSessionAsync(string title, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(new JsonObject { ["subtype"] = "rename_session", ["title"] = title, ["source"] = "host" }, cancellationToken: cancellationToken);
+
     /// <summary>How full the context window is. Claude Code counts tokens with the API's free counting endpoint.</summary>
     public async Task<ContextUsage> GetContextUsageAsync(CancellationToken cancellationToken = default) =>
         ContextUsage.Parse(await SendControlRequestAsync(new JsonObject { ["subtype"] = "get_context_usage" }, cancellationToken: cancellationToken)
@@ -285,6 +302,10 @@ public sealed class ClaudeSession : IAsyncDisposable
                 {
                     Publish(new AuthenticationRequired(auth.Error));
                 }
+                break;
+
+            case ConversationResetMessage reset:
+                Publish(new ConversationReset(reset.Trigger));
                 break;
 
             case UnknownMessage unknown:

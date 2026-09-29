@@ -1,0 +1,151 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Claudette.App.ViewModels"
+        x:Class="Claudette.App.Views.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="Settings"
+        Width="820" Height="600" MinWidth="620" MinHeight="420"
+        WindowStartupLocation="CenterOwner">
+  <Window.Styles>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontSize" Value="18" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+  </Window.Styles>
+
+  <!-- DESIGN.md §14: a sidebar of categories; changes apply immediately. -->
+  <Grid ColumnDefinitions="190,*">
+    <Border Background="{DynamicResource TabStripBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,1,0">
+      <ListBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}" Background="Transparent" Margin="6" />
+    </Border>
+
+    <ScrollViewer Grid.Column="1" Padding="24,20">
+      <StackPanel Spacing="14" MaxWidth="620" HorizontalAlignment="Left">
+
+        <!-- General -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsGeneral}">
+          <TextBlock Classes="section" Text="General" />
+          <CheckBox Content="Confirm before closing a tab where Claude is working" IsChecked="{Binding ConfirmCloseWorkingTab}" />
+          <CheckBox Content="Also rename the session in Claude Code when I rename a tab" IsChecked="{Binding RenameInClaudeCode}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Then claude --resume &lt;name&gt; in a terminal finds the session by the same name." Margin="28,-8,0,0" />
+          <Button Content="Reset to defaults" Command="{Binding ResetGeneralCommand}" />
+        </StackPanel>
+
+        <!-- Claude Code -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsClaudeCode}">
+          <TextBlock Classes="section" Text="Claude Code" />
+          <TextBlock Text="{Binding InstalledText}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding AccountText, StringFormat='Signed in as {0}'}" TextWrapping="Wrap" />
+          <TextBlock Text="Path to claude" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBox Text="{Binding ClaudePath}" PlaceholderText="Found automatically" />
+            <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseClaudePathCommand}" />
+          </Grid>
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Leave empty to find Claude Code automatically. A change takes effect the next time Claudette starts." />
+        </StackPanel>
+
+        <!-- New tabs -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsNewTabs}">
+          <TextBlock Classes="section" Text="New tabs" />
+          <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10">
+            <TextBlock Classes="label" Text="Default model" />
+            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ModelChoices}" SelectedItem="{Binding DefaultModel}" />
+            <TextBlock Grid.Row="1" Classes="label" Text="Default effort" />
+            <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding EffortChoices}" SelectedItem="{Binding DefaultEffort}" />
+            <TextBlock Grid.Row="2" Classes="label" Text="Default permission mode" />
+            <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ModeChoices}" SelectedItem="{Binding DefaultMode}" />
+            <TextBlock Grid.Row="3" Classes="label" Text="Recent folders to keep" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="1" Maximum="100" Increment="1" FormatString="0" Value="{Binding RecentFolderLimit}" />
+          </Grid>
+          <Button Content="Clear recent folders" Command="{Binding ClearRecentFoldersCommand}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Favorites are kept. Manage favorites by right-clicking a folder in the new tab picker." />
+        </StackPanel>
+
+        <!-- Appearance -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsAppearance}">
+          <TextBlock Classes="section" Text="Appearance" />
+          <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+            <TextBlock Classes="label" Text="Theme" />
+            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" />
+            <TextBlock Grid.Row="1" Classes="label" Text="Conversation font size" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="9" Maximum="28" Increment="1" FormatString="0" Value="{Binding ConversationFontSize}" />
+            <TextBlock Grid.Row="2" Classes="label" Text="Code font size" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="8" Maximum="28" Increment="1" FormatString="0" Value="{Binding CodeFontSize}" />
+          </Grid>
+          <CheckBox Content="Show thinking expanded" IsChecked="{Binding ExpandThinking}" />
+        </StackPanel>
+
+        <!-- Sessions -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsSessions}">
+          <TextBlock Classes="section" Text="Sessions" />
+          <CheckBox Content="Also restore unpinned tabs when Claudette starts" IsChecked="{Binding RestoreUnpinnedTabs}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="Pinned tabs are always restored. The session library and syncing between machines come in a later version." />
+        </StackPanel>
+
+        <!-- Check-ins -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsCheckIns}">
+          <TextBlock Classes="section" Text="Check-ins" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="During a long turn, Claudette can ask Claude how it's going, so a stuck tab doesn't burn usage unnoticed. Set a time to 0 to turn that trigger off." />
+          <CheckBox Content="Check in on long turns" IsChecked="{Binding CheckInsEnabled}" />
+          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto" RowSpacing="10" IsEnabled="{Binding CheckInsEnabled}">
+            <TextBlock Classes="label" Text="After the turn has run (minutes)" />
+            <NumericUpDown Grid.Column="1" Minimum="0" Maximum="600" Increment="1" FormatString="0" Value="{Binding CheckInRunTime}" />
+            <TextBlock Grid.Row="1" Classes="label" Text="After no output for (minutes)" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="600" Increment="1" FormatString="0" Value="{Binding CheckInQuietTime}" />
+          </Grid>
+          <TextBlock Text="Message" />
+          <TextBox Text="{Binding CheckInMessage}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70" IsEnabled="{Binding CheckInsEnabled}" />
+          <Button Content="Reset to defaults" Command="{Binding ResetCheckInsCommand}" />
+        </StackPanel>
+
+        <!-- Quick suffixes -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsQuickSuffixes}">
+          <TextBlock Classes="section" Text="Quick suffixes" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Snippets you can add to the end of a message from the Suffixes menu (Ctrl/Cmd+Shift+S). The label shows on the chip; the text is what's sent." />
+          <ItemsControl ItemsSource="{Binding Suffixes}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="10" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:QuickSuffixEditor">
+                <Border BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
+                  <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6" ColumnSpacing="8">
+                    <TextBox Text="{Binding Label}" PlaceholderText="Label" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                      <Button Content="↑" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).MoveSuffixUpCommand}" CommandParameter="{Binding}" />
+                      <Button Content="↓" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).MoveSuffixDownCommand}" CommandParameter="{Binding}" />
+                      <Button Content="Delete" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).RemoveSuffixCommand}" CommandParameter="{Binding}" />
+                    </StackPanel>
+                    <TextBox Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Text}" PlaceholderText="Text added to the message" AcceptsReturn="True" TextWrapping="Wrap" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Classes="accent" Content="Add suffix" Command="{Binding AddSuffixCommand}" />
+            <Button Content="Reset to defaults" Command="{Binding ResetSuffixesCommand}" />
+          </StackPanel>
+        </StackPanel>
+
+        <!-- Advanced -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsAdvanced}">
+          <TextBlock Classes="section" Text="Advanced" />
+          <TextBlock Text="Extra arguments for every claude process" />
+          <TextBox Text="{Binding ExtraArguments}" FontFamily="{StaticResource MonoFont}" PlaceholderText="for example --add-dir ../shared" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Split on spaces and added after Claudette's own arguments. Applies to tabs started after the change." />
+          <Button Content="Open data folder" Command="{Binding OpenDataFolderCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</Window>

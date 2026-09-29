@@ -76,13 +76,26 @@ items:
   - id: "--resume"
     kind: flag
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/WorkspaceViewModel.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.cs
     docs: https://code.claude.com/docs/en/sessions
     test: RealCliTests
   - id: "--no-session-persistence"
     kind: flag
     status: documented
     usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.Core/Sessions/UtilitySession.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: ClaudeEnvironmentTests
+  - id: "--thinking-display"
+    kind: flag
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ClaudeEnvironmentTests
+    fallback: Not in claude --help; the Agent SDKs pass it (ThinkingConfig.display is documented). Without it, newer models send empty thinking blocks and the Thinking row has no text.
+  - id: "--forward-subagent-text"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
     docs: https://code.claude.com/docs/en/cli-reference
     test: ClaudeEnvironmentTests
 
@@ -232,6 +245,61 @@ items:
     usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
     test: ClaudeSessionTests
     fallback: Without it, a withdrawn permission card stays open until the turn ends.
+  - id: "conversation_reset"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: none yet
+  - id: "api_retry"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: none yet
+  - id: "parent_tool_use_id"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
+  - id: "structuredPatch"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.App/Conversation/Diff.cs
+    test: DiffTests
+    fallback: See tool_use_result. Without it, the Edit card shows old_string/new_string as the diff.
+  - id: "Agent"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
+  - id: "TodoWrite"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/TodoList.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
+  - id: "TaskCreate"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/TodoList.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
+  - id: "TaskUpdate"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/TodoList.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
+  - id: "CLAUDE_CODE_ENABLE_TASKS"
+    kind: env
+    status: documented
+    usedIn: src/Claudette.Core/Claude/ClaudeEnvironment.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: CleanEnvironmentTests
+    fallback: Inherited from a parent Claude Code session, it switches the to-do tool from TodoWrite to the Task tools; it's in the session variable list. The to-do list handles both.
 
   # --- Control requests (wire names come from the Agent SDK sources) -----------------------------------
   - id: "control_request"
@@ -320,6 +388,44 @@ items:
     usedIn: src/Claudette.Core/Sessions/UtilitySession.cs
     test: none yet (needs a real sign-in)
     fallback: See claude_authenticate.
+  - id: "generate_session_title"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    test: none yet (one small model call; covered by spikes/scenarios/03)
+    fallback: Name the tab from the first line of the first prompt (DESIGN.md §13, "Session naming").
+  - id: "rename_session"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    test: none yet (covered by spikes/scenarios/03)
+    fallback: Only used when "rename in Claude Code" is on; the name is kept in Claudette either way.
+
+  # --- Transcripts (read when restoring a tab) ----------------------------------------------------------
+  - id: "ai-title"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs
+    test: TranscriptReaderTests
+    fallback: The format is internal to Claude Code. Without titles, a restored tab keeps the name Claudette saved.
+  - id: "custom-title"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs
+    test: TranscriptReaderTests
+    fallback: See ai-title.
+  - id: "toolUseResult"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs
+    test: TranscriptReaderTests
+    fallback: Restored tool cards show the tool result text without diffs.
+  - id: "isSidechain"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs
+    test: TranscriptReaderTests
+    fallback: Restored tabs could show subagent messages at the top level.
 
   # --- Files and behavior ------------------------------------------------------------------------------
   - id: "settings.local.json"
