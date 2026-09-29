@@ -6,6 +6,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Claudette.App.Services;
+using Claudette.App.Themes;
 using Claudette.App.ViewModels;
 using Claudette.App.Views;
 using Claudette.Core;
@@ -30,14 +31,22 @@ public partial class App : Application
     private PlatformChrome? _chrome;
     private WindowPlacementTracker? _placement;
     private bool _shutdownComplete;
+    private MainWindow? _mainWindow;
 
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    /// <summary>Settings → Appearance → Colors (DESIGN.md §3, "Visual style").</summary>
+    internal AppColors Colors { get; private set; } = null!;
+
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+        Colors = new AppColors(this);
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            var window = new MainWindow();
+            var window = _mainWindow = new MainWindow();
             _placement = new WindowPlacementTracker(window);
             var launcher = new ProcessLauncher();
             var trees = TryCreateProcessTracker(launcher);
@@ -169,7 +178,7 @@ public partial class App : Application
 
     private const string DefaultMonoFonts = "Cascadia Mono, Consolas, Menlo, monospace";
 
-    /// <summary>Applies Settings → Appearance: theme, fonts and font sizes (DESIGN.md §14).</summary>
+    /// <summary>Applies Settings → Appearance: theme, colors, fonts and font sizes (DESIGN.md §14).</summary>
     private void ApplyAppearance()
     {
         if (_services is null)
@@ -183,6 +192,8 @@ public partial class App : Application
             ThemeChoice.Dark => ThemeVariant.Dark,
             _ => ThemeVariant.Default,
         };
+        Colors.Apply(appearance.Colors);
+        _mainWindow?.UseMica(appearance.Colors == ColorPalette.System);
         Resources["ConversationFontSize"] = appearance.ConversationFontSize;
         Resources["CodeFontSize"] = appearance.CodeFontSize;
         // A font that isn't installed falls back to the next name in the list.

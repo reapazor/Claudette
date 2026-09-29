@@ -190,9 +190,22 @@ public enum ThemeChoice
     Dark,
 }
 
+/// <summary>Settings → Appearance → Colors (DESIGN.md §3, "Visual style").</summary>
+public enum ColorPalette
+{
+    /// <summary>Neutral greys with the OS's accent color.</summary>
+    System,
+
+    /// <summary>Claude's warm greys and ivory, with its orange as the accent.</summary>
+    Claude,
+}
+
 public sealed class AppearanceSettings
 {
     public ThemeChoice Theme { get; set; } = ThemeChoice.System;
+
+    /// <summary>The colors, in light and dark alike (DESIGN.md §3, "Visual style").</summary>
+    public ColorPalette Colors { get; set; } = ColorPalette.System;
 
     public double ConversationFontSize { get; set; } = 14;
 

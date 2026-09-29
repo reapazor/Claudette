@@ -60,6 +60,18 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Asks for the Mica backdrop on Windows 11, or stops asking. Claude's colors (DESIGN.md §3, "Visual style") are
+    /// solid, so the warm sidebar and header aren't replaced by the desktop showing through.
+    /// </summary>
+    public void UseMica(bool use)
+    {
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+        {
+            TransparencyLevelHint = use ? [WindowTransparencyLevel.Mica] : [];
+        }
+    }
+
+    /// <summary>
     /// The Mica backdrop on Windows 11 (DESIGN.md §2). Only once Windows actually grants it does the window's background
     /// go transparent: the header, sidebar and title bar then show Mica, and the page keeps an opaque background.
     /// </summary>
@@ -69,7 +81,7 @@ public partial class MainWindow : Window
         {
             return;
         }
-        TransparencyLevelHint = [WindowTransparencyLevel.Mica];
+        UseMica(true);
         PropertyChanged += (_, e) =>
         {
             if (e.Property == ActualTransparencyLevelProperty || e.Property == ActualThemeVariantProperty)

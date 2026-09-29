@@ -21,6 +21,7 @@ public class SettingsDefaultsTests
         s.NewTabs.DefaultModel = "opus";
         s.NewTabs.RecentFolderLimit = 5;
         s.Appearance.Theme = ThemeChoice.Dark;
+        s.Appearance.Colors = ColorPalette.Claude;
         s.Appearance.CodeFont = "Fira Code";
         s.Appearance.ShowContextOnTabs = false;
         s.Appearance.Density = Density.Compact;
@@ -48,6 +49,8 @@ public class SettingsDefaultsTests
         Assert.Null(s.NewTabs.DefaultModel);
         Assert.Equal(20, s.NewTabs.RecentFolderLimit);
         Assert.Equal(ThemeChoice.System, s.Appearance.Theme);
+        Assert.Equal(ColorPalette.System, s.Appearance.Colors);
+        Assert.Equal("System accent", settings.Colors.Label);
         Assert.Null(s.Appearance.CodeFont);
         Assert.True(s.Appearance.ShowContextOnTabs);
         Assert.True(settings.ShowContextOnTabs);
@@ -153,5 +156,24 @@ public class SettingsDefaultsTests
 
         Assert.True(tab.HasOverrides);
         Assert.Contains(nameof(TabViewModel.HasOverrides), changed);
+    }
+
+    [Fact]
+    public async Task Colors_offers_System_accent_and_Claude_and_saves_the_choice()
+    {
+        await using var h = new TabTestHarness();
+        var settings = new SettingsViewModel(h.Services, null) { SearchText = "colors" };
+        var changed = 0;
+        h.Services.SettingsChanged += (_, _) => changed++;
+
+        Assert.Equal(["System accent", "Claude"], settings.ColorOptions.Select(o => o.ToString()));
+        Assert.Equal(ColorPalette.System, settings.Colors.Palette);
+        Assert.Contains(settings.SearchResults, r => r is { Category: "Appearance", Label: "Colors" });
+
+        settings.Colors = settings.ColorOptions[1];
+
+        Assert.Equal(ColorPalette.Claude, h.Services.Settings.Appearance.Colors);
+        Assert.Equal("Claude", settings.Colors.Label);
+        Assert.True(changed > 0);
     }
 }

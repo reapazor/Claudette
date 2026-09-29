@@ -1,0 +1,59 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    x:Class="Claudette.App.Themes.ClaudeColors">
+  <!-- Settings → Appearance → Colors → Claude (DESIGN.md §3, "Visual style"): Claude's ivory and warm greys, with its
+       orange as the accent. AppColors copies these over App.axaml's tokens of the same name, and puts them back for
+       System accent. Only surfaces, text and the accent change here; errors, warnings, diffs and the charts' model
+       lines keep App.axaml's colors. The accent is a fixed color, so these use it directly rather than
+       SystemAccentColor. -->
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="MicaPageBrush" Color="#FAF9F5" />
+      <SolidColorBrush x:Key="MicaSidebarBrush" Color="#F0EEE6" />
+      <SolidColorBrush x:Key="MutedTextBrush" Color="#73726C" />
+      <SolidColorBrush x:Key="DividerBrush" Color="#261F1E1D" />
+      <SolidColorBrush x:Key="CardBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToolCardBrush" Color="#F5F4EF" />
+      <SolidColorBrush x:Key="SubtleBrush" Color="#F0EEE6" />
+      <SolidColorBrush x:Key="HoverBrush" Color="#0F1F1E1D" />
+      <SolidColorBrush x:Key="TabSelectedBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="SidebarBrush" Color="#F0EEE6" />
+      <SolidColorBrush x:Key="ComposerBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComposerBorderBrush" Color="#2E1F1E1D" />
+      <SolidColorBrush x:Key="DialogBrush" Color="#FAF9F5" />
+      <!-- A darker orange for text, readable on ivory and white. -->
+      <SolidColorBrush x:Key="AccentStatusBrush" Color="#B5573A" />
+      <SolidColorBrush x:Key="UserBoxBrush" Color="#F0EEE6" />
+      <SolidColorBrush x:Key="UserBoxBorderBrush" Color="#1F1F1E1D" />
+      <SolidColorBrush x:Key="SubagentLineBrush" Color="#331F1E1D" />
+      <SolidColorBrush x:Key="SelectedRowBrush" Color="#D97757" Opacity="0.16" />
+      <SolidColorBrush x:Key="MeterTrackBrush" Color="#1A1F1E1D" />
+      <SolidColorBrush x:Key="MeterBrush" Color="#D97757" />
+      <SolidColorBrush x:Key="ChartSurfaceBrush" Color="#FAF9F5" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="MicaPageBrush" Color="#262624" />
+      <SolidColorBrush x:Key="MicaSidebarBrush" Color="#1F1E1D" />
+      <SolidColorBrush x:Key="MutedTextBrush" Color="#A6A39A" />
+      <SolidColorBrush x:Key="DividerBrush" Color="#2EF5F4EF" />
+      <SolidColorBrush x:Key="CardBrush" Color="#30302E" />
+      <SolidColorBrush x:Key="ToolCardBrush" Color="#2B2B28" />
+      <SolidColorBrush x:Key="SubtleBrush" Color="#1F1E1D" />
+      <SolidColorBrush x:Key="HoverBrush" Color="#14F5F4EF" />
+      <SolidColorBrush x:Key="TabSelectedBrush" Color="#30302E" />
+      <SolidColorBrush x:Key="SidebarBrush" Color="#1F1E1D" />
+      <SolidColorBrush x:Key="ComposerBrush" Color="#30302E" />
+      <SolidColorBrush x:Key="ComposerBorderBrush" Color="#3DF5F4EF" />
+      <SolidColorBrush x:Key="DialogBrush" Color="#2B2B28" />
+      <!-- A lighter orange for text, readable on the dark greys. -->
+      <SolidColorBrush x:Key="AccentStatusBrush" Color="#E9A48D" />
+      <SolidColorBrush x:Key="UserBoxBrush" Color="#1F1E1D" />
+      <SolidColorBrush x:Key="UserBoxBorderBrush" Color="#33F5F4EF" />
+      <SolidColorBrush x:Key="SubagentLineBrush" Color="#40F5F4EF" />
+      <SolidColorBrush x:Key="SelectedRowBrush" Color="#D97757" Opacity="0.24" />
+      <SolidColorBrush x:Key="MeterTrackBrush" Color="#26F5F4EF" />
+      <SolidColorBrush x:Key="MeterBrush" Color="#D97757" />
+      <SolidColorBrush x:Key="ChartSurfaceBrush" Color="#262624" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

@@ -32,6 +32,7 @@ A .NET desktop app that wraps Claude Code in a native GUI: one tab per Claude Co
 - Development happens on Windows, but the app must also run on macOS and Linux. Keep OS-specific code behind interfaces, in `Claudette.Platform`.
 - In XAML:
   - Use the app's own color tokens from `App.axaml` (`MutedTextBrush`, `DividerBrush` and so on), not Fluent's internal resource names.
+  - Claude's colors (Settings → Appearance → Colors) override surface, text and accent tokens from `Themes/ClaudeColors.axaml`, and `Themes/AppColors` gives Fluent a matching palette. A new surface, text or accent token needs a Claude value there too, in light and dark.
   - Reference `Application.Resources` from `Application.Styles` with `DynamicResource`, because styles load before resources.
   - Give icon-only buttons an `AutomationProperties.Name`.
 - The visual reference is Claude Code's VS Code extension (§3, "Visual style").

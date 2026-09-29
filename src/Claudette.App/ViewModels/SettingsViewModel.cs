@@ -18,6 +18,12 @@ public sealed record DiffToolOption(string Kind, string? PresetId, string Label)
 /// <summary>A setting found by the Settings search box (DESIGN.md §14).</summary>
 public sealed record SettingsSearchResult(string Category, string Label);
 
+/// <summary>A Colors choice in Settings → Appearance (DESIGN.md §3, "Visual style").</summary>
+public sealed record ColorsOption(ColorPalette Palette, string Label)
+{
+    public override string ToString() => Label;
+}
+
 /// <summary>A retention option in a dropdown.</summary>
 public sealed record RetentionChoice(RetentionPeriod Period)
 {
@@ -180,6 +186,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("New tabs", "Clear recent folders"),
         new("New tabs", "Favorite folders"),
         new("Appearance", "Theme"),
+        new("Appearance", "Colors"),
         new("Appearance", "Conversation font"),
         new("Appearance", "Conversation font size"),
         new("Appearance", "Code font"),
@@ -448,6 +455,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         get => _settings.Appearance.Theme;
         set => Set(value, v => _settings.Appearance.Theme = v);
+    }
+
+    /// <summary>Settings → Appearance → Colors (DESIGN.md §3, "Visual style"), named as the list shows them.</summary>
+    public IReadOnlyList<ColorsOption> ColorOptions { get; } =
+        [new(ColorPalette.System, "System accent"), new(ColorPalette.Claude, "Claude")];
+
+    public ColorsOption Colors
+    {
+        get => ColorOptions.FirstOrDefault(o => o.Palette == _settings.Appearance.Colors) ?? ColorOptions[0];
+        set => Set(value, v => _settings.Appearance.Colors = v?.Palette ?? ColorPalette.System);
     }
 
     public decimal? ConversationFontSize

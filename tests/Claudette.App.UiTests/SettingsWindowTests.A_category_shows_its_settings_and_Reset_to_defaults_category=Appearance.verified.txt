@@ -1,6 +1,8 @@
 ﻿"Appearance"
 "Theme"
 [choice] "System"
+"Colors"
+[choice] "System accent"
 "Density"
 [choice] "Comfortable"
 "Conversation font"
