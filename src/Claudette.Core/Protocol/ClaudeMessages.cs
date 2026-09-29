@@ -16,7 +16,14 @@ public sealed record SystemInitMessage(
     string? Cwd,
     string? ClaudeCodeVersion,
     IReadOnlyList<string> Capabilities,
-    JsonObject Raw) : ClaudeMessage("system", Raw);
+    JsonObject Raw) : ClaudeMessage("system", Raw)
+{
+    /// <summary>The slash commands the session accepts, without the leading slash (DESIGN.md §5, "Composer").</summary>
+    public IReadOnlyList<string> SlashCommands => Raw.GetStringList("slash_commands");
+
+    /// <summary>The entries of <see cref="SlashCommands"/> bound to the terminal, such as <c>doctor</c>; not offered.</summary>
+    public IReadOnlyList<string> TerminalSlashCommands => Raw.GetStringList("terminal_slash_commands");
+}
 
 /// <summary>Any other <c>system</c> message, such as <c>status</c>, <c>task_started</c> or <c>api_retry</c>.</summary>
 public sealed record SystemMessage(string Subtype, JsonObject Raw) : ClaudeMessage("system", Raw);

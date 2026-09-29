@@ -484,6 +484,74 @@ items:
     test: none yet (covered by spikes/scenarios/03)
     fallback: Only used when "rename in Claude Code" is on; the name is kept in Claudette either way.
 
+  # --- Composer: slash commands, @ mentions and attachments (DESIGN.md §5) --------------------------------
+  - id: "slash_commands"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.Core/Composer/SlashCommandCatalog.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: SlashCommandTests, ComposerTests, RealCliTests
+  - id: "terminal_slash_commands"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.Core/Composer/SlashCommandCatalog.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: SlashCommandTests, ComposerTests
+  - id: "argumentHint"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/InitializeResult.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: SlashCommandTests, RealCliTests
+  - id: "aliases"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/InitializeResult.cs, src/Claudette.Core/Composer/SlashCommandCatalog.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: SlashCommandTests
+  - id: "builtin"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/InitializeResult.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: SlashCommandTests, RealCliTests
+  - id: "commands_changed"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.Composer.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ComposerTests
+  - id: "image content blocks in user messages"
+    kind: behavior
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/OutgoingMessages.cs, src/Claudette.Core/Protocol/MessageImage.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests, AttachmentTests, ComposerTests
+  - id: "Claude Code scales down images it receives"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Core/Composer/Attachment.cs
+    test: RealCliTests
+    fallback: 2.1.284 caps the long edge at 2000 px and re-encodes large images as JPEG, so Claudette sends images as they are, up to 20 MB. If that stops, scale images down in Claudette before sending (at most 2000 px on the long edge and 5 MB base64, the Bedrock and Vertex limit).
+  - id: "@path mentions in prompts"
+    kind: behavior
+    status: documented
+    usedIn: src/Claudette.Core/Composer/ComposerTokens.cs, src/Claudette.Core/Composer/Attachment.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+  - id: "@path mentions are only read in the last content block"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Core/Protocol/OutgoingMessages.cs
+    test: RealCliTests
+    fallback: Claudette puts the text after the images. If mentions next to images stop being read, send the images first in a user message with shouldQuery false (documented; Claude Code holds it and merges it into the next message, checked against 2.1.284), then the text as a plain-text message.
+  - id: "image blocks in transcript user entries"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs
+    test: AttachmentTests, ComposerTests
+    fallback: A restored prompt shows its text without thumbnails.
+
   # --- Transcripts (read when restoring a tab) ----------------------------------------------------------
   - id: "ai-title"
     kind: file

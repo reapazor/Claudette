@@ -8,7 +8,11 @@ namespace Claudette.Core.Transcripts;
 public abstract record TranscriptItem;
 
 /// <summary>Something the user typed.</summary>
-public sealed record TranscriptPrompt(string Text) : TranscriptItem;
+public sealed record TranscriptPrompt(string Text) : TranscriptItem
+{
+    /// <summary>Images attached to the prompt (DESIGN.md §5, "Attachments"), as Claude Code stored them.</summary>
+    public IReadOnlyList<MessageImage> Images { get; init; } = [];
+}
 
 /// <summary>An assistant message, or tool results, in the same form as the live stream.</summary>
 public sealed record TranscriptMessage(ClaudeMessage Message) : TranscriptItem;
@@ -131,14 +135,25 @@ public static class TranscriptReader
             return;
         }
         var joined = string.Join("\n", blocks.OfType<JsonObject>().Where(b => b.GetString("type") == "text").Select(b => b.GetString("text")));
-        if (joined.Length > 0)
+        // Attached images are stored inline, as base64 image blocks.
+        var images = blocks.OfType<JsonObject>()
+            .Where(b => b.GetString("type") == "image" && b.GetObject("source")?.GetString("type") == "base64")
+            .Select(b => MessageImage.FromBase64(b.GetObject("source")!.GetString("media_type"), b.GetObject("source")!.GetString("data")))
+            .OfType<MessageImage>()
+            .ToArray();
+        if (joined.Length > 0 || images.Length > 0)
         {
-            AddText(joined, items);
+            AddText(joined, items, images);
         }
     }
 
-    private static void AddText(string text, List<TranscriptItem> items)
+    private static void AddText(string text, List<TranscriptItem> items, IReadOnlyList<MessageImage>? images = null)
     {
+        if (images is { Count: > 0 } && text.Trim().Length == 0)
+        {
+            items.Add(new TranscriptPrompt("") { Images = images });
+            return;
+        }
         var trimmed = text.Trim();
         if (trimmed.StartsWith(LocalCommandStart, StringComparison.Ordinal))
         {
@@ -160,7 +175,7 @@ public static class TranscriptReader
         {
             return;
         }
-        items.Add(new TranscriptPrompt(StripReminders(text)));
+        items.Add(new TranscriptPrompt(StripReminders(text)) { Images = images ?? [] });
     }
 
     /// <summary>Claude Code prepends <c>&lt;system-reminder&gt;</c> blocks to some prompts; they aren't what the user typed.</summary>

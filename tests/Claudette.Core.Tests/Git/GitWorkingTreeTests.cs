@@ -1,7 +1,7 @@
-using System.Collections;
 using Claudette.Core.Diffs;
 using Claudette.Core.Git;
 using Claudette.Core.Processes;
+using Claudette.Core.Tests.Support;
 
 namespace Claudette.Core.Tests.Git;
 
@@ -231,34 +231,5 @@ public sealed class GitWorkingTreeTests : IDisposable
         var result = await ProcessRunner.RunAsync(
             _launcher, new ProcessStartSpec("git", arguments) { WorkingDirectory = _repo }, TimeSpan.FromSeconds(30), TimeProvider.System, Token);
         Assert.True(result.ExitCode == 0, $"git {string.Join(' ', arguments)} failed: {result.StandardError}");
-    }
-
-    /// <summary>
-    /// Starts git with no global or system config, no inherited <c>GIT_*</c> variables, and no looking for a repository
-    /// above the test's folder.
-    /// </summary>
-    private sealed class IsolatedGitLauncher : IProcessLauncher
-    {
-        private readonly ProcessLauncher _inner = new();
-        private readonly Dictionary<string, string> _environment;
-
-        public IsolatedGitLauncher(string root)
-        {
-            var globalConfig = Path.Combine(root, "empty.gitconfig");
-            File.WriteAllText(globalConfig, "");
-            _environment = new Dictionary<string, string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-            foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
-            {
-                if (entry.Key is string key && entry.Value is string value && !key.StartsWith("GIT_", StringComparison.OrdinalIgnoreCase))
-                {
-                    _environment[key] = value;
-                }
-            }
-            _environment["GIT_CONFIG_GLOBAL"] = globalConfig;
-            _environment["GIT_CONFIG_NOSYSTEM"] = "1";
-            _environment["GIT_CEILING_DIRECTORIES"] = root;
-        }
-
-        public IRunningProcess Start(ProcessStartSpec spec) => _inner.Start(spec with { Environment = _environment });
     }
 }
