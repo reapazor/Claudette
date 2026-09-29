@@ -5,6 +5,7 @@ using Claudette.Core.Installation;
 using Claudette.Core.Processes;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
+using Claudette.Platform.Notifications;
 using Claudette.Platform.Processes;
 using Claudette.Usage;
 using Microsoft.Extensions.Logging;
@@ -33,6 +34,7 @@ public sealed class AppServices : IAsyncDisposable
     /// Tracks each <c>claude</c> process and everything it starts (DESIGN.md §4, "Process monitor"); the launcher must
     /// be the matching <see cref="Claudette.Platform.Processes.TrackingProcessLauncher"/>. Null in tests.
     /// </param>
+    /// <param name="notifier">Shows OS notifications (DESIGN.md §10). Null shows none.</param>
     public AppServices(
         AppPaths paths,
         IProcessLauncher launcher,
@@ -40,7 +42,8 @@ public sealed class AppServices : IAsyncDisposable
         IPlatformServices platform,
         IUiDispatcher dispatcher,
         ILoggerFactory? loggerFactory = null,
-        IProcessTreeTracker? processTrees = null)
+        IProcessTreeTracker? processTrees = null,
+        INotifier? notifier = null)
     {
         Paths = paths;
         _launcher = launcher;
@@ -56,13 +59,18 @@ public sealed class AppServices : IAsyncDisposable
         State = _stateStore.Load();
         Git = new GitWorkingTree(launcher, timeProvider);
         Library = new LibraryService(this);
+        Notifications = new NotificationService(this, notifier ?? NullNotifier.Instance);
         UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time);
         SettingsChanged += (_, _) =>
         {
             Library.OnSettingsChanged();
             ClaudeUpdates?.OnSettingsChanged();
+            Notifications.OnSettingsChanged();
         };
     }
+
+    /// <summary>OS notifications and the Dock/taskbar badge (DESIGN.md §10).</summary>
+    public NotificationService Notifications { get; }
 
     /// <summary>Makes the updater for a <c>claude</c> path (DESIGN.md §12). Tests replace it.</summary>
     internal Func<string, IClaudeUpdater> UpdaterFactory { get; set; }
@@ -231,6 +239,7 @@ public sealed class AppServices : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         Library.Dispose();
+        Notifications.Dispose();
         if (ClaudeUpdates is not null)
         {
             await ClaudeUpdates.DisposeAsync();

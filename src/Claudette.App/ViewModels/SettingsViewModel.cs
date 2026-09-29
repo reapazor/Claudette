@@ -62,7 +62,7 @@ public sealed partial class QuickSuffixEditor(QuickSuffix suffix, Action changed
 public sealed partial class SettingsViewModel : ViewModelBase
 {
     public static readonly IReadOnlyList<string> AllCategories =
-        ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Advanced"];
+        ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Notifications", "Advanced"];
 
     private readonly AppServices _services;
     private readonly AppSettings _settings;
@@ -84,8 +84,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsGeneral), nameof(IsClaudeCode), nameof(IsNewTabs), nameof(IsAppearance), nameof(IsSessions), nameof(IsCheckIns), nameof(IsQuickSuffixes), nameof(IsAdvanced))]
-    [NotifyPropertyChangedFor(nameof(IsUsage), nameof(IsProcesses), nameof(IsDiffTool))]
+    [NotifyPropertyChangedFor(nameof(IsUsage), nameof(IsProcesses), nameof(IsDiffTool), nameof(IsNotifications))]
     public partial string SelectedCategory { get; set; }
+
+    public bool IsNotifications => SelectedCategory == "Notifications";
 
     public bool IsUsage => SelectedCategory == "Usage";
 
@@ -626,6 +628,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
         set => Set(value, v => _settings.CheckIns.Message = string.IsNullOrWhiteSpace(v) ? CheckInSettings.DefaultMessage : v);
     }
 
+    public bool NotifyOnCheckIn
+    {
+        get => _settings.CheckIns.Notify;
+        set => Set(value, v => _settings.CheckIns.Notify = v);
+    }
+
     [RelayCommand]
     private void ResetCheckIns()
     {
@@ -635,6 +643,68 @@ public sealed partial class SettingsViewModel : ViewModelBase
         OnPropertyChanged(nameof(CheckInRunTime));
         OnPropertyChanged(nameof(CheckInQuietTime));
         OnPropertyChanged(nameof(CheckInMessage));
+        OnPropertyChanged(nameof(NotifyOnCheckIn));
+    }
+
+    // ---- Notifications (DESIGN.md §10) ------------------------------------------------------------------------------
+
+    /// <summary>False when this machine can't show OS notifications, for example a macOS build run outside its app bundle.</summary>
+    public bool NotificationsAvailable => _services.Notifications.IsAvailable;
+
+    public bool NotifyTurnFinished
+    {
+        get => _settings.Notifications.TurnFinished;
+        set => Set(value, v => _settings.Notifications.TurnFinished = v);
+    }
+
+    public bool NotifyNeedsInput
+    {
+        get => _settings.Notifications.NeedsInput;
+        set => Set(value, v => _settings.Notifications.NeedsInput = v);
+    }
+
+    public bool NotifyProcessErrors
+    {
+        get => _settings.Notifications.ProcessErrors;
+        set => Set(value, v => _settings.Notifications.ProcessErrors = v);
+    }
+
+    public bool NotifyUsageAlerts
+    {
+        get => _settings.Notifications.UsageAlerts;
+        set => Set(value, v => _settings.Notifications.UsageAlerts = v);
+    }
+
+    public bool NotifySignIn
+    {
+        get => _settings.Notifications.SignIn;
+        set => Set(value, v => _settings.Notifications.SignIn = v);
+    }
+
+    public bool NotifyUpdateReady
+    {
+        get => _settings.Notifications.UpdateReady;
+        set => Set(value, v => _settings.Notifications.UpdateReady = v);
+    }
+
+    public bool ShowBadge
+    {
+        get => _settings.Notifications.Badge;
+        set => Set(value, v => _settings.Notifications.Badge = v);
+    }
+
+    [RelayCommand]
+    private void ResetNotifications()
+    {
+        _settings.Notifications = new NotificationSettings();
+        Save();
+        OnPropertyChanged(nameof(NotifyTurnFinished));
+        OnPropertyChanged(nameof(NotifyNeedsInput));
+        OnPropertyChanged(nameof(NotifyProcessErrors));
+        OnPropertyChanged(nameof(NotifyUsageAlerts));
+        OnPropertyChanged(nameof(NotifySignIn));
+        OnPropertyChanged(nameof(NotifyUpdateReady));
+        OnPropertyChanged(nameof(ShowBadge));
     }
 
     // ---- Quick suffixes ------------------------------------------------------------------------------------------

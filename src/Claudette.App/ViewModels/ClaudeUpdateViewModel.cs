@@ -18,6 +18,7 @@ public sealed partial class ClaudeUpdateViewModel : ViewModelBase, IDisposable
     private readonly Func<IReadOnlyCollection<Version>> _runningVersions;
     private readonly StringBuilder _output = new();
     private Version? _dismissed;
+    private Version? _notified;
 
     public ClaudeUpdateViewModel(AppServices services, ClaudeUpdateService updates, Func<IReadOnlyCollection<Version>> runningVersions)
     {
@@ -173,7 +174,20 @@ public sealed partial class ClaudeUpdateViewModel : ViewModelBase, IDisposable
             ResultText = result.Message;
         }
         OnPropertyChanged(nameof(HasBadge));
+        if (ReadyVersion is { } readyVersion && readyVersion != _notified && readyVersion != _dismissed)
+        {
+            // Once per version (DESIGN.md §10).
+            _notified = readyVersion;
+            _services.Notifications.Notify(NotificationKind.UpdateReady, BadgeText, IsReadyInstalled
+                ? "New tabs use it. Open tabs keep their version until you close them."
+                : $"Update it from Claudette: {Plan?.Method ?? "your package manager"} has it.");
+        }
     }
+
+    /// <summary>Asks the header to open the update dialog, for a clicked notification.</summary>
+    public event Action? OpenRequested;
+
+    public void RequestOpen() => OpenRequested?.Invoke();
 
     [RelayCommand(CanExecute = nameof(CanRunUpdate))]
     private async Task UpdateNowAsync()

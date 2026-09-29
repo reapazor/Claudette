@@ -37,7 +37,11 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
 
     public AppServices Services => services;
 
-    public Task StartAsync() => CheckInstallAsync(services.Settings.ClaudeCode.ClaudePath);
+    public Task StartAsync()
+    {
+        services.Notifications.Activated += OnNotificationActivated;
+        return CheckInstallAsync(services.Settings.ClaudeCode.ClaudePath);
+    }
 
     private async Task CheckInstallAsync(string? path)
     {
@@ -123,6 +127,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
             return;
         }
 
+        services.Notifications.Clear(NotificationKind.SignIn);
         services.ProjectsDirectory = status.ProjectsDirectory
             ?? (status.ConfigDirectory is { } config ? Path.Combine(config, "projects") : null);
         AccountText = string.Join(" · ", new[] { status.Email, PlanName(status.SubscriptionType) }.Where(s => !string.IsNullOrEmpty(s)));
@@ -186,6 +191,38 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         if (CurrentPage is not SignInViewModel)
         {
             CurrentPage = new SignInViewModel(services, CheckSignInAsync);
+            // DESIGN.md §11: if Claudette isn't in front, an OS notification too.
+            services.Notifications.Notify(NotificationKind.SignIn, "Claude Code needs you to sign in", "Your tabs are paused until you sign in again.");
+        }
+    }
+
+    /// <summary>Asks the window to come to the front, for a clicked notification.</summary>
+    public event Action? BringToFrontRequested;
+
+    /// <summary>
+    /// A notification was clicked (DESIGN.md §10): bring Claudette to the front and go to the tab or screen it was
+    /// about.
+    /// </summary>
+    internal void OnNotificationActivated(NotificationTarget target)
+    {
+        BringToFrontRequested?.Invoke();
+        switch (target.Kind)
+        {
+            case NotificationKind.UsageAlert:
+                Usage?.OpenPanelCommand.Execute(null);
+                break;
+            case NotificationKind.UpdateReady:
+                Updates?.RequestOpen();
+                break;
+            case NotificationKind.SignIn:
+                // The sign-in screen is already showing.
+                break;
+            default:
+                if (target.TabId is { } tabId && CurrentPage == _shell)
+                {
+                    _shell?.SelectTab(tabId);
+                }
+                break;
         }
     }
 
@@ -199,6 +236,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
 
     public async ValueTask DisposeAsync()
     {
+        services.Notifications.Activated -= OnNotificationActivated;
         Usage?.Dispose();
         Updates?.Dispose();
         if (_shell is not null)

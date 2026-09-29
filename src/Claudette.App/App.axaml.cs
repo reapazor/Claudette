@@ -9,6 +9,7 @@ using Claudette.App.Views;
 using Claudette.Core;
 using Claudette.Core.Processes;
 using Claudette.Core.Settings;
+using Claudette.Platform.Notifications;
 using Claudette.Platform.Processes;
 
 namespace Claudette.App;
@@ -34,7 +35,12 @@ public partial class App : Application
                 TimeProvider.System,
                 new AvaloniaPlatformServices(() => TopLevel.GetTopLevel(window)),
                 new AvaloniaUiDispatcher(),
-                processTrees: trees);
+                processTrees: trees,
+                notifier: Notifier.CreateForCurrentOS(launcher));
+            var services = _services;
+            // The Dock or taskbar badge needs the window's native handle, so it's set up once the window exists.
+            window.Opened += (_, _) => services.Notifications.UseBadge(
+                Notifier.CreateBadgeForCurrentOS(() => window.TryGetPlatformHandle()?.Handle ?? 0, BadgeIcon.Render));
             ApplyAppearance();
             _services.SettingsChanged += (_, _) => ApplyAppearance();
             _mainViewModel = new MainWindowViewModel(_services, FolderArgument(desktop.Args ?? []));

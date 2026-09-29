@@ -703,6 +703,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         _conversation.AddUserMessage(message, isCheckIn: true);
         _ = SendRawAsync(message);
+        NotifyCheckIn();
     });
 
     // ---- Lifecycle -----------------------------------------------------------------------------------------
@@ -800,6 +801,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             Status = TabStatus.Error;
             _conversation.AddNote($"Couldn't start Claude Code: {ex.Message}", NoteKind.Error);
+            NotifyProcessError($"Couldn't start Claude Code: {ex.Message}");
         }
     }
 
@@ -957,6 +959,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     _checkIns.SetWaitingOnUser(true);
                     WatchPermission(requested.Request);
                     UpdateStatus();
+                    NotifyNeedsInput(requested.Request);
                     break;
                 case PermissionCancelled:
                     PermissionResolved();
@@ -987,6 +990,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     {
                         Status = TabStatus.Unread;
                     }
+                    if (!completed.Result.IsError)
+                    {
+                        NotifyTurnFinished(completed.Result);
+                    }
                     break;
                 case ConversationReset:
                     TodoList.Clear();
@@ -1006,6 +1013,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     _pendingPermissions = 0;
                     Status = exited.Exit.ExitCode == 0 ? TabStatus.Exited : TabStatus.Error;
                     OnPropertyChanged(nameof(CanRestart));
+                    _services.Notifications.ClearTab(Id, NotificationKind.NeedsInput);
+                    if (exited.Exit.ExitCode != 0)
+                    {
+                        NotifyProcessError($"Claude Code stopped unexpectedly (exit code {exited.Exit.ExitCode}).");
+                    }
                     break;
             }
         }
@@ -1026,6 +1038,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         if (_pendingPermissions == 0)
         {
             _checkIns.SetWaitingOnUser(false);
+            _services.Notifications.ClearTab(Id, NotificationKind.NeedsInput);
         }
         UpdateStatus();
     }
@@ -1161,6 +1174,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     public async ValueTask CloseAsync(bool killProcesses)
     {
         _checkIns.Dispose();
+        _services.Notifications.ClearTab(Id);
         ReleaseLease();
         await StopSessionAsync(killProcesses);
         CleanUpDiffFiles();

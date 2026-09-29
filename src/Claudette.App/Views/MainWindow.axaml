@@ -102,7 +102,7 @@
 
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <!-- "Claude Code 2.1.290 is ready" (DESIGN.md §12, "Applying it"): small and non-blocking -->
-          <Button Classes="update" DataContext="{Binding Updates}" x:DataType="vm:ClaudeUpdateViewModel"
+          <Button x:Name="UpdateBadge" Classes="update" DataContext="{Binding Updates}" x:DataType="vm:ClaudeUpdateViewModel"
                   IsVisible="{Binding HasBadge, FallbackValue=False}" Content="{Binding BadgeText}"
                   ToolTip.Tip="What's new, and how to update" AutomationProperties.Name="Claude Code update">
             <Button.Flyout>

@@ -312,7 +312,7 @@ An OS notification (optional) when:
 - The projection says you'll hit the limit before it resets.
 - A limit resets.
 
-Each alert fires once per window. The first reading after a restart doesn't alert for levels that were already crossed. Until OS notifications arrive (milestone 7), the alert shows as a dismissible line under the header.
+Each alert fires once per window. The first reading after a restart doesn't alert for levels that were already crossed. The alert also shows as a dismissible line under the header, and the OS notification is skipped while Claudette is in front ([§10](#10-notifications)).
 
 ### Data source
 
@@ -397,7 +397,7 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
   - Before saving, the card shows the exact rule, and the user can edit it to make it broader or narrower.
 - When Claude Code suggests a mode switch instead of a rule (for a file edit it suggests `acceptEdits` for the session), the card offers **Allow all edits this session** in place of **Always allow**.
 - When Claude Code marks a request `suppressAlwaysAllowRule` (the rule would grant more than this request), **Always allow** isn't offered.
-- A tab with a waiting prompt gets the "Needs input" status. If Claudette isn't focused or the tab isn't selected, it also sends an OS notification (milestone 7).
+- A tab with a waiting prompt gets the "Needs input" status. If Claudette isn't focused or the tab isn't selected, it also sends an OS notification ([§10](#10-notifications)).
 - Keyboard: `Ctrl/Cmd+Enter` allows, `Ctrl/Cmd+Backspace` denies the oldest waiting prompt in the tab.
   - Not while typing in one of the prompt's own fields, and `Ctrl/Cmd+Backspace` still deletes a word in a field with text.
   - A request Claude Code marks `defaultToNo` can't be allowed from the keyboard.
@@ -577,6 +577,24 @@ Native OS notifications (Windows toast, macOS User Notifications). Each type can
 
 Clicking a notification brings Claudette to the front and goes to the relevant tab or screen. Notifications are skipped when Claudette is focused and that tab is already selected. The Dock (macOS) and taskbar (Windows) show a badge with the number of tabs needing input.
 
+- **What each one says.** Tab notifications carry the tab's name as their title:
+  - **Finished:** the first line of Claude's reply. Only a turn that ends normally counts; one you stopped, or that ended with an error, doesn't.
+  - **Needs input:** what's waiting, such as *"Allow this command? npm test"*, *"Claude has a question: Which database?"* or *"Claude has a plan for you to review."*
+  - **Errors:** *"Claude Code stopped unexpectedly (exit code 3)."*, or why it couldn't start.
+  - **Check-ins:** Settings → Check-ins → **Notify me when a check-in is sent** (off by default), which Tab settings can override ([§5](#check-ins-on-long-turns)).
+- **Skipping.** App-wide notifications (usage alerts, sign-in, updates) are skipped while Claudette is focused, because the header or the sign-in screen already shows them. Usage alerts also keep their line under the header.
+- **One per subject.** A newer notification replaces an older one of the same kind for the same tab. A tab's notifications are taken away once you look at it; a waiting-prompt notification also goes once the prompt is answered. An update is announced once per version.
+- **Clicking.**
+  - A tab notification selects the tab, expanding its group if it's collapsed.
+  - A usage alert opens the Usage panel, and an update opens the update dialog.
+- **Badge.** Settings → Notifications → **Show the number of tabs needing input on the Dock or taskbar icon**. On Windows it's an overlay icon on the taskbar button, drawn by Claudette.
+- **How each OS does it** (the code is in `Claudette.Platform/Notifications`):
+  - **Windows:** WinRT toasts (`ToastNotificationManager`), called through source-generated COM interop so the app stays a plain `net10.0` build. A click raises the toast's `Activated` event in the running Claudette. An MSIX install has package identity. Run unpackaged, Claudette sets its AppUserModelID (`MatthewDavey.Claudette`) and registers it under `HKCU\Software\Classes\AppUserModelId`, as the Windows App SDK does. The badge uses `ITaskbarList3::SetOverlayIcon`.
+  - **macOS:** `UNUserNotificationCenter` through the Objective-C runtime, with a delegate that reports clicks and lets notifications show while Claudette is in front. It needs the app bundle's identifier, so a build run with `dotnet run` has no notifications and Settings says so. The badge is the Dock tile's `badgeLabel`.
+  - **Linux:** `notify-send --wait` with a default action, which reports a click. Without `notify-send`, there are no notifications.
+
+> **Not yet tested on a real machine:** showing and clicking notifications on Windows and macOS, and the badges. CI builds a real toast through WinRT on Windows (without showing it), and checks the Objective-C string calls on macOS.
+
 ## 11. Sign-in
 
 Claude Code keeps its own credentials. Claudette never reads or stores them; it only detects when Claude Code needs a sign-in and runs Claude Code's own sign-in flow.
@@ -707,7 +725,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 
 - **Claudette.Core** has no UI dependencies, so it can be unit tested and could be reused by another front end. External diff tools live here rather than in Platform: they only look for files and start processes through `IProcessLauncher`.
 - **Claudette.Usage** holds the usage engine, with no UI: parsing, the SQLite history, the burn rate and projection, alerts and the polling schedule.
-- **Claudette.Platform** holds the OS-specific process monitor. Notifications, the Dock and taskbar, and window chrome join it in milestone 7.
+- **Claudette.Platform** holds the OS-specific code: the process monitor, and notifications with the Dock and taskbar badge ([§10](#10-notifications)).
   - `ClaudeSession` owns one `claude` process. It turns the output stream into typed events (`AssistantDelta`, `ToolUse`, `ToolResult`, `PermissionRequest`, `TurnCompleted`, `TitleChanged`, `UsageUpdated`, `RateLimit`, `AuthRequired`, `Exited`…), and exposes commands such as `SendAsync`, `InterruptAsync`, `RespondToPermissionAsync`, `SetModelAsync`, `SetEffortAsync` and `SetPermissionModeAsync`.
 - **Threading.** Each session reads its process on a background task. Events go to the UI thread through a channel, and streaming text is batched so the UI isn't updated for every token.
 - **Resilience.** If a process exits unexpectedly, the tab shows an error with a **Restart** button that resumes the same session ID.
@@ -861,7 +879,7 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
   - A newer synced change is applied here.
   - When both changed, the newer one wins.
   - Equal values are never a conflict.
-- Keyboard shortcuts and notification settings sync once they exist (milestone 7).
+- Notification settings sync. Keyboard shortcuts sync once they can be rebound.
 
 ## 15. Testing
 

@@ -20,7 +20,7 @@ public sealed class LibraryService : IDisposable
     private static readonly TimeSpan SettleDelay = TimeSpan.FromSeconds(1);
 
     /// <summary>What syncs (DESIGN.md §14). The path to claude, the machine name, the library folder, the diff tool, folders and tabs stay per machine.</summary>
-    private static readonly string[] SyncedSettings = ["appearance", "newTabs", "usage", "checkIns", "quickSuffixes", "processes"];
+    private static readonly string[] SyncedSettings = ["appearance", "newTabs", "usage", "checkIns", "quickSuffixes", "processes", "notifications"];
 
     private readonly AppServices _services;
     private readonly ILogger _logger;

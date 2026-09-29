@@ -61,10 +61,13 @@ internal sealed class FakeLauncher : IProcessLauncher
 
     public List<FakeRunningProcess> Started { get; } = [];
 
+    public List<ProcessStartSpec> Specs { get; } = [];
+
     public IRunningProcess Start(ProcessStartSpec spec)
     {
         var process = new FakeRunningProcess(Interlocked.Increment(ref _nextId));
         Started.Add(process);
+        Specs.Add(spec);
         return process;
     }
 }
@@ -84,7 +87,9 @@ internal sealed class FakeRunningProcess(int id) : IRunningProcess
 
     public ChannelReader<string> StandardError => _stderr.Reader;
 
-    public Task<int> Exited { get; } = new TaskCompletionSource<int>().Task;
+    private readonly TaskCompletionSource<int> _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public Task<int> Exited => _exited.Task;
 
     public ValueTask WriteLineAsync(string line, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
 
@@ -93,6 +98,18 @@ internal sealed class FakeRunningProcess(int id) : IRunningProcess
     }
 
     public void Kill() => KillCalls++;
+
+    public void WriteOutput(string line) => _stdout.Writer.TryWrite(line);
+
+    public void WriteError(string line) => _stderr.Writer.TryWrite(line);
+
+    /// <summary>Closes both streams and exits with <paramref name="exitCode"/>.</summary>
+    public void Exit(int exitCode)
+    {
+        _stdout.Writer.TryComplete();
+        _stderr.Writer.TryComplete();
+        _exited.TrySetResult(exitCode);
+    }
 
     public ValueTask DisposeAsync()
     {

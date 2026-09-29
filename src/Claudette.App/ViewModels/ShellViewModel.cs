@@ -21,6 +21,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     {
         _services = services;
         _onAuthenticationRequired = onAuthenticationRequired;
+        _services.Notifications.SelectedTabId = () => SelectedTab?.Id;
         _services.SettingsChanged += (_, _) =>
         {
             foreach (var tab in AllTabs)
@@ -77,6 +78,24 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     internal void OnRunningVersionsChanged() => RunningVersionsChanged?.Invoke();
 
+    /// <summary>A tab's status changed: the Dock/taskbar badge counts tabs needing input (DESIGN.md §10).</summary>
+    internal void OnTabStatusChanged() => _services.Notifications.SetTabsNeedingInput(AllTabs.Count(t => t.NeedsInput));
+
+    /// <summary>Selects a tab by id, for a clicked notification. False when it has closed since.</summary>
+    public bool SelectTab(string tabId)
+    {
+        if (AllTabs.FirstOrDefault(t => t.Id == tabId) is not { } tab)
+        {
+            return false;
+        }
+        if (Groups.FirstOrDefault(g => g.Tabs.Contains(tab)) is { IsCollapsed: true } group)
+        {
+            ToggleGroupCollapsed(group);
+        }
+        SelectedTab = tab;
+        return true;
+    }
+
     [ObservableProperty]
     public partial TabViewModel? SelectedTab { get; set; }
 
@@ -89,6 +108,11 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         if (newValue is not null)
         {
             newValue.IsSelected = true;
+            if (_services.Notifications.IsAppActive)
+            {
+                // Looked at now: its notifications are no longer news (DESIGN.md §10).
+                _services.Notifications.ClearTab(newValue.Id);
+            }
         }
         _services.State.SelectedTabId = newValue?.Id;
         _services.SaveState();
@@ -472,6 +496,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             SelectedTab = remaining.Count == 0 ? null : remaining[Math.Clamp(index, 0, remaining.Count - 1)];
         }
         SaveTabs();
+        OnTabStatusChanged();
         await tab.CloseAsync(killProcesses);
     }
 

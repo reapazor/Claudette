@@ -46,6 +46,7 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
         RunTimeMinutes = checkIns.RunTimeMinutes;
         QuietTimeMinutes = checkIns.QuietTimeMinutes;
         CheckInMessage = checkIns.Message;
+        NotifyOnCheckIn = checkIns.Notify;
     }
 
     public string Title => $"Settings for \"{_tab.DisplayName}\"";
@@ -80,6 +81,9 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
     [ObservableProperty]
     public partial string CheckInMessage { get; set; }
 
+    [ObservableProperty]
+    public partial bool NotifyOnCheckIn { get; set; }
+
     [RelayCommand]
     private async Task ApplyAsync()
     {
@@ -96,6 +100,7 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
                     RunTimeMinutes = (int)(RunTimeMinutes ?? 0),
                     QuietTimeMinutes = (int)(QuietTimeMinutes ?? 0),
                     Message = string.IsNullOrWhiteSpace(CheckInMessage) ? CheckInSettings.DefaultMessage : CheckInMessage,
+                    Notify = NotifyOnCheckIn,
                 }
                 : null,
         };

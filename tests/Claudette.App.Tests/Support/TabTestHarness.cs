@@ -252,7 +252,8 @@ internal sealed class TabTestHarness : IAsyncDisposable
         Directory.CreateDirectory(Path.Combine(_root, "work"));
         Directory.CreateDirectory(ProjectsDirectory);
         Trees = new FakeProcessTreeTracker(Time);
-        Services = new AppServices(AppPaths.Under(_root), new ProcessLauncher(), Time, Platform, new InlineDispatcher(), processTrees: Trees);
+        Services = new AppServices(AppPaths.Under(_root), new ProcessLauncher(), Time, Platform, new InlineDispatcher(), processTrees: Trees, notifier: Notifier);
+        Services.Notifications.UseBadge(Notifier);
         configure?.Invoke(Services.Settings);
         if (updater is not null)
         {
@@ -268,6 +269,8 @@ internal sealed class TabTestHarness : IAsyncDisposable
     public FakeProcessTreeTracker Trees { get; }
 
     public NoPlatform Platform { get; } = new();
+
+    public FakeNotifier Notifier { get; } = new();
 
     /// <summary>Stands in for Claude Code's <c>projects</c> folder.</summary>
     public string ProjectsDirectory => Path.Combine(_root, "projects");
