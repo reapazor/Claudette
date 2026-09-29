@@ -114,7 +114,8 @@ The visual reference is Claude Code's own Visual Studio Code extension:
   - Each group has a label with the folder name and a color. The color is picked automatically and can be changed. If two folders have the same name, the label adds the parent folder (`work/api`, `personal/api`).
   - Hovering the label shows the full path. The group's `+` opens a new tab in the same folder.
   - A group can be collapsed to just its label. A collapsed group still shows the most urgent status of its tabs, such as "needs input".
-  - Tabs can be dragged to reorder them within their group, and groups can be dragged to reorder them. A tab can't be dragged into another group, because its folder is fixed.
+  - Tabs can be dragged to reorder them within their group, and groups can be dragged (by their label) to reorder them. A tab can't be dragged into another group, because its folder is fixed, and pinned tabs stay ahead of the others.
+    - A dragged tab is selected, and the strip rearranges as soon as the pointer passes the middle of a neighbor. **Move left** and **Move right** in the tab menu do the same from the keyboard or mouse.
   - A group with a single tab still gets a label, so the strip always looks the same.
 - Closing a tab that is working asks for confirmation, then stops the process. Right-clicking a group label gives **Close group**.
 - **Pinned tabs** come back every time Claudette launches, resuming their sessions.
@@ -851,8 +852,22 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
 | Diff tool | Built-in, a preset or a custom command, with **Test**. See [§8](#external-diff-tool). |
 | Notifications | On/off for each type in [§10](#10-notifications). Dock/taskbar badge on/off. |
-| Keyboard | List of shortcuts, each one rebindable. |
+| Keyboard | List of shortcuts, each one rebindable ([below](#keyboard-shortcuts)). |
 | Advanced | Protocol logging and **Open log folder**. **Diagnostics** page ([§16](#staying-tolerant-at-runtime)). Extra command-line arguments passed to `claude`. Minimum supported Claude Code version (read-only). |
+
+### Keyboard shortcuts
+
+Settings → Keyboard lists every shortcut Claudette handles, with its default from the section that describes it: new tab, close tab, next and previous tab, go to tab 1–9, History, Settings, Stop, the quick suffixes menu, and allowing or denying the waiting prompt.
+
+- **Rebinding.** Click a shortcut and press the new keys; Esc cancels. **Reset** puts one back, **Remove** clears it, and **Reset to defaults** restores them all.
+- **One key for both OSes.** Shortcuts are stored with a *Primary* modifier: Ctrl on Windows and Linux, Cmd on macOS. That way a shortcut synced between a Windows machine and a Mac means the same thing on both. Ctrl is its own modifier only on macOS; elsewhere it is Primary.
+- **Refused shortcuts.** A shortcut already used by another command or a quick suffix is refused, and the row names the conflict. So is a letter, digit or punctuation key without Ctrl, Alt or Cmd, since it would get in the way of typing. Escape, Tab, Enter, Backspace, Delete and function keys are allowed on their own.
+- **Go to tab 1–9** is one shortcut for all nine digits; rebinding it takes any digit and keeps its modifiers.
+- **Fixed keys**, listed on the page but not rebindable: Enter sends and Shift+Enter starts a new line; in the new tab picker and the quick suffixes menu, 1–9 pick an entry.
+- **Quick suffixes** each get their own optional shortcut in Settings → Quick suffixes ([§5](#quick-suffixes)), checked for conflicts the same way.
+- Tooltips and the composer's placeholder show the current shortcuts.
+
+**Search.** The box above the categories filters settings by name: it lists matching settings with their category, and picking one opens that category.
 
 ### Per-tab overrides
 

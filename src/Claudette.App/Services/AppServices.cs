@@ -60,14 +60,19 @@ public sealed class AppServices : IAsyncDisposable
         Git = new GitWorkingTree(launcher, timeProvider);
         Library = new LibraryService(this);
         Notifications = new NotificationService(this, notifier ?? NullNotifier.Instance);
+        Tips = new ShortcutTips(Settings);
         UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time);
         SettingsChanged += (_, _) =>
         {
             Library.OnSettingsChanged();
             ClaudeUpdates?.OnSettingsChanged();
             Notifications.OnSettingsChanged();
+            Tips.Refresh();
         };
     }
+
+    /// <summary>Tooltips naming the current keyboard shortcuts (DESIGN.md §14, "Keyboard").</summary>
+    public ShortcutTips Tips { get; }
 
     /// <summary>OS notifications and the Dock/taskbar badge (DESIGN.md §10).</summary>
     public NotificationService Notifications { get; }

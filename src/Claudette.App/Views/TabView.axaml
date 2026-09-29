@@ -186,7 +186,7 @@
           <TextBlock Classes="muted small" Text="{Binding Reason}" TextWrapping="Wrap" IsVisible="{Binding HasReason}" />
 
           <WrapPanel ItemSpacing="8" LineSpacing="6" IsVisible="{Binding IsPending}">
-            <Button Classes="accent" Content="Allow" Command="{Binding AllowCommand}" ToolTip.Tip="Ctrl/Cmd+Enter" />
+            <Button Classes="accent" Content="Allow" Command="{Binding AllowCommand}" ToolTip.Tip="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).Tips.Allow}" />
             <SplitButton Content="Always allow…" Command="{Binding StartAlwaysAllowCommand}" IsVisible="{Binding CanAlwaysAllow}"
                          ToolTip.Tip="Save an allow rule to this folder's .claude/settings.local.json">
               <SplitButton.Flyout>
@@ -196,7 +196,7 @@
               </SplitButton.Flyout>
             </SplitButton>
             <Button Content="{Binding ModeAction}" Command="{Binding AllowWithModeCommand}" IsVisible="{Binding HasModeAction}" />
-            <Button Content="Deny" Command="{Binding DenyCommand}" ToolTip.Tip="Ctrl/Cmd+Backspace" />
+            <Button Content="Deny" Command="{Binding DenyCommand}" ToolTip.Tip="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).Tips.Deny}" />
             <Button Classes="flat" Content="Deny with a message…" Command="{Binding StartDenyWithMessageCommand}" VerticalAlignment="Center" />
           </WrapPanel>
 
@@ -274,8 +274,8 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
           <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsPending}">
-            <Button Classes="accent" Content="Send answers" Command="{Binding SubmitCommand}" ToolTip.Tip="Ctrl/Cmd+Enter" />
-            <Button Content="Dismiss" Command="{Binding DismissCommand}" ToolTip.Tip="Ctrl/Cmd+Backspace" />
+            <Button Classes="accent" Content="Send answers" Command="{Binding SubmitCommand}" ToolTip.Tip="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).Tips.Allow}" />
+            <Button Content="Dismiss" Command="{Binding DismissCommand}" ToolTip.Tip="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).Tips.Deny}" />
           </StackPanel>
           <TextBlock Classes="muted small" Text="{Binding Outcome}" TextWrapping="Wrap" IsVisible="{Binding HasOutcome}" />
         </StackPanel>
@@ -293,7 +293,7 @@
           <WrapPanel ItemSpacing="8" LineSpacing="6" IsVisible="{Binding IsPending}">
             <Button Classes="accent" Content="Approve, accept edits" Command="{Binding ApproveAcceptingEditsCommand}"
                     ToolTip.Tip="Start working, and edit files without asking" />
-            <Button Content="Approve, ask before edits" Command="{Binding ApproveAskingForEditsCommand}" ToolTip.Tip="Ctrl/Cmd+Enter" />
+            <Button Content="Approve, ask before edits" Command="{Binding ApproveAskingForEditsCommand}" ToolTip.Tip="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).Tips.Allow}" />
             <Button Content="Keep planning…" Command="{Binding StartFeedbackCommand}" />
           </WrapPanel>
           <StackPanel Spacing="6" IsVisible="{Binding IsWritingFeedback}">
@@ -543,28 +543,33 @@
         <Grid RowDefinitions="Auto,Auto">
           <TextBox x:Name="Composer" Text="{Binding ComposerText}" AcceptsReturn="True" TextWrapping="Wrap"
                    MinHeight="40" MaxHeight="240" Padding="2,6"
-                   PlaceholderText="Message Claude…  (Enter to send, Shift+Enter for a new line, Esc to stop)" />
+                   PlaceholderText="{Binding Tips.ComposerPlaceholder}" />
 
           <!-- Control bar -->
           <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto">
             <StackPanel Orientation="Horizontal" Spacing="2">
-              <Button x:Name="SuffixButton" Classes="flat" ToolTip.Tip="Quick suffixes (Ctrl/Cmd+Shift+S)">
+              <Button x:Name="SuffixButton" Classes="flat" ToolTip.Tip="{Binding Tips.Suffixes}">
                 <TextBlock Classes="muted small" Text="Suffixes ▾" />
                 <Button.Flyout>
-                  <Flyout Placement="TopEdgeAlignedLeft">
-                    <StackPanel MinWidth="260" Spacing="2">
-                      <ItemsControl ItemsSource="{Binding AvailableSuffixes}">
+                  <Flyout Placement="TopEdgeAlignedLeft" Opened="OnSuffixMenuOpened">
+                    <!-- 1–9 pick the first nine (DESIGN.md §5) -->
+                    <StackPanel x:Name="SuffixMenu" MinWidth="280" Spacing="2" KeyDown="OnSuffixMenuKeyDown">
+                      <ItemsControl ItemsSource="{Binding SuffixMenu}">
                         <ItemsControl.ItemTemplate>
-                          <DataTemplate DataType="settings:QuickSuffix">
-                            <Button Classes="flat row" ToolTip.Tip="{Binding Text}" Click="OnSuffixPicked"
-                                    Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).AddSuffixCommand}" CommandParameter="{Binding}">
-                              <TextBlock Text="{Binding Label}" />
+                          <DataTemplate DataType="vm:SuffixMenuItem">
+                            <Button Classes="flat row" ToolTip.Tip="{Binding Suffix.Text}" Click="OnSuffixPicked" HorizontalContentAlignment="Stretch"
+                                    Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).AddSuffixCommand}" CommandParameter="{Binding Suffix}">
+                              <Grid ColumnDefinitions="18,*,Auto" ColumnSpacing="6">
+                                <TextBlock Classes="muted small" Text="{Binding Number}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{Binding Suffix.Label}" />
+                                <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding Shortcut}" VerticalAlignment="Center" />
+                              </Grid>
                             </Button>
                           </DataTemplate>
                         </ItemsControl.ItemTemplate>
                       </ItemsControl>
                       <Separator Margin="0,4" />
-                      <TextBlock Classes="muted small" Text="Edit suffixes in Settings → Quick suffixes" Margin="6,0,6,4" />
+                      <Button Classes="flat row" Content="Edit suffixes…" Click="OnFlyoutItemPicked" Command="{Binding EditSuffixesCommand}" />
                     </StackPanel>
                   </Flyout>
                 </Button.Flyout>

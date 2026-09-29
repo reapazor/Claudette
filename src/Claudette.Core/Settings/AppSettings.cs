@@ -32,6 +32,8 @@ public sealed class AppSettings
 
     public NotificationSettings Notifications { get; set; } = new();
 
+    public KeyboardSettings Keyboard { get; set; } = new();
+
     public AdvancedSettings Advanced { get; set; } = new();
 }
 
@@ -233,6 +235,9 @@ public sealed class QuickSuffix
     public string Label { get; set; } = "";
 
     public string Text { get; set; } = "";
+
+    /// <summary>Adds this suffix straight from the keyboard, as a <see cref="KeyChord"/> such as <c>Primary+Alt+1</c>.</summary>
+    public string? Shortcut { get; set; }
 
     public static List<QuickSuffix> Defaults() =>
     [

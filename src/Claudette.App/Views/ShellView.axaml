@@ -31,7 +31,8 @@
       <Grid ColumnDefinitions="*,Auto">
         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
           <StackPanel Orientation="Horizontal" Spacing="8">
-            <ItemsControl ItemsSource="{Binding Groups}">
+            <!-- Drag a tab to reorder it in its group, or a group label to move the group (DESIGN.md §4) -->
+            <ItemsControl x:Name="GroupStrip" ItemsSource="{Binding Groups}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <StackPanel Orientation="Horizontal" Spacing="8" />
@@ -42,7 +43,7 @@
                   <Border CornerRadius="8" Background="{Binding SoftBrush}" Padding="3">
                     <StackPanel Orientation="Horizontal" Spacing="2">
                       <!-- Group label: click to collapse; right-click for group actions -->
-                      <Button Classes="flat" ToolTip.Tip="{Binding Summary}"
+                      <Button Classes="flat grouplabel" ToolTip.Tip="{Binding Summary}"
                               Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).ToggleGroupCollapsedCommand}"
                               CommandParameter="{Binding}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
@@ -125,13 +126,13 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <Button Classes="flat" Padding="8" ToolTip.Tip="New tab (Ctrl/Cmd+T)" AutomationProperties.Name="New tab" Command="{Binding NewTabCommand}" VerticalAlignment="Center">
+            <Button Classes="flat" Padding="8" ToolTip.Tip="{Binding Tips.NewTab}" AutomationProperties.Name="New tab" Command="{Binding NewTabCommand}" VerticalAlignment="Center">
               <Path Data="{StaticResource IconPlus}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.6" Width="10" Height="10" Stretch="Uniform" />
             </Button>
           </StackPanel>
         </ScrollViewer>
 
-        <Button Grid.Column="1" Classes="flat" Padding="8" ToolTip.Tip="Settings (Ctrl/Cmd+,)" AutomationProperties.Name="Settings" Command="{Binding OpenSettingsCommand}" VerticalAlignment="Center">
+        <Button Grid.Column="1" Classes="flat" Padding="8" ToolTip.Tip="{Binding Tips.Settings}" AutomationProperties.Name="Settings" Command="{Binding OpenSettingsCommand}" VerticalAlignment="Center">
           <Path Data="{StaticResource IconSettings}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.6" Width="12" Height="12" Stretch="Uniform" />
         </Button>
       </Grid>

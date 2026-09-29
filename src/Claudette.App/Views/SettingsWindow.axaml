@@ -21,7 +21,34 @@
   <!-- DESIGN.md §14: a sidebar of categories; changes apply immediately. -->
   <Grid ColumnDefinitions="190,*">
     <Border Background="{DynamicResource TabStripBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,1,0">
-      <ListBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}" Background="Transparent" Margin="6" />
+      <DockPanel>
+        <!-- DESIGN.md §14: a search box filters settings by name -->
+        <TextBox DockPanel.Dock="Top" Margin="8,8,8,2" Text="{Binding SearchText}" PlaceholderText="Search settings"
+                 AutomationProperties.Name="Search settings" />
+        <Panel>
+          <ListBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}" Background="Transparent" Margin="6"
+                   IsVisible="{Binding !IsSearching}" />
+          <ListBox ItemsSource="{Binding SearchResults}" SelectedItem="{Binding SelectedSearchResult}" Background="Transparent" Margin="6"
+                   IsVisible="{Binding IsSearching}">
+            <ListBox.ItemTemplate>
+              <DataTemplate DataType="vm:SettingsSearchResult">
+                <StackPanel>
+                  <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
+                  <TextBlock Classes="muted small" Text="{Binding Category}" />
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <TextBlock Classes="muted small" Text="No settings match." Margin="14,10" TextWrapping="Wrap" VerticalAlignment="Top">
+            <TextBlock.IsVisible>
+              <MultiBinding Converter="{x:Static BoolConverters.And}">
+                <Binding Path="IsSearching" />
+                <Binding Path="!SearchResults.Count" />
+              </MultiBinding>
+            </TextBlock.IsVisible>
+          </TextBlock>
+        </Panel>
+      </DockPanel>
     </Border>
 
     <ScrollViewer Grid.Column="1" Padding="24,20">
@@ -274,7 +301,7 @@
         <StackPanel Spacing="12" IsVisible="{Binding IsQuickSuffixes}">
           <TextBlock Classes="section" Text="Quick suffixes" />
           <TextBlock Classes="muted small" TextWrapping="Wrap"
-                     Text="Snippets you can add to the end of a message from the Suffixes menu (Ctrl/Cmd+Shift+S). The label shows on the chip; the text is what's sent." />
+                     Text="{Binding SuffixesShortcutText, StringFormat='Snippets you can add to the end of a message from the Suffixes menu ({0}), or with their own shortcut. The label shows on the chip, and the text is sent.'}" />
           <ItemsControl ItemsSource="{Binding Suffixes}">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
@@ -284,7 +311,7 @@
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="vm:QuickSuffixEditor">
                 <Border BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
-                  <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6" ColumnSpacing="8">
+                  <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
                     <TextBox Text="{Binding Label}" PlaceholderText="Label" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
                       <Button Content="↑" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).MoveSuffixUpCommand}" CommandParameter="{Binding}" />
@@ -292,6 +319,15 @@
                       <Button Content="Delete" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).RemoveSuffixCommand}" CommandParameter="{Binding}" />
                     </StackPanel>
                     <TextBox Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Text}" PlaceholderText="Text added to the message" AcceptsReturn="True" TextWrapping="Wrap" />
+                    <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
+                      <TextBlock Classes="small" Text="Shortcut" VerticalAlignment="Center" />
+                      <Button Content="{Binding ShortcutText}" FontFamily="{StaticResource MonoFont}" MinWidth="150" HorizontalContentAlignment="Left"
+                              Classes.accent="{Binding IsRecording}" ToolTip.Tip="Click, then press the keys that add this suffix"
+                              Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).StartRecordingCommand}" CommandParameter="{Binding}" />
+                      <Button Classes="flat" Content="Remove" IsVisible="{Binding HasShortcut}"
+                              Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).ClearShortcutCommand}" CommandParameter="{Binding}" />
+                      <TextBlock Classes="small error" Text="{Binding Error}" IsVisible="{Binding HasError}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                    </StackPanel>
                   </Grid>
                 </Border>
               </DataTemplate>
@@ -320,6 +356,41 @@
           <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Check-in notifications are in Check-ins." />
           <CheckBox Content="Show the number of tabs needing input on the Dock or taskbar icon" IsChecked="{Binding ShowBadge}" Margin="0,8,0,0" />
           <Button Content="Reset to defaults" Command="{Binding ResetNotificationsCommand}" />
+        </StackPanel>
+
+        <!-- Keyboard (DESIGN.md §14) -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsKeyboard}">
+          <TextBlock Classes="section" Text="Keyboard" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Click a shortcut, then press the keys you want. Esc cancels. Quick suffix shortcuts are set in Quick suffixes." />
+          <ItemsControl ItemsSource="{Binding ShortcutRows}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="6" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:ShortcutRow">
+                <StackPanel Spacing="2">
+                  <Grid ColumnDefinitions="220,190,Auto,Auto" ColumnSpacing="8">
+                    <TextBlock Classes="label" Text="{Binding Label}" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Content="{Binding ShortcutText}"
+                            FontFamily="{StaticResource MonoFont}" Classes.accent="{Binding IsRecording}"
+                            Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).StartRecordingCommand}" CommandParameter="{Binding}"
+                            ToolTip.Tip="Click, then press the new shortcut" />
+                    <Button Grid.Column="2" Classes="flat" Content="Reset" IsVisible="{Binding IsCustomized}"
+                            Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).ResetShortcutCommand}" CommandParameter="{Binding}" />
+                    <Button Grid.Column="3" Classes="flat" Content="Remove" IsVisible="{Binding Shortcut, Converter={x:Static ObjectConverters.IsNotNull}}"
+                            Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).ClearShortcutCommand}" CommandParameter="{Binding}" />
+                  </Grid>
+                  <TextBlock Classes="small error" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" Margin="228,0,0,0" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="In the message box, Enter sends and Shift+Enter starts a new line. In the new tab picker, 1–9 pick a folder; in the quick suffixes menu, 1–9 pick a suffix." />
+          <Button Content="Reset to defaults" Command="{Binding ResetKeyboardCommand}" />
         </StackPanel>
 
         <!-- Advanced -->

@@ -38,6 +38,11 @@ public sealed partial class SuffixChip(QuickSuffix suffix, bool isKept) : Observ
     public string Label => IsKept ? $"{Suffix.Label} (kept)" : Suffix.Label;
 }
 
+/// <summary>An entry of the quick suffix menu (DESIGN.md §5).</summary>
+/// <param name="Number">1–9 for the first nine, which those keys pick while the menu is open.</param>
+/// <param name="Shortcut">The suffix's own shortcut, as it reads on this OS.</param>
+public sealed record SuffixMenuItem(QuickSuffix Suffix, int? Number, string? Shortcut);
+
 /// <summary>One row of the tab info card (DESIGN.md §4).</summary>
 public sealed record InfoRow(string Label, string Value);
 
@@ -580,6 +585,32 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     public IReadOnlyList<QuickSuffix> AvailableSuffixes => _services.Settings.QuickSuffixes;
 
+    /// <summary>The suffix menu: numbered 1–9 for picking from the keyboard, with each suffix's own shortcut (DESIGN.md §5).</summary>
+    public IReadOnlyList<SuffixMenuItem> SuffixMenu => AvailableSuffixes
+        .Select((suffix, index) => new SuffixMenuItem(suffix, index < 9 ? index + 1 : null,
+            KeyChord.TryParse(suffix.Shortcut, out var chord) ? chord.Display(Shortcuts.IsMac) : null))
+        .ToArray();
+
+    /// <summary>Picks the <paramref name="number"/>th suffix (1–9) in the menu.</summary>
+    public bool PickSuffix(int number)
+    {
+        if (number < 1 || number > Math.Min(9, AvailableSuffixes.Count))
+        {
+            return false;
+        }
+        AddSuffix(AvailableSuffixes[number - 1]);
+        return true;
+    }
+
+    /// <summary><b>Edit suffixes…</b> in the suffix menu opens Settings → Quick suffixes.</summary>
+    [RelayCommand]
+    private Task EditSuffixesAsync() => _shell.OpenSettingsAtAsync("Quick suffixes");
+
+    /// <summary>Settings → Keyboard, for the tab's own shortcuts (Stop, the suffix menu, answering prompts).</summary>
+    public KeyboardSettings Keyboard => _services.Settings.Keyboard;
+
+    public ShortcutTips Tips => _services.Tips;
+
     [RelayCommand]
     private void AddSuffix(QuickSuffix? suffix)
     {
@@ -617,6 +648,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     public void OnSettingsChanged()
     {
         OnPropertyChanged(nameof(AvailableSuffixes));
+        OnPropertyChanged(nameof(SuffixMenu));
         _conversation.ExpandThinking = _services.Settings.Appearance.ExpandThinking;
         UpdateSampler();
     }

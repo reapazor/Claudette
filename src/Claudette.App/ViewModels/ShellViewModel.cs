@@ -70,6 +70,14 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     public bool HasTabs => Groups.Count > 0;
 
+    /// <summary>Settings → Keyboard, for the window's shortcuts.</summary>
+    public KeyboardSettings Keyboard => _services.Settings.Keyboard;
+
+    /// <summary>Quick suffixes, some of which have their own shortcuts (DESIGN.md §5).</summary>
+    public IReadOnlyList<QuickSuffix> QuickSuffixes => _services.Settings.QuickSuffixes;
+
+    public ShortcutTips Tips => _services.Tips;
+
     /// <summary>The Claude Code version each running tab uses (DESIGN.md §12).</summary>
     public IReadOnlyCollection<Version> RunningVersions => AllTabs.Select(t => t.RunningVersion).OfType<Version>().ToArray();
 
@@ -137,7 +145,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     public bool HasTabSettings => TabSettings is not null;
 
     /// <summary>Set by the view: opens the Settings window.</summary>
-    public Func<Task>? ShowSettingsWindow { get; set; }
+    /// <remarks>The argument is the category to open at, or null for the first.</remarks>
+    public Func<string?, Task>? ShowSettingsWindow { get; set; }
 
     /// <summary>
     /// Brings back saved tabs (DESIGN.md §9, "Restore on launch"): pinned tabs always, the others only when
@@ -591,6 +600,43 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         SaveTabs();
     }
 
+    /// <summary>
+    /// Dragging a tab (DESIGN.md §4): moves it to <paramref name="index"/> within its own group. Pinned tabs stay ahead
+    /// of the others, so a tab only moves among tabs with the same pinned state. Returns whether it moved.
+    /// </summary>
+    public bool MoveTabTo(TabViewModel tab, int index)
+    {
+        if (Groups.FirstOrDefault(g => g.Tabs.Contains(tab)) is not { } group)
+        {
+            return false;
+        }
+        var pinned = group.Tabs.Count(t => t.IsPinned);
+        var (first, last) = tab.IsPinned ? (0, pinned - 1) : (pinned, group.Tabs.Count - 1);
+        var from = group.Tabs.IndexOf(tab);
+        var to = Math.Clamp(index, first, last);
+        if (to == from)
+        {
+            return false;
+        }
+        group.Tabs.Move(from, to);
+        SaveTabs();
+        return true;
+    }
+
+    /// <summary>Dragging a group label (DESIGN.md §4): moves the whole group. Returns whether it moved.</summary>
+    public bool MoveGroupTo(TabGroupViewModel group, int index)
+    {
+        var from = Groups.IndexOf(group);
+        var to = Math.Clamp(index, 0, Groups.Count - 1);
+        if (from < 0 || to == from)
+        {
+            return false;
+        }
+        Groups.Move(from, to);
+        SaveTabs();
+        return true;
+    }
+
     /// <summary>Called when a tab is pinned or unpinned: pinned tabs move to the start of their group.</summary>
     internal void OnPinChanged(TabViewModel tab)
     {
@@ -610,7 +656,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     // ---- Settings -------------------------------------------------------------------------------------------
 
     [RelayCommand]
-    private Task OpenSettingsAsync() => ShowSettingsWindow?.Invoke() ?? Task.CompletedTask;
+    private Task OpenSettingsAsync() => ShowSettingsWindow?.Invoke(null) ?? Task.CompletedTask;
+
+    /// <summary>Opens Settings at a category, for example Quick suffixes from the suffix menu's <b>Edit suffixes…</b>.</summary>
+    internal Task OpenSettingsAtAsync(string category) => ShowSettingsWindow?.Invoke(category) ?? Task.CompletedTask;
 
     [RelayCommand]
     private void OpenTabSettings(TabViewModel? tab)

@@ -7,7 +7,9 @@ using Avalonia.Styling;
 using Avalonia.VisualTree;
 using Claudette.App.Conversation;
 using Claudette.App.Diffs;
+using Claudette.App.Services;
 using Claudette.App.ViewModels;
+using Claudette.Core.Settings;
 
 namespace Claudette.App.Views;
 
@@ -34,13 +36,12 @@ public partial class TabView : UserControl
         {
             return;
         }
-        if (e.Key == Key.Escape && tab.StopCommand.CanExecute(null))
+        if (Shortcuts.Matches(tab.Keyboard, KeyboardShortcuts.Stop, e.Key, e.KeyModifiers) && tab.StopCommand.CanExecute(null))
         {
             tab.StopCommand.Execute(null);
             e.Handled = true;
         }
-        var command = this.GetPlatformSettings()?.HotkeyConfiguration.CommandModifiers ?? KeyModifiers.Control;
-        if (e.Key == Key.S && e.KeyModifiers == (command | KeyModifiers.Shift))
+        else if (Shortcuts.Matches(tab.Keyboard, KeyboardShortcuts.Suffixes, e.Key, e.KeyModifiers))
         {
             SuffixButton.Flyout?.ShowAt(SuffixButton);
             e.Handled = true;
@@ -48,13 +49,18 @@ public partial class TabView : UserControl
     }
 
     /// <summary>
-    /// Ctrl/Cmd+Enter answers "yes" to the waiting prompt and Ctrl/Cmd+Backspace "no" (DESIGN.md §7). Not while
-    /// typing in one of a prompt's own fields, and Backspace keeps deleting words in a field with text.
+    /// Ctrl/Cmd+Enter answers "yes" to the waiting prompt and Ctrl/Cmd+Backspace "no" (DESIGN.md §7), or whatever
+    /// Settings → Keyboard says. Not while typing in one of a prompt's own fields, and Backspace keeps deleting words in
+    /// a field with text.
     /// </summary>
     private void OnPromptKeyDown(object? sender, KeyEventArgs e)
     {
-        var command = this.GetPlatformSettings()?.HotkeyConfiguration.CommandModifiers ?? KeyModifiers.Control;
-        if (e.KeyModifiers != command || e.Key is not (Key.Enter or Key.Back) || ViewModel is not { WaitingPrompt: not null } tab)
+        if (ViewModel is not { WaitingPrompt: not null } tab)
+        {
+            return;
+        }
+        var allow = Shortcuts.Matches(tab.Keyboard, KeyboardShortcuts.AllowPrompt, e.Key, e.KeyModifiers);
+        if (!allow && !Shortcuts.Matches(tab.Keyboard, KeyboardShortcuts.DenyPrompt, e.Key, e.KeyModifiers))
         {
             return;
         }
@@ -64,7 +70,7 @@ public partial class TabView : UserControl
         {
             return;
         }
-        e.Handled = e.Key == Key.Enter ? tab.AcceptWaitingPrompt() : tab.DeclineWaitingPrompt();
+        e.Handled = allow ? tab.AcceptWaitingPrompt() : tab.DeclineWaitingPrompt();
     }
 
     private void OnComposerKeyDown(object? sender, KeyEventArgs e)
@@ -206,6 +212,21 @@ public partial class TabView : UserControl
     {
         CloseFlyout(sender as Visual);
         Composer.Focus();
+    }
+
+    /// <summary>Focus goes into the menu, so its number keys work straight away.</summary>
+    private void OnSuffixMenuOpened(object? sender, EventArgs e) =>
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => SuffixMenu.GetVisualDescendants().OfType<Button>().FirstOrDefault()?.Focus());
+
+    /// <summary>1–9 pick one of the first nine suffixes (DESIGN.md §5).</summary>
+    private void OnSuffixMenuKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyModifiers == KeyModifiers.None && Shortcuts.Digit(e.Key) is { } number && ViewModel is { } tab && tab.PickSuffix(number))
+        {
+            SuffixButton.Flyout?.Hide();
+            Composer.Focus();
+            e.Handled = true;
+        }
     }
 
     private static void CloseFlyout(Visual? item)
