@@ -325,8 +325,11 @@ internal sealed class TabTestHarness : IAsyncDisposable
         Directory.CreateDirectory(Path.Combine(_root, "work"));
         Directory.CreateDirectory(ProjectsDirectory);
         Trees = new FakeProcessTreeTracker(Time);
+        // Other programs' folders (the Epic launcher's, Unity Hub's) are empty ones here, never the real ones (DESIGN.md §18).
+        var otherPrograms = new Core.ProjectTools.ProjectToolPaths(Path.Combine(_root, "home"), Path.Combine(_root, "appdata"), Path.Combine(_root, "localappdata"),
+            Path.Combine(_root, "programdata"), Path.Combine(_root, "programfiles"), Path.Combine(_root, "applications"));
         Services = new AppServices(AppPaths.Under(_root), launcher ?? new ProcessLauncher(), Time, Platform, dispatcher ?? new InlineDispatcher(), processTrees: Trees, notifier: Notifier,
-            appInstaller: appInstaller, httpHandler: http ?? new OfflineHandler(), appVersion: appVersion);
+            appInstaller: appInstaller, httpHandler: http ?? new OfflineHandler(), appVersion: appVersion, projectToolPaths: otherPrograms);
         Services.Notifications.UseBadge(Notifier);
         configure?.Invoke(Services.Settings);
         if (updater is not null)
