@@ -9,16 +9,18 @@ namespace Claudette.App.ViewModels;
 /// <summary>Tabs that share a working folder, shown together like browser tab groups (DESIGN.md §4, "Grouped by folder").</summary>
 public sealed partial class TabGroupViewModel : ObservableObject
 {
-    public static readonly IReadOnlyList<Color> Palette =
+    /// <summary>The colors a new group takes in turn, and the swatches of the color picker.</summary>
+    public static readonly IReadOnlyList<NamedColor> Palette =
     [
-        Color.Parse("#4C8DFF"), Color.Parse("#3DBE72"), Color.Parse("#F29B38"), Color.Parse("#A66BFF"),
-        Color.Parse("#F25CA2"), Color.Parse("#25B8B8"), Color.Parse("#D9B51A"), Color.Parse("#F2555A"),
+        new("Blue", Color.Parse("#4C8DFF")), new("Green", Color.Parse("#3DBE72")), new("Orange", Color.Parse("#F29B38")),
+        new("Purple", Color.Parse("#A66BFF")), new("Pink", Color.Parse("#F25CA2")), new("Teal", Color.Parse("#25B8B8")),
+        new("Yellow", Color.Parse("#D9B51A")), new("Red", Color.Parse("#F2555A")),
     ];
 
-    public TabGroupViewModel(string folder, int colorIndex, bool isCollapsed)
+    public TabGroupViewModel(string folder, Color color, bool isCollapsed)
     {
         Folder = folder;
-        ColorIndex = colorIndex;
+        Color = color;
         IsCollapsed = isCollapsed;
         Label = FolderName;
         Tabs.CollectionChanged += OnTabsChanged;
@@ -36,11 +38,11 @@ public sealed partial class TabGroupViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Brush), nameof(SoftBrush))]
-    public partial int ColorIndex { get; set; }
+    public partial Color Color { get; set; }
 
-    public IBrush Brush => new SolidColorBrush(Palette[ColorIndex % Palette.Count]);
+    public IBrush Brush => new SolidColorBrush(Color);
 
-    public IBrush SoftBrush => new SolidColorBrush(Palette[ColorIndex % Palette.Count], 0.18);
+    public IBrush SoftBrush => new SolidColorBrush(Color, 0.18);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsExpanded), nameof(CollapseMenuText))]
@@ -81,4 +83,26 @@ public sealed partial class TabGroupViewModel : ObservableObject
             OnPropertyChanged(nameof(UrgentGlyph));
         }
     }
+
+    /// <summary>A color as it's saved and typed: <c>#RRGGBB</c>. Group colors are opaque.</summary>
+    public static string ToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+
+    /// <summary>
+    /// Reads a color typed or saved as <c>#RRGGBB</c> or <c>#RGB</c>, with or without the <c>#</c>. Any transparency is
+    /// dropped.
+    /// </summary>
+    public static bool TryParseHex(string? text, out Color color)
+    {
+        color = default;
+        var hex = text?.Trim().TrimStart('#') ?? "";
+        if (hex.Length is not (3 or 6) || !hex.All(char.IsAsciiHexDigit) || !Color.TryParse("#" + hex, out var parsed))
+        {
+            return false;
+        }
+        color = Color.FromRgb(parsed.R, parsed.G, parsed.B);
+        return true;
+    }
 }
+
+/// <summary>One of the group colors, with the name its swatch has for screen readers and in its tip.</summary>
+public sealed record NamedColor(string Name, Color Color);

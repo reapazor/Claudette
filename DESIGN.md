@@ -206,13 +206,17 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
   - Saved with the tab, so the counts survive app restarts and session resumes.
   - The same numbers feed the "which tab is burning the most" view in the Usage panel ([§6](#6-token-burn-awareness)).
 - **Grouped by folder.** Tabs that share a working folder sit together in a group, like browser tab groups. In the sidebar a group is a label with its tabs listed under it:
-  - Each group has a label with the folder name and a color. A line in the color runs down beside its tabs. The color is picked automatically and can be changed. If two folders have the same name, the label adds the parent folder (`work/api`, `personal/api`).
+  - Each group has a label with the folder name and a color. A line in the color runs down beside its tabs. If two folders have the same name, the label adds the parent folder (`work/api`, `personal/api`).
+  - **The color.** A new group takes the first of eight group colors that no open group has. **Change color…** in the group's menu, in the full sidebar or the rail, opens a color picker beside the label:
+    - The eight group colors as swatches, each named in its tip, with the group's own ringed. Clicking one applies it and closes the picker.
+    - For any other color, a saturation and brightness square, a hue slider, and a hex field (`#12AB34`, or `#1A3`). The group changes color as you drag or type, and the hex field applies once it holds a whole color; Enter closes the picker.
+    - The color is remembered for the folder on this machine (in `state.json`), so the group has it again after a restart, or when the folder is opened again after its group was closed, however its path was written.
   - Hovering the label shows the full path. The group's `+` opens a new tab in the same folder.
   - A group can be collapsed to just its label. A collapsed group still shows the most urgent status of its tabs, such as "needs input".
   - Tabs can be dragged to reorder them within their group, and groups can be dragged (by their label) to reorder them. A tab can't be dragged into another group, because its folder is fixed, and pinned tabs stay ahead of the others.
     - A dragged tab is selected, and the list rearranges as soon as the pointer passes the middle of a neighbor. **Move up** and **Move down** in the tab menu do the same from the keyboard or mouse.
   - A group with a single tab still gets a label, so the sidebar always looks the same.
-- Closing a tab that is working asks for confirmation, then stops the process. Right-clicking a group label gives **Close group**.
+- Closing a tab that is working asks for confirmation, then stops the process. Right-clicking a group label gives **New tab here**, **Collapse group** (or **Expand group**), **Change color…** and **Close group**.
 - **Pinned tabs** come back every time Claudette launches, resuming their sessions.
   - Pin or unpin from the tab's right-click menu. A pinned tab shows a pin icon and sits at the start of its folder group.
   - **Close group** and **Close other tabs** skip pinned tabs.
@@ -246,6 +250,7 @@ The tabs are listed in a sidebar on the left of the window, rather than a strip 
 - **Resizing.** Drag the sidebar's edge to make it wider or narrower (180 to 420 pixels; 248 by default). Double-click the edge for the default width. The width is remembered.
 - **Collapsing.** The collapse button, or `Ctrl/Cmd+B`, shrinks the sidebar to a rail:
   - The rail shows each group's color, then a square per tab with the first letter of its name and a small status icon. Hovering a square shows the tab info card. It doesn't list project runs.
+  - Right-clicking a group's color gives the group's menu, **Change color…** included.
   - A collapsed group shows only its color and its most urgent status.
   - New tab, the project, History, the update badge and Settings stay as icons.
   - Whether the sidebar is collapsed is remembered.

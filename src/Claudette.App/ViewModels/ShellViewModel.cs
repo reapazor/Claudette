@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
+using Avalonia.Media;
 using Claudette.App.Services;
 using Claudette.Core.Development;
 using Claudette.Core.Git;
@@ -336,12 +337,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         if (group is null)
         {
             var state = _services.State;
-            if (!state.GroupColors.TryGetValue(tab.Folder, out var color))
-            {
-                var used = Groups.Select(g => g.ColorIndex).ToHashSet();
-                color = Enumerable.Range(0, TabGroupViewModel.Palette.Count).FirstOrDefault(i => !used.Contains(i), Groups.Count % TabGroupViewModel.Palette.Count);
-                state.GroupColors[tab.Folder] = color;
-            }
+            var color = SavedGroupColor(tab.Folder) ?? NextGroupColor();
+            RememberGroupColor(tab.Folder, color);
             group = new TabGroupViewModel(tab.Folder, color, state.CollapsedGroups.Any(c => FolderHistory.SamePath(c, tab.Folder)));
             Groups.Add(group);
             UpdateGroupLabels();
@@ -713,16 +710,61 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         _services.SaveState();
     }
 
-    [RelayCommand]
-    private void CycleGroupColor(TabGroupViewModel? group)
+    /// <summary>
+    /// <b>Change color…</b> in a group's menu opens this picker (DESIGN.md §4, "Grouped by folder"). What it picks applies
+    /// at once and is remembered for the folder.
+    /// </summary>
+    public GroupColorPickerViewModel PickGroupColor(TabGroupViewModel group) => new(group, color => SetGroupColor(group, color));
+
+    public void SetGroupColor(TabGroupViewModel group, Color color)
     {
-        if (group is null)
-        {
-            return;
-        }
-        group.ColorIndex = (group.ColorIndex + 1) % TabGroupViewModel.Palette.Count;
-        _services.State.GroupColors[group.Folder] = group.ColorIndex;
+        group.Color = color;
+        RememberGroupColor(group.Folder, color);
         _services.SaveState();
+    }
+
+    /// <summary>The color saved for a folder, matched as groups match folders. One saved as a group color's index is read too.</summary>
+    private Color? SavedGroupColor(string folder)
+    {
+        var state = _services.State;
+        foreach (var (path, hex) in state.FolderColors)
+        {
+            if (FolderHistory.SamePath(path, folder) && TabGroupViewModel.TryParseHex(hex, out var color))
+            {
+                return color;
+            }
+        }
+        var palette = TabGroupViewModel.Palette;
+        foreach (var (path, index) in state.GroupColors)
+        {
+            if (FolderHistory.SamePath(path, folder))
+            {
+                return palette[(index % palette.Count + palette.Count) % palette.Count].Color;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>A new group's color: the first group color no open group has, else the next in turn.</summary>
+    private Color NextGroupColor()
+    {
+        var palette = TabGroupViewModel.Palette;
+        var used = Groups.Select(g => g.Color).ToHashSet();
+        return palette.Select(p => p.Color).FirstOrDefault(c => !used.Contains(c), palette[Groups.Count % palette.Count].Color);
+    }
+
+    private void RememberGroupColor(string folder, Color color)
+    {
+        var state = _services.State;
+        foreach (var path in state.FolderColors.Keys.Where(p => FolderHistory.SamePath(p, folder)).ToList())
+        {
+            state.FolderColors.Remove(path);
+        }
+        foreach (var path in state.GroupColors.Keys.Where(p => FolderHistory.SamePath(p, folder)).ToList())
+        {
+            state.GroupColors.Remove(path);
+        }
+        state.FolderColors[folder] = TabGroupViewModel.ToHex(color);
     }
 
     [RelayCommand]

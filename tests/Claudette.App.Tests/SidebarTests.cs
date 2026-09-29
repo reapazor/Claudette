@@ -1,4 +1,5 @@
 using Avalonia.Input;
+using Avalonia.Media;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
@@ -7,7 +8,7 @@ using Claudette.Core.Settings;
 
 namespace Claudette.App.Tests;
 
-/// <summary>The sidebar that lists the tabs: collapsing to its rail, resizing, and its rows (DESIGN.md §3, §4).</summary>
+/// <summary>The sidebar that lists the tabs: collapsing to its rail, resizing, its rows and its groups' colors (DESIGN.md §3, §4).</summary>
 public class SidebarTests
 {
     [Fact]
@@ -141,6 +142,89 @@ public class SidebarTests
         Assert.True(Shortcuts.Matches(h.Services.Settings.Keyboard, KeyboardShortcuts.ToggleSidebar, Key.B, primary));
         Assert.Equal($"Collapse the sidebar ({shown})", h.Shell.Tips.CollapseSidebar);
         Assert.Equal($"Expand the sidebar ({shown})", h.Shell.Tips.ExpandSidebar);
+    }
+
+    [Fact]
+    public async Task Change_color_applies_a_swatch_a_hex_code_or_the_spectrum_at_once_and_remembers_it()
+    {
+        await using var h = new TabTestHarness();
+        await h.OpenTabAsync();
+        var group = h.Shell.Groups.Single();
+        Assert.Equal(TabGroupViewModel.Palette[0].Color, group.Color);
+
+        var picker = h.Shell.PickGroupColor(group);
+        var done = 0;
+        picker.Done += () => done++;
+        Assert.Equal("#4C8DFF", picker.Hex);
+        Assert.Equal(["Blue"], picker.Swatches.Where(s => s.IsSelected).Select(s => s.Name));
+
+        // A swatch applies and closes the picker.
+        picker.PickCommand.Execute(picker.Swatches[3]);
+        Assert.Equal(TabGroupViewModel.Palette[3].Color, group.Color);
+        Assert.Equal("#A66BFF", picker.Hex);
+        Assert.Equal(["Purple"], picker.Swatches.Where(s => s.IsSelected).Select(s => s.Name));
+        Assert.Equal("#A66BFF", h.Services.State.FolderColors[group.Folder]);
+        Assert.Equal(1, done);
+
+        // A hex code applies once it's a color, so typing one changes nothing on the way.
+        picker.Hex = "#12AB3";
+        Assert.Equal(TabGroupViewModel.Palette[3].Color, group.Color);
+        picker.Hex = "12ab34";
+        Assert.Equal(Color.Parse("#12AB34"), group.Color);
+        Assert.DoesNotContain(picker.Swatches, s => s.IsSelected);
+        Assert.Equal("#12AB34", h.Services.State.FolderColors[group.Folder]);
+
+        // The spectrum and hue slider.
+        picker.HsvColor = new HsvColor(1, 120, 1, 1);
+        Assert.Equal(Color.FromRgb(0, 255, 0), group.Color);
+        Assert.Equal("#00FF00", picker.Hex);
+        Assert.Equal(1, done);
+        picker.FinishCommand.Execute(null);
+        Assert.Equal(2, done);
+
+        // Closing the group and opening the folder again brings the color back.
+        await h.Shell.CloseGroupCommand.ExecuteAsync(group);
+        Assert.Empty(h.Shell.Groups);
+        await h.OpenTabAsync();
+        Assert.Equal(Color.FromRgb(0, 255, 0), h.Shell.Groups.Single().Color);
+    }
+
+    [Fact]
+    public async Task A_groups_color_comes_back_however_its_folder_was_written_and_from_an_older_save()
+    {
+        await using var h = new TabTestHarness();
+        h.Services.Settings.Sessions.RestoreUnpinnedTabs = true;
+        var other = Path.Combine(h.Root, "other");
+        Directory.CreateDirectory(other);
+        var state = h.Services.State;
+        // Saved under another spelling of the folder's path, and by an older Claudette, as the index of a group color.
+        state.FolderColors[h.WorkFolder + Path.DirectorySeparatorChar] = "#12AB34";
+        state.GroupColors[other] = 5;
+        state.Tabs = [new TabState { Folder = h.WorkFolder }, new TabState { Folder = other }];
+
+        h.Shell.Restore(null);
+
+        Assert.Equal(Color.Parse("#12AB34"), h.Shell.Groups.Single(g => FolderHistory.SamePath(g.Folder, h.WorkFolder)).Color);
+        Assert.Equal(TabGroupViewModel.Palette[5].Color, h.Shell.Groups.Single(g => FolderHistory.SamePath(g.Folder, other)).Color);
+        // Each is saved once now, as the group's folder is written.
+        Assert.Equal(
+            h.Shell.Groups.Select(g => (g.Folder, TabGroupViewModel.ToHex(g.Color))).Order(),
+            state.FolderColors.Select(p => (p.Key, p.Value)).Order());
+        Assert.Empty(state.GroupColors);
+    }
+
+    [Theory]
+    [InlineData("#12ab34", "#12AB34")]
+    [InlineData("  12AB34 ", "#12AB34")]
+    [InlineData("#1a3", "#11AA33")]
+    [InlineData("#8012AB34", null)]
+    [InlineData("#12AB3", null)]
+    [InlineData("red", null)]
+    [InlineData("", null)]
+    public void A_hex_code_is_six_or_three_digits(string text, string? expected)
+    {
+        var parsed = TabGroupViewModel.TryParseHex(text, out var color);
+        Assert.Equal(expected, parsed ? TabGroupViewModel.ToHex(color) : null);
     }
 
     [Theory]

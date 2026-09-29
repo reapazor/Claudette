@@ -216,7 +216,7 @@ public class ProjectRunsTests
         var generate = await RunToEndAsync(tab, launcher, "generate-project-files", 0);
         // Another tab is showing. (Its folder is gone, so it starts no session.)
         var other = new TabViewModel(h.Services, h.Shell, new TabState { Folder = Path.Combine(h.Root, "elsewhere") }, isRestored: false);
-        var group = new TabGroupViewModel(other.Folder, 1, isCollapsed: false);
+        var group = new TabGroupViewModel(other.Folder, TabGroupViewModel.Palette[1].Color, isCollapsed: false);
         group.Tabs.Add(other);
         h.Shell.Groups.Add(group);
         h.Shell.SelectedTab = other;

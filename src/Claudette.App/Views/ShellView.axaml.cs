@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -204,6 +205,32 @@ public partial class ShellView : UserControl
     }
 
     private ShellViewModel? ViewModel => DataContext as ShellViewModel;
+
+    /// <summary>
+    /// <b>Change color…</b> in a group's menu opens its color picker beside the group's label, in the sidebar or the rail
+    /// (DESIGN.md §4, "Grouped by folder"). Posted, so the menu has closed before the picker opens.
+    /// </summary>
+    private void OnChangeGroupColor(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } shell || (sender as MenuItem)?.DataContext is not TabGroupViewModel group)
+        {
+            return;
+        }
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            var label = this.GetVisualDescendants().OfType<Button>()
+                .FirstOrDefault(b => b.Classes.Contains("grouplabel") && b.DataContext == group && b.IsEffectivelyVisible);
+            if (label is null)
+            {
+                return;
+            }
+            var picker = shell.PickGroupColor(group);
+            var flyout = new Flyout { Placement = PlacementMode.RightEdgeAlignedTop, Content = new GroupColorPicker { DataContext = picker } };
+            picker.Done += flyout.Hide;
+            FlyoutBase.SetAttachedFlyout(label, flyout);
+            flyout.ShowAt(label);
+        });
+    }
 
     /// <summary>
     /// The project's menu opened: look at the project's files again, so what's enabled is current (a solution generated

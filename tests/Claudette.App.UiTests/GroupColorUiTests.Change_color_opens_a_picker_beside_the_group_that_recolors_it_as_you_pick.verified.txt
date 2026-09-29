@@ -1,0 +1,11 @@
+﻿[button] Blue
+[button] Green
+[button] Orange
+[button] Purple
+[button] Pink
+[button] Teal
+[button] Yellow
+[button] Red
+[button] (icon)
+[button] (icon)
+[field] "#4C8DFF"

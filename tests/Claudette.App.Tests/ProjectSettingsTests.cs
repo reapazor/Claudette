@@ -37,7 +37,7 @@ public class ProjectSettingsTests
     private static TabViewModel AddUnstartedTab(TabTestHarness h, string name)
     {
         var tab = new TabViewModel(h.Services, h.Shell, new TabState { Folder = Path.Combine(h.Root, name) }, isRestored: false);
-        var group = new TabGroupViewModel(tab.Folder, 1, isCollapsed: false);
+        var group = new TabGroupViewModel(tab.Folder, TabGroupViewModel.Palette[1].Color, isCollapsed: false);
         group.Tabs.Add(tab);
         h.Shell.Groups.Add(group);
         return tab;

@@ -22,7 +22,13 @@ public sealed class AppState
 
     public List<string> FavoriteFolders { get; set; } = [];
 
-    /// <summary>A folder group's color index, by folder path.</summary>
+    /// <summary>A folder group's color, as <c>#RRGGBB</c>, by folder path (DESIGN.md §4, "Grouped by folder").</summary>
+    public Dictionary<string, string> FolderColors { get; set; } = [];
+
+    /// <summary>
+    /// Group colors saved before <see cref="FolderColors"/>, as an index into the group colors. A folder's entry moves to
+    /// <see cref="FolderColors"/> when its group next opens.
+    /// </summary>
     public Dictionary<string, int> GroupColors { get; set; } = [];
 
     /// <summary>Folder groups the user collapsed.</summary>

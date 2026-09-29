@@ -1,0 +1,76 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             xmlns:primitives="using:Avalonia.Controls.Primitives"
+             x:Class="Claudette.App.Views.GroupColorPicker"
+             x:DataType="vm:GroupColorPickerViewModel">
+
+  <!-- A folder group's color (DESIGN.md §4, "Grouped by folder"): the group colors, then any color from the spectrum,
+       the hue slider or a hex code. Every change applies to the group at once. -->
+  <UserControl.Styles>
+    <Style Selector="Button.swatch">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="13" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.swatch Ellipse.ring">
+      <Setter Property="Width" Value="26" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="Button.swatch.selected Ellipse.ring">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="Button.swatch Ellipse.dot">
+      <Setter Property="Width" Value="18" />
+      <Setter Property="Height" Value="18" />
+    </Style>
+    <Style Selector="primitives|ColorSpectrum">
+      <Setter Property="Height" Value="124" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="Border.preview">
+      <Setter Property="Width" Value="32" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+  </UserControl.Styles>
+
+  <StackPanel Width="232" Spacing="10" Margin="2">
+    <ItemsControl ItemsSource="{Binding Swatches}">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <UniformGrid Columns="8" />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate DataType="vm:ColorSwatch">
+          <Button Classes="flat swatch" Classes.selected="{Binding IsSelected}" ToolTip.Tip="{Binding Name}" AutomationProperties.Name="{Binding Name}"
+                  Command="{Binding $parent[UserControl].((vm:GroupColorPickerViewModel)DataContext).PickCommand}" CommandParameter="{Binding}">
+            <Panel>
+              <Ellipse Classes="ring" Stroke="{Binding Brush}" />
+              <Ellipse Classes="dot" Fill="{Binding Brush}" />
+            </Panel>
+          </Button>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <primitives:ColorSpectrum Components="SaturationValue" Shape="Box" HsvColor="{Binding HsvColor, Mode=TwoWay}"
+                              AutomationProperties.Name="Saturation and brightness" />
+    <primitives:ColorSlider Orientation="Horizontal" ColorModel="Hsva" ColorComponent="Component1" IsAlphaVisible="False" IsPerceptive="True"
+                            HsvColor="{Binding HsvColor, Mode=TwoWay}" AutomationProperties.Name="Hue" />
+
+    <DockPanel>
+      <Border DockPanel.Dock="Left" Classes="preview" Background="{Binding Group.Brush}" />
+      <TextBox Text="{Binding Hex}" MaxLength="7" AutomationProperties.Name="Hex color">
+        <TextBox.KeyBindings>
+          <KeyBinding Gesture="Enter" Command="{Binding FinishCommand}" />
+        </TextBox.KeyBindings>
+      </TextBox>
+    </DockPanel>
+  </StackPanel>
+</UserControl>

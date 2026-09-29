@@ -137,7 +137,7 @@
                         <ContextMenu>
                           <MenuItem Header="New tab here" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewTabInGroupCommand}" CommandParameter="{Binding}" />
                           <MenuItem Header="{Binding CollapseMenuText}" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).ToggleGroupCollapsedCommand}" CommandParameter="{Binding}" />
-                          <MenuItem Header="Change color" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CycleGroupColorCommand}" CommandParameter="{Binding}" />
+                          <MenuItem Header="Change color…" Click="OnChangeGroupColor" />
                           <Separator />
                           <MenuItem Header="Close group" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CloseGroupCommand}" CommandParameter="{Binding}" />
                         </ContextMenu>
@@ -321,6 +321,7 @@
                       <ContextMenu>
                         <MenuItem Header="New tab here" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewTabInGroupCommand}" CommandParameter="{Binding}" />
                         <MenuItem Header="{Binding CollapseMenuText}" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).ToggleGroupCollapsedCommand}" CommandParameter="{Binding}" />
+                        <MenuItem Header="Change color…" Click="OnChangeGroupColor" />
                         <Separator />
                         <MenuItem Header="Close group" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CloseGroupCommand}" CommandParameter="{Binding}" />
                       </ContextMenu>
