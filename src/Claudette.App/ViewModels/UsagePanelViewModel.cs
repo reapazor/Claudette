@@ -16,14 +16,18 @@ public sealed record TabBurnRow(string Name, string Tokens, string Cost, string 
     /// <summary>"41%", for the detailed header's busiest tabs (DESIGN.md §6).</summary>
     public string ShareText => string.Create(CultureInfo.CurrentCulture, $"{Share * 100:0}%");
 
-    /// <summary>One row per tab, the heaviest first. <paramref name="tabName"/> names open tabs; the rest were closed.</summary>
+    /// <summary>
+    /// One row per tab, the heaviest first. <paramref name="tabName"/> names open tabs; a closed one keeps the last name
+    /// the usage history has for it.
+    /// </summary>
     public static IReadOnlyList<TabBurnRow> From(IReadOnlyList<TabTokenSum> sums, Func<string, string?> tabName)
     {
         var total = Math.Max(1, sums.Sum(s => s.Total));
         return sums
             .OrderByDescending(s => s.Total)
             .Select(s => new TabBurnRow(
-                tabName(s.TabId) ?? "A closed tab",
+                // Turns recorded before the history kept names have none.
+                tabName(s.TabId) ?? s.Name ?? "A closed tab",
                 TokenTotals.Short(s.Total),
                 $"${s.CostUsd:0.00}",
                 $"{s.Turns} turn{(s.Turns == 1 ? "" : "s")}",

@@ -153,6 +153,8 @@ public class UsageDetailsTests
             Turn(now.AddMinutes(-30), "gone", 2_000),
             Turn(now.AddMinutes(-20), "tiny", 900),
         ]);
+        // "gone" was closed: the history has its last name.
+        tracker.Store.SetTabName("gone", "fix the build");
         using var header = new UsageViewModel(h.Services, tracker)
         {
             TabName = id => id switch { "api" => "refactor auth", "docs" => "write the docs", "tiny" => "a question", _ => null },
@@ -164,12 +166,12 @@ public class UsageDetailsTests
         await TabTestHarness.Eventually(() => header.HasBusiestTabs, "the busiest tabs");
 
         Assert.Equal(
-            [("refactor auth", "41%"), ("write the docs", "30%"), ("A closed tab", "20%")],
+            [("refactor auth", "41%"), ("write the docs", "30%"), ("fix the build", "20%")],
             header.BusiestTabs.Select(t => (t.Name, t.ShareText)));
         Assert.Equal(0.41, header.BusiestTabs[0].Share, 6);
 
         // A turn somewhere else reads the tabs again.
-        tracker.OnTurnCompleted("tiny", Result(20_000));
+        tracker.OnTurnCompleted("tiny", "a question", Result(20_000));
         await TabTestHarness.Eventually(() => header.BusiestTabs[0].Name == "a question", "the new turn");
     }
 

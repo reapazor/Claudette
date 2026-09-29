@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Claudette.Core.Protocol;
 using Claudette.Usage.Tests.Support;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 
 namespace Claudette.Usage.Tests;
@@ -240,6 +241,72 @@ public sealed class UsageStoreTests : IDisposable
         Assert.Equal(new TabTokenSum("tab-1", 250, 25, 0, 2000, 0.21, 2), tab1 with { CostUsd = Math.Round(tab1.CostUsd, 6) });
         Assert.Equal(2275, tab1.Total);
         Assert.Equal(1, sums[0].Turns);
+    }
+
+    [Fact]
+    public void Tokens_by_tab_carry_each_tabs_last_known_name()
+    {
+        var store = Open();
+        // A tab without turns gets no name stored.
+        store.SetTabName("tab-2", "not used yet");
+        store.AddTurns(
+        [
+            new TurnRecord(Start, "tab-1", "s1", "fable", 100, 0, 0, 0, 0.1),
+            new TurnRecord(Start, "tab-2", "s2", "fable", 50, 0, 0, 0, 0.1),
+        ]);
+
+        store.SetTabName("tab-1", "api");
+        store.SetTabName("tab-1", "refactor auth");
+
+        Assert.Equal(
+            [("tab-1", "refactor auth"), ("tab-2", null)],
+            store.GetTokensByTab(Start.AddHours(-5)).Select(s => (s.TabId, s.Name)));
+    }
+
+    [Fact]
+    public void Prune_and_clear_drop_the_names_of_tabs_with_no_turns_left()
+    {
+        var store = Open();
+        store.AddTurns([new TurnRecord(Start, "old", null, "fable", 1, 1, 1, 1, 0)]);
+        store.SetTabName("old", "an old tab");
+        _time.Advance(TimeSpan.FromDays(2));
+        store.AddTurns([new TurnRecord(_time.GetUtcNow(), "new", null, "fable", 1, 1, 1, 1, 0)]);
+        store.SetTabName("new", "a new tab");
+
+        Assert.Equal(1, store.Prune(TimeSpan.FromDays(1)));
+
+        // The old tab's name went with its turns, so a turn under its id again starts unnamed.
+        store.AddTurns([new TurnRecord(_time.GetUtcNow(), "old", null, "fable", 1, 1, 1, 1, 0)]);
+        Assert.Equal(
+            [("new", "a new tab"), ("old", null)],
+            store.GetTokensByTab(DateTimeOffset.MinValue).Select(s => (s.TabId, s.Name)));
+
+        store.Clear();
+        store.AddTurns([new TurnRecord(_time.GetUtcNow(), "new", null, "fable", 1, 1, 1, 1, 0)]);
+        Assert.Null(Assert.Single(store.GetTokensByTab(DateTimeOffset.MinValue)).Name);
+    }
+
+    [Fact]
+    public void A_history_from_before_tab_names_is_upgraded_and_keeps_its_turns()
+    {
+        var store = Open();
+        store.AddTurns([new TurnRecord(Start, "tab-1", "s1", "fable", 1, 2, 3, 4, 0.5)]);
+        store.Dispose();
+        // The first version of the file had no names.
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = DatabasePath, Pooling = false }.ToString()))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "DROP TABLE tabs; PRAGMA user_version = 1;";
+            command.ExecuteNonQuery();
+        }
+
+        var upgraded = Open();
+
+        var sum = Assert.Single(upgraded.GetTokensByTab(DateTimeOffset.MinValue));
+        Assert.Equal(("tab-1", 10L, (string?)null), (sum.TabId, sum.Total, sum.Name));
+        upgraded.SetTabName("tab-1", "refactor auth");
+        Assert.Equal("refactor auth", Assert.Single(upgraded.GetTokensByTab(DateTimeOffset.MinValue)).Name);
     }
 
     [Fact]

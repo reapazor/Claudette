@@ -85,7 +85,8 @@ public sealed record TurnRecord(
 
 /// <summary>A tab's tokens since some moment, for "which tab is burning the most".</summary>
 /// <param name="Turns">Turns, not records: a turn that used two models counts once.</param>
-public sealed record TabTokenSum(string TabId, long Input, long Output, long CacheWrite, long CacheRead, double CostUsd, int Turns)
+/// <param name="Name">The tab's last known name; null for turns recorded before names were kept.</param>
+public sealed record TabTokenSum(string TabId, long Input, long Output, long CacheWrite, long CacheRead, double CostUsd, int Turns, string? Name = null)
 {
     public long Total => Input + Output + CacheWrite + CacheRead;
 }

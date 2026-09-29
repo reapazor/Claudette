@@ -545,7 +545,7 @@ This is Claudette's main feature: knowing how fast you're using your plan's limi
 - **Rate** is measured over a recent window (by default the last 30 minutes, using a moving average), so a single big turn doesn't swing the projection wildly. When nothing is running, the projection says so instead of showing a stale rate.
 - Clicking the header opens a **Usage** panel (its own window) with:
   - A larger chart of the current session and the past week.
-  - Tokens per tab for the current window, so you can see which session is burning the most.
+  - Tokens per tab for the current window, so you can see which session is burning the most. A tab closed since then keeps the last name it had, from the [usage history](#usage-history), after a restart too.
   - Past sessions and weeks, as far back as the stored [usage history](#usage-history) goes. Each past window shows the highest usage it reached. The lists show the latest 30 sessions and 12 weeks, with **Show more** for the next page.
 - Accounts without plan limits (an API key, for example) get no meters; the header just says Claudette.
 
@@ -567,7 +567,7 @@ The header can be drawn taller, with charts, for keeping an eye on usage without
 - **Numbers.**
   - **Burn rate:** % per hour over the burn rate window, or *Idle*.
   - **Time to limit** at that rate, and whether that's before the reset or the window resets first.
-  - **Busiest tabs:** the top three tabs by tokens this window, as "name 41%" with a small bar. It's the same count as the Usage panel's list of tabs.
+  - **Busiest tabs:** the top three tabs by tokens this window, as "name 41%" with a small bar. It's the same count as the Usage panel's list of tabs, and a closed tab keeps its last name there too.
 - Clicking the charts opens the Usage panel, as the header does.
 - **Narrow windows** leave out the busiest tabs first (below 960 px), then the weekly chart (below 700 px). The session chart takes the room.
 - Accounts without plan limits get no charts, as they get no meters.
@@ -629,7 +629,7 @@ Token and context data are documented:
 
 ### Usage history
 
-Claudette stores usage data locally in a SQLite file in the app data folder, so the trendline, charts and per-tab stats survive restarts. The file is per machine and isn't synced. It holds two kinds of records.
+Claudette stores usage data locally in a SQLite file in the app data folder, so the trendline, charts and per-tab stats survive restarts. The file is per machine and isn't synced. It holds three kinds of records.
 
 **Plan usage samples** (app-wide):
 
@@ -650,7 +650,9 @@ A sample is saved only when a value changes, and at most once a minute. These fe
 
 These feed each tab's per-turn chart, the "which tab is burning the most" view, and the detailed header's busiest tabs.
 
-**Not stored:** prompts, replies, code or any other conversation content. That stays in Claude Code's transcripts and the session library.
+**Tab names** (per tab): each tab's last known name, so its rows are still named once it's closed. It's kept when a turn is recorded and whenever the name changes after that, and only for a tab with turn records. Turns and names are written in the order they happen, so a rename just after a turn isn't lost. A name goes when its tab's last turn record does (retention or **Clear usage history**). Turns recorded before names were kept show as "A closed tab".
+
+**Not stored:** prompts, replies, code or any other conversation content. That stays in Claude Code's transcripts and the session library. A tab's name is kept, although it's often the title Claude Code gave the conversation ([§4](#4-tabs--sessions)): it's what the sidebar, History and the session library show, and it never leaves this machine.
 
 **Retention.** Settings → Usage → **Keep usage history** with these options:
 
@@ -662,7 +664,7 @@ These feed each tab's per-turn chart, the "which tab is burning the most" view, 
 
 Records older than the chosen period are deleted at launch and once a day. With **1 day**, the weekly chart only covers the last day. The header meters and projection are unaffected, since they only need the current 5-hour window and the latest weekly value.
 
-**Clear usage history.** A button beside the retention option. After confirming, it deletes every stored sample and per-turn record.
+**Clear usage history.** A button beside the retention option. After confirming, it deletes every stored sample, per-turn record and tab name.
 
 - The header meters fill in again at the next update from Claude Code.
 - Each tab's running token totals are kept, because they're saved with the tab ([§4](#4-tabs--sessions)). A checkbox in the confirmation, **Also reset per-tab token totals**, clears those too.

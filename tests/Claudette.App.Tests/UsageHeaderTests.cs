@@ -119,12 +119,75 @@ public class UsageHeaderTests
         var recorded = new TaskCompletionSource();
         tracker.TurnRecorded += () => recorded.TrySetResult();
 
-        tracker.OnTurnCompleted("tab-1", Result(100, 20));
+        tracker.OnTurnCompleted("tab-1", "api", Result(100, 20));
         await recorded.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         var sum = Assert.Single(tracker.Store.GetTokensByTab(h.Time.GetUtcNow().AddHours(-1)));
-        Assert.Equal("tab-1", sum.TabId);
+        Assert.Equal(("tab-1", "api"), (sum.TabId, sum.Name));
         Assert.Equal(120, sum.Total);
+    }
+
+    [Fact]
+    public async Task Names_are_recorded_in_the_order_they_came()
+    {
+        await using var h = new TabTestHarness();
+        var tracker = new UsageTracker(h.Services, new UsageStore(Path.Combine(h.Root, "usage.db"), h.Time));
+
+        // Each rename lands after the turn before it, however the writes are scheduled.
+        for (var i = 0; i < 20; i++)
+        {
+            tracker.OnTurnCompleted($"tab-{i}", "api", Result(100, 20));
+            tracker.OnTabRenamed($"tab-{i}", "refactor auth");
+            tracker.OnTabRenamed($"tab-{i}", $"refactor auth {i}");
+        }
+        await tracker.DisposeAsync();
+
+        Assert.All(tracker.Store.GetTokensByTab(DateTimeOffset.MinValue), s => Assert.Equal($"refactor auth {s.TabId[4..]}", s.Name));
+        Assert.Equal(20, tracker.Store.GetTokensByTab(DateTimeOffset.MinValue).Count);
+        tracker.Store.Dispose();
+    }
+
+    [Fact]
+    public async Task A_closed_tab_keeps_its_last_name_in_the_usage_panel()
+    {
+        await using var h = new TabTestHarness();
+        var tracker = new UsageTracker(h.Services, new UsageStore(Path.Combine(h.Root, "usage.db"), h.Time));
+        h.Services.UseUsageTracker(tracker);
+        using var header = new UsageViewModel(h.Services, tracker);
+        var panel = new UsagePanelViewModel(h.Services, tracker, header, id => h.Shell.AllTabs.FirstOrDefault(t => t.Id == id)?.DisplayName);
+        var tab = await h.OpenTabAsync();
+        h.Transport.EmitTurn();
+        await Row("work", "the turn");
+
+        // Renamed after its last turn, then closed: the panel still names it.
+        tab.StartRenameCommand.Execute(null);
+        tab.RenameText = "refactor auth";
+        await tab.CommitRenameCommand.ExecuteAsync(null);
+        h.Shell.CloseTabCommand.Execute(tab);
+        await TabTestHarness.Eventually(() => !h.Shell.AllTabs.Any(), "the tab to close");
+
+        await Row("refactor auth", "the closed tab's last name");
+
+        async Task Row(string name, string what) =>
+            await TabTestHarness.Eventually(() =>
+            {
+                panel.Refresh();
+                return panel.Tabs is [{ } row] && row.Name == name;
+            }, what);
+    }
+
+    [Fact]
+    public void A_row_is_named_after_the_open_tab_then_the_last_name_kept()
+    {
+        var rows = TabBurnRow.From(
+            [
+                new TabTokenSum("open", 300, 0, 0, 0, 0, 1, "its old name"),
+                new TabTokenSum("closed", 200, 0, 0, 0, 0, 1, "fix the build"),
+                new TabTokenSum("recorded-before-names", 100, 0, 0, 0, 0, 1),
+            ],
+            id => id == "open" ? "its new name" : null);
+
+        Assert.Equal(["its new name", "fix the build", "A closed tab"], rows.Select(r => r.Name));
     }
 
     private static RateLimitEventMessage Event(double session, DateTimeOffset sessionResets, double weekly)

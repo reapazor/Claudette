@@ -335,6 +335,13 @@ public sealed class AppServices : IAsyncDisposable
     /// <summary>For tests: sessions come from <paramref name="factory"/> instead of a real <c>claude</c>.</summary>
     internal void UseSessionFactory(IClaudeSessionFactory factory) => Sessions = factory;
 
+    /// <summary>For tests: the tabs record their turns with <paramref name="tracker"/>, which only polls once started.</summary>
+    internal void UseUsageTracker(UsageTracker tracker)
+    {
+        UsageHistory = tracker.Store;
+        Usage = tracker;
+    }
+
     /// <summary>Saves settings shortly, so a burst of changes (typing in a field) writes once.</summary>
     public void SaveSettings()
     {

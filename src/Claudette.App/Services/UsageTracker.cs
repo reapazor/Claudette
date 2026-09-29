@@ -18,6 +18,8 @@ public sealed class UsageTracker : IAsyncDisposable
     private readonly UsagePoller _poller;
     private readonly ITimer _pruneTimer;
     private readonly ILogger _logger;
+    private readonly Lock _writeLock = new();
+    private Task _historyWrites = Task.CompletedTask;
 
     public UsageTracker(AppServices services, UsageStore store)
     {
@@ -56,17 +58,18 @@ public sealed class UsageTracker : IAsyncDisposable
 
     public void OnSettingsChanged() => _poller.UseUsageCommandFallback = _services.Settings.Usage.UseUsageCommandFallback;
 
-    /// <summary>A tab finished a turn: record its tokens and poll soon (at most once a minute).</summary>
-    public void OnTurnCompleted(string tabId, ResultMessage result)
+    /// <summary>A tab finished a turn: record its tokens and its name, and poll soon (at most once a minute).</summary>
+    public void OnTurnCompleted(string tabId, string tabName, ResultMessage result)
     {
         var records = TurnRecord.FromResult(result, tabId, _services.Time.GetUtcNow());
         if (records.Count > 0)
         {
-            _ = Task.Run(() =>
+            WriteHistory(() =>
             {
                 try
                 {
                     Store.AddTurns(records);
+                    Store.SetTabName(tabId, tabName);
                     _services.Dispatcher.Post(() => TurnRecorded?.Invoke());
                 }
                 catch (Exception ex)
@@ -76,6 +79,32 @@ public sealed class UsageTracker : IAsyncDisposable
             });
         }
         _poller.NotifyTurnCompleted();
+    }
+
+    /// <summary>A tab's name changed: the history keeps the latest, so the tab's row is still named once it's closed.</summary>
+    public void OnTabRenamed(string tabId, string tabName) =>
+        WriteHistory(() =>
+        {
+            try
+            {
+                Store.SetTabName(tabId, tabName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Couldn't record a tab's name.");
+            }
+        });
+
+    /// <summary>
+    /// Writes turns and names off the UI thread, one at a time in the order they came, so a name can't land before the
+    /// turn it belongs to, or an older name after a newer one.
+    /// </summary>
+    private void WriteHistory(Action write)
+    {
+        lock (_writeLock)
+        {
+            _historyWrites = _historyWrites.ContinueWith(_ => write(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+        }
     }
 
     /// <summary>A <c>rate_limit_event</c> from any tab updates the header at once, between polls.</summary>
@@ -130,5 +159,12 @@ public sealed class UsageTracker : IAsyncDisposable
     {
         await _pruneTimer.DisposeAsync().ConfigureAwait(false);
         await _poller.DisposeAsync().ConfigureAwait(false);
+        // The last turns and names are written before the history closes. Each write catches its own failure.
+        Task writes;
+        lock (_writeLock)
+        {
+            writes = _historyWrites;
+        }
+        await writes.ConfigureAwait(false);
     }
 }

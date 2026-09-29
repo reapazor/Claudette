@@ -194,6 +194,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(DisplayName));
         OnPropertyChanged(nameof(HasUserName));
         _services.SaveState();
+        // The usage history keeps the tab's last name, for its rows once it's closed (DESIGN.md §6).
+        _services.Usage?.OnTabRenamed(Id, DisplayName);
     }
 
     // ---- Pinning (DESIGN.md §4) ---------------------------------------------------------------------------
@@ -1254,6 +1256,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(Folder));
         OnPropertyChanged(nameof(FolderName));
         OnPropertyChanged(nameof(DisplayName));
+        _services.Usage?.OnTabRenamed(Id, DisplayName);
         OnPropertyChanged(nameof(InfoRows));
         OnPropertyChanged(nameof(IsGitRepository));
         ReloadCustomActions();
@@ -1506,7 +1509,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     State.SessionId = completed.Result.SessionId ?? State.SessionId;
                     State.Tokens.Add(completed.Result);
                     _callUsage.TurnEnded(completed.Result);
-                    _services.Usage?.OnTurnCompleted(Id, completed.Result);
+                    _services.Usage?.OnTurnCompleted(Id, DisplayName, completed.Result);
                     // Only a tab that syncs writes to the library (DESIGN.md §9, "Session library").
                     CopyToLibrary();
                     RefreshTokens();

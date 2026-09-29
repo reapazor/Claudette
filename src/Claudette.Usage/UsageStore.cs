@@ -9,14 +9,14 @@ namespace Claudette.Usage;
 /// The local usage history: a SQLite file in the app data folder (DESIGN.md §6, "Usage history").
 /// <list type="bullet">
 /// <item>Plan usage samples, app-wide. One is saved only when a value changed, and at most once a minute.</item>
-/// <item>Per-turn token records, per tab.</item>
+/// <item>Per-turn token records, per tab, and each tab's last known name.</item>
 /// </list>
 /// No conversation content is ever stored. Synchronous and safe to call from any thread; keep it off the UI thread.
 /// Times are stored to the millisecond.
 /// </summary>
 public sealed class UsageStore : IDisposable
 {
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
     public static readonly TimeSpan MinimumSampleInterval = TimeSpan.FromMinutes(1);
 
     private const int SqliteCorrupt = 11;
@@ -214,7 +214,27 @@ public sealed class UsageStore : IDisposable
         }
     }
 
-    /// <summary>Each tab's tokens since <paramref name="from"/>, the heaviest first.</summary>
+    /// <summary>
+    /// Keeps <paramref name="name"/> as the tab's name, so its turns are still named once it's closed. Nothing is stored
+    /// for a tab without turn records.
+    /// </summary>
+    public void SetTabName(string tabId, string name)
+    {
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            using var command = _connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO tabs (tab_id, name) SELECT $tabId, $name WHERE EXISTS (SELECT 1 FROM turns WHERE tab_id = $tabId)
+                ON CONFLICT (tab_id) DO UPDATE SET name = excluded.name
+                """;
+            Add(command, "$tabId", tabId);
+            Add(command, "$name", name);
+            command.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>Each tab's tokens since <paramref name="from"/>, the heaviest first, with its last known name.</summary>
     public IReadOnlyList<TabTokenSum> GetTokensByTab(DateTimeOffset from)
     {
         lock (_lock)
@@ -223,10 +243,11 @@ public sealed class UsageStore : IDisposable
             using var command = _connection.CreateCommand();
             // A turn's records (one per model) share its timestamp.
             command.CommandText = """
-                SELECT tab_id, SUM(input), SUM(output), SUM(cache_write), SUM(cache_read), SUM(cost_usd), COUNT(DISTINCT timestamp)
-                FROM turns WHERE timestamp >= $from
-                GROUP BY tab_id
-                ORDER BY SUM(input + output + cache_write + cache_read) DESC, tab_id
+                SELECT turns.tab_id, SUM(input), SUM(output), SUM(cache_write), SUM(cache_read), SUM(cost_usd), COUNT(DISTINCT timestamp), tabs.name
+                FROM turns LEFT JOIN tabs ON tabs.tab_id = turns.tab_id
+                WHERE timestamp >= $from
+                GROUP BY turns.tab_id
+                ORDER BY SUM(input + output + cache_write + cache_read) DESC, turns.tab_id
                 """;
             Add(command, "$from", from.ToUnixTimeMilliseconds());
             using var reader = command.ExecuteReader();
@@ -240,15 +261,16 @@ public sealed class UsageStore : IDisposable
                     reader.GetInt64(3),
                     reader.GetInt64(4),
                     reader.GetDouble(5),
-                    reader.GetInt32(6)));
+                    reader.GetInt32(6),
+                    reader.IsDBNull(7) ? null : reader.GetString(7)));
             }
             return sums;
         }
     }
 
     /// <summary>
-    /// Deletes samples and turn records older than <paramref name="keepFor"/> (DESIGN.md §6, "Retention"). Null keeps
-    /// everything. Returns the number of records deleted.
+    /// Deletes samples and turn records older than <paramref name="keepFor"/> (DESIGN.md §6, "Retention"), and the names
+    /// of tabs with no turns left. Null keeps everything. Returns the number of samples and turn records deleted.
     /// </summary>
     public int Prune(TimeSpan? keepFor)
     {
@@ -263,12 +285,13 @@ public sealed class UsageStore : IDisposable
             using var transaction = _connection.BeginTransaction();
             var deleted = Execute(transaction, "DELETE FROM samples WHERE timestamp < $cutoff", cutoff)
                 + Execute(transaction, "DELETE FROM turns WHERE timestamp < $cutoff", cutoff);
+            Execute(transaction, "DELETE FROM tabs WHERE tab_id NOT IN (SELECT tab_id FROM turns)", null);
             transaction.Commit();
             return deleted;
         }
     }
 
-    /// <summary>Deletes every sample and turn record ("Clear usage history").</summary>
+    /// <summary>Deletes every sample, turn record and tab name ("Clear usage history").</summary>
     public void Clear()
     {
         lock (_lock)
@@ -278,6 +301,7 @@ public sealed class UsageStore : IDisposable
             {
                 Execute(transaction, "DELETE FROM samples", null);
                 Execute(transaction, "DELETE FROM turns", null);
+                Execute(transaction, "DELETE FROM tabs", null);
                 transaction.Commit();
             }
             // Give the space back and leave nothing of the old rows in the file.
@@ -359,6 +383,10 @@ public sealed class UsageStore : IDisposable
                     );
                     CREATE INDEX IF NOT EXISTS turns_by_time ON turns (timestamp);
                     CREATE INDEX IF NOT EXISTS turns_by_tab ON turns (tab_id, timestamp);
+                    CREATE TABLE IF NOT EXISTS tabs (
+                        tab_id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL
+                    );
                     PRAGMA user_version = {SchemaVersion};
                     """;
                 create.ExecuteNonQuery();
