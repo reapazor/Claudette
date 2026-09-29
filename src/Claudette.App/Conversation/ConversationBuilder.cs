@@ -44,10 +44,10 @@ public sealed class ConversationBuilder
     /// <summary>Show messages Claudette skipped as rows with their JSON: protocol logging is on (DESIGN.md §16).</summary>
     public bool ShowUnsupportedMessages { get; set; }
 
-    public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false)
+    public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null)
     {
         CloseOpen();
-        var item = new UserMessageItem(text, suffixText, isCheckIn);
+        var item = new UserMessageItem(text, suffixText, isCheckIn) { Images = images ?? [] };
         Items.Add(item);
         return item;
     }

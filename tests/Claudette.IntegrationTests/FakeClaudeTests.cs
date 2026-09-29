@@ -51,6 +51,19 @@ public sealed class FakeClaudeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_message_with_images_is_accepted()
+    {
+        await using var session = await StartAsync();
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+
+        await session.SendUserMessageAsync("look", [new MessageImage("image/png", png), new MessageImage("image/jpeg", [0xFF, 0xD8, 0xFF])], TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.Equal("pong: look [images: image/png, image/jpeg]", done.Result.Result);
+        Assert.Contains(session.Initialization!.Commands, c => c.Name == "compact");
+    }
+
+    [Fact]
     public async Task Launches_with_the_expected_arguments_and_folder()
     {
         var record = _work.Combine("record.json");

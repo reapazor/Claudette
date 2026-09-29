@@ -239,7 +239,7 @@ The conversation is drawn from Claude Code's structured output stream, not from 
 | Assistant text | Markdown with syntax-highlighted code blocks and copy buttons. Streams in as it's generated. |
 | Thinking | Collapsed "Thinking…" row; click to expand. |
 | Tool call | Compact card: tool icon, name and a one-line summary (file path, command, search pattern). Expand to see full input and output. |
-| Edit / Write | Card shows `+added −removed`; expand for an inline diff, or open it in the diff view. |
+| Edit / Write | Card shows `+added −removed`; expand for an inline diff, or **Open diff** to see the file in the diff view ([§8](#8-file-changes--diff-view)): from before Claude's first change in this session to the file now, as Changed files shows it. |
 | Bash | Shows the command; output is collapsed and uses a monospace font. |
 | Subagent (Task) | Nested, collapsible group holding that agent's tool calls. |
 | To-do list | Pinned checklist at the top of the conversation while it exists. |
@@ -254,10 +254,48 @@ Scrolling follows new output unless the user has scrolled up; a "Jump to latest"
 - Multi-line text box. `Enter` sends, `Shift+Enter` adds a new line.
 - **Stop.** A Stop button replaces Send while Claude is working, and `Esc` does the same. Stopping interrupts the current turn; it does not close the session.
 - You can type and send while Claude is working; the message is queued and delivered to the session.
-- `/` opens slash-command autocomplete (built-in plus the project's custom commands).
-- `@` opens file autocomplete for the tab's working folder.
-- Drag and drop or paste images and files to attach them.
+- `/` opens slash-command autocomplete (built-in plus the project's custom commands), and `@` file autocomplete for the tab's working folder. See [Autocomplete](#autocomplete).
+- Drag and drop, paste, or pick with the attach button images and files to attach them. See [Attachments](#attachments).
 - Per-tab controls in the bar above the composer: working folder (read-only), model, effort level, permission mode, context window usage %, tokens used.
+
+### Autocomplete
+
+- **Slash commands.** Typing `/` at the start of a message lists the session's commands: built-in, user, project, plugin and MCP ones. Only the start counts, because that's the only place Claude Code runs a command.
+  - Names, argument hints and descriptions come from the `commands` of the `initialize` reply. A `system/commands_changed` message replaces them when the list changes mid-session, for example when Claude Code finds skills in a subfolder.
+  - Each turn's `system/init` lists the commands the session accepts (`slash_commands`). A command only it names is offered without a description.
+  - Terminal-bound commands (`terminal_slash_commands`, such as `doctor`) and internal ones (a leading `__`) aren't offered.
+  - Filtering ignores case. Names that start with what's typed come first (an exact name first of all), then aliases (`/reset` finds `/clear`), then names that contain it, then, from three letters on, descriptions.
+  - Picking one replaces the word with `/name ` and closes the list. Claude Code runs the command when the message is sent, as in the terminal.
+- **Files.** Typing `@` at the start of a word lists the working folder's files and folders.
+  - In a git repository the list is `git ls-files --cached --others --exclude-standard`, so `.gitignore` is respected.
+  - Elsewhere it's a breadth-first walk of the folder that skips `.git`, `.hg`, `.svn`, `node_modules`, `bin`, `obj`, `.vs`, `.idea`, `__pycache__` and `.venv`, and stops at 20,000 entries or 16 levels deep.
+  - The list is cached per tab. It's refreshed when it's more than 15 seconds old and after each turn, and the old list is used while the new one loads.
+  - Matching ignores case. Best first: a name that starts with what's typed, a path that does (`src/de` finds `src/deep/`), a path segment that does, a name or path that contains it, then its letters in order, preferring the starts of words (`tvm` finds `TabViewModel.cs`). Ties go to shallower, then shorter, paths. With nothing typed, the top of the folder is listed, folders first.
+  - Picking a file inserts `@path/to/file ` relative to the working folder. Picking a folder inserts `@folder/` and lists what's in it. A path with spaces is quoted: `@"docs/my notes.md"`.
+- **Keys.** The list opens above the composer, and the text box keeps focus.
+  - `Up` and `Down` move through it, `Enter` or `Tab` picks, and clicking an entry picks it.
+  - `Esc` closes it (without stopping Claude), and it stays closed while the caret is in that command or mention.
+  - `Enter` still sends when the list has nothing to pick, or when what's typed is already the highlighted entry, such as `/compact` in full.
+- **What Claude Code does with `@path`.** Checked against 2.1.284:
+  - When the message is sent, Claude Code reads each mentioned file with its Read tool and gives Claude the content as context. A folder gets a listing, and an image file becomes an image. Absolute paths outside the folder work too, and none of this asks for permission.
+  - A file that was already read and hasn't changed isn't attached again. A path that doesn't exist is left as text, and so is a binary file it can't read.
+  - It only reads mentions in the message's last content block, and only when that block is text. Claudette sends the text after any images for this reason.
+  - Setting `client_composed` on a message turns this off, along with running slash commands. Claudette doesn't set it.
+
+### Attachments
+
+- Images and files can be dropped on the composer, pasted into it, or picked with the attach button (the paper clip).
+- **Images.** PNG, JPEG, GIF and WebP, recognized by their first bytes.
+  - They show as thumbnails above the text box, each with a `×` to remove it.
+  - They're sent as base64 `image` content blocks in the `user` message, before the text. A message can be only images.
+  - Each can be up to 20 MB, and a message can have up to 20.
+  - Claude Code scales images down itself before they reach the API: 2.1.284 fits them in 2000 px and re-encodes large ones as JPEG. So Claudette sends them as they are, and the API's own size limits don't apply to what's attached.
+- **Other files and folders** become `@path` mentions, inserted at the caret. The path is relative to the working folder when the file is in it, and the full path otherwise. Claude Code reads them when the message is sent (see [Autocomplete](#autocomplete)), which covers text, PDFs and notebooks, and the message still says what was attached.
+  - Binary files Claude can't read are refused with a note under the composer, rather than becoming a mention Claude Code would silently drop. A file is treated as binary when its first 8 KB contain a zero byte, except PDFs.
+  - Images over 20 MB and other image formats (such as BMP) are refused the same way.
+- **Pasting.** Copied files are attached. Otherwise, text on the clipboard pastes as text, even when an image comes with it, since apps often add a picture of the same text. An image on its own, such as a screenshot, is attached.
+- **In the conversation.** A sent message shows its images as thumbnails above its text. Claude Code stores them in the transcript, so a restored tab shows them too.
+- Attachments aren't kept with a tab's draft when Claudette restarts into a new build ([§9](#working-on-claudette)).
 
 ### Quick suffixes
 
@@ -861,7 +899,7 @@ The `system/init` message that follows gives `session_id`, `model`, `permissionM
 
 | Need | How | Documented |
 |---|---|---|
-| Send a message, with images | A `user` message as one JSON line on stdin. See "Messages sent while Claude is working" below. | Yes |
+| Send a message, with images | A `user` message as one JSON line on stdin. Images are base64 `image` content blocks before the text ([§5](#attachments)). See "Messages sent while Claude is working" below. | Yes |
 | Receive output | JSON lines on stdout: `system/init`, `system/status`, `assistant`, `user` (tool results, with `tool_use_result`), `stream_event` (partial text), `result`, `rate_limit_event`, `auth_status`, `permission_denied`, `api_retry`, `conversation_reset`, `task_started` / `task_notification`, `thinking_tokens` | Yes |
 | Stop the current turn | `interrupt`. The reply lists `still_queued` messages; the turn ends with a `result` of `error_during_execution` / `aborted_streaming`. SIGINT is a fallback. Never SIGTERM: it leaves the turn unfinished with no result. | Yes |
 | Permission prompts | Incoming `can_use_tool`; reply allow, allow with `updatedPermissions`, or deny with a message ([§7](#7-permission-prompts)) | Behavior yes, wire format no |
@@ -1064,7 +1102,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 |---|---|
 | Fake transport and replay transport | `tests/Claudette.Core.Tests/Support/` |
 | Protocol fixtures | `tests/Claudette.Core.Tests/Fixtures/protocol/2.1.284/` (recorded in the spikes, with paths and personal details removed) |
-| `fake-claude` | `tools/Claudette.FakeClaude/`. Scripted by the prompt (`ASK_PERMISSION`, `SLOW`, `CRASH`, `AUTH_FAIL`) and by environment variables, rather than scenario files. Its sign-in (`auth login`, `auth logout`, the sign-in control requests) is kept in a file in `CLAUDE_CONFIG_DIR`, so a sign-in sticks; see the header of its `Program.cs`. |
+| `fake-claude` | `tools/Claudette.FakeClaude/`. Scripted by the prompt (`ASK_PERMISSION`, `SLOW`, `CRASH`, `SPAWN`, `SILENT`, `HANG`, `AUTH_FAIL`) and by environment variables, rather than scenario files; see the header of its `Program.cs`. Its sign-in (`auth login`, `auth logout`, the sign-in control requests) is kept in a file in `CLAUDE_CONFIG_DIR`, so a sign-in sticks. Its reply to a message with images names their media types. |
 | Mock Messages API | `tools/Claudette.MockApi/`. Runs in-process in tests, or on its own with `dotnet run`. |
 | Tests against `fake-claude` and the real CLI | `tests/Claudette.IntegrationTests/`. The real-CLI tests are tagged `RealCli`. |
 | View model tests | `tests/Claudette.App.Tests/`. `Support/TabTestHarness.cs` gives a tab a scripted Claude Code connection, a fake clock, a temporary data folder and a fake process tracker. |
@@ -1072,6 +1110,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 | Process monitor tests | `tests/Claudette.Platform.Tests/`. Some start real process trees on the current OS; the Linux ones skip elsewhere. |
 | History, library, leases, settings sync, diffs, git | `tests/Claudette.Core.Tests/{History,Library,Settings,Diffs,Git}`. Git tests use the real `git` in a temporary repo and skip without it. |
 | Real-CLI checks of questions and plans | `RealCliTests`, with the mock's `ASK_QUESTION` and `EXIT_PLAN` scripts |
+| Real-CLI checks of attachments, `@` mentions and slash commands | `RealCliTests`; the mock records the images that reach it, with a PNG's size |
 
 ## 16. Tracking Claude Code Changes
 

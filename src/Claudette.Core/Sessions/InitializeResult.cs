@@ -12,7 +12,26 @@ public sealed record ModelInfo(
     bool SupportsEffort,
     IReadOnlyList<string> SupportedEffortLevels);
 
-public sealed record SlashCommandInfo(string Name, string? Description, string? ArgumentHint);
+/// <summary>A slash command, as <c>initialize</c> and <c>system/commands_changed</c> list them (DESIGN.md §5, "Composer").</summary>
+/// <param name="Name">Without the leading slash.</param>
+public sealed record SlashCommandInfo(string Name, string? Description, string? ArgumentHint)
+{
+    public IReadOnlyList<string> Aliases { get; init; } = [];
+
+    /// <summary>One of Claude Code's own commands, rather than a user, project, plugin or MCP one.</summary>
+    public bool IsBuiltIn { get; init; }
+
+    /// <summary>Reads a <c>commands</c> array; entries without a name are skipped.</summary>
+    public static IReadOnlyList<SlashCommandInfo> ParseList(JsonArray? commands) =>
+        commands?.OfType<JsonObject>()
+            .Select(c => new SlashCommandInfo(c.GetString("name") ?? "", c.GetString("description"), c.GetString("argumentHint"))
+            {
+                Aliases = c.GetStringList("aliases"),
+                IsBuiltIn = c.GetBool("builtin") ?? false,
+            })
+            .Where(c => c.Name.Length > 0)
+            .ToArray() ?? [];
+}
 
 public sealed record AccountInfo(string? Email, string? Organization, string? SubscriptionType, string? TokenSource, string? ApiProvider);
 
@@ -37,10 +56,7 @@ public sealed record InitializeResult(
             .Where(m => m.Value.Length > 0)
             .ToArray() ?? [];
 
-        var commands = response.GetArray("commands")?.OfType<JsonObject>()
-            .Select(c => new SlashCommandInfo(c.GetString("name") ?? "", c.GetString("description"), c.GetString("argumentHint")))
-            .Where(c => c.Name.Length > 0)
-            .ToArray() ?? [];
+        var commands = SlashCommandInfo.ParseList(response.GetArray("commands"));
 
         var account = response.GetObject("account") ?? [];
         return new InitializeResult(

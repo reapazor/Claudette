@@ -1,4 +1,5 @@
 using Claudette.App.Conversation;
+using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 
 namespace Claudette.App.ViewModels;
@@ -9,14 +10,17 @@ namespace Claudette.App.ViewModels;
 /// </summary>
 public sealed partial class TabViewModel
 {
+    /// <summary>A message on its way, with the images attached to it.</summary>
+    private sealed record PendingMessage(string Text, IReadOnlyList<MessageImage> Images);
+
     /// <summary>Messages sent while Claude Code needed a sign-in, in the order they were sent.</summary>
-    private readonly List<string> _heldForSignIn = [];
+    private readonly List<PendingMessage> _heldForSignIn = [];
 
     /// <summary>
     /// Messages Claude Code has been given that nothing has come back for yet. If the sign-in error comes first, they
     /// never reached the model, so they're sent again after the sign-in.
     /// </summary>
-    private readonly List<string> _awaitingReply = [];
+    private readonly List<PendingMessage> _awaitingReply = [];
 
     /// <summary>The note about held messages was shown, for this sign-in.</summary>
     private bool _heldNoted;
@@ -28,16 +32,16 @@ public sealed partial class TabViewModel
     private bool WaitsForSignIn => _restartAfterSignIn && _shell.NeedsSignIn;
 
     /// <summary>The messages waiting for a sign-in.</summary>
-    public IReadOnlyList<string> HeldMessages => _heldForSignIn;
+    public IReadOnlyList<string> HeldMessages => [.. _heldForSignIn.Select(m => m.Text)];
 
     /// <summary>Holds <paramref name="message"/> if Claude Code needs a sign-in. Returns whether it was held.</summary>
-    private bool HoldForSignIn(string message)
+    private bool HoldForSignIn(string message, IReadOnlyList<MessageImage>? images)
     {
         if (!_shell.NeedsSignIn)
         {
             return false;
         }
-        _heldForSignIn.Add(message);
+        _heldForSignIn.Add(new PendingMessage(message, images ?? []));
         NoteHeldMessages();
         return true;
     }
@@ -129,7 +133,7 @@ public sealed partial class TabViewModel
         _conversation.AddNote(held.Length == 1 ? "Signed in. Sending your message." : $"Signed in. Sending your {held.Length} messages.");
         foreach (var message in held)
         {
-            await SendRawAsync(message);
+            await SendRawAsync(message.Text, message.Images);
         }
         _ = RequestTitleAsync();
     }

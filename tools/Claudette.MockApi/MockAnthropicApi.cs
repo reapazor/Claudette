@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 namespace Claudette.MockApi;
 
 /// <summary>A request the mock received, for tests to check what reached the API.</summary>
+/// <param name="LastUserImages">The images in the latest user message, in order.</param>
 public sealed record RecordedRequest(
     string Method,
     string Path,
@@ -22,7 +23,11 @@ public sealed record RecordedRequest(
     int MessageCount,
     string LastUserText,
     string Reply,
-    string LastToolResultText = "");
+    string LastToolResultText = "",
+    IReadOnlyList<RecordedImage>? LastUserImages = null);
+
+/// <summary>An image that reached the API: its media type, size, and for a PNG its dimensions.</summary>
+public sealed record RecordedImage(string MediaType, int Bytes, int? Width, int? Height);
 
 /// <summary>
 /// A fake Anthropic Messages API, so the real <c>claude</c> CLI can be driven without tokens (DESIGN.md §15,
@@ -221,7 +226,8 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
             (body["messages"] as JsonArray)?.Count ?? 0,
             LastUserText(body).Text,
             reply,
-            LastToolResultText(body)));
+            LastToolResultText(body),
+            LastUserImages(body)));
     }
 
     private sealed record Plan(string Kind, List<JsonObject> Blocks, TimeSpan? ChunkDelay = null);
@@ -318,6 +324,39 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
             JsonArray parts => string.Join("\n", parts.OfType<JsonObject>().Select(p => p["text"]?.GetValue<string>())),
             _ => "",
         }));
+    }
+
+    /// <summary>The base64 image blocks in the latest user message.</summary>
+    private static IReadOnlyList<RecordedImage> LastUserImages(JsonObject body)
+    {
+        var last = (body["messages"] as JsonArray)?.OfType<JsonObject>().LastOrDefault(m => m["role"]?.GetValue<string>() == "user");
+        if (last?["content"] is not JsonArray blocks)
+        {
+            return [];
+        }
+        return blocks.OfType<JsonObject>()
+            .Where(b => b["type"]?.GetValue<string>() == "image")
+            .Select(b =>
+            {
+                var mediaType = b["source"]?["media_type"]?.GetValue<string>() ?? "";
+                byte[] data;
+                try
+                {
+                    data = Convert.FromBase64String(b["source"]?["data"]?.GetValue<string>() ?? "");
+                }
+                catch (FormatException)
+                {
+                    data = [];
+                }
+                // A PNG's width and height are the first fields of its IHDR chunk, at bytes 16 and 20.
+                var isPng = data.Length >= 24 && data[1] == (byte)'P' && data[2] == (byte)'N' && data[3] == (byte)'G';
+                return new RecordedImage(
+                    mediaType,
+                    data.Length,
+                    isPng ? System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(data.AsSpan(16)) : null,
+                    isPng ? System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(data.AsSpan(20)) : null);
+            })
+            .ToArray();
     }
 
     /// <summary>A message's plain text: its string content, or its text blocks joined.</summary>

@@ -14,6 +14,15 @@ public interface IPlatformServices
 
     Task SetClipboardTextAsync(string text);
 
+    /// <summary>Files copied in Finder or Explorer, as local paths, for pasting into the composer (DESIGN.md §5).</summary>
+    Task<IReadOnlyList<string>> GetClipboardFilesAsync();
+
+    /// <summary>Whether the clipboard has text, which a paste prefers over an image of the same thing.</summary>
+    Task<bool> ClipboardHasTextAsync();
+
+    /// <summary>An image on the clipboard, such as a screenshot, as PNG bytes; null when there's none.</summary>
+    Task<byte[]?> GetClipboardImageAsync();
+
     /// <summary>Opens a file in the app the OS uses for it, for example the user's editor (DESIGN.md §8).</summary>
     Task OpenFileAsync(string path);
 

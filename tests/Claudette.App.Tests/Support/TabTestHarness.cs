@@ -245,6 +245,17 @@ internal sealed class NoPlatform : IPlatformServices
         return Task.CompletedTask;
     }
 
+    /// <summary>Files, an image or text "on the clipboard", for paste tests.</summary>
+    public List<string> ClipboardFiles { get; } = [];
+
+    public byte[]? ClipboardImage { get; set; }
+
+    public Task<IReadOnlyList<string>> GetClipboardFilesAsync() => Task.FromResult<IReadOnlyList<string>>(ClipboardFiles.ToArray());
+
+    public Task<bool> ClipboardHasTextAsync() => Task.FromResult(!string.IsNullOrEmpty(Clipboard));
+
+    public Task<byte[]?> GetClipboardImageAsync() => Task.FromResult(ClipboardImage);
+
     public Task OpenFileAsync(string path) => Task.CompletedTask;
 }
 

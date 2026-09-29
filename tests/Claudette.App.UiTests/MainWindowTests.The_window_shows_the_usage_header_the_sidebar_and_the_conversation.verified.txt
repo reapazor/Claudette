@@ -20,6 +20,7 @@
 [button] Settings
 "Opus"
 [field] "Message Claude…  (Enter to send, Shift+Enter for a new line, Esc to stop)"
+[button] Attach a file
 [button] Suffixes ▾
 [button] Opus ▾
 [button] Default effort ▾

@@ -6,6 +6,8 @@
              xmlns:settings="using:Claudette.Core.Settings"
              xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
              xmlns:controls="using:Claudette.App.Controls"
+             xmlns:protocol="using:Claudette.Core.Protocol"
+             xmlns:services="using:Claudette.App.Services"
              x:Class="Claudette.App.Views.TabView"
              x:DataType="vm:TabViewModel"
              FontSize="{DynamicResource ConversationFontSize}"
@@ -59,6 +61,31 @@
       <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
       <Setter Property="Background" Value="Transparent" />
     </Style>
+    <!-- Tool card icons (DESIGN.md §5): 12×12 strokes from App.axaml, drawn as they are. -->
+    <Style Selector="Path.toolicon">
+      <Setter Property="Stroke" Value="{DynamicResource MutedTextBrush}" />
+      <Setter Property="StrokeThickness" Value="1.1" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="StrokeJoin" Value="Round" />
+      <Setter Property="Width" Value="12" />
+      <Setter Property="Height" Value="12" />
+      <Setter Property="Stretch" Value="None" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- Attached images (DESIGN.md §5, "Attachments") -->
+    <Style Selector="Border.thumbnail">
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="ClipToBounds" Value="True" />
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Border.composer.dropping">
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
+    </Style>
+    <!-- The / and @ autocomplete (DESIGN.md §5, "Composer") -->
+    <Style Selector="Button.completion.selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SelectedRowBrush}" />
+    </Style>
   </UserControl.Styles>
 
   <!-- Conversation templates (DESIGN.md §5). Declared on the control so nested subagent groups use them too. -->
@@ -69,6 +96,21 @@
               CornerRadius="8" Padding="12,8" Margin="0,6,0,2">
         <StackPanel Spacing="4">
           <TextBlock Classes="muted small" Text="Automatic check-in" IsVisible="{Binding IsCheckIn}" />
+          <!-- Attached images (DESIGN.md §5, "Attachments") -->
+          <ItemsControl ItemsSource="{Binding Images}" IsVisible="{Binding HasImages}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel ItemSpacing="6" LineSpacing="6" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="protocol:MessageImage">
+                <Border Classes="thumbnail">
+                  <Image Source="{Binding Data, Converter={x:Static services:ImageFiles.Thumbnail}}" Height="72" MaxWidth="160" Stretch="UniformToFill" />
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
           <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" IsVisible="{Binding Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           <SelectableTextBlock Classes="muted small" Text="{Binding SuffixText}" TextWrapping="Wrap" IsVisible="{Binding HasSuffix}" />
         </StackPanel>
@@ -99,7 +141,7 @@
         <Button Classes="flat row" Command="{Binding ToggleCommand}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <TextBlock Classes="status" Classes.busy="{Binding !IsComplete}" Classes.ok="{Binding IsComplete}" Classes.failed="{Binding IsError}" Text="●" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding Icon}" Classes="muted" VerticalAlignment="Center" />
+            <Path Classes="toolicon" Data="{Binding IconKey, Converter={x:Static conv:ToolIcons.Geometry}}" />
             <TextBlock FontWeight="SemiBold" Text="{Binding AgentType}" VerticalAlignment="Center" />
             <TextBlock Classes="muted" Text="{Binding Summary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
           </StackPanel>
@@ -122,15 +164,24 @@
 
     <DataTemplate DataType="conv:ToolUseItem">
       <StackPanel Spacing="4">
-        <Button Classes="flat row" Command="{Binding ToggleCommand}" IsHitTestVisible="{Binding CanExpand}">
-          <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
-            <TextBlock Classes="status" Classes.busy="{Binding !IsComplete}" Classes.ok="{Binding IsComplete}" Classes.failed="{Binding IsError}"
-                       Text="●" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBlock Grid.Column="1" FontWeight="SemiBold" Text="{Binding Name}" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBlock Grid.Column="2" Classes="mono muted" Text="{Binding Summary}" MaxWidth="560" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="4" Classes="mono small" Text="{Binding DiffStats}" IsVisible="{Binding HasDiff}" VerticalAlignment="Center" Margin="12,0,0,0" />
-          </Grid>
-        </Button>
+        <Grid ColumnDefinitions="*,Auto">
+          <Button Classes="flat row" Command="{Binding ToggleCommand}" IsHitTestVisible="{Binding CanExpand}">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+              <TextBlock Classes="status" Classes.busy="{Binding !IsComplete}" Classes.ok="{Binding IsComplete}" Classes.failed="{Binding IsError}"
+                         Text="●" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <Path Grid.Column="1" Classes="toolicon" Data="{Binding IconKey, Converter={x:Static conv:ToolIcons.Geometry}}" Margin="0,0,6,0" />
+              <TextBlock Grid.Column="2" FontWeight="SemiBold" Text="{Binding Name}" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <TextBlock Grid.Column="3" Classes="mono muted" Text="{Binding Summary}" MaxWidth="560" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="5" Classes="mono small" Text="{Binding DiffStats}" IsVisible="{Binding HasDiff}" VerticalAlignment="Center" Margin="12,0,0,0" />
+            </Grid>
+          </Button>
+          <!-- Edit / Write: the file in the diff view (DESIGN.md §5, §8) -->
+          <Button Grid.Column="1" Classes="flat" Padding="6,2" Margin="4,0,0,0" VerticalAlignment="Center" IsVisible="{Binding CanOpenDiff}"
+                  ToolTip.Tip="Open in the diff view" AutomationProperties.Name="Open in the diff view"
+                  Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenToolDiffCommand}" CommandParameter="{Binding}">
+            <TextBlock Classes="muted small" Text="Open diff" />
+          </Button>
+        </Grid>
         <TextBlock Classes="muted small mono" Text="{Binding ResultSummary}" Classes.error="{Binding IsError}" TextTrimming="CharacterEllipsis"
                    Margin="22,0,0,0" IsVisible="{Binding HasResultSummary}" />
 
@@ -569,15 +620,84 @@
       <TextBlock Classes="small error" Margin="4,0" TextWrapping="Wrap" IsVisible="{Binding IsBypassMode}"
                  Text="Bypass permissions: Claude won't ask before running commands or changing files in this session." />
 
-      <Border Classes="composer" Classes.bypass="{Binding IsBypassMode}">
-        <Grid RowDefinitions="Auto,Auto">
-          <TextBox x:Name="Composer" Text="{Binding ComposerText}" AcceptsReturn="True" TextWrapping="Wrap"
+      <!-- Why a dropped or pasted file wasn't attached -->
+      <Grid ColumnDefinitions="*,Auto" Margin="4,0" IsVisible="{Binding HasAttachmentError}">
+        <TextBlock Classes="small error" TextWrapping="Wrap" VerticalAlignment="Center" Text="{Binding AttachmentError}" />
+        <Button Grid.Column="1" Classes="flat" Padding="4" ToolTip.Tip="Dismiss" AutomationProperties.Name="Dismiss" Command="{Binding DismissAttachmentErrorCommand}">
+          <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="7" Height="7" Stretch="Uniform" />
+        </Button>
+      </Grid>
+
+      <Border x:Name="ComposerBox" Classes="composer" Classes.bypass="{Binding IsBypassMode}" DragDrop.AllowDrop="True">
+        <Grid RowDefinitions="Auto,Auto,Auto">
+          <!-- Attached images, removable (DESIGN.md §5, "Attachments") -->
+          <ItemsControl ItemsSource="{Binding Attachments}" IsVisible="{Binding Attachments.Count}" Margin="0,4,0,2">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel ItemSpacing="6" LineSpacing="6" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:ComposerAttachment">
+                <Panel ToolTip.Tip="{Binding Name}">
+                  <Border Classes="thumbnail">
+                    <Image Source="{Binding Data, Converter={x:Static services:ImageFiles.Thumbnail}}" Height="56" MaxWidth="120" Stretch="UniformToFill" />
+                  </Border>
+                  <Button Classes="flat" Padding="4" Margin="3" HorizontalAlignment="Right" VerticalAlignment="Top" CornerRadius="9"
+                          Background="{DynamicResource ComposerBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1"
+                          ToolTip.Tip="Remove" AutomationProperties.Name="Remove image"
+                          Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RemoveAttachmentCommand}" CommandParameter="{Binding}">
+                    <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="7" Height="7" Stretch="Uniform" />
+                  </Button>
+                </Panel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBox x:Name="Composer" Grid.Row="1" Text="{Binding ComposerText}" AcceptsReturn="True" TextWrapping="Wrap"
                    MinHeight="40" MaxHeight="240" Padding="2,6"
                    PlaceholderText="{Binding Tips.ComposerPlaceholder}" />
 
+          <!-- / and @ autocomplete (DESIGN.md §5, "Composer"): keyboard first, the text box keeps focus -->
+          <Popup x:Name="CompletionPopup" Grid.Row="1" PlacementTarget="{Binding #ComposerBox}" Placement="TopEdgeAlignedLeft" VerticalOffset="-4"
+                 IsOpen="{Binding Completions.IsOpen, Mode=OneWay}" IsLightDismissEnabled="False">
+            <Border Classes="dialog" Padding="4" Width="{Binding #ComposerBox.Bounds.Width}" MaxHeight="340">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Classes="muted small" FontWeight="SemiBold" Margin="8,4,8,2" Text="{Binding Completions.Header}" />
+                <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="8,4,8,6" Text="{Binding Completions.Message}" IsVisible="{Binding Completions.HasMessage}" />
+                <ScrollViewer x:Name="CompletionScroll" HorizontalScrollBarVisibility="Disabled">
+                  <ItemsControl x:Name="CompletionList" ItemsSource="{Binding Completions.Items}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="vm:CompletionItem">
+                        <Button Classes="flat row completion" Classes.selected="{Binding IsSelected}" Focusable="False" Padding="8,4"
+                                HorizontalContentAlignment="Stretch" Click="OnCompletionClicked">
+                          <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                            <Path Classes="toolicon" Data="{Binding IconKey, Converter={x:Static conv:ToolIcons.Geometry}}" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                              <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                              <TextBlock Classes="muted small mono" Text="{Binding Hint}" VerticalAlignment="Center"
+                                         IsVisible="{Binding Hint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                          </Grid>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </DockPanel>
+            </Border>
+          </Popup>
+
           <!-- Control bar -->
-          <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto">
+          <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto">
             <StackPanel Orientation="Horizontal" Spacing="2">
+              <!-- Attach a file (DESIGN.md §5, "Attachments"); dropping and pasting work too -->
+              <Button Classes="flat" Padding="6,4" ToolTip.Tip="Attach a file or image (or drop or paste one)" AutomationProperties.Name="Attach a file"
+                      Click="OnAttachClicked">
+                <Path Data="{StaticResource IconAttach}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.1" StrokeLineCap="Round"
+                      Width="12" Height="12" Stretch="None" />
+              </Button>
               <Button x:Name="SuffixButton" Classes="flat" ToolTip.Tip="{Binding Tips.Suffixes}">
                 <TextBlock Classes="muted small" Text="Suffixes ▾" />
                 <Button.Flyout>

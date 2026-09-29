@@ -71,6 +71,30 @@ public sealed class AvaloniaPlatformServices(Func<TopLevel?> topLevel) : IPlatfo
             await clipboard.SetTextAsync(text);
         }
     }
+
+    public async Task<IReadOnlyList<string>> GetClipboardFilesAsync()
+    {
+        if (topLevel()?.Clipboard is not { } clipboard || await clipboard.TryGetFilesAsync() is not { } items)
+        {
+            return [];
+        }
+        return items.Select(item => item.TryGetLocalPath()).OfType<string>().ToArray();
+    }
+
+    public async Task<bool> ClipboardHasTextAsync() =>
+        topLevel()?.Clipboard is { } clipboard && !string.IsNullOrEmpty(await clipboard.TryGetTextAsync());
+
+    public async Task<byte[]?> GetClipboardImageAsync()
+    {
+        if (topLevel()?.Clipboard is not { } clipboard || await clipboard.TryGetBitmapAsync() is not { } bitmap)
+        {
+            return null;
+        }
+        using (bitmap)
+        {
+            return ImageFiles.ToPng(bitmap);
+        }
+    }
 }
 
 public sealed class AvaloniaUiDispatcher : IUiDispatcher

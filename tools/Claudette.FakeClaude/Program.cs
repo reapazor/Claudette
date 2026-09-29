@@ -31,6 +31,8 @@
 //   HANG             goes quiet and ignores everything until interrupted (a stuck turn)
 //   AUTH_FAIL        answers like a signed-out Claude Code: an assistant message with error "authentication_failed"
 //   anything else    replies "pong: <prompt>" (or, while signed out, as AUTH_FAIL does)
+// A message with images (content blocks) is read as its text plus "[images: image/png, …]", so the reply says what
+// arrived.
 //
 //   fake-claude --child <seconds> [busy]   the child process SPAWN starts
 //
@@ -229,7 +231,7 @@ internal sealed class FakeSession(string version)
                 case "user":
                     lock (_prompts)
                     {
-                        _prompts.Enqueue(message["message"]!["content"]!.GetValue<string>());
+                        _prompts.Enqueue(PromptText(message["message"]?["content"]));
                     }
                     _promptSignal.Release();
                     break;
@@ -238,6 +240,20 @@ internal sealed class FakeSession(string version)
         // Standard input closed: finish.
         _turn?.Cancel();
         return 0;
+    }
+
+    /// <summary>A plain-text prompt, or content blocks: their text, then the attached images' media types.</summary>
+    private static string PromptText(JsonNode? content)
+    {
+        if (content is JsonValue value && value.TryGetValue<string>(out var text))
+        {
+            return text;
+        }
+        var blocks = (content as JsonArray)?.OfType<JsonObject>().ToArray() ?? [];
+        var texts = blocks.Where(b => b["type"]?.GetValue<string>() == "text").Select(b => b["text"]?.GetValue<string>() ?? "");
+        var images = blocks.Where(b => b["type"]?.GetValue<string>() == "image").Select(b => b["source"]?["media_type"]?.GetValue<string>() ?? "unknown").ToArray();
+        var prompt = string.Join("\n", texts);
+        return images.Length == 0 ? prompt : $"{prompt} [images: {string.Join(", ", images)}]".TrimStart();
     }
 
     private async Task HandleControlRequestAsync(JsonObject message)
@@ -256,7 +272,9 @@ internal sealed class FakeSession(string version)
                 ["models"] = new JsonArray(
                     new JsonObject { ["value"] = "default", ["resolvedModel"] = "claude-fake-1", ["displayName"] = "Default (recommended)", ["supportsEffort"] = true, ["supportedEffortLevels"] = new JsonArray("low", "high") },
                     new JsonObject { ["value"] = "fake", ["resolvedModel"] = "claude-fake-1", ["displayName"] = "Fake", ["supportsEffort"] = true, ["supportedEffortLevels"] = new JsonArray("low", "high") }),
-                ["commands"] = new JsonArray(),
+                ["commands"] = new JsonArray(
+                    new JsonObject { ["name"] = "review", ["description"] = "Review the changes (project)", ["argumentHint"] = "[path]" },
+                    new JsonObject { ["name"] = "compact", ["description"] = "Free up context by summarizing the conversation so far", ["argumentHint"] = "<optional custom summarization instructions>", ["builtin"] = true }),
                 ["account"] = new JsonObject { ["email"] = "fake@example.com", ["subscriptionType"] = "Claude Max" },
                 ["current_permission_mode"] = "default",
             },
@@ -331,7 +349,7 @@ internal sealed class FakeSession(string version)
                 prompt = _prompts.Dequeue();
             }
             _turn = new CancellationTokenSource();
-            await WriteAsync(new JsonObject { ["type"] = "system", ["subtype"] = "init", ["session_id"] = _sessionId, ["model"] = "claude-fake-1", ["permissionMode"] = "default", ["claude_code_version"] = version, ["capabilities"] = new JsonArray("interrupt_receipt_v1") });
+            await WriteAsync(new JsonObject { ["type"] = "system", ["subtype"] = "init", ["session_id"] = _sessionId, ["model"] = "claude-fake-1", ["permissionMode"] = "default", ["claude_code_version"] = version, ["capabilities"] = new JsonArray("interrupt_receipt_v1"), ["slash_commands"] = new JsonArray("review", "compact") });
             try
             {
                 if (prompt.StartsWith("AUTH_FAIL", StringComparison.Ordinal) || !FakeAuth.IsLoggedIn())
