@@ -5,6 +5,7 @@ using Claudette.Core.Installation;
 using Claudette.Core.Processes;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
+using Claudette.Platform.Notifications;
 using Claudette.Platform.Processes;
 using Claudette.Usage;
 using Microsoft.Extensions.Logging;
@@ -33,6 +34,7 @@ public sealed class AppServices : IAsyncDisposable
     /// Tracks each <c>claude</c> process and everything it starts (DESIGN.md §4, "Process monitor"); the launcher must
     /// be the matching <see cref="Claudette.Platform.Processes.TrackingProcessLauncher"/>. Null in tests.
     /// </param>
+    /// <param name="notifier">Shows OS notifications (DESIGN.md §10). Null shows none.</param>
     public AppServices(
         AppPaths paths,
         IProcessLauncher launcher,
@@ -40,7 +42,8 @@ public sealed class AppServices : IAsyncDisposable
         IPlatformServices platform,
         IUiDispatcher dispatcher,
         ILoggerFactory? loggerFactory = null,
-        IProcessTreeTracker? processTrees = null)
+        IProcessTreeTracker? processTrees = null,
+        INotifier? notifier = null)
     {
         Paths = paths;
         _launcher = launcher;
@@ -56,8 +59,34 @@ public sealed class AppServices : IAsyncDisposable
         State = _stateStore.Load();
         Git = new GitWorkingTree(launcher, timeProvider);
         Library = new LibraryService(this);
-        SettingsChanged += (_, _) => Library.OnSettingsChanged();
+        Notifications = new NotificationService(this, notifier ?? NullNotifier.Instance);
+        Tips = new ShortcutTips(Settings);
+        UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time);
+        SettingsChanged += (_, _) =>
+        {
+            Library.OnSettingsChanged();
+            ClaudeUpdates?.OnSettingsChanged();
+            Notifications.OnSettingsChanged();
+            Tips.Refresh();
+        };
     }
+
+    /// <summary>Tooltips naming the current keyboard shortcuts (DESIGN.md §14, "Keyboard").</summary>
+    public ShortcutTips Tips { get; }
+
+    /// <summary>OS notifications and the Dock/taskbar badge (DESIGN.md §10).</summary>
+    public NotificationService Notifications { get; }
+
+    /// <summary>Makes the updater for a <c>claude</c> path (DESIGN.md §12). Tests replace it.</summary>
+    internal Func<string, IClaudeUpdater> UpdaterFactory { get; set; }
+
+    public IClaudeUpdater CreateUpdater(string claudePath) => UpdaterFactory(claudePath);
+
+    /// <summary>Claude Code update checks and <b>Update now</b>, once Claude Code has been found.</summary>
+    public ClaudeUpdateService? ClaudeUpdates { get; private set; }
+
+    /// <summary>The Claude Code version new tabs start with.</summary>
+    public Version? InstalledClaudeVersion => ClaudeUpdates?.InstalledVersion ?? Install?.Version;
 
     /// <summary>Runs git for "working tree vs HEAD" and the library's uncommitted-changes check (DESIGN.md §8, §9).</summary>
     public GitWorkingTree Git { get; }
@@ -140,6 +169,7 @@ public sealed class AppServices : IAsyncDisposable
         Install = install;
         Sessions = new ClaudeSessionFactory(install.Path, _launcher, Time, Loggers);
         Auth = new ClaudeAuth(install.Path, _launcher, Time);
+        ClaudeUpdates = new ClaudeUpdateService(this, CreateUpdater(install.Path), install.Version);
     }
 
     /// <summary>For tests: sessions come from <paramref name="factory"/> instead of a real <c>claude</c>.</summary>
@@ -152,7 +182,14 @@ public sealed class AppServices : IAsyncDisposable
         Debounce(ref _pendingSettingsSave, () => JsonFileStore<AppSettings>.Serialize(Settings), _settingsStore);
     }
 
-    public void SaveState() => Debounce(ref _pendingStateSave, () => JsonFileStore<AppState>.Serialize(State), _stateStore);
+    public void SaveState()
+    {
+        StateChanged?.Invoke(this, EventArgs.Empty);
+        Debounce(ref _pendingStateSave, () => JsonFileStore<AppState>.Serialize(State), _stateStore);
+    }
+
+    /// <summary>Raised on the UI thread when the state changes, for example the recent folders.</summary>
+    public event EventHandler? StateChanged;
 
     /// <summary>Writes anything still pending, for shutdown.</summary>
     public async Task FlushAsync()
@@ -190,9 +227,36 @@ public sealed class AppServices : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Stops the hidden utility session, for an update that can't replace a running <c>claude</c> (WinGet). It starts
+    /// again the next time it's needed.
+    /// </summary>
+    public async Task StopUtilitySessionAsync()
+    {
+        await _utilityLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_utility is not null)
+            {
+                await _utility.DisposeAsync().ConfigureAwait(false);
+                _utility = null;
+            }
+        }
+        finally
+        {
+            _utilityLock.Release();
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         Library.Dispose();
+        Notifications.Dispose();
+        if (ClaudeUpdates is not null)
+        {
+            await ClaudeUpdates.DisposeAsync();
+            ClaudeUpdates = null;
+        }
         if (Usage is not null)
         {
             await Usage.DisposeAsync();

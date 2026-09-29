@@ -30,7 +30,37 @@ public sealed class AppSettings
 
     public DiffToolSettings DiffTool { get; set; } = new();
 
+    public NotificationSettings Notifications { get; set; } = new();
+
+    public KeyboardSettings Keyboard { get; set; } = new();
+
     public AdvancedSettings Advanced { get; set; } = new();
+}
+
+/// <summary>
+/// OS notifications, each type on or off, and the Dock/taskbar badge (DESIGN.md §10). Check-in notifications are a
+/// check-in setting (<see cref="CheckInSettings.Notify"/>), so a tab can override them.
+/// </summary>
+public sealed class NotificationSettings
+{
+    /// <summary>A tab finished its turn while you weren't looking at it.</summary>
+    public bool TurnFinished { get; set; } = true;
+
+    /// <summary>A permission prompt, question or plan is waiting.</summary>
+    public bool NeedsInput { get; set; } = true;
+
+    /// <summary>A tab's Claude Code stopped with an error or exited unexpectedly.</summary>
+    public bool ProcessErrors { get; set; } = true;
+
+    /// <summary>Usage thresholds, the projection and limit resets (DESIGN.md §6, "Alerts").</summary>
+    public bool UsageAlerts { get; set; } = true;
+
+    public bool SignIn { get; set; } = true;
+
+    public bool UpdateReady { get; set; } = true;
+
+    /// <summary>The number of tabs needing input on the Dock icon or taskbar button.</summary>
+    public bool Badge { get; set; } = true;
 }
 
 /// <summary>How long to keep something: usage history (DESIGN.md §6) or library sessions (§9).</summary>
@@ -122,6 +152,9 @@ public sealed class ClaudeCodeSettings
 {
     /// <summary>Null means find it automatically.</summary>
     public string? ClaudePath { get; set; }
+
+    /// <summary>Check for Claude Code updates at launch and every few hours (DESIGN.md §12).</summary>
+    public bool CheckForUpdates { get; set; } = true;
 }
 
 public sealed class NewTabSettings
@@ -188,6 +221,9 @@ public sealed class CheckInSettings
 
     public string Message { get; set; } = DefaultMessage;
 
+    /// <summary>Also send an OS notification when a check-in is sent.</summary>
+    public bool Notify { get; set; }
+
     public CheckInSettings Clone() => (CheckInSettings)MemberwiseClone();
 }
 
@@ -199,6 +235,9 @@ public sealed class QuickSuffix
     public string Label { get; set; } = "";
 
     public string Text { get; set; } = "";
+
+    /// <summary>Adds this suffix straight from the keyboard, as a <see cref="KeyChord"/> such as <c>Primary+Alt+1</c>.</summary>
+    public string? Shortcut { get; set; }
 
     public static List<QuickSuffix> Defaults() =>
     [

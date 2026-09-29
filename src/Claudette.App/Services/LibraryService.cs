@@ -20,7 +20,11 @@ public sealed class LibraryService : IDisposable
     private static readonly TimeSpan SettleDelay = TimeSpan.FromSeconds(1);
 
     /// <summary>What syncs (DESIGN.md §14). The path to claude, the machine name, the library folder, the diff tool, folders and tabs stay per machine.</summary>
-    private static readonly string[] SyncedSettings = ["appearance", "newTabs", "usage", "checkIns", "quickSuffixes", "processes"];
+    /// <summary>Synced sections; <see cref="ApplySettings"/> copies each of them back.</summary>
+    private static readonly string[] SyncedSettings = ["appearance", "newTabs", "usage", "checkIns", "quickSuffixes", "processes", "notifications", "keyboard"];
+
+    /// <summary>Synced as one value each: the shortcut overrides come and go by command id.</summary>
+    private static readonly string[] SyncedLeaves = ["keyboard.bindings"];
 
     private readonly AppServices _services;
     private readonly ILogger _logger;
@@ -190,7 +194,7 @@ public sealed class LibraryService : IDisposable
     }
 
     private Dictionary<string, JsonNode?> FlattenSettings() =>
-        SettingsSync.Flatten(SettingsJson(_services.Settings), SyncedSettings);
+        SettingsSync.Flatten(SettingsJson(_services.Settings), SyncedSettings, SyncedLeaves);
 
     private static JsonObject SettingsJson(AppSettings settings) =>
         JsonSerializer.SerializeToNode(settings, JsonFileStore<AppSettings>.Options)!.AsObject();
@@ -214,6 +218,8 @@ public sealed class LibraryService : IDisposable
         live.CheckIns = updated.CheckIns;
         live.QuickSuffixes = updated.QuickSuffixes;
         live.Processes = updated.Processes;
+        live.Notifications = updated.Notifications;
+        live.Keyboard = updated.Keyboard;
         _applyingSync = true;
         try
         {

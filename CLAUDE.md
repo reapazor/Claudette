@@ -18,7 +18,7 @@ A .NET desktop app that wraps Claude Code in a native GUI: one tab per Claude Co
 - Layout (§13):
   - `src/Claudette.Core`: sessions, protocol, permission rules, sign-in, install checks, settings and state stores and settings sync, transcripts and History, the session library and leases, diffs and changed files, external diff tools, git (project identity, working tree), check-in timing. Later also updates.
   - `src/Claudette.Usage`: plan usage parsing, the SQLite usage history, burn rate and projection, alerts, the polling schedule. No UI.
-  - `src/Claudette.Platform`: OS-specific code, so far the process monitor (Job Objects on Windows, `/proc`, `ps`). No UI.
+  - `src/Claudette.Platform`: OS-specific code: the process monitor (Job Objects on Windows, `/proc`, `ps`), notifications and the Dock/taskbar badge (WinRT toasts, `UNUserNotificationCenter`, `notify-send`), the Windows jump list, and the single-instance pipe. No UI. Windows and macOS APIs are called through source-generated COM interop and the Objective-C runtime, so the project stays a plain `net10.0` library.
   - `src/Claudette.App`: the Avalonia UI.
     - `ShellViewModel` holds the tab groups and History.
     - `TabViewModel` is one session, split into partial files for the library, changed files and processes.
@@ -27,6 +27,7 @@ A .NET desktop app that wraps Claude Code in a native GUI: one tab per Claude Co
   - `tests/`: `Claudette.Core.Tests` (unit and protocol replay), `Claudette.Usage.Tests`, `Claudette.Platform.Tests`, `Claudette.App.Tests`, `Claudette.IntegrationTests` (real processes).
   - `tools/`: `Claudette.FakeClaude` (the `fake-claude` test double) and `Claudette.MockApi` (a mock Messages API).
   - `compat/`: the compatibility surface list, check script and snapshots (§16).
+  - `packaging/`: the MSIX and `.dmg` build scripts, manifest, `Info.plist`, entitlements and icons; `.github/workflows/package.yml` runs them (§2, "Packaging and signing").
 - `Claudette.Core`, `Claudette.Usage` and `Claudette.Platform` must not reference Avalonia.
 - Development happens on Windows, but the app must also run on macOS and Linux. Keep OS-specific code behind interfaces, in `Claudette.Platform`.
 - In XAML:

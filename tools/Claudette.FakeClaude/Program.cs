@@ -1,11 +1,18 @@
 // fake-claude: stands in for the `claude` CLI in tests (DESIGN.md §15, "Fake CLI").
 //
-//   fake-claude --version                      prints "<FAKE_CLAUDE_VERSION> (Claude Code)"
+//   fake-claude --version                      prints "<version> (Claude Code)"
 //   fake-claude auth status                    prints auth JSON; exits 1 when FAKE_CLAUDE_LOGGED_IN=0
+//   fake-claude doctor                         prints a claude doctor report
+//   fake-claude update                         "updates" to FAKE_CLAUDE_UPDATE_TO, stored in FAKE_CLAUDE_VERSION_FILE
 //   fake-claude -p --input-format stream-json  a scripted stream-json session (below)
 //
 // Environment:
 //   FAKE_CLAUDE_VERSION       version to report (default 2.1.284)
+//   FAKE_CLAUDE_VERSION_FILE  path: when it exists, the version is read from it instead (so an update sticks)
+//   FAKE_CLAUDE_UPDATE_TO     the version `update` installs; unset means already up to date
+//   FAKE_CLAUDE_UPDATE_FAIL   "1": `update` fails with exit code 1
+//   FAKE_CLAUDE_INSTALL_TYPE  doctor's install type (default native); FAKE_CLAUDE_PACKAGE_MANAGER adds that line
+//   FAKE_CLAUDE_AUTO_UPDATES  doctor's Auto-updates value (default enabled)
 //   FAKE_CLAUDE_LOGGED_IN     "0" to report signed out (default signed in)
 //   FAKE_CLAUDE_RECORD        path: write {args, cwd, env} there at startup
 //   FAKE_CLAUDE_EXIT_AFTER_INITIALIZE  "1": exit with code 3 right after answering initialize
@@ -19,7 +26,10 @@ using System.Collections;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-var version = Environment.GetEnvironmentVariable("FAKE_CLAUDE_VERSION") ?? "2.1.284";
+var versionFile = Environment.GetEnvironmentVariable("FAKE_CLAUDE_VERSION_FILE");
+var version = versionFile is { Length: > 0 } && File.Exists(versionFile)
+    ? File.ReadAllText(versionFile).Trim()
+    : Environment.GetEnvironmentVariable("FAKE_CLAUDE_VERSION") ?? "2.1.284";
 
 if (Environment.GetEnvironmentVariable("FAKE_CLAUDE_RECORD") is { Length: > 0 } recordPath)
 {
@@ -55,6 +65,53 @@ if (args is ["auth", "status", ..])
         ["subscriptionType"] = loggedIn ? "max" : null,
     }.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     return loggedIn ? 0 : 1;
+}
+
+if (args is ["doctor", ..])
+{
+    var installType = Environment.GetEnvironmentVariable("FAKE_CLAUDE_INSTALL_TYPE") ?? "native";
+    var packageManager = Environment.GetEnvironmentVariable("FAKE_CLAUDE_PACKAGE_MANAGER");
+    Console.WriteLine("Claude Code doctor");
+    Console.WriteLine();
+    Console.WriteLine($"Running: {installType} ({version})");
+    Console.WriteLine("Platform: fake");
+    if (packageManager is { Length: > 0 })
+    {
+        Console.WriteLine($"Package manager: {packageManager}");
+    }
+    Console.WriteLine($"Path: {Environment.ProcessPath}");
+    Console.WriteLine($"Config install method: {installType}");
+    Console.WriteLine($"Auto-updates: {(packageManager is { Length: > 0 } ? "Managed by package manager" : Environment.GetEnvironmentVariable("FAKE_CLAUDE_AUTO_UPDATES") ?? "enabled")}");
+    Console.WriteLine("Auto-update channel: latest");
+    Console.WriteLine("Last update attempt: none recorded");
+    Console.WriteLine();
+    Console.WriteLine("1 warning found");
+    Console.WriteLine("- This is fake-claude");
+    Console.WriteLine("  Fix: Nothing to fix");
+    return 0;
+}
+
+if (args is ["update", ..])
+{
+    if (Environment.GetEnvironmentVariable("FAKE_CLAUDE_UPDATE_FAIL") == "1")
+    {
+        Console.Error.WriteLine("Error: Failed to install native update");
+        return 1;
+    }
+    Console.WriteLine($"Current version: {version}");
+    if (Environment.GetEnvironmentVariable("FAKE_CLAUDE_UPDATE_TO") is { Length: > 0 } target && Version.Parse(target) > Version.Parse(version))
+    {
+        if (versionFile is { Length: > 0 })
+        {
+            File.WriteAllText(versionFile, target);
+        }
+        Console.WriteLine($"Successfully updated from {version} to version {target}");
+    }
+    else
+    {
+        Console.WriteLine($"Claude Code is up to date ({version})");
+    }
+    return 0;
 }
 
 if (!args.Contains("stream-json"))

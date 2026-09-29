@@ -19,11 +19,13 @@ public class LibraryAndHistoryTests
 
         h.Transport.EmitTurn();
 
+        // The lease is taken last, after the transcript and the record are written: wait for the whole save.
         await TabTestHarness.Eventually(() =>
         {
             h.Time.Advance(TimeSpan.FromSeconds(1));
-            return h.Services.Library.Library.GetTranscriptPath("s1") is not null;
+            return h.Services.Library.CheckLease("s1") is LeaseStatus.Mine;
         }, "the library copy");
+        Assert.NotNull(h.Services.Library.Library.GetTranscriptPath("s1"));
         var entry = Assert.Single(h.Services.Library.Library.List());
         Assert.Equal("Login fix", entry.Record.Name);
         Assert.Equal(h.Services.Library.MachineName, entry.Record.Machine);

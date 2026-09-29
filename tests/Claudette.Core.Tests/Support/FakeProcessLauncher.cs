@@ -12,6 +12,12 @@ internal sealed class FakeProcessLauncher : IProcessLauncher
     /// <summary>When set, <see cref="Start"/> throws this instead of starting anything.</summary>
     public Exception? StartFailure { get; set; }
 
+    /// <summary>
+    /// When set, answers each started process: the result's output is written and the process exits with its code.
+    /// Returning null leaves the process running for the test to drive.
+    /// </summary>
+    public Func<ProcessStartSpec, ProcessResult?>? Respond { get; set; }
+
     public IReadOnlyList<ProcessStartSpec> Started => _started;
 
     public IReadOnlyList<FakeRunningProcess> Processes => _processes;
@@ -25,6 +31,12 @@ internal sealed class FakeProcessLauncher : IProcessLauncher
         _started.Add(spec);
         var process = new FakeRunningProcess(1000 + _processes.Count);
         _processes.Add(process);
+        if (Respond?.Invoke(spec) is { } result)
+        {
+            process.WriteOutput(result.StandardOutput);
+            process.WriteError(result.StandardError);
+            process.Exit(result.ExitCode);
+        }
         return process;
     }
 }
@@ -54,6 +66,22 @@ internal sealed class FakeRunningProcess(int id) : IRunningProcess
     public ValueTask WriteLineAsync(string line, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
 
     public void CloseStandardInput() => StandardInputClosed = true;
+
+    /// <summary>Writes each line of <paramref name="text"/> to standard output.</summary>
+    public void WriteOutput(string text) => WriteLines(_stdout, text);
+
+    public void WriteError(string text) => WriteLines(_stderr, text);
+
+    private static void WriteLines(Channel<string> channel, string text)
+    {
+        foreach (var line in text.Split('\n'))
+        {
+            if (line.Length > 0)
+            {
+                channel.Writer.TryWrite(line.TrimEnd('\r'));
+            }
+        }
+    }
 
     public void Kill()
     {

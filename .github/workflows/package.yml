@@ -1,0 +1,144 @@
+name: Package
+
+# MSIX for Windows and a signed, notarized .dmg for macOS (DESIGN.md §2, "Packaging").
+#
+# - A tag like v1.2.3 builds signed packages and attaches them to a draft release.
+# - "Run workflow" builds them for a version you give, without a release.
+# - Pull requests that change packaging build unsigned packages, to check the scripts.
+#
+# Signing uses these repository secrets; without them the packages are built unsigned:
+#   Windows: WINDOWS_CERTIFICATE_PFX (base64 .pfx), WINDOWS_CERTIFICATE_PASSWORD, MSIX_PUBLISHER (the certificate's subject)
+#   macOS:   MACOS_CERTIFICATE_P12 (base64 Developer ID Application .p12), MACOS_CERTIFICATE_PASSWORD, MACOS_SIGNING_IDENTITY,
+#            and for notarization APPLE_API_KEY_P8 (base64 .p8), APPLE_API_KEY_ID, APPLE_API_ISSUER
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version, such as 1.2.3
+        required: true
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - '.github/workflows/package.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF#refs/tags/v}"
+          elif [[ -n "${{ inputs.version }}" ]]; then
+            version="${{ inputs.version }}"
+          else
+            version="0.7.${{ github.run_number }}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Certificate
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        env:
+          PFX: ${{ secrets.WINDOWS_CERTIFICATE_PFX }}
+        run: |
+          if ($env:PFX) {
+            $path = Join-Path $env:RUNNER_TEMP 'claudette.pfx'
+            [IO.File]::WriteAllBytes($path, [Convert]::FromBase64String($env:PFX))
+            "WINDOWS_CERTIFICATE_PATH=$path" >> $env:GITHUB_ENV
+          }
+      - name: Build MSIX
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          MSIX_PUBLISHER: ${{ secrets.MSIX_PUBLISHER }}
+        run: ./packaging/windows/build-msix.ps1 -Version ${{ needs.version.outputs.version }} -Architecture ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: claudette-windows-${{ matrix.arch }}
+          path: artifacts/*.msix
+          if-no-files-found: error
+
+  macos:
+    needs: version
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x64]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Certificate and notarization key
+        if: github.event_name != 'pull_request'
+        env:
+          P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          API_KEY: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          if [[ -n "$P12" ]]; then
+            keychain="$RUNNER_TEMP/claudette.keychain-db"
+            password="$(uuidgen)"
+            security create-keychain -p "$password" "$keychain"
+            security set-keychain-settings -lut 3600 "$keychain"
+            security unlock-keychain -p "$password" "$keychain"
+            echo "$P12" | base64 --decode > "$RUNNER_TEMP/claudette.p12"
+            security import "$RUNNER_TEMP/claudette.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+            security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+            echo "MACOS_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          fi
+          if [[ -n "$API_KEY" ]]; then
+            echo "$API_KEY" | base64 --decode > "$RUNNER_TEMP/claudette-api-key.p8"
+            echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/claudette-api-key.p8" >> "$GITHUB_ENV"
+          fi
+      - name: Build .dmg
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: packaging/macos/build-dmg.sh ${{ needs.version.outputs.version }} ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: claudette-macos-${{ matrix.arch }}
+          path: artifacts/*.dmg
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF#refs/tags/}" artifacts/* --repo "$GITHUB_REPOSITORY" --draft --generate-notes --title "Claudette ${{ needs.version.outputs.version }}"

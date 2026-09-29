@@ -34,6 +34,12 @@ public sealed class AppState
 
     /// <summary>What settings sync last saw or published, per setting path (DESIGN.md §14).</summary>
     public SettingsSyncState? SettingsSync { get; set; }
+
+    /// <summary>
+    /// <b>Update on next launch</b>: run the Claude Code update at the next start, before any tab starts its process,
+    /// because WinGet can't replace a running <c>claude</c> (DESIGN.md §12).
+    /// </summary>
+    public bool UpdateClaudeOnNextLaunch { get; set; }
 }
 
 /// <summary>What's saved for one tab (DESIGN.md §9, "Restore on launch").</summary>

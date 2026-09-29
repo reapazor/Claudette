@@ -213,7 +213,7 @@ public sealed class ProcessSamplerTests : IDisposable
         };
 
         // The first sample blocks on another thread while the clock runs on.
-        var start = Task.Run(_sampler.Start, cancellation);
+        var start = StartOnOwnThread(cancellation);
         Assert.True(entered.Wait(TimeSpan.FromSeconds(5), cancellation));
         _time.Advance(TimeSpan.FromSeconds(10));
         Assert.Equal(1, _tree.Samples);
@@ -239,7 +239,7 @@ public sealed class ProcessSamplerTests : IDisposable
             return [];
         };
 
-        var start = Task.Run(_sampler.Start, cancellation);
+        var start = StartOnOwnThread(cancellation);
         Assert.True(entered.Wait(TimeSpan.FromSeconds(5), cancellation));
         _sampler.Stop();
         gate.Set();
@@ -249,4 +249,11 @@ public sealed class ProcessSamplerTests : IDisposable
         _time.Advance(TimeSpan.FromMinutes(1));
         Assert.Equal(1, _tree.Samples);
     }
+
+    /// <summary>
+    /// Starts the sampler, whose first sample runs at once and here blocks, on a thread of its own: on a busy pool,
+    /// with other test classes running, a pool thread can take longer to come than the test waits.
+    /// </summary>
+    private Task StartOnOwnThread(CancellationToken cancellation) =>
+        Task.Factory.StartNew(_sampler.Start, cancellation, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 }

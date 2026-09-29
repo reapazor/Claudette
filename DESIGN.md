@@ -25,13 +25,34 @@ Claudette does not replace Claude Code. It runs the real `claude` CLI as a child
 |---|---|---|
 | Runtime | .NET 10 (LTS) | |
 | UI | Avalonia 12 | One codebase for Windows, macOS and Linux. |
-| Look & feel | Fluent theme on Windows, macOS-style theme on macOS | Follows the OS light/dark setting and accent color. Mica backdrop on Windows 11; native title bar, traffic lights and menu bar on macOS. |
+| Look & feel | Fluent theme on Windows, macOS-style theme on macOS | Follows the OS light/dark setting and accent color. Mica backdrop on Windows 11; native title bar, traffic lights and menu bar on macOS. Mica is used only once Windows grants it: the title bar, header and tab strip show it, and the page keeps an opaque background. The macOS-style theme isn't built yet; macOS uses the Fluent theme for now. |
 | Pattern | MVVM with CommunityToolkit.Mvvm | |
 | Markdown | LiveMarkdown.Avalonia | For assistant messages. Built for streaming: text is appended as it arrives instead of re-rendering the whole message. Includes syntax-highlighted code blocks. (Markdown.Avalonia only had an alpha for Avalonia 12.) |
 | Diffs | Claudette's own line diff and diff view, highlighted with TextMateSharp | The TextMate grammars and themes LiveMarkdown already ships for code blocks. AvaloniaEdit was the plan, but a read-only diff doesn't need an editor. |
 | Usage history | SQLite (Microsoft.Data.Sqlite) | [§6](#usage-history) |
 | Dependency | Claude Code CLI | Must already be installed. Claudette finds `claude` on `PATH` (or a path set in Settings), checks its version on launch against a minimum supported version, and shows a setup screen if it is missing or too old. Sign-in is handled inside Claudette (see [§11](#11-sign-in)). |
-| Packaging | Windows: MSIX or installer. macOS: signed, notarized `.app` in a `.dmg`. | |
+| Packaging | Windows: MSIX. macOS: signed, notarized `.app` in a `.dmg`. | [Below](#packaging-and-signing). |
+
+### Packaging and signing
+
+The files are in `packaging/`, and `.github/workflows/package.yml` builds them.
+
+- **Windows: MSIX**, one per architecture (x64, arm64), self-contained.
+  - `packaging/windows/build-msix.ps1` publishes the app, adds `Package.appxmanifest` and the tile images, builds `resources.pri` for the scaled taskbar icons, packs with `makeappx`, and signs with `signtool`.
+  - The identity is `MatthewDavey.Claudette`, the same as the AppUserModelID an unpackaged Claudette uses. The manifest's `Publisher` must match the signing certificate's subject; the script takes it as `-Publisher` or `MSIX_PUBLISHER`.
+  - **File and registry write virtualization are off** (`desktop6:FileSystemWriteVirtualization`, with the `unvirtualizedResources` capability). Claude Code and every tool it runs are Claudette's children and share its package container. Otherwise their writes under AppData and HKCU would go to Claudette's private copy, where a terminal `claude` wouldn't see them.
+  - Windows only installs signed packages. For a local test, sign with a self-signed certificate whose subject matches the publisher, and trust it.
+- **macOS: a `.dmg` per architecture** (arm64, x64) holding `Claudette.app` and an Applications link.
+  - `packaging/macos/build-dmg.sh` publishes into the bundle, writes `Info.plist` and the icon, signs every Mach-O file and then the bundle with the hardened runtime, builds the `.dmg`, signs it, notarizes it with `notarytool` and staples the ticket.
+  - The bundle identifier is `com.matthewdavey.claudette`; User Notifications need one ([§10](#10-notifications)). The entitlements allow only what .NET's JIT needs.
+  - `Info.plist` has purpose strings for the Documents, Desktop, Downloads, removable and network volume prompts. Claude Code runs as Claudette's child, so macOS asks about Claudette when Claude Code reads a project in one of those places.
+- **The workflow.**
+  - A `v*` tag builds signed packages and attaches them to a draft GitHub release. **Run workflow** builds them for a given version.
+  - A pull request that changes `packaging/` builds them unsigned, to check the scripts.
+  - Signing and notarization use repository secrets, listed at the top of the workflow. Without them, the packages are built unsigned.
+- **The icon** is a placeholder drawn by Claudette's own renderer: `packaging/icon/claudette-1024.png` for macOS, and `src/Claudette.App/Assets/claudette.ico` and `packaging/windows/Assets/` for Windows. Replace those files to change it.
+
+> **Not yet tested on a real machine:** installing and running the MSIX and the `.dmg`, and signing and notarization, which need the certificates. The pull request build checks that both packages build.
 
 ## 3. Main Window
 
@@ -114,7 +135,8 @@ The visual reference is Claude Code's own Visual Studio Code extension:
   - Each group has a label with the folder name and a color. The color is picked automatically and can be changed. If two folders have the same name, the label adds the parent folder (`work/api`, `personal/api`).
   - Hovering the label shows the full path. The group's `+` opens a new tab in the same folder.
   - A group can be collapsed to just its label. A collapsed group still shows the most urgent status of its tabs, such as "needs input".
-  - Tabs can be dragged to reorder them within their group, and groups can be dragged to reorder them. A tab can't be dragged into another group, because its folder is fixed.
+  - Tabs can be dragged to reorder them within their group, and groups can be dragged (by their label) to reorder them. A tab can't be dragged into another group, because its folder is fixed, and pinned tabs stay ahead of the others.
+    - A dragged tab is selected, and the strip rearranges as soon as the pointer passes the middle of a neighbor. **Move left** and **Move right** in the tab menu do the same from the keyboard or mouse.
   - A group with a single tab still gets a label, so the strip always looks the same.
 - Closing a tab that is working asks for confirmation, then stops the process. Right-clicking a group label gives **Close group**.
 - **Pinned tabs** come back every time Claudette launches, resuming their sessions.
@@ -157,6 +179,9 @@ Using the picker:
 - The command line: `Claudette --folder <path>` opens a tab in that folder on startup. Open Recent and the jump list use this too.
 - On macOS, **File → Open Recent** and the Dock icon's menu list recent folders. On Windows, the taskbar jump list does the same.
 - Choosing any of these opens a new tab in that folder.
+- The lists hold favorites first, then recent folders, up to 10, leaving out folders that no longer exist. Folders with the same name show their parent too (`work/api`), as tab groups do.
+- **One Claudette at a time.** A launch while Claudette is running (from the jump list, or by opening the app again) passes its arguments to the running one over a named pipe and exits. The running one comes to the front, and opens a tab if a folder was given. A development copy with its own `CLAUDETTE_HOME` counts as a separate instance.
+- The macOS menu bar also has **File → New Tab**, **History…** and **Close Tab**, and the app menu has **Settings…**. Each shows its shortcut from Settings → Keyboard ([§14](#keyboard-shortcuts)).
 
 ### Process monitor
 
@@ -312,7 +337,7 @@ An OS notification (optional) when:
 - The projection says you'll hit the limit before it resets.
 - A limit resets.
 
-Each alert fires once per window. The first reading after a restart doesn't alert for levels that were already crossed. Until OS notifications arrive (milestone 7), the alert shows as a dismissible line under the header.
+Each alert fires once per window. The first reading after a restart doesn't alert for levels that were already crossed. The alert also shows as a dismissible line under the header, and the OS notification is skipped while Claudette is in front ([§10](#10-notifications)).
 
 ### Data source
 
@@ -397,7 +422,7 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
   - Before saving, the card shows the exact rule, and the user can edit it to make it broader or narrower.
 - When Claude Code suggests a mode switch instead of a rule (for a file edit it suggests `acceptEdits` for the session), the card offers **Allow all edits this session** in place of **Always allow**.
 - When Claude Code marks a request `suppressAlwaysAllowRule` (the rule would grant more than this request), **Always allow** isn't offered.
-- A tab with a waiting prompt gets the "Needs input" status. If Claudette isn't focused or the tab isn't selected, it also sends an OS notification (milestone 7).
+- A tab with a waiting prompt gets the "Needs input" status. If Claudette isn't focused or the tab isn't selected, it also sends an OS notification ([§10](#10-notifications)).
 - Keyboard: `Ctrl/Cmd+Enter` allows, `Ctrl/Cmd+Backspace` denies the oldest waiting prompt in the tab.
   - Not while typing in one of the prompt's own fields, and `Ctrl/Cmd+Backspace` still deletes a word in a field with text.
   - A request Claude Code marks `defaultToNo` can't be allowed from the keyboard.
@@ -577,6 +602,24 @@ Native OS notifications (Windows toast, macOS User Notifications). Each type can
 
 Clicking a notification brings Claudette to the front and goes to the relevant tab or screen. Notifications are skipped when Claudette is focused and that tab is already selected. The Dock (macOS) and taskbar (Windows) show a badge with the number of tabs needing input.
 
+- **What each one says.** Tab notifications carry the tab's name as their title:
+  - **Finished:** the first line of Claude's reply. Only a turn that ends normally counts; one you stopped, or that ended with an error, doesn't.
+  - **Needs input:** what's waiting, such as *"Allow this command? npm test"*, *"Claude has a question: Which database?"* or *"Claude has a plan for you to review."*
+  - **Errors:** *"Claude Code stopped unexpectedly (exit code 3)."*, or why it couldn't start.
+  - **Check-ins:** Settings → Check-ins → **Notify me when a check-in is sent** (off by default), which Tab settings can override ([§5](#check-ins-on-long-turns)).
+- **Skipping.** App-wide notifications (usage alerts, sign-in, updates) are skipped while Claudette is focused, because the header or the sign-in screen already shows them. Usage alerts also keep their line under the header.
+- **One per subject.** A newer notification replaces an older one of the same kind for the same tab. A tab's notifications are taken away once you look at it; a waiting-prompt notification also goes once the prompt is answered. An update is announced once per version.
+- **Clicking.**
+  - A tab notification selects the tab, expanding its group if it's collapsed.
+  - A usage alert opens the Usage panel, and an update opens the update dialog.
+- **Badge.** Settings → Notifications → **Show the number of tabs needing input on the Dock or taskbar icon**. On Windows it's an overlay icon on the taskbar button, drawn by Claudette.
+- **How each OS does it** (the code is in `Claudette.Platform/Notifications`):
+  - **Windows:** WinRT toasts (`ToastNotificationManager`), called through source-generated COM interop so the app stays a plain `net10.0` build. A click raises the toast's `Activated` event in the running Claudette. An MSIX install has package identity. Run unpackaged, Claudette sets its AppUserModelID (`MatthewDavey.Claudette`) and registers it under `HKCU\Software\Classes\AppUserModelId`, as the Windows App SDK does. The badge uses `ITaskbarList3::SetOverlayIcon`.
+  - **macOS:** `UNUserNotificationCenter` through the Objective-C runtime, with a delegate that reports clicks and lets notifications show while Claudette is in front. It needs the app bundle's identifier, so a build run with `dotnet run` has no notifications and Settings says so. The badge is the Dock tile's `badgeLabel`.
+  - **Linux:** `notify-send --wait` with a default action, which reports a click. Without `notify-send`, there are no notifications.
+
+> **Not yet tested on a real machine:** showing and clicking notifications on Windows and macOS, and the badges. CI builds a real toast through WinRT on Windows (without showing it), and checks the Objective-C string calls on macOS.
+
 ## 11. Sign-in
 
 Claude Code keeps its own credentials. Claudette never reads or stores them; it only detects when Claude Code needs a sign-in and runs Claude Code's own sign-in flow.
@@ -613,15 +656,34 @@ Claude Code keeps its own credentials. Claudette never reads or stores them; it 
 
 ## 12. Claude Code Updates
 
-How Claude Code updates depends on how it was installed. `claude doctor` is a read-only diagnostic that reports the install method, whether auto-updates are on, the release channel and the last update attempt. For example:
+How Claude Code updates depends on how it was installed. `claude doctor` is a read-only diagnostic that reports the install method, whether auto-updates are on, the release channel and the last update attempt. For example (2.1.284):
 
 ```
+Claude Code doctor
+
 Running: native (2.1.284)
+Commit: 2b8ce618c24d
+Platform: linux-x64
+Path: /home/me/.local/share/claude/versions/2.1.284
 Config install method: native
+Search: OK (/usr/bin/rg)
 Auto-updates: enabled
 Auto-update channel: latest
 Last update attempt: success → 2.1.284 (2026-09-28)
+
+1 warning found
+- Leftover npm global installation at /usr/local/bin/claude
+  Fix: Run: npm -g uninstall @anthropic-ai/claude-code
 ```
+
+What Claudette reads from it (the command is documented; the line format isn't, so every field is optional):
+
+- **`Running:`** gives the install type: `native`, `npm-global`, `npm-local`, `package-manager` or `development`. Anything else counts as unknown and is treated like native.
+- **`Package manager:`** appears only for package-manager installs: `homebrew`, `winget`, `deb`, `rpm`, `apk`, `pacman`, `mise` or `asdf` in 2.1.284. For those, `Auto-updates:` reads `Managed by package manager`.
+- **`Path:`** shows the Homebrew cask, as in `…/Caskroom/claude-code@latest/…`.
+- **`Auto-updates:`** is `enabled` or `disabled (<reason>)`. The reason is `set by env: DISABLE_AUTOUPDATER`, `set by env: DISABLE_UPDATES`, `config` or `development build`.
+- **Warnings** follow `N warnings found`, as `- <issue>` lines, each with an indented `Fix:`. Settings → Claude Code shows them, which covers the npm case below.
+- `doctor` reads the settings files of its working folder, so Claudette runs it (and the other update commands) in its own utility folder.
 
 | Install method | How Claude Code updates | What Claudette offers |
 |---|---|---|
@@ -633,21 +695,30 @@ Last update attempt: success → 2.1.284 (2026-09-28)
 
 ### Detecting an update
 
-- On launch and every few hours, Claudette runs `claude --version` and `claude doctor`.
-- Each tab knows which version it is running from its `system/init` message. If the installed version is newer, that tab is running an old version.
-- For Homebrew and WinGet, Claudette checks with the package manager (`brew outdated`, `winget upgrade`). There is no documented "check only" command for native installs, so Claudette relies on the auto-updater and reads the result from `claude doctor`.
-- If updates are turned off (`DISABLE_UPDATES`, or managed settings), Claudette shows the version but doesn't offer to update.
+- On launch and every 4 hours, Claudette runs `claude --version` and `claude doctor`. **Check for Claude Code updates automatically** in Settings → Claude Code turns this off, and **Check now** runs it by hand.
+- Each tab knows which version it is running: the installed version when its process started, confirmed by `claude_code_version` in its `system/init` message. If the installed version is newer, that tab is running an old version.
+- For Homebrew and WinGet, Claudette checks with the package manager:
+  - Homebrew: `brew outdated --cask --greedy --json=v2 <cask>`, which reads Homebrew's local index, so it knows what Homebrew last fetched.
+  - WinGet: `winget list --id Anthropic.ClaudeCode --exact --upgrade-available`. Not `winget upgrade --id …`, which would install the update.
+- There is no documented "check only" command for native installs, so Claudette relies on the auto-updater and notices the new version with `claude --version`.
+- If updates are turned off (`DISABLE_UPDATES`, set directly or through managed settings), Claudette shows the version but doesn't offer to update.
 
 ### Applying it
 
 - A small, non-blocking badge appears in the header: *"Claude Code 2.1.290 is ready"*. Clicking it shows the current and new version, a link to the Claude Code changelog, and the actions from the table above.
+  - It appears when the package manager has a newer version than the one installed, or when the installed version is newer than the one an open tab is running.
+  - **Dismiss** hides it until a newer version comes along. It also goes away once no open tab runs an older version.
+  - Settings → Claude Code shows the same details and actions, plus the install method, auto-update state, channel, last update attempt and `claude doctor`'s warnings.
 - **Open tabs are never restarted.** Each tab's `claude` process keeps running the version it started with until the tab is closed. Claudette doesn't restart tabs to apply an update, automatically or otherwise.
   - **New tabs** always start on the newly installed version.
   - **To move an open tab to the new version**, close it and open a new one, or reopen its session from History.
   - **Pinned tabs** pick up the new version the next time Claudette launches, because restored tabs start new processes.
 - A tab running an older version than the one installed shows a small note in its tooltip, for example *"Running Claude Code 2.1.284; 2.1.290 is installed. New tabs use 2.1.290."*
-- **Update now** shows the command's output in a small progress dialog and reports the new version when it succeeds.
+- **Update now** shows the command's output in a small progress dialog and reports the new version when it succeeds. `claude update` prints `Successfully updated from <old> to version <new>`, or `Claude Code is up to date (<version>)`; either way Claudette reads the new version with `claude --version` afterwards.
+- **WinGet.** Claudette's hidden utility session is a running `claude` too. **Update now** stops it first; it starts again when next needed. While any tab is running, **Update on next launch** replaces **Update now**. It's saved with this machine's state, and runs at the next start, before the utility session or any tab starts its process.
 - **Minimum version.** Claudette declares the lowest Claude Code version it supports. If the installed version is older, the setup screen asks you to update before any tab starts, with the same **Update now** action.
+
+> **Not yet tested on a real machine:** the Homebrew and WinGet checks and upgrades. Their commands and output parsing are covered by unit tests with recorded output; `claude update` and `claude doctor` are also covered with `fake-claude` and the real CLI.
 
 ## 13. Architecture
 
@@ -662,11 +733,12 @@ Last update attempt: success → 2.1.284 (2026-09-28)
 │  ClaudeSession (1 per tab)   │  │  UsagePoller (sampling)    │  │  Process monitor  │
 │   ├ process + stdio          │  │  UsageStore (SQLite)       │  │  (Job Objects,    │
 │   ├ protocol reader/writer   │  │  BurnRate (projection)     │  │   /proc, ps)      │
-│   └ typed event stream       │  │  UsageAlerts               │  │  Later:           │
-│  TranscriptReader, History   │  └────────────────────────────┘  │  Notifications    │
-│  SessionLibrary, leases      │                                  │  Dock/taskbar     │
-│  Diffs: line diff, changed   │                                  │  Window chrome    │
-│   files, external diff tools │                                  └───────────────────┘
+│   └ typed event stream       │  │  UsageAlerts               │  │  Notifications,   │
+│  TranscriptReader, History   │  └────────────────────────────┘  │   Dock/taskbar    │
+│  SessionLibrary, leases      │                                  │   badge           │
+│  Diffs: line diff, changed   │                                  │  Jump list, one   │
+│   files, external diff tools │                                  │   instance        │
+│  Claude Code updates         │                                  └───────────────────┘
 │  Git: identity, working tree │
 │  Auth, install checks        │
 │  Settings, state, sync       │
@@ -679,7 +751,7 @@ Last update attempt: success → 2.1.284 (2026-09-28)
 
 - **Claudette.Core** has no UI dependencies, so it can be unit tested and could be reused by another front end. External diff tools live here rather than in Platform: they only look for files and start processes through `IProcessLauncher`.
 - **Claudette.Usage** holds the usage engine, with no UI: parsing, the SQLite history, the burn rate and projection, alerts and the polling schedule.
-- **Claudette.Platform** holds the OS-specific process monitor. Notifications, the Dock and taskbar, and window chrome join it in milestone 7.
+- **Claudette.Platform** holds the OS-specific code: the process monitor, and notifications with the Dock and taskbar badge ([§10](#10-notifications)).
   - `ClaudeSession` owns one `claude` process. It turns the output stream into typed events (`AssistantDelta`, `ToolUse`, `ToolResult`, `PermissionRequest`, `TurnCompleted`, `TitleChanged`, `UsageUpdated`, `RateLimit`, `AuthRequired`, `Exited`…), and exposes commands such as `SendAsync`, `InterruptAsync`, `RespondToPermissionAsync`, `SetModelAsync`, `SetEffortAsync` and `SetPermissionModeAsync`.
 - **Threading.** Each session reads its process on a background task. Events go to the UI thread through a channel, and streaming text is batched so the UI isn't updated for every token.
 - **Resilience.** If a process exits unexpectedly, the tab shows an error with a **Restart** button that resumes the same session ID.
@@ -805,8 +877,22 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
 | Diff tool | Built-in, a preset or a custom command, with **Test**. See [§8](#external-diff-tool). |
 | Notifications | On/off for each type in [§10](#10-notifications). Dock/taskbar badge on/off. |
-| Keyboard | List of shortcuts, each one rebindable. |
+| Keyboard | List of shortcuts, each one rebindable ([below](#keyboard-shortcuts)). |
 | Advanced | Protocol logging and **Open log folder**. **Diagnostics** page ([§16](#staying-tolerant-at-runtime)). Extra command-line arguments passed to `claude`. Minimum supported Claude Code version (read-only). |
+
+### Keyboard shortcuts
+
+Settings → Keyboard lists every shortcut Claudette handles, with its default from the section that describes it: new tab, close tab, next and previous tab, go to tab 1–9, History, Settings, Stop, the quick suffixes menu, and allowing or denying the waiting prompt.
+
+- **Rebinding.** Click a shortcut and press the new keys; Esc cancels. **Reset** puts one back, **Remove** clears it, and **Reset to defaults** restores them all.
+- **One key for both OSes.** Shortcuts are stored with a *Primary* modifier: Ctrl on Windows and Linux, Cmd on macOS. That way a shortcut synced between a Windows machine and a Mac means the same thing on both. Ctrl is its own modifier only on macOS; elsewhere it is Primary.
+- **Refused shortcuts.** A shortcut already used by another command or a quick suffix is refused, and the row names the conflict. So is a letter, digit or punctuation key without Ctrl, Alt or Cmd, since it would get in the way of typing. Escape, Tab, Enter, Backspace, Delete and function keys are allowed on their own.
+- **Go to tab 1–9** is one shortcut for all nine digits; rebinding it takes any digit and keeps its modifiers.
+- **Fixed keys**, listed on the page but not rebindable: Enter sends and Shift+Enter starts a new line; in the new tab picker and the quick suffixes menu, 1–9 pick an entry.
+- **Quick suffixes** each get their own optional shortcut in Settings → Quick suffixes ([§5](#quick-suffixes)), checked for conflicts the same way.
+- Tooltips and the composer's placeholder show the current shortcuts.
+
+**Search.** The box above the categories filters settings by name: it lists matching settings with their category, and picking one opens that category.
 
 ### Per-tab overrides
 
@@ -833,7 +919,7 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
   - A newer synced change is applied here.
   - When both changed, the newer one wins.
   - Equal values are never a conflict.
-- Keyboard shortcuts and notification settings sync once they exist (milestone 7).
+- Notification settings sync. Keyboard shortcuts sync once they can be rebound.
 
 ## 15. Testing
 
@@ -1033,11 +1119,9 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
    - **Composer:** check-ins and quick suffixes.
    - **Keyboard shortcuts** for tabs and settings.
    - **Deferred to later milestones:**
-     - Dragging tabs to reorder. Move left/right is in the tab menu for now.
-     - The Settings search box.
-     - Per-suffix shortcuts and number keys in the suffix menu.
+     - Dragging tabs to reorder, the Settings search box, and per-suffix shortcuts and number keys in the suffix menu: built in milestone 7.
      - The "this session window" token split, which needs milestone 5's usage data.
-     - OS notifications for check-ins (milestone 7).
+     - OS notifications for check-ins: built in milestone 7.
 4. **Permissions.** ✅ Built 2026-09-28.
    - **Prompts:** inline prompts with the tool's input and a diff preview for edits.
      - **Always allow** shows the exact rule and lets you edit it; the menu offers **Allow for this session only**.
@@ -1047,7 +1131,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
    - **Mode picker:** the permission mode picker, with a confirmation and warning style for Bypass.
    - **Keyboard and notes:** Ctrl/Cmd+Enter and Ctrl/Cmd+Backspace answer prompts, and notes appear for denials Claude Code made by itself.
    - **Deferred:**
-     - The OS notification for a waiting prompt (milestone 7).
+     - The OS notification for a waiting prompt: built in milestone 7.
      - Switching into Bypass mid-session works only for tabs started in Bypass mode ([§7](#7-permission-prompts)).
 5. **Usage.** ✅ Built 2026-09-28.
    - **Header:** meters, countdowns and the sparkline with projection.
@@ -1055,7 +1139,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
    - **History and panel:** the SQLite usage history with retention and **Clear usage history**, and the Usage panel.
    - **Alerts:** shown in the header.
    - **Per tab:** each tab's "this session window" tokens and per-turn chart, and **Compact**.
-   - **Deferred:** OS notifications for alerts (milestone 7).
+   - **Deferred:** OS notifications for alerts, built in milestone 7.
 6. **History, sync & diffs.** ✅ Built 2026-09-28.
    - **History:** History (Ctrl/Cmd+Shift+H, or from the new-tab picker).
    - **Session library:**
@@ -1069,7 +1153,29 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
      - Running the macOS and Linux process code for real (it compiles and its parsers are tested).
      - Resuming a transcript recorded on the other OS ([§9](#session-library-sync-across-machines)).
      - **Choose folder…** and **Unpin and close** for a restored tab whose folder is gone; it still shows a note.
-7. **Polish & ship.** Notifications, Claude Code update handling, keyboard shortcuts, platform chrome, packaging and signing for Windows and macOS.
+7. **Polish & ship.** ✅ Built 2026-09-29.
+   - **Claude Code updates ([§12](#12-claude-code-updates)):**
+     - Checks with `claude --version`, `claude doctor` and Homebrew or WinGet, at launch and every 4 hours.
+     - The header badge and its dialog, **Update now** for each install method, and **Update on next launch** for WinGet.
+     - The tab note for an older version, and **Update now** on the too-old setup screen.
+   - **Notifications ([§10](#10-notifications)):** every type, with its setting, click routing and the Dock/taskbar badge, on Windows, macOS and Linux.
+   - **Keyboard ([§14](#keyboard-shortcuts)):** Settings → Keyboard with rebindable, synced shortcuts, per-suffix shortcuts, and 1–9 in the suffix menu.
+   - **Settings:** the search box, and the Notifications and Keyboard categories.
+   - **Platform chrome ([§2](#2-platform--tech-stack), [§4](#opening-a-tab)):**
+     - Mica on Windows 11.
+     - The macOS menu bar (Settings…, File with Open Recent) and Dock menu, and the Windows jump list.
+     - One running instance, which takes later launches' `--folder`.
+     - Folders dropped on the tab strip open tabs.
+     - Dragging tabs and groups.
+   - **Packaging ([§2](#packaging-and-signing)):** MSIX, and a signed, notarized `.dmg`, built by `package.yml`, with a placeholder icon.
+   - **Still to verify on real machines** (CI builds and runs the platform tests on Windows and macOS, but nothing there is looked at or clicked):
+     - Showing and clicking toasts and macOS notifications, and both badges.
+     - Mica, the jump list, and the macOS menus and Dock menu.
+     - Homebrew and WinGet updates.
+     - Installing the MSIX and `.dmg`, and signing and notarization, which need the certificates.
+   - **Deferred:**
+     - A macOS-style theme ([§2](#2-platform--tech-stack)). macOS uses the Fluent theme for now; this needs a design decision.
+     - The replacement for the placeholder icon.
 8. **Later.** The features in [§18](#18-future-features), in an order decided after v1 ships.
 
 ## 18. Future Features

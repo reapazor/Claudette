@@ -76,6 +76,8 @@ public sealed class FolderEntry(string path, string? branch, DateTimeOffset? las
 public sealed partial class NewTabPickerViewModel : ViewModelBase
 {
     private readonly AppServices _services;
+
+    public ShortcutTips Tips => _services.Tips;
     private readonly ShellViewModel _shell;
 
     public NewTabPickerViewModel(AppServices services, ShellViewModel shell)

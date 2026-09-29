@@ -15,16 +15,72 @@ public sealed record DiffToolOption(string Kind, string? PresetId, string Label)
     public override string ToString() => Label;
 }
 
+/// <summary>A setting found by the Settings search box (DESIGN.md §14).</summary>
+public sealed record SettingsSearchResult(string Category, string Label);
+
 /// <summary>A retention option in a dropdown.</summary>
 public sealed record RetentionChoice(RetentionPeriod Period)
 {
     public override string ToString() => Period.Label();
 }
 
+/// <summary>Something whose keyboard shortcut is being set in Settings: a command, or a quick suffix.</summary>
+public abstract partial class ShortcutEditor : ObservableObject
+{
+    /// <summary>Waiting for the user to press the new shortcut.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShortcutText))]
+    public partial bool IsRecording { get; set; }
+
+    /// <summary>Why the last keys pressed can't be used.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasError))]
+    public partial string? Error { get; set; }
+
+    public bool HasError => Error is not null;
+
+    public abstract KeyChord? Shortcut { get; }
+
+    public string ShortcutText => IsRecording ? "Press keys…" : Shortcut?.Display(Shortcuts.IsMac) ?? "None";
+
+    public void Refresh()
+    {
+        OnPropertyChanged(nameof(ShortcutText));
+        OnPropertyChanged(nameof(Shortcut));
+        OnRefresh();
+    }
+
+    protected virtual void OnRefresh()
+    {
+    }
+}
+
+/// <summary>One command in Settings → Keyboard (DESIGN.md §14).</summary>
+public sealed class ShortcutRow(ShortcutCommand command, KeyboardSettings settings) : ShortcutEditor
+{
+    public ShortcutCommand Command { get; } = command;
+
+    public string Label => Command.Label;
+
+    public override KeyChord? Shortcut => KeyboardShortcuts.Resolve(settings, Command.Id);
+
+    /// <summary>Changed from the default, so <b>Reset</b> applies.</summary>
+    public bool IsCustomized => settings.Bindings.ContainsKey(Command.Id);
+
+    protected override void OnRefresh() => OnPropertyChanged(nameof(IsCustomized));
+}
+
 /// <summary>One quick suffix being edited in Settings.</summary>
-public sealed partial class QuickSuffixEditor(QuickSuffix suffix, Action changed) : ObservableObject
+public sealed partial class QuickSuffixEditor(QuickSuffix suffix, Action changed) : ShortcutEditor
 {
     public QuickSuffix Suffix { get; } = suffix;
+
+    /// <summary>Adds the suffix straight from the keyboard (DESIGN.md §5, "Own shortcut").</summary>
+    public override KeyChord? Shortcut => KeyChord.TryParse(Suffix.Shortcut, out var chord) ? chord : null;
+
+    public bool HasShortcut => Shortcut is not null;
+
+    protected override void OnRefresh() => OnPropertyChanged(nameof(HasShortcut));
 
     public string Label
     {
@@ -62,29 +118,136 @@ public sealed partial class QuickSuffixEditor(QuickSuffix suffix, Action changed
 public sealed partial class SettingsViewModel : ViewModelBase
 {
     public static readonly IReadOnlyList<string> AllCategories =
-        ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Advanced"];
+        ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Notifications", "Keyboard", "Advanced"];
 
     private readonly AppServices _services;
     private readonly AppSettings _settings;
 
-    public SettingsViewModel(AppServices services, string? accountText)
+    public SettingsViewModel(AppServices services, string? accountText, ClaudeUpdateViewModel? updates = null)
     {
         _services = services;
         _settings = services.Settings;
         AccountText = accountText ?? "Not signed in";
+        Updates = updates;
         foreach (var suffix in _settings.QuickSuffixes)
         {
             Suffixes.Add(new QuickSuffixEditor(suffix, Save));
+        }
+        foreach (var command in KeyboardShortcuts.All)
+        {
+            ShortcutRows.Add(new ShortcutRow(command, _settings.Keyboard));
         }
         SelectedCategory = AllCategories[0];
     }
 
     public IReadOnlyList<string> Categories => AllCategories;
 
+    // ---- Search (DESIGN.md §14: "A search box filters settings by name") -------------------------------------------
+
+    /// <summary>The settings by category, as their labels read in the window. Keep in step with SettingsWindow.axaml.</summary>
+    private static readonly IReadOnlyList<SettingsSearchResult> SearchIndex =
+    [
+        new("General", "Confirm before closing a tab where Claude is working"),
+        new("General", "Also rename the session in Claude Code when I rename a tab"),
+        new("Sessions", "Also restore unpinned tabs when Claudette starts"),
+        new("Sessions", "Name for this machine"),
+        new("Sessions", "Keep library sessions for"),
+        new("Sessions", "Session library folder"),
+        new("Sessions", "Move library"),
+        new("Sessions", "Sync Claudette's settings through the library"),
+        new("Processes", "Show the process monitor"),
+        new("Processes", "Refresh the panel every (seconds)"),
+        new("Processes", "Show command lines"),
+        new("Claude Code", "Installed version and install method"),
+        new("Claude Code", "Check for Claude Code updates automatically"),
+        new("Claude Code", "Update Claude Code"),
+        new("Claude Code", "Signed-in account"),
+        new("Claude Code", "Path to claude"),
+        new("New tabs", "Default model"),
+        new("New tabs", "Default effort"),
+        new("New tabs", "Default permission mode"),
+        new("New tabs", "Recent folders to keep"),
+        new("New tabs", "Clear recent folders"),
+        new("Appearance", "Theme"),
+        new("Appearance", "Conversation font size"),
+        new("Appearance", "Code font size"),
+        new("Appearance", "Show thinking expanded"),
+        new("Usage", "Warn at (% of session used)"),
+        new("Usage", "Alert at (% of session used)"),
+        new("Usage", "Burn rate window (minutes)"),
+        new("Usage", "Show model-specific weekly limits"),
+        new("Usage", "Read model limits from /usage"),
+        new("Usage", "Keep usage history"),
+        new("Usage", "Clear usage history"),
+        new("Quick suffixes", "Add suffix"),
+        new("Quick suffixes", "Suffix shortcuts"),
+        new("Check-ins", "Check in on long turns"),
+        new("Check-ins", "After the turn has run (minutes)"),
+        new("Check-ins", "After no output for (minutes)"),
+        new("Check-ins", "Check-in message"),
+        new("Check-ins", "Notify me when a check-in is sent"),
+        new("Diff tool", "Diff tool"),
+        new("Diff tool", "Custom diff command"),
+        new("Diff tool", "Test the diff tool"),
+        new("Notifications", "A tab finishes its turn"),
+        new("Notifications", "A tab needs permission or an answer"),
+        new("Notifications", "A tab's Claude Code stops with an error"),
+        new("Notifications", "Usage alerts"),
+        new("Notifications", "Claude Code needs me to sign in"),
+        new("Notifications", "A Claude Code update is ready"),
+        new("Notifications", "Dock or taskbar badge"),
+        .. KeyboardShortcuts.All.Select(c => new SettingsSearchResult("Keyboard", $"{c.Label} shortcut")),
+        new("Advanced", "Extra arguments for every claude process"),
+        new("Advanced", "Open data folder"),
+    ];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSearching))]
+    public partial string SearchText { get; set; } = "";
+
+    public bool IsSearching => SearchText.Trim().Length > 0;
+
+    public ObservableCollection<SettingsSearchResult> SearchResults { get; } = [];
+
+    partial void OnSearchTextChanged(string value)
+    {
+        SearchResults.Clear();
+        var words = value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (words.Length == 0)
+        {
+            return;
+        }
+        foreach (var result in SearchIndex.Where(r => words.All(w =>
+            r.Label.Contains(w, StringComparison.OrdinalIgnoreCase) || r.Category.Contains(w, StringComparison.OrdinalIgnoreCase))))
+        {
+            SearchResults.Add(result);
+        }
+        if (SearchResults.Count > 0 && SearchResults.All(r => r.Category != SelectedCategory))
+        {
+            SelectedCategory = SearchResults[0].Category;
+        }
+    }
+
+    /// <summary>Picking a result shows its category.</summary>
+    [ObservableProperty]
+    public partial SettingsSearchResult? SelectedSearchResult { get; set; }
+
+    partial void OnSelectedSearchResultChanged(SettingsSearchResult? value)
+    {
+        if (value is not null)
+        {
+            SelectedCategory = value.Category;
+        }
+    }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsGeneral), nameof(IsClaudeCode), nameof(IsNewTabs), nameof(IsAppearance), nameof(IsSessions), nameof(IsCheckIns), nameof(IsQuickSuffixes), nameof(IsAdvanced))]
-    [NotifyPropertyChangedFor(nameof(IsUsage), nameof(IsProcesses), nameof(IsDiffTool))]
+    [NotifyPropertyChangedFor(nameof(IsUsage), nameof(IsProcesses), nameof(IsDiffTool), nameof(IsNotifications), nameof(IsKeyboard))]
     public partial string SelectedCategory { get; set; }
+
+    public bool IsKeyboard => SelectedCategory == "Keyboard";
+
+    public bool IsNotifications => SelectedCategory == "Notifications";
 
     public bool IsUsage => SelectedCategory == "Usage";
 
@@ -134,6 +297,17 @@ public sealed partial class SettingsViewModel : ViewModelBase
     // ---- Claude Code -----------------------------------------------------------------------------------------
 
     public string AccountText { get; }
+
+    /// <summary>Version, install method, update checks and <b>Update now</b> (DESIGN.md §12, §14). Null before Claude Code is found.</summary>
+    public ClaudeUpdateViewModel? Updates { get; }
+
+    public bool HasUpdates => Updates is not null;
+
+    public bool CheckForUpdates
+    {
+        get => _settings.ClaudeCode.CheckForUpdates;
+        set => Set(value, v => _settings.ClaudeCode.CheckForUpdates = v);
+    }
 
     public string InstalledText => _services.Install is { } install
         ? $"Claude Code {install.Version} at {install.Path}. Last tested with {ClaudeLocator.LastTestedVersion}{(install.Version > ClaudeLocator.LastTestedVersion ? " (this version is newer)" : "")}."
@@ -614,6 +788,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
         set => Set(value, v => _settings.CheckIns.Message = string.IsNullOrWhiteSpace(v) ? CheckInSettings.DefaultMessage : v);
     }
 
+    public bool NotifyOnCheckIn
+    {
+        get => _settings.CheckIns.Notify;
+        set => Set(value, v => _settings.CheckIns.Notify = v);
+    }
+
     [RelayCommand]
     private void ResetCheckIns()
     {
@@ -623,6 +803,68 @@ public sealed partial class SettingsViewModel : ViewModelBase
         OnPropertyChanged(nameof(CheckInRunTime));
         OnPropertyChanged(nameof(CheckInQuietTime));
         OnPropertyChanged(nameof(CheckInMessage));
+        OnPropertyChanged(nameof(NotifyOnCheckIn));
+    }
+
+    // ---- Notifications (DESIGN.md §10) ------------------------------------------------------------------------------
+
+    /// <summary>False when this machine can't show OS notifications, for example a macOS build run outside its app bundle.</summary>
+    public bool NotificationsAvailable => _services.Notifications.IsAvailable;
+
+    public bool NotifyTurnFinished
+    {
+        get => _settings.Notifications.TurnFinished;
+        set => Set(value, v => _settings.Notifications.TurnFinished = v);
+    }
+
+    public bool NotifyNeedsInput
+    {
+        get => _settings.Notifications.NeedsInput;
+        set => Set(value, v => _settings.Notifications.NeedsInput = v);
+    }
+
+    public bool NotifyProcessErrors
+    {
+        get => _settings.Notifications.ProcessErrors;
+        set => Set(value, v => _settings.Notifications.ProcessErrors = v);
+    }
+
+    public bool NotifyUsageAlerts
+    {
+        get => _settings.Notifications.UsageAlerts;
+        set => Set(value, v => _settings.Notifications.UsageAlerts = v);
+    }
+
+    public bool NotifySignIn
+    {
+        get => _settings.Notifications.SignIn;
+        set => Set(value, v => _settings.Notifications.SignIn = v);
+    }
+
+    public bool NotifyUpdateReady
+    {
+        get => _settings.Notifications.UpdateReady;
+        set => Set(value, v => _settings.Notifications.UpdateReady = v);
+    }
+
+    public bool ShowBadge
+    {
+        get => _settings.Notifications.Badge;
+        set => Set(value, v => _settings.Notifications.Badge = v);
+    }
+
+    [RelayCommand]
+    private void ResetNotifications()
+    {
+        _settings.Notifications = new NotificationSettings();
+        Save();
+        OnPropertyChanged(nameof(NotifyTurnFinished));
+        OnPropertyChanged(nameof(NotifyNeedsInput));
+        OnPropertyChanged(nameof(NotifyProcessErrors));
+        OnPropertyChanged(nameof(NotifyUsageAlerts));
+        OnPropertyChanged(nameof(NotifySignIn));
+        OnPropertyChanged(nameof(NotifyUpdateReady));
+        OnPropertyChanged(nameof(ShowBadge));
     }
 
     // ---- Quick suffixes ------------------------------------------------------------------------------------------
@@ -682,6 +924,150 @@ public sealed partial class SettingsViewModel : ViewModelBase
             Suffixes.Add(new QuickSuffixEditor(suffix, Save));
         }
         Save();
+    }
+
+    // ---- Keyboard (DESIGN.md §14) ------------------------------------------------------------------------------------
+
+    public ObservableCollection<ShortcutRow> ShortcutRows { get; } = [];
+
+    public string SuffixesShortcutText => _services.Tips.Text(KeyboardShortcuts.Suffixes) ?? "no shortcut";
+
+    private ShortcutEditor? _recording;
+
+    /// <summary>A shortcut is being recorded: the window passes the next key press to <see cref="RecordShortcut"/>.</summary>
+    public bool IsRecordingShortcut => _recording is not null;
+
+    [RelayCommand]
+    private void StartRecording(ShortcutEditor? editor)
+    {
+        CancelRecording();
+        if (editor is not null)
+        {
+            editor.Error = null;
+            editor.IsRecording = true;
+            _recording = editor;
+        }
+    }
+
+    public void CancelRecording()
+    {
+        if (_recording is not null)
+        {
+            _recording.IsRecording = false;
+            _recording = null;
+        }
+    }
+
+    /// <summary>
+    /// The keys pressed while recording. Refused, with the reason shown, when another command or suffix already uses
+    /// them, or when they'd get in the way of typing.
+    /// </summary>
+    public void RecordShortcut(KeyChord chord)
+    {
+        if (_recording is not { } editor)
+        {
+            return;
+        }
+        var goToTab = editor is ShortcutRow { Command.Id: KeyboardShortcuts.GoToTab };
+        if (goToTab)
+        {
+            if (chord.Key.Length != 2 || chord.Key[0] != 'D' || chord.Key[1] is < '1' or > '9')
+            {
+                editor.Error = "Press a number key from 1 to 9, with the modifier keys you want.";
+                return;
+            }
+            chord = chord with { Key = "D1" };
+        }
+        if (!AllowedWhileTyping(chord))
+        {
+            editor.Error = "Add Ctrl, Alt or Cmd, so typing still works.";
+            return;
+        }
+        var id = editor switch
+        {
+            ShortcutRow row => row.Command.Id,
+            QuickSuffixEditor suffix => suffix.Suffix.Id,
+            _ => null,
+        };
+        if (KeyboardShortcuts.FindConflict(_settings, chord, id, Shortcuts.IsMac) is { } conflict)
+        {
+            editor.Error = $"{chord.Display(Shortcuts.IsMac)} is already used by {conflict}.";
+            return;
+        }
+        switch (editor)
+        {
+            case ShortcutRow row when chord == row.Command.Default:
+                _settings.Keyboard.Bindings.Remove(row.Command.Id);
+                break;
+            case ShortcutRow row:
+                _settings.Keyboard.Bindings[row.Command.Id] = chord.ToString();
+                break;
+            case QuickSuffixEditor suffix:
+                suffix.Suffix.Shortcut = chord.ToString();
+                break;
+        }
+        editor.Error = null;
+        CancelRecording();
+        SaveShortcuts();
+    }
+
+    /// <summary>Letters, digits and punctuation need Ctrl, Alt or Cmd; Escape, Tab, Enter and F-keys don't.</summary>
+    private static bool AllowedWhileTyping(KeyChord chord) =>
+        (chord.Modifiers & (ChordModifiers.Primary | ChordModifiers.Ctrl | ChordModifiers.Alt)) != 0
+        || chord.Key is "Escape" or "Tab" or "Enter" or "Back" or "Delete" || (chord.Key.Length > 1 && chord.Key[0] == 'F' && char.IsDigit(chord.Key[1]));
+
+    [RelayCommand]
+    private void ResetShortcut(ShortcutRow? row)
+    {
+        if (row is not null && _settings.Keyboard.Bindings.Remove(row.Command.Id))
+        {
+            SaveShortcuts();
+        }
+    }
+
+    /// <summary>Removes a shortcut: the command is then only in menus and buttons.</summary>
+    [RelayCommand]
+    private void ClearShortcut(ShortcutEditor? editor)
+    {
+        switch (editor)
+        {
+            case ShortcutRow row:
+                _settings.Keyboard.Bindings[row.Command.Id] = "";
+                break;
+            case QuickSuffixEditor suffix:
+                suffix.Suffix.Shortcut = null;
+                break;
+            default:
+                return;
+        }
+        SaveShortcuts();
+    }
+
+    [RelayCommand]
+    private void ResetKeyboard()
+    {
+        CancelRecording();
+        _settings.Keyboard = new KeyboardSettings();
+        ShortcutRows.Clear();
+        foreach (var command in KeyboardShortcuts.All)
+        {
+            ShortcutRows.Add(new ShortcutRow(command, _settings.Keyboard));
+        }
+        SaveShortcuts();
+    }
+
+    private void SaveShortcuts()
+    {
+        Save();
+        foreach (var row in ShortcutRows)
+        {
+            row.Refresh();
+        }
+        foreach (var suffix in Suffixes)
+        {
+            suffix.Refresh();
+        }
+        OnPropertyChanged(nameof(SuffixesShortcutText));
     }
 
     // ---- Advanced --------------------------------------------------------------------------------------------------

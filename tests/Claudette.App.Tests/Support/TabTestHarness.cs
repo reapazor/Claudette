@@ -151,12 +151,26 @@ internal sealed class InlineDispatcher : IUiDispatcher
     // Stands in for the one UI thread: every harness shares it, and tests read view model state under it too.
     private static readonly Lock UiThread = new();
 
-    public void Post(Action action)
+    public void Post(Action action) => RunOnUiThread(action);
+
+    /// <summary>
+    /// Serializes like a UI thread would, with a synchronization context so an <c>await</c> in posted work resumes
+    /// under the lock too, as it resumes on Avalonia's UI thread in the app.
+    /// </summary>
+    private static void RunOnUiThread(Action action)
     {
-        // Serialize like a UI thread would.
         lock (UiThread)
         {
-            action();
+            var previous = SynchronizationContext.Current;
+            SynchronizationContext.SetSynchronizationContext(UiContext.Instance);
+            try
+            {
+                action();
+            }
+            finally
+            {
+                SynchronizationContext.SetSynchronizationContext(previous);
+            }
         }
     }
 
@@ -168,19 +182,44 @@ internal sealed class InlineDispatcher : IUiDispatcher
             return read();
         }
     }
+
+    /// <summary>Runs continuations later on a pool thread, one at a time under the lock, like a UI thread's queue.</summary>
+    private sealed class UiContext : SynchronizationContext
+    {
+        public static readonly UiContext Instance = new();
+
+        public override void Post(SendOrPostCallback d, object? state) =>
+            ThreadPool.UnsafeQueueUserWorkItem(_ => RunOnUiThread(() => d(state)), null);
+
+        public override void Send(SendOrPostCallback d, object? state) => RunOnUiThread(() => d(state));
+
+        public override SynchronizationContext CreateCopy() => this;
+    }
 }
 
 internal sealed class NoPlatform : IPlatformServices
 {
+    public List<string> OpenedUrls { get; } = [];
+
+    public string? Clipboard { get; private set; }
+
     public Task<string?> PickFolderAsync(string title) => Task.FromResult<string?>(null);
 
     public Task<string?> PickFileAsync(string title) => Task.FromResult<string?>(null);
 
-    public Task OpenUrlAsync(string url) => Task.CompletedTask;
+    public Task OpenUrlAsync(string url)
+    {
+        OpenedUrls.Add(url);
+        return Task.CompletedTask;
+    }
 
     public Task RevealFolderAsync(string path) => Task.CompletedTask;
 
-    public Task SetClipboardTextAsync(string text) => Task.CompletedTask;
+    public Task SetClipboardTextAsync(string text)
+    {
+        Clipboard = text;
+        return Task.CompletedTask;
+    }
 
     public Task OpenFileAsync(string path) => Task.CompletedTask;
 }
@@ -234,13 +273,20 @@ internal sealed class TabTestHarness : IAsyncDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"claudette-tabtest-{Guid.NewGuid():N}");
 
-    public TabTestHarness(Action<AppSettings>? configure = null)
+    /// <param name="updater">Claude Code's installation, for update tests; when given, update checks are set up too.</param>
+    public TabTestHarness(Action<AppSettings>? configure = null, FakeClaudeUpdater? updater = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "work"));
         Directory.CreateDirectory(ProjectsDirectory);
         Trees = new FakeProcessTreeTracker(Time);
-        Services = new AppServices(AppPaths.Under(_root), new ProcessLauncher(), Time, new NoPlatform(), new InlineDispatcher(), processTrees: Trees);
+        Services = new AppServices(AppPaths.Under(_root), new ProcessLauncher(), Time, Platform, new InlineDispatcher(), processTrees: Trees, notifier: Notifier);
+        Services.Notifications.UseBadge(Notifier);
         configure?.Invoke(Services.Settings);
+        if (updater is not null)
+        {
+            Services.UpdaterFactory = _ => updater;
+            Services.UseInstall(new Core.Installation.ClaudeInstall("claude", updater.Installed));
+        }
         Services.ProjectsDirectory = ProjectsDirectory;
         Factory = new ScriptedSessionFactory(Transport, Time);
         Services.UseSessionFactory(Factory);
@@ -248,6 +294,10 @@ internal sealed class TabTestHarness : IAsyncDisposable
     }
 
     public FakeProcessTreeTracker Trees { get; }
+
+    public NoPlatform Platform { get; } = new();
+
+    public FakeNotifier Notifier { get; } = new();
 
     /// <summary>Stands in for Claude Code's <c>projects</c> folder.</summary>
     public string ProjectsDirectory => Path.Combine(_root, "projects");

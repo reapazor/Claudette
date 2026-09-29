@@ -19,7 +19,7 @@
       </Grid>
 
       <CheckBox Content="Use different check-in settings for this tab" IsChecked="{Binding UseCustomCheckIns}" />
-      <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8" IsVisible="{Binding UseCustomCheckIns}">
+      <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8" IsVisible="{Binding UseCustomCheckIns}">
         <TextBlock Text="Check-ins" VerticalAlignment="Center" />
         <CheckBox Grid.Column="1" Content="On" IsChecked="{Binding CheckInsEnabled}" />
         <TextBlock Grid.Row="1" Text="Run time (min)" VerticalAlignment="Center" />
@@ -28,6 +28,7 @@
         <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="600" Increment="1" FormatString="0" Value="{Binding QuietTimeMinutes}" />
         <TextBlock Grid.Row="3" Text="Message" VerticalAlignment="Top" Margin="0,6,0,0" />
         <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding CheckInMessage}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" />
+        <CheckBox Grid.Row="4" Grid.Column="1" Content="Notify me when a check-in is sent" IsChecked="{Binding NotifyOnCheckIn}" />
       </Grid>
 
       <Grid ColumnDefinitions="*,Auto">
