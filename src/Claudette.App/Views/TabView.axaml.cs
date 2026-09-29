@@ -143,6 +143,9 @@ public partial class TabView : UserControl
             _tab.ScrollToRequested -= OnScrollToRequested;
             _tab.AgentWindowRequested -= OnAgentWindowRequested;
             _tab.PropertyChanged -= OnTabPropertyChanged;
+            // The list belonged to that tab.
+            TasksChip.Flyout?.Hide();
+            _tab.IsTaskListOpen = false;
         }
         _tab = ViewModel;
         if (_tab is not null)
@@ -160,11 +163,36 @@ public partial class TabView : UserControl
     /// <summary>The output of the run the Project page shows, which it follows.</summary>
     private System.Collections.ObjectModel.ObservableCollection<string>? _projectOutput;
 
+    /// <summary>
+    /// The Project page shows another run, or the last running task ended while its list was open: the list goes with
+    /// the chip.
+    /// </summary>
     private void OnTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(TabViewModel.SelectedProjectRun))
         {
             WatchProjectOutput();
+        }
+        else if (e.PropertyName == nameof(TabViewModel.HasRunningTasks) && _tab is { HasRunningTasks: false })
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => TasksChip.Flyout?.Hide());
+        }
+    }
+
+    /// <summary>The running tasks list is open, so its running times tick (DESIGN.md §5, "Running tasks").</summary>
+    private void OnTaskListOpened(object? sender, EventArgs e)
+    {
+        if (ViewModel is { } tab)
+        {
+            tab.IsTaskListOpen = true;
+        }
+    }
+
+    private void OnTaskListClosed(object? sender, EventArgs e)
+    {
+        if (ViewModel is { } tab)
+        {
+            tab.IsTaskListOpen = false;
         }
     }
 

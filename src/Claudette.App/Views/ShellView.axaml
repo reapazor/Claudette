@@ -31,7 +31,7 @@
         <ItemsControl ItemsSource="{Binding InfoRows}">
           <ItemsControl.ItemTemplate>
             <DataTemplate DataType="vm:InfoRow">
-              <Grid ColumnDefinitions="72,*">
+              <Grid ColumnDefinitions="88,*">
                 <TextBlock Classes="muted small" Text="{Binding Label}" />
                 <TextBlock Grid.Column="1" Classes="small" Text="{Binding Value}" TextWrapping="Wrap" />
               </Grid>
@@ -72,6 +72,24 @@
     <!-- A tab's Claude app icon while it connects or reconnects (DESIGN.md §18, "Remote Control"). -->
     <Style Selector="Border#RemoteIcon.settling">
       <Setter Property="Opacity" Value="0.45" />
+    </Style>
+    <!-- How many tasks a tab still has running once its turn is over (DESIGN.md §4, "Sidebar"): no taller than the
+         name beside it, so the row keeps its height. -->
+    <Style Selector="Border.taskbadge">
+      <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="MinWidth" Value="15" />
+      <Setter Property="Padding" Value="3,0" />
+    </Style>
+    <Style Selector="Border.taskbadge > TextBlock">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector=".claude Border.taskbadge">
+      <Setter Property="CornerRadius" Value="8" />
     </Style>
   </UserControl.Styles>
 
@@ -181,6 +199,11 @@
                                     </Border>
                                     <TextBlock DockPanel.Dock="Left" Classes="status busy small" Text="⚙" IsVisible="{Binding HasBusyProcesses}" VerticalAlignment="Center" Margin="0,0,5,0"
                                                ToolTip.Tip="A process this tab started is using CPU" />
+                                    <!-- Tasks still running once the turn is over (DESIGN.md §4, "Sidebar"; §5, "Running tasks") -->
+                                    <Border x:Name="TaskBadge" DockPanel.Dock="Left" Classes="taskbadge" IsVisible="{Binding ShowTaskBadge}" VerticalAlignment="Center" Margin="0,0,5,0"
+                                            ToolTip.Tip="{Binding TaskBadgeTip}" AutomationProperties.Name="{Binding TaskBadgeTip}">
+                                      <TextBlock Text="{Binding RunningTaskCount}" />
+                                    </Border>
                                     <!-- The Perforce changelist (DESIGN.md §18): separate from the name, so renaming keeps it -->
                                     <Button DockPanel.Dock="Right" Classes="flat changelist" Padding="0" Margin="5,0,0,0" VerticalAlignment="Center"
                                             IsVisible="{Binding ShowChangelistBadge}" ToolTip.Tip="{Binding ChangelistBadgeTip}" AutomationProperties.Name="{Binding ChangelistBadge}">

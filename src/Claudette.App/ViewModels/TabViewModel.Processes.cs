@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using Claudette.App.Conversation;
-using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using Claudette.Platform.Processes;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -53,7 +52,6 @@ public sealed partial class TabViewModel
     private ProcessTree? _tree;
     private ProcessSampler? _sampler;
     private readonly Dictionary<int, string> _processTools = [];
-    private readonly Dictionary<string, string> _backgroundTasks = [];
 
     /// <summary>The monitor is on for this tab: its own setting in Tab settings…, or Settings → Processes.</summary>
     public bool IsProcessMonitorOn => (State.Overrides.ShowProcessMonitor ?? _services.Settings.Processes.ShowMonitor) && _tree is not null;
@@ -217,15 +215,6 @@ public sealed partial class TabViewModel
         _ => $"{(int)span.TotalDays}d {span.Hours}h",
     };
 
-    /// <summary>Background tasks, so Stop can go through Claude Code (DESIGN.md §4, "Actions").</summary>
-    private void OnTaskStarted(SystemMessage message)
-    {
-        if (message.Raw.GetString("task_id") is { } taskId && message.Raw.GetString("tool_use_id") is { } toolUseId)
-        {
-            _backgroundTasks[toolUseId] = taskId;
-        }
-    }
-
     [RelayCommand]
     private void ShowProcessTool(ProcessRow? row)
     {
@@ -243,7 +232,8 @@ public sealed partial class TabViewModel
         {
             return;
         }
-        var taskId = row.Tool is { } tool && _backgroundTasks.TryGetValue(tool.ToolUseId, out var id) ? id : null;
+        // A task Claude Code started for the call, so Stop can go through it (DESIGN.md §4, "Actions").
+        var taskId = row.Tool is { } tool ? Tasks.TaskIdFor(tool.ToolUseId) : null;
         _shell.Confirm(
             $"Stop {row.Name} (PID {row.Pid})?",
             taskId is not null
