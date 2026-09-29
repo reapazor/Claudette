@@ -1421,11 +1421,13 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     private Task? _contextRefresh;
 
     /// <summary>
-    /// For tests: every session event so far is applied, and the start's context usage request has finished. A tab
-    /// shows Idle as soon as its session starts, while the start's own events (its state changes) are still queued.
+    /// For tests: the start has finished, every session event so far is applied, and the start's context usage request
+    /// has finished. A tab shows Idle as soon as its session starts, while the start's own events (its state changes)
+    /// are still queued and its context usage request hasn't gone out yet.
     /// </summary>
     internal bool IsSettled =>
-        Volatile.Read(ref _batchesInFlight) == 0
+        _starting is null or { IsCompleted: true }
+        && Volatile.Read(ref _batchesInFlight) == 0
         && _session?.Events is not { CanCount: true, Count: > 0 }
         && _contextRefresh is null or { IsCompleted: true };
 

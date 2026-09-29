@@ -93,16 +93,15 @@ public sealed class GitWorkingTreeTests : IDisposable
         Write("untracked dir/new file ü.txt", "u1\nu2\nu3");
         File.WriteAllBytes(Path.Combine(_repo, "image.bin"), [9, 0, 9]);
 
-        var root = (await _git.GetRepositoryRootAsync(_repo, Token))!;
         var changes = (await _git.GetChangesAsync(Path.Combine(_repo, "sub"), Token))
-            .ToDictionary(c => Path.GetRelativePath(root, c.Path).Replace('\\', '/'));
+            .ToDictionary(c => Path.GetRelativePath(_repo, c.Path).Replace('\\', '/'));
 
         Assert.Equal(6, changes.Count);
         Assert.All(changes.Values, c => Assert.True(Path.IsPathFullyQualified(c.Path)));
         Assert.Equal((GitChangeKind.Modified, 2, 1), Summary(changes["modified.txt"]));
         Assert.Equal((GitChangeKind.Deleted, 0, 1), Summary(changes["deleted.txt"]));
         Assert.Equal((GitChangeKind.Renamed, 0, 0), Summary(changes["renamed-new.txt"]));
-        Assert.Equal(Path.Combine(root, "renamed-old.txt"), changes["renamed-new.txt"].OldPath);
+        Assert.Equal(Path.Combine(_repo, "renamed-old.txt"), changes["renamed-new.txt"].OldPath);
         Assert.Equal((GitChangeKind.Added, 2, 0), Summary(changes["staged.txt"]));
         Assert.Equal((GitChangeKind.Untracked, 3, 0), Summary(changes["untracked dir/new file ü.txt"]));
         Assert.Equal((GitChangeKind.Modified, null, null), Summary(changes["image.bin"]));
@@ -169,6 +168,39 @@ public sealed class GitWorkingTreeTests : IDisposable
         // Git reports the real path as the root, so these are only reachable relative to the folder.
         Assert.Equal("inner\n", await _git.GetHeadContentAsync(Path.Combine(link, "sub"), Path.Combine(link, "sub", "inner.txt"), Token));
         Assert.Equal("top\n", await _git.GetHeadContentAsync(Path.Combine(link, "sub"), Path.Combine(link, "top.txt"), Token));
+    }
+
+    [Fact]
+    public async Task Changes_are_named_the_way_the_folder_is()
+    {
+        Assert.SkipWhen(!GitInstalled, "git isn't on PATH.");
+        await InitAsync();
+        Write("top.txt", "top\n");
+        Write("sub/inner.txt", "inner\n");
+        await CommitAsync();
+        Write("top.txt", "changed\n");
+        Write("sub/new.txt", "new\n");
+        Write(".git/info/exclude", "alias\n");
+        var link = Path.Combine(_root, "link");
+        var alias = Path.Combine(_repo, "alias");
+        try
+        {
+            Directory.CreateSymbolicLink(link, _repo);
+            Directory.CreateSymbolicLink(alias, Path.Combine(_repo, "sub"));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Assert.Skip("This account can't create symbolic links.");
+        }
+
+        // Git reports the real path as the root, as it does for a folder under /var on macOS.
+        var throughLink = await _git.GetChangesAsync(Path.Combine(link, "sub"), Token);
+        Assert.Equal([Path.Combine(link, "sub", "new.txt"), Path.Combine(link, "top.txt")], throughLink.Select(c => c.Path).Order(StringComparer.Ordinal));
+
+        // A symlink inside the repository can't be traced back up from, so its changes are named from git's root.
+        var root = (await _git.GetRepositoryRootAsync(_repo, Token))!;
+        var throughAlias = await _git.GetChangesAsync(alias, Token);
+        Assert.Equal([Path.Combine(root, "sub", "new.txt"), Path.Combine(root, "top.txt")], throughAlias.Select(c => c.Path).Order(StringComparer.Ordinal));
     }
 
     [Fact]

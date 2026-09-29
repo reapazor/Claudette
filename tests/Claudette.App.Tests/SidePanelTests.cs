@@ -339,6 +339,57 @@ public class SidePanelTests
         Assert.True(tab.ChangedFiles.Single(r => r.FileName == "a.cs").IsReviewed);
     }
 
+    [Fact]
+    public async Task A_refresh_that_ends_after_a_later_one_leaves_the_later_ones_rows()
+    {
+        // Git finds the repository when the test says, then lists what the working tree has at that point.
+        var asked = new System.Collections.Concurrent.ConcurrentQueue<FakeProcess>();
+        var untracked = "";
+        var git = new FakeLauncher
+        {
+            OnStart = (spec, process) =>
+            {
+                if (spec.Arguments.Contains("--show-toplevel"))
+                {
+                    asked.Enqueue(process);
+                    return;
+                }
+                if (spec.Arguments.Contains("status"))
+                {
+                    process.WriteOutput($"?? {untracked}\0");
+                }
+                process.Exit(spec.Arguments.Contains("status") ? 0 : 128);
+            },
+        };
+        await using var h = new TabTestHarness(launcher: git);
+        var tab = await h.OpenTabAsync();
+        tab.ShowGitChanges = true;
+        await TabTestHarness.Eventually(() => asked.Count == 1, "the first refresh");
+        var older = tab.RefreshChangedFilesCommand.ExecuteAsync(null);
+        await TabTestHarness.Eventually(() => asked.Count == 2, "the older refresh");
+        var newer = tab.RefreshChangedFilesCommand.ExecuteAsync(null);
+        await TabTestHarness.Eventually(() => asked.Count == 3, "the newer refresh");
+        var processes = asked.ToArray();
+        processes[0].Exit(128);
+
+        untracked = "new.txt";
+        Found(processes[2]);
+        await newer;
+        Assert.Equal(["new.txt"], InlineDispatcher.Read(() => tab.ChangedFiles.Select(r => r.FileName).ToArray()));
+
+        untracked = "old.txt";
+        Found(processes[1]);
+        await older;
+        Assert.Equal(["new.txt"], InlineDispatcher.Read(() => tab.ChangedFiles.Select(r => r.FileName).ToArray()));
+
+        void Found(FakeProcess process)
+        {
+            process.WriteOutput(h.WorkFolder);
+            process.WriteOutput("");
+            process.Exit(0);
+        }
+    }
+
     /// <summary>A successful Edit of <paramref name="path"/>, live.</summary>
     private static void EmitEdit(TabTestHarness h, string id, string path)
     {

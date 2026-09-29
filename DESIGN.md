@@ -287,7 +287,7 @@ Using the picker:
 
 - Dragging a folder from Finder or Explorer onto the sidebar opens a tab there.
 - The command line: `Claudette --folder <path>` opens a tab in that folder on startup. Open Recent and the jump list use this too.
-- On macOS, **File → Open Recent** and the Dock icon's menu list recent folders. On Windows, the taskbar jump list does the same.
+- On macOS, **File → Open Recent** and the Dock icon's menu list recent folders. On Windows, the taskbar jump list does the same, unless the user has turned off **Show recently opened items** in Windows' Start settings, which stops Windows from showing any app's recent items there.
 - Choosing any of these opens a new tab in that folder.
 - The lists hold favorites first, then recent folders, up to 10, leaving out folders that no longer exist. Folders with the same name show their parent too (`work/api`), as tab groups do.
 - **One Claudette at a time.** A launch while Claudette is running (from the jump list, or by opening the app again) passes its arguments to the running one over a named pipe and exits. The running one comes to the front, and opens a tab if a folder was given. A development copy with its own `CLAUDETTE_HOME` counts as a separate instance.
@@ -857,7 +857,7 @@ Claude Code's credentials and settings are never copied.
 **Writing.**
 
 - For a tab that syncs, Claudette copies the transcript into the library after each turn finishes, never while Claude Code is writing it. It waits a second after the turn's result, so Claude Code has finished writing. Turning sync on, and **Sync now**, wait the same second.
-- Each file is written to a temporary name, then renamed, so a sync client never uploads a half-written file. The record is written last, so a record in the library means its transcript is there too.
+- Each file is written to a temporary name, then renamed, so a sync client never uploads a half-written file. The record is written last, so a record in the library means its transcript is there too. On Windows the rename fails while anything has the file open, such as History reading a record, so it's tried again for a moment, and so is a read that meets a rename under way.
 - A file that hasn't changed (same size, and a modified time within 2 seconds, since some synced drives store coarse times) isn't copied again, except by **Sync now**.
 - Ticking a changed file as reviewed ([§8](#8-file-changes--diff-view)) copies the session 2 seconds after the last tick, so ticking several files writes the record once. Only the record has changed, so the transcript isn't copied again. During a turn, the copy as the turn ends carries the ticks.
 - Library copies aren't affected by Claude Code's own cleanup of local transcripts (30 days by default), so the library also works as a longer-term archive for the sessions that sync. It has its own retention setting.
