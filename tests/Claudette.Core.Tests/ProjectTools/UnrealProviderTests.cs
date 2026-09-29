@@ -32,7 +32,7 @@ public sealed class UnrealProviderTests : IDisposable
 
         Assert.Equal("NightOwl", info.Name);
         Assert.Equal("UE 5.4", info.ShortVersion);
-        Assert.Equal(["launch-editor", "generate-project-files", "build-editor", "build-and-launch", "open-solution", "open-log", "clean"], info.Actions.Select(a => a.Id));
+        Assert.Equal(["launch-editor", "generate-project-files", "build-editor", "build-and-launch", "open-solution", "open-log", "clean", "kill-editors"], info.Actions.Select(a => a.Id));
         Assert.Equal("launch-editor", info.MainAction!.Id);
         Assert.Equal(ProjectActionKind.Launch, Action(info, "launch-editor").Kind);
         Assert.True(Action(info, "launch-editor").IsEnabled);
@@ -236,6 +236,56 @@ public sealed class UnrealProviderTests : IDisposable
         Assert.Equal("12 KB", FolderCleaner.FormatSize(12 * 1024));
         Assert.Equal("140 MB", FolderCleaner.FormatSize(140L * 1024 * 1024));
         Assert.Equal("3.2 GB", FolderCleaner.FormatSize((long)(3.2 * 1024 * 1024 * 1024)));
+    }
+
+    // ---- Kill all Unreal editors ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Kill_all_editors_is_disabled_when_none_is_running_and_names_every_editor()
+    {
+        var engine = ProjectToolFixtures.Engine(_temp, "UE5", installed: false);
+        var project = ProjectToolFixtures.UProject(_temp, "UE5/NightOwl/NightOwl.uproject", association: "");
+        var processes = new FakeSystemProcesses();
+        ProjectInfo Describe() => _unreal.Describe(new ProjectCandidate(UnrealProvider.KindId, project, "NightOwl"), ProjectToolFixtures.Context(_temp, processes: processes));
+
+        var idle = Action(Describe(), "kill-editors");
+        Assert.Equal(ProjectActionKind.Destructive, idle.Kind);
+        Assert.Equal("No Unreal editor is running", idle.DisabledReason);
+
+        processes.Running.Add(new SystemProcess(10, "UnrealEditor", $"\"{engine}/Engine/Binaries/Linux/UnrealEditor\" \"{project}\" -debug"));
+        processes.Running.Add(new SystemProcess(11, "UE4Editor-Cmd", @"C:\UE_4.27\UE4Editor-Cmd.exe D:\Old\Legacy.uproject -run=cook"));
+        processes.Running.Add(new SystemProcess(12, "ShaderCompileWorker", "ShaderCompileWorker"));
+        var busy = Action(Describe(), "kill-editors");
+
+        Assert.True(busy.IsEnabled);
+        var kill = Assert.IsType<KillProcesses>(busy.Destructive);
+        Assert.Equal(["UnrealEditor", "UnrealEditor-Cmd", "UE4Editor", "UE4Editor-Cmd"], kill.Names);
+        Assert.Equal("Unreal editor", kill.What);
+        var found = processes.Find(kill.Names);
+        Assert.Equal([10, 11], found.Select(p => p.Pid));
+        Assert.Equal(["NightOwl", "Legacy"], found.Select(p => kill.ProjectOf!(p)));
+        // Where processes can't be listed, it doesn't guess.
+        Assert.True(Action(_unreal.Describe(new ProjectCandidate(UnrealProvider.KindId, project, "NightOwl"), ProjectToolFixtures.Context(_temp)), "kill-editors").IsEnabled);
+    }
+
+    [Theory]
+    [InlineData(@"UnrealEditor ""D:\My Games\NightOwl\NightOwl.uproject""", ".uproject", "NightOwl")]
+    [InlineData("UnrealEditor /home/matt/g/NightOwl.uproject -game", ".uproject", "NightOwl")]
+    [InlineData("UnrealEditor -project=D:/g/Owl.uproject", ".uproject", "Owl")]
+    [InlineData("UnrealEditor", ".uproject", null)]
+    public void The_project_a_process_has_open_is_read_from_its_command_line(string commandLine, string extension, string? project)
+    {
+        Assert.Equal(project, SystemProcessNames.FileArgument(commandLine, extension));
+    }
+
+    [Theory]
+    [InlineData(@"Unity.exe -projectPath ""D:\My Games\Owl"" -debugCodeOptimization", "-projectPath", "Owl")]
+    [InlineData("Unity -projectPath /home/matt/owl/ -batchmode", "-projectPath", "owl")]
+    [InlineData("godot --editor --path /home/matt/Owl Game", "--path", "Owl")]
+    [InlineData("godot --editor", "--path", null)]
+    public void The_folder_after_an_option_is_read_from_a_command_line(string commandLine, string option, string? folder)
+    {
+        Assert.Equal(folder, SystemProcessNames.FolderAfter(commandLine, option));
     }
 
     // ---- The note to Claude ------------------------------------------------------------------------------------------------

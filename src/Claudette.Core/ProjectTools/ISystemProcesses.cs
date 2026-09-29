@@ -40,6 +40,45 @@ public static class SystemProcessNames
         return false;
     }
 
+    /// <summary>
+    /// The file name, without its extension, of the first argument ending in <paramref name="extension"/> (such as
+    /// <c>.uproject</c>), quoted or not; null when there's none.
+    /// </summary>
+    public static string? FileArgument(string? commandLine, string extension)
+    {
+        if (commandLine is null)
+        {
+            return null;
+        }
+        var end = commandLine.IndexOf(extension, StringComparison.OrdinalIgnoreCase);
+        if (end < 0)
+        {
+            return null;
+        }
+        var start = commandLine.LastIndexOfAny(['"', '\'', '/', '\\', ' ', '='], end) + 1;
+        var name = commandLine[start..end];
+        return name.Length > 0 ? name : null;
+    }
+
+    /// <summary>The folder name after an option such as <c>-projectPath</c> or <c>--path</c>, quoted or not; null when there's none.</summary>
+    public static string? FolderAfter(string? commandLine, string option)
+    {
+        if (commandLine is null)
+        {
+            return null;
+        }
+        var at = commandLine.IndexOf(option + " ", StringComparison.OrdinalIgnoreCase);
+        if (at < 0)
+        {
+            return null;
+        }
+        var rest = commandLine[(at + option.Length + 1)..].TrimStart();
+        var value = rest.StartsWith('"') ? rest[1..].Split('"')[0] : rest.Split(' ')[0];
+        var trimmed = value.TrimEnd('/', '\\');
+        var name = trimmed[(trimmed.LastIndexOfAny(['/', '\\']) + 1)..];
+        return name.Length > 0 ? name : null;
+    }
+
     /// <summary>Does the process's command line name <paramref name="path"/>, with either slash, ignoring case?</summary>
     public static bool CommandLineMentions(SystemProcess process, string path) =>
         process.CommandLine is { } commandLine

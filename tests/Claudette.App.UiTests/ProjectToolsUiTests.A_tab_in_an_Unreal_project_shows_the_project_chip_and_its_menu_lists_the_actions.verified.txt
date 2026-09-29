@@ -8,6 +8,7 @@
 [button] Open solution
 [button] Open latest log
 [button] Clean intermediates…
+[button] Kill all Unreal editors…
 "Editor configuration"
 [button] (parts below)
   "●"

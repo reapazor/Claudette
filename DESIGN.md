@@ -1449,7 +1449,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Working line ([§5](#working-line)).** A twinkling glyph, a fun verb (or what the running tool is doing), the turn's time and tokens above the composer while Claude works, with Claude Code's `spinnerVerbs`, and both options in Settings → Appearance.
     - **Still to verify:** installing an update on a real Windows and Mac, which needs signed packages from a published release.
 13. **Project tools.** ✅ Built 2026-09-29 ([§18](#project-tools)).
-    - **Unreal Engine:** finding the project (in the folder, below and above it) and its engine (a parent folder, `LauncherInstalled.dat`, the registry, `Install.ini`, a chosen folder), Launch editor with Development or DebugGame per project, Generate project files, Build editor, Build and launch, Open solution with a chosen IDE, Open latest log and Clean intermediates.
+    - **Unreal Engine:** finding the project (in the folder, below and above it) and its engine (a parent folder, `LauncherInstalled.dat`, the registry, `Install.ini`, a chosen folder), Launch editor with Development or DebugGame per project, Generate project files, Build editor, Build and launch, Open solution with a chosen IDE, Open latest log, Clean intermediates and Kill all Unreal editors.
     - **The chip** in the composer bar, the project's submenu in the tab menu, the **Project** page with the job's output and Stop, the notification, and `Ctrl/Cmd+Shift+E`.
     - **claudette.json** and **claudette.local.json:** a folder's own actions (with trust for the shared file's commands) and links, the links in the sidebar, and the in-app editor.
     - **Settings → Project tools**, and the note to Claude about Unreal projects.
@@ -1662,6 +1662,11 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - **Clean intermediates…**, destructive. It deletes `Binaries` and `Intermediate` in the project, and in each plugin under `Plugins/` (a folder with a `.uplugin`, however deeply nested). Nothing else: not `Saved`, `DerivedDataCache`, `Content` or `Config`.
     - The confirmation lists the folders and their total size. It warns when an editor seems to have the project open: an `UnrealEditor`, `UnrealEditor-Cmd`, `UE4Editor` or `UE4Editor-Cmd` process whose command line names the `.uproject`. Where command lines can't be read, it doesn't guess.
     - The folders are deleted off the UI thread, as a job with its lines on the Project page. Read-only files are made writable first, and links inside are removed without following them.
+  - **Kill all Unreal editors…**, destructive. It ends every running Unreal editor, not just this project's, and each one's process tree, which takes ShaderCompileWorker and the like with it.
+    - The editors are `UnrealEditor`, `UnrealEditor-Cmd`, `UE4Editor` and `UE4Editor-Cmd` (`.exe` on Windows; on macOS, the executable inside `UnrealEditor.app`).
+    - The confirmation says how many are running and lists each with its PID and, when its command line shows it, its project: "End 2 Unreal editors?", "• UnrealEditor (PID 501): NightOwl".
+    - It's disabled with "No Unreal editor is running" when none is found. The menu checks each time it opens; where processes can't be listed, it stays enabled and doesn't guess.
+- **Processes by name** (`ISystemProcesses` in Core, `SystemProcesses` in `Claudette.Platform`), shared by every provider, with the process monitor's own ways of reading processes: a Toolhelp snapshot and `NtQueryInformationProcess` for command lines on Windows, `/proc` on Linux (the `exe` link, else the first argument, since `comm` is cut to 15 characters), and one `ps` run on macOS, where a program's path can have spaces (`/Users/Shared/Epic Games/…`), so its name is taken from the longest start of the command line that is a file. Claudette itself is never listed. Ending a tree uses .NET's `Process.Kill(entireProcessTree: true)`.
 - **Running `.bat` files on Windows.** They run as `cmd.exe /d /s /c ""<bat>" <args>"`: `/d` skips AutoRun, and `/s` takes off only the outer quotes. cmd doesn't read its command line by the rules .NET quotes arguments with, so `CommandLines.BatchFile` builds it and the launcher passes it as it is (`ProcessStartSpec.CommandLine`). An argument is quoted when it has a space or a character cmd treats specially; an option such as `-project=<path>` has only its value quoted, as Unreal's tools write it. An argument with a quote or a line break is refused. `.sh` files run through `/bin/bash`.
 - **Telling Claude.** With **Tell Claude about Unreal projects** on (the default), a session that starts in a detected project gets a note through `--append-system-prompt`, before Perforce's note when both apply ([§18](#perforce-ticket-handling)):
   > This is an Unreal Engine 5.4 project, NightOwl, at D:\Games\NightOwl\NightOwl.uproject.
@@ -1736,7 +1741,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
 > - The registry entries and `Install.ini` as UnrealVersionSelector writes them.
 > - That Stop ends UnrealBuildTool and its compilers, and the process monitor lists them.
 > - Opening a `.xcworkspace` and each IDE for real.
-> - The editor-open warning from real editor command lines.
+> - The editor-open warning, and Kill all Unreal editors, with real editors on each OS (on macOS, reading their command lines through `ps`).
 
 ## 19. Open Questions
 

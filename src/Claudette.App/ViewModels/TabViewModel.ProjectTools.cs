@@ -572,6 +572,9 @@ public sealed partial class TabViewModel
             case ProjectActionKind.Destructive when action.Destructive is DeleteFolders delete:
                 await ConfirmDeleteAsync(action, delete);
                 break;
+            case ProjectActionKind.Destructive when action.Destructive is KillProcesses kill:
+                await ConfirmKillAsync(kill);
+                break;
         }
     }
 
@@ -656,6 +659,45 @@ public sealed partial class TabViewModel
             }), action, $"Deleting {folders.Count} folder{(folders.Count == 1 ? "" : "s")} ({FolderCleaner.FormatSize(size)})");
             return Task.CompletedTask;
         });
+    }
+
+    /// <summary>
+    /// <b>Kill all editors</b>: lists every running editor with the project it has open, when its command line says,
+    /// then ends each one's whole process tree (DESIGN.md §18).
+    /// </summary>
+    private async Task ConfirmKillAsync(KillProcesses kill)
+    {
+        if (_services.ProjectTools.Processes is not { } processes)
+        {
+            _conversation.AddNote($"Claudette can't list the processes on this machine, so it can't end the {kill.What}s.", NoteKind.Warning);
+            return;
+        }
+        var running = await Task.Run(() => processes.Find(kill.Names));
+        if (running.Count == 0)
+        {
+            _conversation.AddNote($"No {kill.What} is running.");
+            await RefreshProjectAsync();
+            return;
+        }
+        var list = string.Join("\n", running.Select(p => $"• {p.Name} (PID {p.Pid.ToString(CultureInfo.InvariantCulture)})"
+            + (kill.ProjectOf?.Invoke(p) is { } project ? $": {project}" : "")));
+        var count = running.Count == 1 ? $"1 {kill.What}" : $"{running.Count} {kill.What}s";
+        _shell.Confirm(
+            $"End {count}?",
+            $"{list}\n\nEach one ends at once, with the processes it started, such as shader compilers. Unsaved work in them is lost.",
+            running.Count == 1 ? "End it" : "End them",
+            async () =>
+            {
+                await Task.Run(() =>
+                {
+                    foreach (var process in running)
+                    {
+                        processes.KillTree(process.Pid);
+                    }
+                });
+                _conversation.AddNote($"Ended {count}.");
+                await RefreshProjectAsync();
+            });
     }
 
     // ---- The job and the Project page ----------------------------------------------------------------------------

@@ -74,9 +74,10 @@ public abstract record DestructiveWork;
 public sealed record DeleteFolders(string Root, Func<IReadOnlyList<string>> Folders, string? Warning = null, IReadOnlyList<string>? EditorProcessNames = null, string? ProjectFile = null)
     : DestructiveWork;
 
-/// <summary>Ends every running process with one of these names, and each one's process tree.</summary>
-/// <param name="What">"Unreal editor", for the confirmation.</param>
-public sealed record KillProcesses(IReadOnlyList<string> Names, string What) : DestructiveWork;
+/// <summary>Ends every running process with one of these names, and each one's process tree (<b>Kill all editors</b>).</summary>
+/// <param name="What">"Unreal editor", for the confirmation: "End 2 Unreal editors?".</param>
+/// <param name="ProjectOf">The project a process has open, read from its command line, for the confirmation; null when it can't tell.</param>
+public sealed record KillProcesses(IReadOnlyList<string> Names, string What, Func<SystemProcess, string?>? ProjectOf = null) : DestructiveWork;
 
 /// <summary>A row of the project's details: on the Project page and in the chip menu's header.</summary>
 public sealed record ProjectDetail(string Label, string Value);

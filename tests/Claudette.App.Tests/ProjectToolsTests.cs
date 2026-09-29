@@ -85,7 +85,7 @@ public class ProjectToolsTests
 
         Assert.Equal(
         [
-            "Launch editor", "Generate project files", "Build editor", "Build and launch", "Open solution", "Open latest log", "Clean intermediates…",
+            "Launch editor", "Generate project files", "Build editor", "Build and launch", "Open solution", "Open latest log", "Clean intermediates…", "Kill all Unreal editors…",
             "-", "Editor configuration", "Development", "DebugGame",
             "-", "Choose another engine folder…",
             "-", "Show output…", "Add an action…", "Refresh",
@@ -408,6 +408,35 @@ public class ProjectToolsTests
         Assert.True(Directory.Exists(Path.Combine(h.WorkFolder, "Binaries")));
     }
 
+    [Fact]
+    public async Task Kill_all_editors_confirms_with_each_editor_and_its_project_then_ends_their_trees()
+    {
+        var (h, _, uproject) = UnrealHarness();
+        await using var _h = h;
+        var processes = new FakeSystemProcesses();
+        h.Services.ProjectTools.Processes = processes;
+        var tab = await OpenWithProjectAsync(h);
+        Assert.Equal("No Unreal editor is running", Entry(tab, "Kill all Unreal editors…").Tip);
+
+        processes.Running.Add(new SystemProcess(501, "UnrealEditor", $"UnrealEditor \"{uproject}\""));
+        processes.Running.Add(new SystemProcess(502, "UnrealEditor-Cmd", "UnrealEditor-Cmd /g/Other.uproject -run=cook"));
+        await tab.RefreshProjectCommand.ExecuteAsync(null);
+        Assert.True(Entry(tab, "Kill all Unreal editors…").IsEnabled);
+        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "kill-editors"));
+
+        var confirmation = h.Shell.Confirmation!;
+        Assert.Equal("End 2 Unreal editors?", confirmation.Title);
+        Assert.Contains("• UnrealEditor (PID 501): NightOwl", confirmation.Message, StringComparison.Ordinal);
+        Assert.Contains("• UnrealEditor-Cmd (PID 502): Other", confirmation.Message, StringComparison.Ordinal);
+        Assert.Empty(processes.Killed);
+
+        await confirmation.ConfirmCommand.ExecuteAsync(null);
+
+        Assert.Equal([501, 502], processes.Killed);
+        Assert.Contains(tab.Items, i => i is Conversation.NoteItem { Text: "Ended 2 Unreal editors." });
+        await TabTestHarness.Eventually(() => !Entry(tab, "Kill all Unreal editors…").IsEnabled, "none left");
+    }
+
     // ---- Custom actions (claudette.json and claudette.local.json) ----------------------------------------------------------
 
     [Fact]
@@ -690,8 +719,23 @@ public class ProjectToolsTests
     {
         public List<SystemProcess> Running { get; } = [];
 
-        public IReadOnlyList<SystemProcess> Find(IReadOnlyCollection<string> names) => Running.Where(p => SystemProcessNames.Matches(p.Name, names)).ToArray();
+        public List<int> Killed { get; } = [];
 
-        public void KillTree(int pid) => Running.RemoveAll(p => p.Pid == pid);
+        public IReadOnlyList<SystemProcess> Find(IReadOnlyCollection<string> names)
+        {
+            lock (Running)
+            {
+                return Running.Where(p => SystemProcessNames.Matches(p.Name, names)).ToArray();
+            }
+        }
+
+        public void KillTree(int pid)
+        {
+            lock (Running)
+            {
+                Killed.Add(pid);
+                Running.RemoveAll(p => p.Pid == pid);
+            }
+        }
     }
 }

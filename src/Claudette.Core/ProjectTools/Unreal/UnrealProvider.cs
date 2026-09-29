@@ -114,6 +114,15 @@ public sealed class UnrealProvider : IProjectToolProvider
             DisabledReason = cleanable.Count == 0 ? "Nothing to clean: there are no Binaries or Intermediate folders." : null,
         });
 
+        // Every Unreal editor, not just this project's: a stuck one, or several, often need ending (DESIGN.md §18).
+        var running = context.Processes?.Find(EditorProcessNames);
+        actions.Add(new ProjectAction("kill-editors", "Kill all Unreal editors…", ProjectActionKind.Destructive)
+        {
+            Description = "Ends every running Unreal editor, with ShaderCompileWorker and whatever else each started.",
+            Destructive = new KillProcesses(EditorProcessNames, "Unreal editor", p => SystemProcessNames.FileArgument(p.CommandLine, ".uproject")),
+            DisabledReason = running is { Count: 0 } ? "No Unreal editor is running" : null,
+        });
+
         var details = new List<ProjectDetail>
         {
             new("Project", project.Path),
