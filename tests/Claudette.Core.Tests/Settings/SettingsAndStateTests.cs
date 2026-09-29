@@ -1,3 +1,4 @@
+using Claudette.Core.Development;
 using Claudette.Core.Git;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
@@ -58,7 +59,7 @@ public sealed class SettingsAndStateTests : IDisposable
     public async Task Tabs_round_trip_with_their_token_totals()
     {
         var store = new JsonFileStore<AppState>(Path.Combine(_root, "state.json"));
-        var tab = new TabState { Folder = "/work/api", SessionId = "s1", UserName = "Refactor", IsPinned = true };
+        var tab = new TabState { Folder = "/work/api", SessionId = "s1", UserName = "Refactor", IsPinned = true, SyncToLibrary = true };
         tab.Tokens.Models["claude-opus-5-5"] = new ModelTokenTotals { Input = 100, Output = 20 };
         tab.Overrides.Effort = "high";
 
@@ -67,8 +68,33 @@ public sealed class SettingsAndStateTests : IDisposable
 
         Assert.Equal("Refactor", loaded.UserName);
         Assert.True(loaded.IsPinned);
+        Assert.True(loaded.SyncToLibrary);
         Assert.Equal("high", loaded.Overrides.Effort);
         Assert.Equal(120, loaded.Tokens.Total);
+    }
+
+    [Fact]
+    public async Task Machine_state_round_trips_the_window_models_and_update_choices()
+    {
+        var store = new JsonFileStore<AppState>(Path.Combine(_root, "state.json"));
+        var started = DateTimeOffset.Parse("2026-09-28T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        await store.SaveAsync(new AppState
+        {
+            Tabs = [new TabState { Folder = "/work/api", SessionStartedAt = started }],
+            Window = new WindowPlacement(40, 60, 1200.5, 800, true),
+            KnownModels = [new ModelInfo("opus", "claude-opus-5-5", "Opus", "Most capable", true, ["low", "high"])],
+            DismissedClaudeUpdate = "2.1.290",
+            NotifiedClaudeUpdate = "2.1.290",
+        }, TestContext.Current.CancellationToken);
+
+        var loaded = store.Load();
+
+        Assert.Equal(new WindowPlacement(40, 60, 1200.5, 800, true), loaded.Window);
+        var model = Assert.Single(loaded.KnownModels);
+        Assert.Equal(("opus", "Opus", true), (model.Value, model.DisplayName, model.SupportsEffort));
+        Assert.Equal(["low", "high"], model.SupportedEffortLevels);
+        Assert.Equal("2.1.290", loaded.DismissedClaudeUpdate);
+        Assert.Equal(started, loaded.Tabs.Single().SessionStartedAt);
     }
 
     [Fact]

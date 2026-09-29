@@ -35,6 +35,8 @@ public sealed class AppSettings
     public KeyboardSettings Keyboard { get; set; } = new();
 
     public AdvancedSettings Advanced { get; set; } = new();
+
+    public PerforceSettings Perforce { get; set; } = new();
 }
 
 /// <summary>
@@ -146,6 +148,12 @@ public sealed class GeneralSettings
 
     /// <summary>Also send tab renames to Claude Code, so <c>claude --resume &lt;name&gt;</c> sees them.</summary>
     public bool RenameInClaudeCode { get; set; }
+
+    /// <summary>Check GitHub for new Claudette releases at launch and every few hours (DESIGN.md §2, "Updating Claudette").</summary>
+    public bool CheckForAppUpdates { get; set; } = true;
+
+    /// <summary>Offer pre-releases too, not only full releases.</summary>
+    public bool IncludePrereleases { get; set; }
 }
 
 public sealed class ClaudeCodeSettings
@@ -184,6 +192,12 @@ public sealed class AppearanceSettings
 
     public double CodeFontSize { get; set; } = 13;
 
+    /// <summary>The conversation's font family, or null for Claudette's own (DESIGN.md §14, "Appearance").</summary>
+    public string? ConversationFont { get; set; }
+
+    /// <summary>The font family for code, commands and diffs, or null for the default monospace fonts.</summary>
+    public string? CodeFont { get; set; }
+
     public bool ExpandThinking { get; set; }
 }
 
@@ -200,6 +214,12 @@ public sealed class SessionSettings
 
     /// <summary>How long sessions stay in the library after they were last used.</summary>
     public RetentionPeriod KeepLibrarySessions { get; set; } = RetentionPeriod.Forever;
+
+    /// <summary>
+    /// New tabs start with <see cref="TabState.SyncToLibrary"/> on (DESIGN.md §9, "Session library"). Off by default,
+    /// so a tab copies its session to the library only when it opts in.
+    /// </summary>
+    public bool SyncNewTabs { get; set; }
 
     /// <summary>Sync Claudette's settings through the library (DESIGN.md §14, "Settings sync").</summary>
     public bool SyncSettings { get; set; }
@@ -253,4 +273,10 @@ public sealed class AdvancedSettings
 {
     /// <summary>Extra command-line arguments for every <c>claude</c> process, split on spaces.</summary>
     public string ExtraArguments { get; set; } = "";
+
+    /// <summary>
+    /// Writes each session's raw protocol traffic to the log folder, and shows messages Claudette skipped in the
+    /// conversation (DESIGN.md §13, "Logging"; §16).
+    /// </summary>
+    public bool LogProtocol { get; set; }
 }

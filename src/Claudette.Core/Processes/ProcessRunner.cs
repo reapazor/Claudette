@@ -9,15 +9,31 @@ public sealed record ProcessResult(int ExitCode, string StandardOutput, string S
 public static class ProcessRunner
 {
     /// <param name="onLine">Called with each line of output as it arrives, from either stream, on a background thread.</param>
+    /// <param name="inputLine">
+    /// A line to write to standard input before closing it. This is how a secret such as a password reaches a command:
+    /// never in its arguments, which other processes can read.
+    /// </param>
     public static async Task<ProcessResult> RunAsync(
         IProcessLauncher launcher,
         ProcessStartSpec spec,
         TimeSpan timeout,
         TimeProvider timeProvider,
         CancellationToken cancellationToken = default,
-        Action<string>? onLine = null)
+        Action<string>? onLine = null,
+        string? inputLine = null)
     {
         await using var process = launcher.Start(spec);
+        if (inputLine is not null)
+        {
+            try
+            {
+                await process.WriteLineAsync(inputLine, cancellationToken).ConfigureAwait(false);
+            }
+            catch (IOException)
+            {
+                // It exited without reading its input; its output says why.
+            }
+        }
         process.CloseStandardInput();
 
         using var timeoutSource = new CancellationTokenSource(timeout, timeProvider);

@@ -28,18 +28,23 @@ public sealed class ClaudeSession : IAsyncDisposable
     private readonly IClaudeTransport _transport;
     private readonly ControlChannel _control;
     private readonly ILogger _logger;
+    private readonly ProtocolDiagnostics? _diagnostics;
     private readonly Channel<SessionEvent> _events = Channel.CreateUnbounded<SessionEvent>(new UnboundedChannelOptions { SingleWriter = false, SingleReader = false });
     private readonly ConcurrentDictionary<string, PermissionRequest> _pendingPermissions = new();
+    private readonly ConcurrentDictionary<string, CancellationTokenSource> _pendingHooks = new();
+    private HookCallbackRegistry _hooks = new([]);
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Task _readLoop;
     private int _unknownMessageCount;
     private int _protocolErrorCount;
     private SessionState _state = SessionState.Starting;
 
-    public ClaudeSession(IClaudeTransport transport, TimeProvider timeProvider, ILogger<ClaudeSession>? logger = null)
+    /// <param name="diagnostics">Counts what Claude Code sends that Claudette doesn't know yet (DESIGN.md §16).</param>
+    public ClaudeSession(IClaudeTransport transport, TimeProvider timeProvider, ILogger<ClaudeSession>? logger = null, ProtocolDiagnostics? diagnostics = null)
     {
         _transport = transport;
         _logger = logger ?? NullLogger<ClaudeSession>.Instance;
+        _diagnostics = diagnostics;
         _control = new ControlChannel(transport.SendAsync, timeProvider);
         _readLoop = Task.Run(ReadLoopAsync);
     }
@@ -73,9 +78,16 @@ public sealed class ClaudeSession : IAsyncDisposable
     /// <summary>Completes when the process has exited and every event has been published.</summary>
     public Task Completion => _readLoop;
 
-    public async Task<InitializeResult> InitializeAsync(CancellationToken cancellationToken = default)
+    public Task<InitializeResult> InitializeAsync(CancellationToken cancellationToken = default) => InitializeAsync([], cancellationToken);
+
+    /// <param name="hooks">
+    /// Hook callbacks to register through the <c>hooks</c> field, as the Agent SDKs do; Claude Code calls them back with
+    /// <c>hook_callback</c> control requests (DESIGN.md §13, "Hook callbacks").
+    /// </param>
+    public async Task<InitializeResult> InitializeAsync(IReadOnlyList<HookRegistration> hooks, CancellationToken cancellationToken = default)
     {
-        var response = await _control.RequestAsync(new JsonObject { ["subtype"] = "initialize", ["hooks"] = null }, InitializeTimeout, cancellationToken)
+        _hooks = new HookCallbackRegistry(hooks);
+        var response = await _control.RequestAsync(new JsonObject { ["subtype"] = "initialize", ["hooks"] = _hooks.Config }, InitializeTimeout, cancellationToken)
             .ConfigureAwait(false);
         Initialization = InitializeResult.Parse(response);
         PermissionMode ??= Initialization.CurrentPermissionMode;
@@ -86,9 +98,13 @@ public sealed class ClaudeSession : IAsyncDisposable
         return Initialization;
     }
 
-    public async ValueTask SendUserMessageAsync(string text, CancellationToken cancellationToken = default)
+    public ValueTask SendUserMessageAsync(string text, CancellationToken cancellationToken = default) =>
+        SendUserMessageAsync(text, [], cancellationToken);
+
+    /// <summary>Sends a message with attached images (DESIGN.md §5, "Attachments").</summary>
+    public async ValueTask SendUserMessageAsync(string text, IReadOnlyList<MessageImage> images, CancellationToken cancellationToken = default)
     {
-        await _transport.SendAsync(OutgoingMessages.UserText(text).ToJsonString(), cancellationToken).ConfigureAwait(false);
+        await _transport.SendAsync(OutgoingMessages.UserMessage(text, images).ToJsonString(), cancellationToken).ConfigureAwait(false);
         if (_state == SessionState.Idle)
         {
             SetState(SessionState.Working);
@@ -186,18 +202,21 @@ public sealed class ClaudeSession : IAsyncDisposable
                 if (!MessageParser.TryParse(line, out var message, out var error))
                 {
                     Interlocked.Increment(ref _protocolErrorCount);
+                    _diagnostics?.RecordParseError();
                     _logger.LogWarning("Skipped a line from Claude Code: {Error}", error);
                     Publish(new ProtocolError(line, error));
                     continue;
                 }
                 try
                 {
+                    _diagnostics?.RecordFields(message);
                     Handle(message);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     // One bad message must never end the session (DESIGN.md §16).
                     Interlocked.Increment(ref _protocolErrorCount);
+                    _diagnostics?.RecordParseError();
                     _logger.LogError(ex, "Failed to handle a '{Type}' message.", message.Type);
                     Publish(new ProtocolError(line, ex.Message));
                 }
@@ -215,6 +234,13 @@ public sealed class ClaudeSession : IAsyncDisposable
             request.Cancel();
         }
         _pendingPermissions.Clear();
+        foreach (var requestId in _pendingHooks.Keys)
+        {
+            if (_pendingHooks.TryRemove(requestId, out var hook))
+            {
+                CancelHook(hook);
+            }
+        }
         SetState(SessionState.Exited);
         Publish(new SessionExited(exit));
         _events.Writer.TryComplete();
@@ -240,6 +266,10 @@ public sealed class ClaudeSession : IAsyncDisposable
                 {
                     cancelled.Cancel();
                     Publish(new PermissionCancelled(cancel.RequestId));
+                }
+                else if (_pendingHooks.TryRemove(cancel.RequestId, out var hook))
+                {
+                    CancelHook(hook);
                 }
                 break;
 
@@ -276,7 +306,7 @@ public sealed class ClaudeSession : IAsyncDisposable
                 break;
 
             case AssistantMessage assistant:
-                if (assistant.Error == "authentication_failed")
+                if (Auth.SignInErrors.IsSignInCategory(assistant.Error))
                 {
                     Publish(new AuthenticationRequired(assistant.Content.OfType<TextBlock>().FirstOrDefault()?.Text));
                 }
@@ -304,7 +334,13 @@ public sealed class ClaudeSession : IAsyncDisposable
                 Publish(new RateLimitUpdated(rateLimit));
                 break;
 
+            case ToolProgressMessage progress:
+                Publish(new ToolProgress(progress));
+                break;
+
             case AuthStatusMessage auth:
+                // Only sent with the hidden --enable-auth-status flag, which Claudette doesn't pass; it reports cloud
+                // credential helpers such as awsAuthRefresh. One that failed still means Claude Code can't sign in.
                 if (auth.Error is not null)
                 {
                     Publish(new AuthenticationRequired(auth.Error));
@@ -315,19 +351,32 @@ public sealed class ClaudeSession : IAsyncDisposable
                 Publish(new ConversationReset(reset.Trigger));
                 break;
 
+            case AutocompactStateMessage autocompact:
+                Publish(new AutocompactStateChanged(autocompact));
+                break;
+
+            case IgnoredMessage:
+                break;
+
             case UnknownMessage unknown:
                 Interlocked.Increment(ref _unknownMessageCount);
+                _diagnostics?.RecordUnknownMessage(unknown.MessageType);
                 _logger.LogDebug("Skipped unknown message type '{Type}'.", unknown.MessageType);
-                Publish(new UnrecognizedMessage(unknown.MessageType));
+                Publish(new UnrecognizedMessage(unknown.MessageType, unknown.Raw));
                 break;
         }
     }
 
     private void HandleControlRequest(ControlRequestMessage request)
     {
+        if (request.Subtype == "hook_callback")
+        {
+            HandleHookCallback(request);
+            return;
+        }
         if (request.Subtype != "can_use_tool")
         {
-            // Hook callbacks and SDK MCP servers aren't used yet. Answer so Claude Code doesn't wait forever.
+            // SDK MCP servers aren't used. Answer so Claude Code doesn't wait forever.
             _logger.LogWarning("Unsupported control request '{Subtype}' from Claude Code.", request.Subtype);
             _ = RespondSafelyAsync(() => _control.RespondErrorAsync(request.RequestId, $"Unsupported control request: {request.Subtype}", _lifetime.Token));
             return;
@@ -337,6 +386,70 @@ public sealed class ClaudeSession : IAsyncDisposable
         _pendingPermissions[request.RequestId] = permission;
         Publish(new PermissionRequested(permission));
         _ = AnswerPermissionAsync(permission);
+    }
+
+    /// <summary>
+    /// Runs a registered hook callback off the read loop, and answers with its output. An unknown callback, or one
+    /// that fails, gets an error answer, which Claude Code treats as a hook error and carries on. A call Claude Code
+    /// withdraws (<c>control_cancel_request</c>) is cancelled and not answered.
+    /// </summary>
+    private void HandleHookCallback(ControlRequestMessage request)
+    {
+        if (request.Request.GetString("callback_id") is not { } callbackId || _hooks.Find(callbackId) is not { } callback)
+        {
+            _logger.LogWarning("Claude Code called back an unknown hook.");
+            _ = RespondSafelyAsync(() => _control.RespondErrorAsync(request.RequestId, "No hook callback with that id.", _lifetime.Token));
+            return;
+        }
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _pendingHooks[request.RequestId] = cancellation;
+        _ = RunHookAsync(request.RequestId, callback, HookInput.Parse(request.Request), cancellation);
+    }
+
+    private async Task RunHookAsync(string requestId, HookCallback callback, HookInput input, CancellationTokenSource cancellation)
+    {
+        try
+        {
+            JsonObject output;
+            try
+            {
+                output = await Task.Run(() => callback(input, cancellation.Token)).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "A {Event} hook callback failed.", input.EventName);
+                if (_pendingHooks.TryRemove(requestId, out _))
+                {
+                    await RespondSafelyAsync(() => _control.RespondErrorAsync(requestId, ex.Message, _lifetime.Token)).ConfigureAwait(false);
+                }
+                return;
+            }
+            if (_pendingHooks.TryRemove(requestId, out _))
+            {
+                await RespondSafelyAsync(() => _control.RespondAsync(requestId, output, _lifetime.Token)).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _pendingHooks.TryRemove(requestId, out _);
+            cancellation.Dispose();
+        }
+    }
+
+    private static void CancelHook(CancellationTokenSource hook)
+    {
+        try
+        {
+            hook.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // It just finished.
+        }
     }
 
     private async Task AnswerPermissionAsync(PermissionRequest permission)

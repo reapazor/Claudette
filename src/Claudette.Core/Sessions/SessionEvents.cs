@@ -38,16 +38,26 @@ public sealed record PermissionCancelled(string RequestId) : SessionEvent;
 
 public sealed record RateLimitUpdated(RateLimitEventMessage Message) : SessionEvent;
 
+/// <summary>A tool call is still running, for example a subagent (a heartbeat, or waiting out an API error).</summary>
+public sealed record ToolProgress(ToolProgressMessage Message) : SessionEvent;
+
+/// <summary>
+/// Claude Code needs a sign-in (DESIGN.md §11, "Detecting"): an <c>assistant</c> message with a sign-in error, or an
+/// <c>auth_status</c> message with an error.
+/// </summary>
 public sealed record AuthenticationRequired(string? Detail) : SessionEvent;
 
 /// <summary>The conversation was cleared (for example by <c>/clear</c>); drop the view and any cached title.</summary>
 public sealed record ConversationReset(string? Trigger) : SessionEvent;
 
+/// <summary>Claude Code's auto-compaction settings for this session, sent with each turn (undocumented).</summary>
+public sealed record AutocompactStateChanged(AutocompactStateMessage State) : SessionEvent;
+
 /// <summary>Any other <c>system</c> message (status, tasks, retries, …).</summary>
 public sealed record SystemNotice(SystemMessage Message) : SessionEvent;
 
 /// <summary>A message type Claudette doesn't know yet (DESIGN.md §16, "Staying tolerant at runtime").</summary>
-public sealed record UnrecognizedMessage(string MessageType) : SessionEvent;
+public sealed record UnrecognizedMessage(string MessageType, System.Text.Json.Nodes.JsonObject Raw) : SessionEvent;
 
 /// <summary>A line that couldn't be parsed. The session keeps going.</summary>
 public sealed record ProtocolError(string Line, string Error) : SessionEvent;

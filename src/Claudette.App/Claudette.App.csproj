@@ -37,5 +37,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Claudette.App.Tests" />
+    <InternalsVisibleTo Include="Claudette.App.UiTests" />
   </ItemGroup>
 </Project>

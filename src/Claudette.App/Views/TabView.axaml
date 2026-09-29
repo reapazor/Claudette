@@ -6,9 +6,13 @@
              xmlns:settings="using:Claudette.Core.Settings"
              xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
              xmlns:controls="using:Claudette.App.Controls"
+             xmlns:protocol="using:Claudette.Core.Protocol"
+             xmlns:services="using:Claudette.App.Services"
+             xmlns:views="using:Claudette.App.Views"
              x:Class="Claudette.App.Views.TabView"
              x:DataType="vm:TabViewModel"
-             FontSize="{DynamicResource ConversationFontSize}">
+             FontSize="{DynamicResource ConversationFontSize}"
+             FontFamily="{DynamicResource ConversationFont}">
 
   <UserControl.Styles>
     <Style Selector="Border.diffline.added">
@@ -58,6 +62,31 @@
       <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
       <Setter Property="Background" Value="Transparent" />
     </Style>
+    <!-- Tool card icons (DESIGN.md §5): 12×12 strokes from App.axaml, drawn as they are. -->
+    <Style Selector="Path.toolicon">
+      <Setter Property="Stroke" Value="{DynamicResource MutedTextBrush}" />
+      <Setter Property="StrokeThickness" Value="1.1" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="StrokeJoin" Value="Round" />
+      <Setter Property="Width" Value="12" />
+      <Setter Property="Height" Value="12" />
+      <Setter Property="Stretch" Value="None" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- Attached images (DESIGN.md §5, "Attachments") -->
+    <Style Selector="Border.thumbnail">
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="ClipToBounds" Value="True" />
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Border.composer.dropping">
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
+    </Style>
+    <!-- The / and @ autocomplete (DESIGN.md §5, "Composer") -->
+    <Style Selector="Button.completion.selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SelectedRowBrush}" />
+    </Style>
   </UserControl.Styles>
 
   <!-- Conversation templates (DESIGN.md §5). Declared on the control so nested subagent groups use them too. -->
@@ -68,6 +97,22 @@
               CornerRadius="8" Padding="12,8" Margin="0,6,0,2">
         <StackPanel Spacing="4">
           <TextBlock Classes="muted small" Text="Automatic check-in" IsVisible="{Binding IsCheckIn}" />
+          <!-- Attached images (DESIGN.md §5, "Attachments") -->
+          <ItemsControl ItemsSource="{Binding Images}" IsVisible="{Binding HasImages}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel ItemSpacing="6" LineSpacing="6" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="protocol:MessageImage">
+                <Border Classes="thumbnail">
+                  <Image Source="{Binding Data, Converter={x:Static services:ImageFiles.Thumbnail}}" Height="72" MaxWidth="160" Stretch="UniformToFill"
+                         AutomationProperties.Name="Attached image" />
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
           <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" IsVisible="{Binding Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           <SelectableTextBlock Classes="muted small" Text="{Binding SuffixText}" TextWrapping="Wrap" IsVisible="{Binding HasSuffix}" />
         </StackPanel>
@@ -97,8 +142,8 @@
       <StackPanel Spacing="2">
         <Button Classes="flat row" Command="{Binding ToggleCommand}">
           <StackPanel Orientation="Horizontal" Spacing="8">
-            <TextBlock Classes="status" Classes.busy="{Binding !IsComplete}" Classes.ok="{Binding IsComplete}" Classes.failed="{Binding IsError}" Text="●" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding Icon}" Classes="muted" VerticalAlignment="Center" />
+            <TextBlock Classes="status" Classes.busy="{Binding !IsComplete}" Classes.ok="{Binding IsSucceeded}" Classes.failed="{Binding IsError}" Text="●" VerticalAlignment="Center" />
+            <Path Classes="toolicon" Data="{Binding IconKey, Converter={x:Static conv:ToolIcons.Geometry}}" />
             <TextBlock FontWeight="SemiBold" Text="{Binding AgentType}" VerticalAlignment="Center" />
             <TextBlock Classes="muted" Text="{Binding Summary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
           </StackPanel>
@@ -121,15 +166,24 @@
 
     <DataTemplate DataType="conv:ToolUseItem">
       <StackPanel Spacing="4">
-        <Button Classes="flat row" Command="{Binding ToggleCommand}" IsHitTestVisible="{Binding CanExpand}">
-          <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
-            <TextBlock Classes="status" Classes.busy="{Binding !IsComplete}" Classes.ok="{Binding IsComplete}" Classes.failed="{Binding IsError}"
-                       Text="●" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBlock Grid.Column="1" FontWeight="SemiBold" Text="{Binding Name}" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBlock Grid.Column="2" Classes="mono muted" Text="{Binding Summary}" MaxWidth="560" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="4" Classes="mono small" Text="{Binding DiffStats}" IsVisible="{Binding HasDiff}" VerticalAlignment="Center" Margin="12,0,0,0" />
-          </Grid>
-        </Button>
+        <Grid ColumnDefinitions="*,Auto">
+          <Button Classes="flat row" Command="{Binding ToggleCommand}" IsHitTestVisible="{Binding CanExpand}">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+              <TextBlock Classes="status" Classes.busy="{Binding !IsComplete}" Classes.ok="{Binding IsComplete}" Classes.failed="{Binding IsError}"
+                         Text="●" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <Path Grid.Column="1" Classes="toolicon" Data="{Binding IconKey, Converter={x:Static conv:ToolIcons.Geometry}}" Margin="0,0,6,0" />
+              <TextBlock Grid.Column="2" FontWeight="SemiBold" Text="{Binding Name}" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <TextBlock Grid.Column="3" Classes="mono muted" Text="{Binding Summary}" MaxWidth="560" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="5" Classes="mono small" Text="{Binding DiffStats}" IsVisible="{Binding HasDiff}" VerticalAlignment="Center" Margin="12,0,0,0" />
+            </Grid>
+          </Button>
+          <!-- Edit / Write: the file in the diff view (DESIGN.md §5, §8) -->
+          <Button Grid.Column="1" Classes="flat" Padding="6,2" Margin="4,0,0,0" VerticalAlignment="Center" IsVisible="{Binding CanOpenDiff}"
+                  ToolTip.Tip="Open in the diff view" AutomationProperties.Name="Open in the diff view"
+                  Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenToolDiffCommand}" CommandParameter="{Binding}">
+            <TextBlock Classes="muted small" Text="Open diff" />
+          </Button>
+        </Grid>
         <TextBlock Classes="muted small mono" Text="{Binding ResultSummary}" Classes.error="{Binding IsError}" TextTrimming="CharacterEllipsis"
                    Margin="22,0,0,0" IsVisible="{Binding HasResultSummary}" />
 
@@ -173,6 +227,7 @@
       <Border Classes="prompt" Classes.answered="{Binding !IsPending}">
         <StackPanel Spacing="8">
           <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+          <TextBlock Classes="muted small" Text="{Binding Asker, StringFormat='Asked by the {0}'}" TextWrapping="Wrap" IsVisible="{Binding HasAsker}" />
           <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
           <Border Classes="codeblock" IsVisible="{Binding HasCommand}">
             <SelectableTextBlock Classes="mono" Text="{Binding Command, StringFormat='$ {0}'}" TextWrapping="Wrap" />
@@ -314,6 +369,13 @@
                            Classes.error="{Binding IsError}" Classes.warning="{Binding IsWarning}" />
     </DataTemplate>
 
+    <!-- Skipped by Claudette, shown while protocol logging is on (DESIGN.md §16) -->
+    <DataTemplate DataType="conv:UnsupportedMessageItem">
+      <Expander Header="{Binding Title}" IsExpanded="{Binding IsExpanded}" Padding="8,4">
+        <SelectableTextBlock Text="{Binding Json}" FontFamily="{DynamicResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
+      </Expander>
+    </DataTemplate>
+
     <DataTemplate DataType="conv:TurnSummaryItem">
       <TextBlock Classes="muted small" Text="{Binding Text}" Opacity="0.8" Margin="0,0,0,4" />
     </DataTemplate>
@@ -321,18 +383,25 @@
 
   <Grid RowDefinitions="*,Auto" ColumnDefinitions="*,Auto">
 
-    <!-- Side panel (DESIGN.md §3): changed files and, when the monitor is on, processes -->
+    <!-- Side panel (DESIGN.md §3): changed files, agents and, when the monitor is on, processes -->
     <Border Grid.Column="1" Grid.RowSpan="2" Width="340" IsVisible="{Binding IsSidePanelOpen}"
             BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1,0,0,0" Background="{DynamicResource SubtleBrush}">
       <DockPanel>
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*,Auto" Margin="8,6">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="8,6">
           <Button Classes="flat" Command="{Binding ShowFilesPageCommand}">
             <TextBlock Text="Changed files" FontWeight="{Binding IsFilesPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
           </Button>
-          <Button Grid.Column="1" Classes="flat" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding IsProcessMonitorOn}">
+          <!-- Agents (DESIGN.md §18); a busy dot while a subagent runs -->
+          <Button Grid.Column="1" Classes="flat" Command="{Binding ShowAgentsPageCommand}" ToolTip.Tip="{Binding AgentsHeader}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <TextBlock Text="Agents" FontWeight="{Binding IsAgentsPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
+              <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding HasActiveAgents}" />
+            </StackPanel>
+          </Button>
+          <Button Grid.Column="2" Classes="flat" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding IsProcessMonitorOn}">
             <TextBlock Text="Processes" FontWeight="{Binding IsProcessesPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
           </Button>
-          <Button Grid.Column="3" Classes="flat" Padding="6" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
+          <Button Grid.Column="4" Classes="flat" Padding="6" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
             <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
           </Button>
         </Grid>
@@ -378,6 +447,21 @@
               </ListBox.ItemTemplate>
             </ListBox>
           </DockPanel>
+
+          <!-- Agents (DESIGN.md §18, "Agent map"): the tree, and the selected agent's prompt and result -->
+          <Grid IsVisible="{Binding IsAgentsPage}" RowDefinitions="Auto,*,Auto,*">
+            <Grid Margin="12,0,6,6" ColumnDefinitions="*,Auto">
+              <TextBlock Classes="muted small" Text="{Binding AgentsHeader}" TextWrapping="Wrap" VerticalAlignment="Center" />
+              <Button Grid.Column="1" Classes="flat" Padding="6" ToolTip.Tip="Open the agent map in its own window" AutomationProperties.Name="Open the agent map in a window"
+                      Command="{Binding OpenAgentWindowCommand}">
+                <Path Data="{StaticResource IconOpenWindow}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.3" Width="10" Height="10" Stretch="Uniform" />
+              </Button>
+            </Grid>
+            <views:AgentTree Grid.Row="1" />
+            <GridSplitter Grid.Row="2" Height="5" Background="Transparent" ResizeDirection="Rows" IsVisible="{Binding HasAgents}"
+                          BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" />
+            <views:AgentDetails Grid.Row="3" IsVisible="{Binding HasAgents}" />
+          </Grid>
 
           <!-- Processes (DESIGN.md §4, "Process monitor") -->
           <DockPanel IsVisible="{Binding IsProcessesPage}">
@@ -489,6 +573,32 @@
           </StackPanel>
         </Border>
       </Border>
+
+      <!-- Perforce password (DESIGN.md §18): "Ask each time", or a first "Stored by Claudette" login. A new prompt
+           makes a new password box, which takes the focus. -->
+      <Border Classes="overlay" IsVisible="{Binding HasPerforcePrompt}">
+        <ContentControl Content="{Binding PerforcePrompt}" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <ContentControl.ContentTemplate>
+            <DataTemplate DataType="vm:PerforcePasswordPrompt">
+              <Border Classes="dialog" MaxWidth="460">
+                <StackPanel Spacing="12">
+                  <TextBlock Text="Log in to Perforce" FontWeight="SemiBold" FontSize="16" />
+                  <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                  <TextBlock Classes="small error" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
+                  <TextBox Text="{Binding Password}" PasswordChar="•" PlaceholderText="Password" AutomationProperties.Name="Perforce password"
+                           AttachedToVisualTree="OnPerforcePasswordAttached" />
+                  <CheckBox Content="{Binding SaveText}" IsChecked="{Binding Save}" IsVisible="{Binding OfferToSave}" />
+                  <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Claude never sees it: it goes straight to p4 login." />
+                  <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <Button Content="Cancel" Command="{Binding CancelCommand}" />
+                    <Button Classes="accent" Content="Log in" Command="{Binding LogInCommand}" IsDefault="True" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ContentControl.ContentTemplate>
+        </ContentControl>
+      </Border>
     </Grid>
 
     <!-- Composer (DESIGN.md §5) -->
@@ -541,6 +651,17 @@
         </StackPanel>
       </Border>
 
+      <!-- The transcript is gone from here and the library (DESIGN.md §9, "Old sessions") -->
+      <Border Classes="codeblock" IsVisible="{Binding IsSessionMissing}">
+        <StackPanel Spacing="8">
+          <TextBlock Classes="warning" TextWrapping="Wrap" Text="{x:Static vm:TabViewModel.SessionMissingText}" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Classes="accent" Content="Start a new session" Command="{Binding StartNewSessionCommand}" />
+            <Button Content="{Binding CloseMissingText}" Command="{Binding UnpinAndCloseCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
       <!-- Taken over by another machine (DESIGN.md §9) -->
       <Border Classes="codeblock" IsVisible="{Binding IsReadOnly}">
         <TextBlock Classes="warning" TextWrapping="Wrap" Text="{Binding ReadOnlyText}" />
@@ -550,15 +671,85 @@
       <TextBlock Classes="small error" Margin="4,0" TextWrapping="Wrap" IsVisible="{Binding IsBypassMode}"
                  Text="Bypass permissions: Claude won't ask before running commands or changing files in this session." />
 
-      <Border Classes="composer" Classes.bypass="{Binding IsBypassMode}">
-        <Grid RowDefinitions="Auto,Auto">
-          <TextBox x:Name="Composer" Text="{Binding ComposerText}" AcceptsReturn="True" TextWrapping="Wrap"
+      <!-- Why a dropped or pasted file wasn't attached -->
+      <Grid ColumnDefinitions="*,Auto" Margin="4,0" IsVisible="{Binding HasAttachmentError}">
+        <TextBlock Classes="small error" TextWrapping="Wrap" VerticalAlignment="Center" Text="{Binding AttachmentError}" />
+        <Button Grid.Column="1" Classes="flat" Padding="4" ToolTip.Tip="Dismiss" AutomationProperties.Name="Dismiss" Command="{Binding DismissAttachmentErrorCommand}">
+          <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="7" Height="7" Stretch="Uniform" />
+        </Button>
+      </Grid>
+
+      <Border x:Name="ComposerBox" Classes="composer" Classes.bypass="{Binding IsBypassMode}" DragDrop.AllowDrop="True">
+        <Grid RowDefinitions="Auto,Auto,Auto">
+          <!-- Attached images, removable (DESIGN.md §5, "Attachments") -->
+          <ItemsControl x:Name="AttachmentList" ItemsSource="{Binding Attachments}" IsVisible="{Binding Attachments.Count}" Margin="0,4,0,2">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel ItemSpacing="6" LineSpacing="6" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:ComposerAttachment">
+                <Panel ToolTip.Tip="{Binding Name}">
+                  <Border Classes="thumbnail">
+                    <Image Source="{Binding Data, Converter={x:Static services:ImageFiles.Thumbnail}}" Height="56" MaxWidth="120" Stretch="UniformToFill"
+                           AutomationProperties.Name="{Binding Name}" />
+                  </Border>
+                  <Button Classes="flat" Padding="4" Margin="3" HorizontalAlignment="Right" VerticalAlignment="Top" CornerRadius="9"
+                          Background="{DynamicResource ComposerBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1"
+                          ToolTip.Tip="Remove" AutomationProperties.Name="Remove image"
+                          Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RemoveAttachmentCommand}" CommandParameter="{Binding}">
+                    <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="7" Height="7" Stretch="Uniform" />
+                  </Button>
+                </Panel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBox x:Name="Composer" Grid.Row="1" Text="{Binding ComposerText}" AcceptsReturn="True" TextWrapping="Wrap"
                    MinHeight="40" MaxHeight="240" Padding="2,6"
                    PlaceholderText="{Binding Tips.ComposerPlaceholder}" />
 
+          <!-- / and @ autocomplete (DESIGN.md §5, "Composer"): keyboard first, the text box keeps focus -->
+          <Popup x:Name="CompletionPopup" Grid.Row="1" PlacementTarget="{Binding #ComposerBox}" Placement="TopEdgeAlignedLeft" VerticalOffset="-4"
+                 IsOpen="{Binding Completions.IsOpen, Mode=OneWay}" IsLightDismissEnabled="False">
+            <Border Classes="dialog" Padding="4" Width="{Binding #ComposerBox.Bounds.Width}" MaxHeight="340">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Classes="muted small" FontWeight="SemiBold" Margin="8,4,8,2" Text="{Binding Completions.Header}" />
+                <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="8,4,8,6" Text="{Binding Completions.Message}" IsVisible="{Binding Completions.HasMessage}" />
+                <ScrollViewer x:Name="CompletionScroll" HorizontalScrollBarVisibility="Disabled">
+                  <ItemsControl x:Name="CompletionList" ItemsSource="{Binding Completions.Items}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="vm:CompletionItem">
+                        <Button Classes="flat row completion" Classes.selected="{Binding IsSelected}" Focusable="False" Padding="8,4"
+                                HorizontalContentAlignment="Stretch" Click="OnCompletionClicked">
+                          <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                            <Path Classes="toolicon" Data="{Binding IconKey, Converter={x:Static conv:ToolIcons.Geometry}}" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                              <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                              <TextBlock Classes="muted small mono" Text="{Binding Hint}" VerticalAlignment="Center"
+                                         IsVisible="{Binding Hint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                          </Grid>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </DockPanel>
+            </Border>
+          </Popup>
+
           <!-- Control bar -->
-          <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto">
+          <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto">
             <StackPanel Orientation="Horizontal" Spacing="2">
+              <!-- Attach a file (DESIGN.md §5, "Attachments"); dropping and pasting work too -->
+              <Button Classes="flat" Padding="6,4" ToolTip.Tip="Attach a file or image (or drop or paste one)" AutomationProperties.Name="Attach a file"
+                      Click="OnAttachClicked">
+                <Path Data="{StaticResource IconAttach}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.1" StrokeLineCap="Round"
+                      Width="12" Height="12" Stretch="None" />
+              </Button>
               <Button x:Name="SuffixButton" Classes="flat" ToolTip.Tip="{Binding Tips.Suffixes}">
                 <TextBlock Classes="muted small" Text="Suffixes ▾" />
                 <Button.Flyout>
@@ -656,6 +847,12 @@
                 <TextBlock Classes="muted small" Text="{Binding ProcessSummaryText}" />
               </Button>
 
+              <!-- Agents (DESIGN.md §18, "Agent map"), while the tab has subagents -->
+              <Button Classes="flat" IsVisible="{Binding HasAgents}" ToolTip.Tip="What this tab's subagents are doing"
+                      Command="{Binding OpenAgentsPageCommand}">
+                <TextBlock Classes="muted small" Text="{Binding AgentsButtonText}" />
+              </Button>
+
               <!-- Changed files (DESIGN.md §8) -->
               <Button Classes="flat" ToolTip.Tip="Changed files" Command="{Binding ToggleSidePanelCommand}">
                 <TextBlock Classes="muted small" Text="{Binding ChangedFiles.Count, StringFormat='Files ({0})'}" />
@@ -723,16 +920,32 @@
                 <TextBlock Classes="muted small" Text="ⓘ" />
                 <Button.Flyout>
                   <Flyout Placement="TopEdgeAlignedRight">
-                    <ItemsControl ItemsSource="{Binding InfoRows}" MinWidth="320" MaxWidth="480">
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:InfoRow">
-                          <Grid ColumnDefinitions="72,*" Margin="0,1">
-                            <TextBlock Classes="muted small" Text="{Binding Label}" />
-                            <SelectableTextBlock Grid.Column="1" Classes="small" Text="{Binding Value}" TextWrapping="Wrap" />
-                          </Grid>
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <StackPanel Spacing="8" MinWidth="320" MaxWidth="480">
+                      <ItemsControl ItemsSource="{Binding InfoRows}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="vm:InfoRow">
+                            <Grid ColumnDefinitions="72,*" Margin="0,1">
+                              <TextBlock Classes="muted small" Text="{Binding Label}" />
+                              <SelectableTextBlock Grid.Column="1" Classes="small" Text="{Binding Value}" TextWrapping="Wrap" />
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <!-- Perforce changelists, with Copy and Open in P4V (DESIGN.md §18) -->
+                      <ItemsControl ItemsSource="{Binding ChangelistRows}" IsVisible="{Binding HasChangelists}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="vm:ChangelistRow">
+                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
+                              <TextBlock Classes="small" Text="{Binding Text}" VerticalAlignment="Center" />
+                              <Button Grid.Column="1" Classes="flat" Content="Copy" Click="OnFlyoutItemPicked"
+                                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyChangelistCommand}" CommandParameter="{Binding Number}" />
+                              <Button Grid.Column="2" Classes="flat" Content="Open in P4V" Click="OnFlyoutItemPicked"
+                                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenChangelistInP4VCommand}" CommandParameter="{Binding Number}" />
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
                   </Flyout>
                 </Button.Flyout>
               </Button>

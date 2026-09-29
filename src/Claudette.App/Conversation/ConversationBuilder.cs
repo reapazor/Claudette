@@ -21,6 +21,10 @@ public sealed class ConversationBuilder
     private AssistantTextItem? _openText;
     private ThinkingItem? _openThinking;
     private NoteItem? _retryNote;
+    private AgentMap? _agents;
+
+    // The agent whose stream this builder shows: the main agent, or the subagent whose group it fills.
+    private AgentNode? _agent;
 
     // Claude Code streams a block's deltas, then sends the complete block as an assistant message. If deltas arrived
     // since the last assistant message, its text has already been shown.
@@ -41,10 +45,26 @@ public sealed class ConversationBuilder
     /// <summary>Show thinking expanded rather than collapsed (Settings → Appearance).</summary>
     public bool ExpandThinking { get; set; }
 
-    public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false)
+    /// <summary>Show messages Claudette skipped as rows with their JSON: protocol logging is on (DESIGN.md §16).</summary>
+    public bool ShowUnsupportedMessages { get; set; }
+
+    /// <summary>
+    /// The tab's agent map (DESIGN.md §18), kept from the same routing as the subagent groups so the two agree.
+    /// </summary>
+    public AgentMap? Agents
+    {
+        get => _agents;
+        init
+        {
+            _agents = value;
+            _agent = value?.Root;
+        }
+    }
+
+    public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null)
     {
         CloseOpen();
-        var item = new UserMessageItem(text, suffixText, isCheckIn);
+        var item = new UserMessageItem(text, suffixText, isCheckIn) { Images = images ?? [] };
         Items.Add(item);
         return item;
     }
@@ -64,6 +84,7 @@ public sealed class ConversationBuilder
         _subagents.Clear();
         _todoToolUses.Clear();
         _todoList?.Clear();
+        _agents?.Clear();
         _openText = null;
         _openThinking = null;
         _retryNote = null;
@@ -109,6 +130,18 @@ public sealed class ConversationBuilder
                 AddPrompt(permission.Request);
                 break;
 
+            case StateChanged changed:
+                _agents?.OnSessionState(changed.State);
+                break;
+
+            case SystemNotice { Message.Subtype: "task_started" or "task_progress" or "task_notification" or "task_updated" } task:
+                _agents?.OnTask(task.Message);
+                break;
+
+            case ToolProgress progress:
+                _agents?.OnToolProgress(progress.Message);
+                break;
+
             case PermissionCancelled cancelled:
                 if (_permissions.TryGetValue(cancelled.RequestId, out var cancelledItem))
                 {
@@ -137,11 +170,17 @@ public sealed class ConversationBuilder
                 CloseOpen();
                 _retryNote = null;
                 ApplyTurnCompleted(completed.Result);
+                _agents?.OnTurnCompleted();
                 break;
 
             case ConversationReset:
                 Clear();
                 AddNote("Conversation cleared.");
+                break;
+
+            case UnrecognizedMessage unrecognized when ShowUnsupportedMessages:
+                Items.Add(new UnsupportedMessageItem(unrecognized.MessageType,
+                    unrecognized.Raw.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true })));
                 break;
 
             case ProtocolError protocolError:
@@ -157,6 +196,7 @@ public sealed class ConversationBuilder
                 var code = exited.Exit.ExitCode?.ToString() ?? "unknown";
                 var detail = string.IsNullOrWhiteSpace(exited.Exit.StandardErrorTail) ? "" : $"\n{LastLines(exited.Exit.StandardErrorTail, 5)}";
                 AddNote($"Claude Code exited (code {code}).{detail}", exited.Exit.ExitCode == 0 ? NoteKind.Info : NoteKind.Error);
+                _agents?.OnSessionExited();
                 break;
         }
     }
@@ -180,6 +220,7 @@ public sealed class ConversationBuilder
         }
         _permissions[request.RequestId] = item;
         Items.Add(item);
+        _agents?.OnPrompt(item);
     }
 
     private void ApplyAssistant(AssistantMessage message)
@@ -207,6 +248,7 @@ public sealed class ConversationBuilder
                         AppendText(text.Text);
                     }
                     CloseText();
+                    _agent?.OnText(text.Text);
                     break;
 
                 case ToolUseBlock toolUse:
@@ -217,10 +259,18 @@ public sealed class ConversationBuilder
                         _todoToolUses.Add(toolUse.Id);
                         break;
                     }
+                    if (_agents is not null && _agent is not null)
+                    {
+                        _agents.OnToolUse(_agent, toolUse.Id, toolUse.Name, toolUse.Input);
+                    }
                     if (toolUse.Name is "Agent" or "Task")
                     {
                         var subagent = new SubagentItem(toolUse.Id, toolUse.Name, toolUse.Input);
-                        _subagents[toolUse.Id] = new ConversationBuilder(subagent.Items, todoList: null, _modelName) { ExpandThinking = ExpandThinking };
+                        var child = new ConversationBuilder(subagent.Items, todoList: null, _modelName) { ExpandThinking = ExpandThinking };
+                        // Its traffic fills its group and its node in the agent map, under this agent.
+                        child._agents = _agents;
+                        child._agent = _agent is not null ? _agents?.Add(_agent, subagent) : null;
+                        _subagents[toolUse.Id] = child;
                         _toolUses[toolUse.Id] = subagent;
                         Items.Add(subagent);
                     }
@@ -246,6 +296,10 @@ public sealed class ConversationBuilder
             else if (_toolUses.TryGetValue(result.ToolUseId, out var tool))
             {
                 tool.ApplyResult(result.Text, result.IsError, message.ToolUseResult);
+                if (tool is SubagentItem && _agents?.Find(result.ToolUseId) is { } node)
+                {
+                    node.OnResult(result.Text, result.IsError, message.ToolUseResult, WasInterrupted(message, result.ToolUseId));
+                }
             }
         }
     }
@@ -282,6 +336,12 @@ public sealed class ConversationBuilder
         }
         if (result.IsError && result.Result is { Length: > 0 } error)
         {
+            // An error Claude Code also sent as the reply (such as "Not logged in · Please run /login") is shown once,
+            // as the error.
+            if (Items.Count > 0 && Items[^1] is AssistantTextItem reply && reply.Text.Trim() == error.Trim())
+            {
+                Items.RemoveAt(Items.Count - 1);
+            }
             AddNote(error, NoteKind.Error);
             return;
         }
@@ -333,6 +393,11 @@ public sealed class ConversationBuilder
         }
         return null;
     }
+
+    /// <summary>Claude Code marks a call cut off by an interrupt or a stop in <c>tool_result_meta</c>.</summary>
+    private static bool WasInterrupted(UserMessage message, string toolUseId) =>
+        message.Raw["tool_result_meta"] is JsonArray meta
+        && meta.OfType<JsonObject>().Any(m => m.GetString("id") == toolUseId && m.GetString("non_execution_kind") == "interrupted");
 
     private static string? ParentOf(SessionEvent sessionEvent) => sessionEvent switch
     {

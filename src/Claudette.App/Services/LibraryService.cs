@@ -10,9 +10,9 @@ using Microsoft.Extensions.Logging;
 namespace Claudette.App.Services;
 
 /// <summary>
-/// The session library (DESIGN.md §9): copies each tab's transcript and record into the library folder after its
-/// turns, keeps a lease on open sessions so two machines don't write the same one, and syncs Claudette's settings
-/// through the library when that's turned on (DESIGN.md §14, "Settings sync").
+/// The session library (DESIGN.md §9): copies the transcript and record of each tab that syncs into the library folder
+/// after its turns, keeps a lease on those sessions so two machines don't write the same one, and syncs Claudette's
+/// settings through the library when that's turned on (DESIGN.md §14, "Settings sync").
 /// </summary>
 public sealed class LibraryService : IDisposable
 {
@@ -99,13 +99,20 @@ public sealed class LibraryService : IDisposable
     /// </summary>
     public Task<string> CopyToLocalAsync(string sessionId) => Library.CopyToLocalAsync(sessionId, _services.Paths.LocalSessionsDirectory);
 
-    /// <summary>Copies a session into the library after a turn, in the background. Never throws.</summary>
-    public async Task SaveAfterTurnAsync(SessionRecord record, string? localCopy)
+    /// <summary>
+    /// Copies a tab's session into the library in the background, and takes its lease (DESIGN.md §9, "Writing"): after
+    /// each turn of a tab that syncs, and when a tab starts syncing. Never throws.
+    /// </summary>
+    /// <param name="stillSyncing">
+    /// Asked after the settle delay and again before the lease is taken, so a tab that stopped syncing meanwhile writes
+    /// nothing and doesn't take its lease back.
+    /// </param>
+    public async Task CopyToLibraryAsync(SessionRecord record, string? localCopy, Func<bool> stillSyncing)
     {
         try
         {
             await Task.Delay(SettleDelay, _services.Time).ConfigureAwait(false);
-            if (FindTranscript(record.SessionId, localCopy) is not { } transcript)
+            if (!stillSyncing() || FindTranscript(record.SessionId, localCopy) is not { } transcript)
             {
                 return;
             }
@@ -120,7 +127,10 @@ public sealed class LibraryService : IDisposable
             }
             var subagents = Path.Combine(Path.GetDirectoryName(transcript)!, record.SessionId, SessionLibrary.SubagentsFolderName);
             await Library.SaveAsync(record, transcript, subagents).ConfigureAwait(false);
-            Leases.Acquire(record.SessionId, Library.GetSessionFolder(record.SessionId));
+            if (stillSyncing())
+            {
+                Leases.Acquire(record.SessionId, Library.GetSessionFolder(record.SessionId));
+            }
         }
         catch (Exception ex)
         {
@@ -130,7 +140,7 @@ public sealed class LibraryService : IDisposable
 
     public LeaseStatus CheckLease(string sessionId) => Leases.Check(Library.GetSessionFolder(sessionId));
 
-    /// <summary>Settings → Sessions → Keep library sessions for. Open sessions are kept.</summary>
+    /// <summary>Settings → Sessions → Keep library sessions for. <paramref name="keep"/> is the sessions open here in tabs that sync.</summary>
     public void Prune(IReadOnlySet<string> keep)
     {
         try

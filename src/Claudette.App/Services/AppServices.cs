@@ -1,10 +1,13 @@
 using Claudette.Core;
 using Claudette.Core.Auth;
+using Claudette.Core.Credentials;
 using Claudette.Core.Git;
 using Claudette.Core.Installation;
 using Claudette.Core.Processes;
+using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
+using Claudette.Core.Updates;
 using Claudette.Platform.Notifications;
 using Claudette.Platform.Processes;
 using Claudette.Usage;
@@ -35,6 +38,10 @@ public sealed class AppServices : IAsyncDisposable
     /// be the matching <see cref="Claudette.Platform.Processes.TrackingProcessLauncher"/>. Null in tests.
     /// </param>
     /// <param name="notifier">Shows OS notifications (DESIGN.md §10). Null shows none.</param>
+    /// <param name="credentials">The OS credential store, for stored Perforce passwords (DESIGN.md §18). Null has none.</param>
+    /// <param name="appInstaller">Installs Claudette's own updates (DESIGN.md §2, "Updating Claudette"). Null can't.</param>
+    /// <param name="httpHandler">Sends Claudette's own web requests: the update check and download. Tests pass a fake.</param>
+    /// <param name="appVersion">This Claudette's version; by default, the one it was built with.</param>
     public AppServices(
         AppPaths paths,
         IProcessLauncher launcher,
@@ -43,8 +50,18 @@ public sealed class AppServices : IAsyncDisposable
         IUiDispatcher dispatcher,
         ILoggerFactory? loggerFactory = null,
         IProcessTreeTracker? processTrees = null,
-        INotifier? notifier = null)
+        INotifier? notifier = null,
+        ICredentialStore? credentials = null,
+        IAppInstaller? appInstaller = null,
+        HttpMessageHandler? httpHandler = null,
+        AppVersion? appVersion = null)
     {
+        AppInstaller = appInstaller ?? new NoAppInstaller();
+        AppVersion = appVersion ?? BuiltVersion();
+        Http = new HttpClient(httpHandler ?? new SocketsHttpHandler { AutomaticDecompression = System.Net.DecompressionMethods.All }, disposeHandler: true)
+        {
+            Timeout = TimeSpan.FromSeconds(60),
+        };
         Paths = paths;
         _launcher = launcher;
         Time = timeProvider;
@@ -59,8 +76,10 @@ public sealed class AppServices : IAsyncDisposable
         State = _stateStore.Load();
         Git = new GitWorkingTree(launcher, timeProvider);
         Library = new LibraryService(this);
+        ProtocolLog.DeleteOld(paths.ProtocolLogDirectory, timeProvider.GetUtcNow());
         Notifications = new NotificationService(this, notifier ?? NullNotifier.Instance);
         Tips = new ShortcutTips(Settings);
+        Perforce = new PerforceService(this, credentials ?? new UnavailableCredentialStore());
         UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time);
         SettingsChanged += (_, _) =>
         {
@@ -74,8 +93,33 @@ public sealed class AppServices : IAsyncDisposable
     /// <summary>Tooltips naming the current keyboard shortcuts (DESIGN.md §14, "Keyboard").</summary>
     public ShortcutTips Tips { get; }
 
+    /// <summary>This Claudette's version, as its releases are tagged.</summary>
+    public AppVersion AppVersion { get; }
+
+    /// <summary>Installs a downloaded release over this Claudette, when the way it was installed allows (DESIGN.md §2).</summary>
+    public IAppInstaller AppInstaller { get; }
+
+    /// <summary>For Claudette's own requests to GitHub. Everything Claude-related goes through Claude Code instead.</summary>
+    public HttpClient Http { get; }
+
+    /// <summary>What Claudette's web requests call themselves.</summary>
+    public string UserAgent => $"Claudette/{AppVersion}";
+
+    /// <summary>The version the running app was built with (<c>-p:Version=…</c> in packaging/), without build metadata.</summary>
+    private static AppVersion BuiltVersion()
+    {
+        var informational = typeof(AppServices).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+            .FirstOrDefault()?.InformationalVersion;
+        return AppVersion.TryParse(informational) ?? AppVersion.TryParse(typeof(AppServices).Assembly.GetName().Version?.ToString(3)) ?? new AppVersion(0, 0, 0);
+    }
+
     /// <summary>OS notifications and the Dock/taskbar badge (DESIGN.md §10).</summary>
     public NotificationService Notifications { get; }
+
+    /// <summary>Perforce ticket handling and changelists, shared by the tabs (DESIGN.md §18).</summary>
+    public PerforceService Perforce { get; }
 
     /// <summary>Makes the updater for a <c>claude</c> path (DESIGN.md §12). Tests replace it.</summary>
     internal Func<string, IClaudeUpdater> UpdaterFactory { get; set; }
@@ -167,9 +211,30 @@ public sealed class AppServices : IAsyncDisposable
     public void UseInstall(ClaudeInstall install)
     {
         Install = install;
-        Sessions = new ClaudeSessionFactory(install.Path, _launcher, Time, Loggers);
+        Sessions = new ClaudeSessionFactory(install.Path, _launcher, Time, Loggers, Diagnostics);
         Auth = new ClaudeAuth(install.Path, _launcher, Time);
         ClaudeUpdates = new ClaudeUpdateService(this, CreateUpdater(install.Path), install.Version);
+    }
+
+    /// <summary>What Claude Code has sent that Claudette doesn't know yet, for Settings → Advanced → Diagnostics (DESIGN.md §16).</summary>
+    public ProtocolDiagnostics Diagnostics { get; } = new();
+
+    /// <summary>A new protocol log for a session when Settings → Advanced turns logging on, otherwise null (DESIGN.md §13).</summary>
+    public string? ProtocolLogPath(string label) =>
+        Settings.Advanced.LogProtocol ? Path.Combine(Paths.ProtocolLogDirectory, ProtocolLog.FileName(Time.GetUtcNow(), label)) : null;
+
+    /// <summary>
+    /// Keeps the models a session's <c>initialize</c> reply offered, for the model and effort lists in Settings and Tab
+    /// settings (DESIGN.md §14). Claude Code's own "default" entry isn't a model to pick.
+    /// </summary>
+    public void RememberModels(IReadOnlyList<ModelInfo>? models)
+    {
+        var offered = models?.Where(m => m.Value != "default").ToList() ?? [];
+        if (offered.Count > 0 && !offered.SequenceEqual(State.KnownModels, ModelInfoComparer.Instance))
+        {
+            State.KnownModels = offered;
+            SaveState();
+        }
     }
 
     /// <summary>For tests: sessions come from <paramref name="factory"/> instead of a real <c>claude</c>.</summary>
@@ -247,7 +312,7 @@ public sealed class AppServices : IAsyncDisposable
                 await _utility.DisposeAsync().ConfigureAwait(false);
             }
             var factory = Sessions ?? throw new InvalidOperationException("Claude Code hasn't been found yet.");
-            _utility = await UtilitySession.StartAsync(factory, Paths.UtilityDirectory, cancellationToken).ConfigureAwait(false);
+            _utility = await UtilitySession.StartAsync(factory, Paths.UtilityDirectory, cancellationToken, ProtocolLogPath("utility")).ConfigureAwait(false);
             return _utility;
         }
         finally
@@ -298,6 +363,7 @@ public sealed class AppServices : IAsyncDisposable
             await _utility.DisposeAsync();
             _utility = null;
         }
+        Http.Dispose();
     }
 
     /// <summary>
@@ -343,4 +409,16 @@ public sealed class AppServices : IAsyncDisposable
             }
         });
     }
+}
+
+/// <summary>Compares models by what Settings shows of them: the id, name and effort levels.</summary>
+internal sealed class ModelInfoComparer : IEqualityComparer<ModelInfo>
+{
+    public static readonly ModelInfoComparer Instance = new();
+
+    public bool Equals(ModelInfo? x, ModelInfo? y) =>
+        ReferenceEquals(x, y) || x is not null && y is not null && x.Value == y.Value && x.DisplayName == y.DisplayName
+            && x.SupportsEffort == y.SupportsEffort && x.SupportedEffortLevels.SequenceEqual(y.SupportedEffortLevels);
+
+    public int GetHashCode(ModelInfo obj) => HashCode.Combine(obj.Value, obj.DisplayName);
 }

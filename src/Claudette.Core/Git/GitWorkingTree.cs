@@ -127,6 +127,20 @@ public sealed class GitWorkingTree(IProcessLauncher launcher, TimeProvider timeP
         return result is { ExitCode: 0 } ? result.StandardOutput.Replace(Environment.NewLine, "\n", StringComparison.Ordinal) : null;
     }
 
+    /// <summary>
+    /// The files under <paramref name="folder"/> that git doesn't ignore, tracked or not, relative to it with forward
+    /// slashes, for the composer's <c>@</c> autocomplete (DESIGN.md §5). Null when the folder isn't in a repository.
+    /// </summary>
+    public async Task<IReadOnlyList<string>?> ListFilesAsync(string folder, CancellationToken cancellationToken = default)
+    {
+        var result = await RunAsync(folder, ["--no-optional-locks", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cancellationToken).ConfigureAwait(false);
+        if (result is not { ExitCode: 0 })
+        {
+            return null;
+        }
+        return TrimOutput(result.StandardOutput).Split('\0', StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).ToArray();
+    }
+
     /// <summary>Whether anything differs from HEAD, including untracked files. Null when it can't be told.</summary>
     public async Task<bool?> HasUncommittedChangesAsync(string folder, CancellationToken cancellationToken = default)
     {

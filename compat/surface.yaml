@@ -130,9 +130,9 @@ items:
   - id: "claude auth logout"
     kind: command
     status: documented
-    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs
+    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs, src/Claudette.App/ViewModels/AccountViewModel.cs
     docs: https://code.claude.com/docs/en/cli-reference
-    test: none yet
+    test: SignInTests, FakeClaudeSignInTests, AccountAndSignInTests
 
   # --- Environment -------------------------------------------------------------------------------------
   - id: "CLAUDECODE"
@@ -194,9 +194,9 @@ items:
   - id: "authentication_failed"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Auth/SignInErrors.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: ReplayTests
+    test: ReplayTests, ClaudeSessionTests, SignInTests
   - id: "tool_use_result"
     kind: field
     status: undocumented
@@ -236,9 +236,10 @@ items:
   - id: "auth_status"
     kind: message
     status: documented
-    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.Core/Sessions/ClaudeSession.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: none yet
+    test: ClaudeSessionTests
+    fallback: One with an error means Claude Code needs a sign-in (DESIGN.md §11). 2.1.284 only sends it with the hidden --enable-auth-status flag, which Claudette doesn't pass, to report cloud credential helpers such as awsAuthRefresh, so in practice authentication_failed is what arrives.
   - id: "control_cancel_request"
     kind: message
     status: undocumented
@@ -446,7 +447,7 @@ items:
     usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/ContextUsage.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: RealCliTests
-    fallback: Last-turn input tokens divided by modelUsage.contextWindow from the result message.
+    fallback: The main agent's latest call (its message.usage) divided by modelUsage.contextWindow from the last result, warning near autocompact_state's threshold (CallUsage, TabViewModel.ShowEstimatedContext).
   - id: "get_usage"
     kind: control
     status: experimental
@@ -456,20 +457,20 @@ items:
   - id: "claude_authenticate"
     kind: control
     status: undocumented
-    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs
-    test: none yet (needs a real sign-in)
-    fallback: claude auth login (documented), with the pasted code written to its input (DESIGN.md §11).
+    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs, src/Claudette.App/ViewModels/SignInViewModel.cs
+    test: FakeClaudeSignInTests, AccountAndSignInTests (against fakes; no real sign-in has completed through it yet)
+    fallback: claude auth login (documented), which Claudette runs whenever claude_authenticate is rejected or gives no address, with the pasted code written to its input (DESIGN.md §11).
   - id: "claude_oauth_wait_for_completion"
     kind: control
     status: undocumented
-    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs
-    test: none yet (needs a real sign-in)
+    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs, src/Claudette.App/ViewModels/SignInViewModel.cs
+    test: FakeClaudeSignInTests, AccountAndSignInTests (against fakes; no real sign-in has completed through it yet)
     fallback: See claude_authenticate.
   - id: "claude_oauth_callback"
     kind: control
     status: undocumented
-    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs
-    test: none yet (needs a real sign-in)
+    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs, src/Claudette.App/ViewModels/SignInViewModel.cs
+    test: FakeClaudeSignInTests, AccountAndSignInTests (against fakes; no real sign-in has completed through it yet)
     fallback: See claude_authenticate.
   - id: "generate_session_title"
     kind: control
@@ -483,6 +484,74 @@ items:
     usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
     test: none yet (covered by spikes/scenarios/03)
     fallback: Only used when "rename in Claude Code" is on; the name is kept in Claudette either way.
+
+  # --- Composer: slash commands, @ mentions and attachments (DESIGN.md §5) --------------------------------
+  - id: "slash_commands"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.Core/Composer/SlashCommandCatalog.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: SlashCommandTests, ComposerTests, RealCliTests
+  - id: "terminal_slash_commands"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.Core/Composer/SlashCommandCatalog.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: SlashCommandTests, ComposerTests
+  - id: "argumentHint"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/InitializeResult.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: SlashCommandTests, RealCliTests
+  - id: "aliases"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/InitializeResult.cs, src/Claudette.Core/Composer/SlashCommandCatalog.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: SlashCommandTests
+  - id: "builtin"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/InitializeResult.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: SlashCommandTests, RealCliTests
+  - id: "commands_changed"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.Composer.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ComposerTests
+  - id: "image content blocks in user messages"
+    kind: behavior
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/OutgoingMessages.cs, src/Claudette.Core/Protocol/MessageImage.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests, AttachmentTests, ComposerTests
+  - id: "Claude Code scales down images it receives"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Core/Composer/Attachment.cs
+    test: RealCliTests
+    fallback: 2.1.284 caps the long edge at 2000 px and re-encodes large images as JPEG (a 12 MB or 20 MB PNG reaches the API under 5 MB base64), so Claudette sends images as they are, up to 20 MB. If that stops, scale images down in Claudette before sending (at most 2000 px on the long edge and 5 MB base64, the Bedrock and Vertex limit).
+  - id: "@path mentions in prompts"
+    kind: behavior
+    status: documented
+    usedIn: src/Claudette.Core/Composer/ComposerTokens.cs, src/Claudette.Core/Composer/Attachment.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+  - id: "@path mentions are only read in the last content block"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Core/Protocol/OutgoingMessages.cs
+    test: RealCliTests
+    fallback: Claudette puts the text after the images. If mentions next to images stop being read, send the images first in a user message with shouldQuery false (documented; Claude Code holds it and merges it into the next message, checked against 2.1.284), then the text as a plain-text message.
+  - id: "image blocks in transcript user entries"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs
+    test: AttachmentTests, ComposerTests
+    fallback: A restored prompt shows its text without thumbnails.
 
   # --- Transcripts (read when restoring a tab) ----------------------------------------------------------
   - id: "ai-title"
@@ -530,6 +599,78 @@ items:
     usedIn: tools/Claudette.MockApi/MockAnthropicApi.cs
     test: RealCliTests
     fallback: A connectivity check Claude Code makes against ANTHROPIC_BASE_URL. The mock answers 404 and Claude Code carries on; if that stops working, answer 200.
+
+  # --- Sign-in (DESIGN.md §11) --------------------------------------------------------------------------
+  - id: "claude auth login"
+    kind: command
+    status: documented
+    usedIn: src/Claudette.Core/Auth/ClaudeLogin.cs, src/Claudette.Core/Auth/ClaudeAuth.cs, src/Claudette.App/ViewModels/SignInViewModel.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: SignInTests, FakeClaudeSignInTests, AccountAndSignInTests
+    fallback: The fallback for the sign-in control requests, and the only way to sign in with SSO. Success is read from its exit code (0), which isn't documented; claude auth status then confirms the sign-in either way.
+  - id: "--console"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Auth/ClaudeLogin.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: SignInTests
+  - id: "--sso"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Auth/ClaudeLogin.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: SignInTests
+  - id: "If the browser didn't open, visit:"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Core/Auth/ClaudeLogin.cs
+    test: SignInTests, FakeClaudeSignInTests
+    fallback: What claude auth login prints with no terminal attached (2.1.284), followed by the address of the page that shows a code. Claudette takes the first http(s) address in any line of its output, with terminal escape codes removed, so the wording can change. Without one, the command still opens the browser itself and can finish on its own; only Open browser again and Enter a code instead have no page to open.
+  - id: "Paste code here if prompted >"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Core/Auth/ClaudeLogin.cs
+    test: SignInTests, FakeClaudeSignInTests
+    fallback: claude auth login reads the code from its input, one line of code#state that 2.1.284 splits on "#". Claudette writes the code as pasted, trimmed. If the command stops reading its input, the code field can't finish a sign-in, but the browser's automatic redirect still can.
+  - id: "loginWithClaudeAi"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs, src/Claudette.App/ViewModels/SignInViewModel.cs
+    test: FakeClaudeSignInTests, AccountAndSignInTests
+    fallback: The claude_authenticate field that picks a Claude subscription (true) or an Anthropic Console account (false), as the TypeScript SDK's claudeAuthenticate sends it. If it goes away, sign in to a Console account with claude auth login --console.
+  - id: "oauth_org_not_allowed"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Auth/SignInErrors.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ClaudeSessionTests, SignInTests
+  - id: "Please run /login"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Core/Auth/SignInErrors.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    test: SignInTests, FakeClaudeSignInTests, AccountAndSignInTests
+    fallback: A session that can't start without a sign-in is recognized from the words of its error ("/login", "Not logged in", "Invalid API key", "OAuth token"…). If the wording changes, the tab shows an ordinary start error with Restart, and a session that starts anyway still reports authentication_failed, which is documented, with its first message.
+  - id: "subscriptionType"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs, src/Claudette.App/ViewModels/AccountViewModel.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: InstallAndAuthTests, AccountAndSignInTests
+    fallback: With email, orgName and authMethod from claude auth status, for the account menu and Settings. Only shown; without them the menu says "Signed in".
+  - id: "orgName"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs, src/Claudette.App/ViewModels/AccountViewModel.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: InstallAndAuthTests
+    fallback: See subscriptionType.
+  - id: "authMethod"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs, src/Claudette.App/ViewModels/AccountViewModel.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: InstallAndAuthTests, AccountAndSignInTests
+    fallback: See subscriptionType. 2.1.284 reports none, claude.ai, api_key, api_key_helper, oauth_token or third_party; an unknown value is shown as it is.
 
   # --- Plan usage (DESIGN.md §6) ------------------------------------------------------------------------
   - id: "rate_limits_available"
@@ -595,6 +736,38 @@ items:
     usedIn: src/Claudette.Core/Sessions/TokenTotals.cs, src/Claudette.Usage/UsageRecords.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: UsageStoreTests
+  - id: "contextWindow"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/CallUsage.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: CallUsageTests
+  - id: "message.usage"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/CallUsage.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: CallUsageTests
+    # Per-call usage on assistant messages: repeated on every content block of a call, so counted once by message id.
+  - id: "autocompact_state"
+    kind: message
+    status: undocumented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    test: ReplayTests
+    fallback: "Seen in 2.1.284 before each turn: value.enabled, value.effective_window, value.threshold. Only the context estimate uses it (when get_context_usage isn't available); without it the estimate warns at 80% of the context window."
+  - id: "active_goal"
+    kind: message
+    status: undocumented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    test: MessageParserTests
+    fallback: Seen in 2.1.284 ({"value":null} before each turn). Skipped on purpose, so Diagnostics doesn't count it as unknown; nothing depends on it.
+  - id: "supportedEffortLevels"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Services/AppServices.cs, src/Claudette.App/ViewModels/SettingsViewModel.Defaults.cs, src/Claudette.App/ViewModels/TabSettingsViewModel.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: SettingsDefaultsTests
+    # The models (and their effort levels) in the initialize reply, kept per machine for the lists in Settings.
 
   # --- History and the session library (DESIGN.md §9) --------------------------------------------------
   - id: "isMeta"
@@ -637,9 +810,9 @@ items:
   - id: "<session-id>/subagents/*.jsonl"
     kind: file
     status: undocumented
-    usedIn: src/Claudette.Core/History/HistoryIndex.cs, src/Claudette.Core/Library/SessionLibrary.cs, src/Claudette.App/Services/LibraryService.cs
-    test: HistoryIndexTests, SessionLibraryTests
-    fallback: History ignores the folder. If it moves, the library copies only the main transcript and a session restored on another machine loses subagent detail.
+    usedIn: src/Claudette.Core/History/HistoryIndex.cs, src/Claudette.Core/Library/SessionLibrary.cs, src/Claudette.App/Services/LibraryService.cs, src/Claudette.Core/Transcripts/TranscriptReader.cs
+    test: HistoryIndexTests, SessionLibraryTests, TranscriptReaderTests
+    fallback: History ignores the folder. If it moves, the library copies only the main transcript and a session restored on another machine loses subagent detail, and a restored tab's subagent groups and agent map show only the top-level subagents, without their activity.
   - id: "compact JSONL transcript lines"
     kind: behavior
     status: undocumented
@@ -701,15 +874,158 @@ items:
   - id: "task_started"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/ViewModels/TabViewModel.Processes.cs
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.Processes.cs, src/Claudette.App/Conversation/AgentMap.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: SidePanelTests
+    test: SidePanelTests, AgentMapTests
   - id: "stop_task"
     kind: control
     status: documented
     usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: SidePanelTests
+  # --- Agent map (DESIGN.md §18) ------------------------------------------------------------------------
+  - id: "tool_progress"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: MessageParserTests, AgentMapTests
+  - id: "subagent_retry"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: MessageParserTests
+  - id: "heartbeat"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: MessageParserTests
+  - id: "<task-notification>"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs, src/Claudette.Core/Transcripts/TranscriptPrompts.cs
+    test: TranscriptReaderTests
+    fallback: How a transcript records a background task ending, as a user turn with <task-id>, <tool-use-id>, <status>, <result> and <usage>. If it changes, a restored tab shows a background subagent as "Didn't finish" and the notification as a user message; the entry's origin.kind "task-notification" (documented on SDKUserMessage) still marks it.
+  - id: "agent-<id>.meta.json"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs
+    test: TranscriptReaderTests
+    fallback: Its toolUseId says which Agent call a subagent transcript belongs to. Without it, a restored tab's subagent groups are empty and the agent map shows only the top-level subagents, without their activity.
+  - id: "task_progress"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "task_notification"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "task_updated"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: 'task_type: "local_agent"'
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests, RealCliTests
+  - id: "is_backgrounded"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "agent_id"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs, src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests, RealCliTests
+    fallback: On can_use_tool it names the subagent asking (its task id); only the TypeScript option (agentID) and the matching field on permission_denied are documented. Without it, a prompt is matched to the subagent by its tool_use_id once the tool call arrives, else counted against the main agent.
+  - id: "subagent_type"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationItems.cs, src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "run_in_background"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: 'status: "async_launched"'
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationItems.cs, src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "totalTokens"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "totalToolUseCount"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "totalDurationMs"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "resolvedModel"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "agentType"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "[Subagent hand-back]"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.App/Conversation/ConversationItems.cs
+    test: AgentMapTests
+    fallback: The frame around a subagent's report in its Agent call's tool result text, read only for nested subagents, whose results have no tool_use_result. If it changes, the map uses the subagent's last text (it's forwarded with --forward-subagent-text), which is the report it hands back.
+  - id: "tool_result_meta"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    test: AgentMapTests
+    fallback: Marks an Agent call cut off by an interrupt or a stop (non_execution_kind "interrupted"). Without it, the "[Request interrupted" result text and the stopped task_notification still mark the subagent stopped.
+  - id: "stop_task (subagents)"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.Agents.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests, AgentMapTests
+    fallback: Documented for background tasks; in 2.1.284 it also stops a foreground subagent, with its nested ones, and the turn carries on. If that stops working, Stop on a subagent falls back to the whole-turn Stop (interrupt).
+  - id: "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"
+    kind: env
+    status: documented
+    usedIn: tests/Claudette.IntegrationTests/RealCliTests.cs
+    docs: https://code.claude.com/docs/en/sub-agents
+    test: RealCliTests
+    fallback: User configuration, passed through to claude. The real-CLI test sets it so nesting is on whatever the machine's environment says.
+
   # --- Claude Code updates (DESIGN.md §12) --------------------------------------------------------------
   - id: "claude doctor"
     kind: command
@@ -819,3 +1135,84 @@ items:
     usedIn: src/Claudette.App/Services/ClaudeUpdateService.cs
     test: ClaudeUpdateTests
     fallback: The update dialog's "What's new" link. If the file moves in the anthropics/claude-code repository, point the link at the repository's releases page.
+
+  # --- Hook callbacks (DESIGN.md §13) and Perforce ticket handling (DESIGN.md §18) -----------------------
+  - id: "--append-system-prompt"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: HookCallbackTests, PerforceTabTests
+  - id: "hooks"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/HookCallbacks.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: HookCallbackTests, RealCliTests
+    fallback: "The initialize request's hooks field, as the Python Agent SDK sends it: {\"PreToolUse\": [{\"matcher\": \"Bash\", \"hookCallbackIds\": [\"hook_0\"], \"timeout\": 300}]}. The SDK option it carries (HookCallbackMatcher, with a timeout in seconds) is documented; the wire names aren't. If Claude Code stops calling back, the Perforce ticket is still renewed ahead of time, and by recovery after a p4 command fails."
+  - id: "hookCallbackIds"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/HookCallbacks.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: HookCallbackTests, RealCliTests
+    fallback: See hooks.
+  - id: "hook_callback"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, tools/Claudette.FakeClaude/Program.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: HookCallbackTests, FakeClaudeTests, RealCliTests
+    fallback: "What Claude Code sends for a registered hook: {subtype: hook_callback, callback_id, input, tool_use_id}, answered with a control_response whose response is the hook's output. Claude Code logs an error answer and runs the tool anyway. See hooks for what happens without it."
+  - id: "callback_id"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: HookCallbackTests, RealCliTests
+    fallback: See hook_callback. An unknown id gets an error answer.
+  - id: "hook_event_name"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/HookCallbacks.cs
+    docs: https://code.claude.com/docs/en/hooks
+    test: HookCallbackTests
+  - id: "tool_input"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/HookCallbacks.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    docs: https://code.claude.com/docs/en/hooks
+    test: HookCallbackTests, PerforceTabTests, RealCliTests
+  - id: "`continue`"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/HookCallbacks.cs
+    docs: https://code.claude.com/docs/en/hooks
+    test: HookCallbackTests, RealCliTests
+  - id: "PreToolUse hook did not respond before its timeout"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.App/Services/PerforceService.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    docs: https://code.claude.com/docs/en/hooks
+    test: RealCliTests
+    fallback: "In 2.1.284 a hook_callback that isn't answered within its timeout gets a control_cancel_request, and the tool call isn't run (its result is this error). So the Perforce hook answers by itself 15 seconds before its 5-minute timeout, even with a password prompt still open; recovery then renews the login and asks Claude to retry. If Claude Code instead ran the tool after a timeout, nothing would need to change."
+  - id: "BashOutput"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Perforce/BashCommandLog.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: PerforceTabTests
+    fallback: "The Bash tool_use_result's stdout and stderr, read for p4 output (changelists, an expired session). Without them the tool_result text is used, which holds the same output."
+  - id: "BashInput"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Perforce/BashCommandLog.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: PerforceTabTests
+  - id: "control_cancel_request for hook_callback"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: HookCallbackTests
+    fallback: Sent when the turn is interrupted or the hook times out. Without it, a hook callback that's still waiting finishes and its answer is ignored.

@@ -7,6 +7,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Claudette.App.Tests/Claudette.App.Tests.csproj" />
+    <Project Path="tests/Claudette.App.UiTests/Claudette.App.UiTests.csproj" />
     <Project Path="tests/Claudette.Core.Tests/Claudette.Core.Tests.csproj" />
     <Project Path="tests/Claudette.IntegrationTests/Claudette.IntegrationTests.csproj" />
     <Project Path="tests/Claudette.Platform.Tests/Claudette.Platform.Tests.csproj" />
@@ -14,6 +15,7 @@
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Claudette.FakeClaude/Claudette.FakeClaude.csproj" />
+    <Project Path="tools/Claudette.Fixtures/Claudette.Fixtures.csproj" />
     <Project Path="tools/Claudette.MockApi/Claudette.MockApi.csproj" />
   </Folder>
   <Folder Name="/Solution Items/">

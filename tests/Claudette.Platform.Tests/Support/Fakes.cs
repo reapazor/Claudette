@@ -91,11 +91,18 @@ internal sealed class FakeRunningProcess(int id) : IRunningProcess
 
     public Task<int> Exited => _exited.Task;
 
-    public ValueTask WriteLineAsync(string line, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    /// <summary>Lines written to standard input.</summary>
+    public List<string> Input { get; } = [];
 
-    public void CloseStandardInput()
+    public bool InputClosed { get; private set; }
+
+    public ValueTask WriteLineAsync(string line, CancellationToken cancellationToken = default)
     {
+        Input.Add(line);
+        return ValueTask.CompletedTask;
     }
+
+    public void CloseStandardInput() => InputClosed = true;
 
     public void Kill() => KillCalls++;
 

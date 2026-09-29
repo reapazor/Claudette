@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Claudette.App.ViewModels"
              xmlns:views="using:Claudette.App.Views"
+             xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
              x:Class="Claudette.App.App"
              Name="Claudette"
              RequestedThemeVariant="Default">
@@ -25,6 +26,20 @@
   <Application.Styles>
     <FluentTheme />
     <StyleInclude Source="avares://LiveMarkdown.Avalonia/Styles.axaml" />
+    <!-- LiveMarkdown brings its own fonts (Arial for text, Consolas for code); use the conversation's and code's from
+         Settings → Appearance instead. Later styles win, so these follow the include. -->
+    <Style Selector="md|MarkdownTextBlock">
+      <Setter Property="FontFamily" Value="{DynamicResource ConversationFont}" />
+    </Style>
+    <Style Selector="md|CodeBlock">
+      <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+    </Style>
+    <Style Selector="md|CodeBlock md|MarkdownTextBlock">
+      <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+    </Style>
+    <Style Selector="md|CodeInline">
+      <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+    </Style>
 
     <Style Selector="Border.card">
       <Setter Property="Background" Value="{DynamicResource CardBrush}" />
@@ -129,11 +144,12 @@
       <Setter Property="Foreground" Value="{DynamicResource WarningTextBrush}" />
       <Setter Property="FontWeight" Value="Bold" />
     </Style>
-    <Style Selector="TextBlock.status.failed">
-      <Setter Property="Foreground" Value="{DynamicResource ErrorTextBrush}" />
-    </Style>
     <Style Selector="TextBlock.status.ok">
       <Setter Property="Foreground" Value="{DynamicResource OkTextBrush}" />
+    </Style>
+    <!-- After .ok: a failed tool call is also complete, and the failure is what should show. -->
+    <Style Selector="TextBlock.status.failed">
+      <Setter Property="Foreground" Value="{DynamicResource ErrorTextBrush}" />
     </Style>
     <Style Selector="TextBlock.status.unread">
       <Setter Property="Foreground" Value="{DynamicResource AccentStatusBrush}" />
@@ -181,7 +197,9 @@
         <ResourceInclude Source="avares://LiveMarkdown.Avalonia/Defaults.axaml" />
       </ResourceDictionary.MergedDictionaries>
 
+      <!-- Updated from Settings → Appearance. -->
       <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Menlo, monospace</FontFamily>
+      <FontFamily x:Key="ConversationFont">$Default</FontFamily>
       <!-- The page's background: none, except under Mica (MainWindow sets it then). -->
       <SolidColorBrush x:Key="PageBackgroundBrush" Color="Transparent" />
       <!-- Updated from Settings → Appearance. -->
@@ -198,7 +216,27 @@
       <StreamGeometry x:Key="IconChevronDown">M3,4.5 L6,7.5 L9,4.5</StreamGeometry>
       <StreamGeometry x:Key="IconChevronRight">M4.5,3 L7.5,6 L4.5,9</StreamGeometry>
       <StreamGeometry x:Key="IconUpdate">M6,10.5 L6,2 M2.5,5.5 L6,2 L9.5,5.5</StreamGeometry>
+      <StreamGeometry x:Key="IconOpenWindow">M7,1.5 L10.5,1.5 L10.5,5 M10.5,1.5 L6,6 M5,2.5 L1.5,2.5 L1.5,10.5 L9.5,10.5 L9.5,7</StreamGeometry>
       <StreamGeometry x:Key="IconRestart">M10.5,6 A4.5,4.5 0 1 1 9.18,2.82 M9.4,0.6 L9.18,2.82 L6.96,2.6</StreamGeometry>
+      <!-- Two arrows chasing round a circle: a tab that syncs to the session library (DESIGN.md §4, "Sidebar"). -->
+      <StreamGeometry x:Key="IconSync">M1.5,6 A4.5,4.5 0 0 1 9.9,3.75 M7.83,3 L9.9,3.75 L10.28,1.58 M10.5,6 A4.5,4.5 0 0 1 2.1,8.25 M4.17,9 L2.1,8.25 L1.72,10.42</StreamGeometry>
+      <StreamGeometry x:Key="IconAttach">M9.5,5.5 L5.6,9.4 A2.3,2.3 0 0 1 2.35,6.15 L6.6,1.9 A1.5,1.5 0 0 1 8.72,4.02 L4.6,8.14 A0.7,0.7 0 0 1 3.6,7.15 L7.2,3.55</StreamGeometry>
+      <!-- Tool cards (DESIGN.md §5); ToolIcons maps tool names to these. -->
+      <StreamGeometry x:Key="IconToolRead">M2.5,1 L7,1 L9.5,3.5 L9.5,11 L2.5,11 Z M7,1 L7,3.5 L9.5,3.5 M4.2,6 L7.8,6 M4.2,8.2 L7.8,8.2</StreamGeometry>
+      <StreamGeometry x:Key="IconToolEdit">M8,1.5 L10.5,4 L4,10.5 L1.5,10.5 L1.5,8 Z M6.5,3 L9,5.5</StreamGeometry>
+      <StreamGeometry x:Key="IconToolWrite">M2.5,1 L7,1 L9.5,3.5 L9.5,11 L2.5,11 Z M7,1 L7,3.5 L9.5,3.5 M6,5.5 L6,9 M4.25,7.25 L7.75,7.25</StreamGeometry>
+      <StreamGeometry x:Key="IconToolBash">M1.5,2.5 L5,6 L1.5,9.5 M6,10 L10.5,10</StreamGeometry>
+      <StreamGeometry x:Key="IconToolSearch">M5,1.5 A3.5,3.5 0 1 1 5,8.5 A3.5,3.5 0 1 1 5,1.5 M7.5,7.5 L10.5,10.5</StreamGeometry>
+      <StreamGeometry x:Key="IconToolFolder">M1,2.5 L4.5,2.5 L5.5,4 L11,4 L11,10 L1,10 Z</StreamGeometry>
+      <StreamGeometry x:Key="IconToolWeb">M6,1 A5,5 0 1 1 6,11 A5,5 0 1 1 6,1 M1,6 L11,6 M6,1 C3.6,3.6 3.6,8.4 6,11 M6,1 C8.4,3.6 8.4,8.4 6,11</StreamGeometry>
+      <StreamGeometry x:Key="IconToolWebSearch">M5,1.5 A3.5,3.5 0 1 1 5,8.5 A3.5,3.5 0 1 1 5,1.5 M1.5,5 L8.5,5 M5,1.5 C3.7,3 3.7,7 5,8.5 M5,1.5 C6.3,3 6.3,7 5,8.5 M7.5,7.5 L10.5,10.5</StreamGeometry>
+      <StreamGeometry x:Key="IconToolAgent">M6,1 A1.5,1.5 0 1 1 6,4 A1.5,1.5 0 1 1 6,1 M2.5,8 A1.5,1.5 0 1 1 2.5,11 A1.5,1.5 0 1 1 2.5,8 M9.5,8 A1.5,1.5 0 1 1 9.5,11 A1.5,1.5 0 1 1 9.5,8 M6,4 L6,6 M2.5,8 L2.5,6 L9.5,6 L9.5,8</StreamGeometry>
+      <StreamGeometry x:Key="IconToolTodo">M1.5,3 L2.5,4 L4,2 M6,3 L11,3 M1.5,8 L2.5,9 L4,7 M6,8 L11,8</StreamGeometry>
+      <StreamGeometry x:Key="IconToolMcp">M4,1 L4,3.5 M8,1 L8,3.5 M2.5,3.5 L9.5,3.5 L9.5,5.5 A3.5,3.5 0 0 1 2.5,5.5 Z M6,9 L6,11.5</StreamGeometry>
+      <StreamGeometry x:Key="IconToolSkill">M6,1 L7.2,4.8 L11,6 L7.2,7.2 L6,11 L4.8,7.2 L1,6 L4.8,4.8 Z</StreamGeometry>
+      <StreamGeometry x:Key="IconToolQuestion">M6,1 A5,5 0 1 1 6,11 A5,5 0 1 1 6,1 M4.4,4.6 A1.6,1.6 0 1 1 6.6,6.1 C6.1,6.4 6,6.8 6,7.3 M6,8.7 L6,9.1</StreamGeometry>
+      <StreamGeometry x:Key="IconToolPlan">M1.5,2.5 L10.5,2.5 M1.5,6 L10.5,6 M1.5,9.5 L7,9.5</StreamGeometry>
+      <StreamGeometry x:Key="IconToolDefault">M6,1 L10.5,3.5 L10.5,8.5 L6,11 L1.5,8.5 L1.5,3.5 Z M1.5,3.5 L6,6 L10.5,3.5 M6,6 L6,11</StreamGeometry>
 
       <!-- Claudette's color tokens, per theme. Views use only these, never Fluent's internal resource names. -->
       <ResourceDictionary.ThemeDictionaries>
@@ -230,6 +268,7 @@
           <SolidColorBrush x:Key="UserBoxBrush" Color="#F4F4F6" />
           <SolidColorBrush x:Key="UserBoxBorderBrush" Color="#1F000000" />
           <SolidColorBrush x:Key="SubagentLineBrush" Color="#33000000" />
+          <SolidColorBrush x:Key="SelectedRowBrush" Color="{DynamicResource SystemAccentColor}" Opacity="0.14" />
           <SolidColorBrush x:Key="BypassBorderBrush" Color="#C42B1C" />
           <SolidColorBrush x:Key="MeterTrackBrush" Color="#1A000000" />
           <SolidColorBrush x:Key="MeterBrush" Color="{DynamicResource SystemAccentColor}" />
@@ -263,6 +302,7 @@
           <SolidColorBrush x:Key="UserBoxBrush" Color="#1E1E22" />
           <SolidColorBrush x:Key="UserBoxBorderBrush" Color="#33FFFFFF" />
           <SolidColorBrush x:Key="SubagentLineBrush" Color="#40FFFFFF" />
+          <SolidColorBrush x:Key="SelectedRowBrush" Color="{DynamicResource SystemAccentColorLight2}" Opacity="0.22" />
           <SolidColorBrush x:Key="BypassBorderBrush" Color="#E0605A" />
           <SolidColorBrush x:Key="MeterTrackBrush" Color="#26FFFFFF" />
           <SolidColorBrush x:Key="MeterBrush" Color="{DynamicResource SystemAccentColorLight2}" />

@@ -191,6 +191,103 @@ public sealed class RealCliTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_attached_image_reaches_the_api()
+    {
+        await using var session = await StartAsync();
+        // A 1×1 PNG: small enough that Claude Code passes it on as it is.
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+
+        await session.SendUserMessageAsync("hello, what is in this image?", [new Core.Protocol.MessageImage("image/png", png)], TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.False(done.Result.IsError);
+        var request = _api.Requests.Last(r => r.Reply == "text");
+        var image = Assert.Single(request.LastUserImages!);
+        Assert.Equal("image/png", image.MediaType);
+        Assert.Equal(1, image.Width);
+        Assert.Contains("what is in this image?", request.LastUserText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_image_with_no_text_is_a_message_too()
+    {
+        await using var session = await StartAsync();
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+
+        // A pasted screenshot sent on its own (DESIGN.md §5, "Attachments"): only image blocks, no text block.
+        await session.SendUserMessageAsync("", [new Core.Protocol.MessageImage("image/png", png)], TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.False(done.Result.IsError);
+        Assert.Equal("pong", done.Result.Result);
+        var request = _api.Requests.Last(r => r.Reply == "text");
+        Assert.Equal("image/png", Assert.Single(request.LastUserImages!).MediaType);
+    }
+
+    [Fact]
+    public async Task Claude_code_scales_a_large_image_down_itself()
+    {
+        await using var session = await StartAsync();
+
+        // Claudette relies on this rather than resizing images itself (DESIGN.md §5, "Attachments").
+        await session.SendUserMessageAsync("hello, a big one", [new Core.Protocol.MessageImage("image/png", Gradient(3000, 2000))], TestContext.Current.CancellationToken);
+        await session.ReadUntilAsync<TurnCompleted>();
+
+        var image = Assert.Single(_api.Requests.Last(r => r.Reply == "text").LastUserImages!);
+        Assert.True(image.Width <= 2000 && image.Height <= 2000, $"Expected at most 2000 px, got {image.Width}×{image.Height}.");
+    }
+
+    [Fact]
+    public async Task Claude_code_brings_a_large_file_under_the_api_size_limit()
+    {
+        await using var session = await StartAsync();
+        // About 12 MB and within 2000 px, so only its size is too big for the API (5 MB an image).
+        var png = Gradient(2000, 2000, noisy: true);
+        Assert.True(png.Length > 10 * 1024 * 1024, $"Expected over 10 MB, got {png.Length} bytes.");
+
+        // The 20 MB Claudette allows relies on this (DESIGN.md §5, "Attachments").
+        await session.SendUserMessageAsync("hello, a heavy one", [new Core.Protocol.MessageImage("image/png", png)], TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.False(done.Result.IsError);
+        var image = Assert.Single(_api.Requests.Last(r => r.Reply == "text").LastUserImages!);
+        Assert.True(image.Bytes * 4L / 3 <= 5 * 1024 * 1024, $"Expected at most 5 MB as base64, got {image.Bytes} bytes ({image.MediaType}).");
+    }
+
+    [Fact]
+    public async Task An_at_mention_is_read_by_claude_code()
+    {
+        await using var session = await StartAsync();
+        await File.WriteAllTextAsync(Path.Combine(Work, "mentioned.txt"), "MENTIONED FILE CONTENT\n", TestContext.Current.CancellationToken);
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+
+        // With an image too: Claude Code only expands mentions in the last block, so the text must come after it.
+        await session.SendUserMessageAsync("hello, see @mentioned.txt", [new Core.Protocol.MessageImage("image/png", png)], TestContext.Current.CancellationToken);
+        await session.ReadUntilAsync<TurnCompleted>();
+
+        var request = _api.Requests.Last(r => r.Reply == "text");
+        Assert.Contains("MENTIONED FILE CONTENT", request.LastUserText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Initialize_and_init_list_the_slash_commands()
+    {
+        Directory.CreateDirectory(Path.Combine(Work, ".claude", "commands"));
+        await File.WriteAllTextAsync(Path.Combine(Work, ".claude", "commands", "ship-it.md"), "---\ndescription: Ship the change\nargument-hint: <version>\n---\nShip $ARGUMENTS\n", TestContext.Current.CancellationToken);
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("hello", TestContext.Current.CancellationToken);
+        var (started, _) = await session.ReadUntilAsync<TurnStarted>();
+        await session.ReadUntilAsync<TurnCompleted>();
+
+        var command = Assert.Single(session.Initialization!.Commands, c => c.Name == "ship-it");
+        Assert.StartsWith("Ship the change", command.Description, StringComparison.Ordinal);
+        Assert.Equal("<version>", command.ArgumentHint);
+        Assert.Contains(session.Initialization.Commands, c => c is { Name: "compact", IsBuiltIn: true });
+        Assert.Contains("ship-it", started.Init.SlashCommands);
+    }
+
+    [Fact]
     public async Task Context_usage_is_reported()
     {
         await using var session = await StartAsync();
@@ -224,24 +321,208 @@ public sealed class RealCliTests : IAsyncLifetime
         Assert.True(File.Exists(Path.Combine(library, $"{sessionId}.jsonl")), "The continued transcript should be written next to the resumed file (DESIGN.md §9).");
     }
 
-    private async Task<ClaudeSession> StartAsync(string? permissionMode = null, string? resume = null)
+    /// <summary>
+    /// An RGB PNG with a gradient, which compresses well, so a big one stays small. With <paramref name="noisy"/> each
+    /// pixel is random instead, so it barely compresses, like a large photo-like screenshot.
+    /// </summary>
+    private static byte[] Gradient(int width, int height, bool noisy = false)
+    {
+        var rows = new byte[(width * 3 + 1) * height];
+        var random = new Random(1);
+        for (var y = 0; y < height; y++)
+        {
+            var row = y * (width * 3 + 1);
+            if (noisy)
+            {
+                random.NextBytes(rows.AsSpan(row + 1, width * 3));
+                continue;
+            }
+            for (var x = 0; x < width; x++)
+            {
+                rows[row + 1 + x * 3] = (byte)x;
+                rows[row + 2 + x * 3] = (byte)y;
+                rows[row + 3 + x * 3] = 128;
+            }
+        }
+        using var compressed = new MemoryStream();
+        using (var zlib = new System.IO.Compression.ZLibStream(compressed, System.IO.Compression.CompressionLevel.Fastest))
+        {
+            zlib.Write(rows);
+        }
+        var header = new byte[13];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(header, width);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(header.AsSpan(4), height);
+        header[8] = 8; // bits per channel
+        header[9] = 2; // RGB
+        using var png = new MemoryStream();
+        png.Write([0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A]);
+        Chunk(png, "IHDR", header);
+        Chunk(png, "IDAT", compressed.ToArray());
+        Chunk(png, "IEND", []);
+        return png.ToArray();
+
+        static void Chunk(Stream stream, string type, byte[] data)
+        {
+            var length = new byte[4];
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(length, data.Length);
+            stream.Write(length);
+            var typed = System.Text.Encoding.ASCII.GetBytes(type).Concat(data).ToArray();
+            stream.Write(typed);
+            var crc = new byte[4];
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(crc, Crc32(typed));
+            stream.Write(crc);
+        }
+
+        static uint Crc32(byte[] data)
+        {
+            var crc = 0xFFFFFFFFu;
+            foreach (var b in data)
+            {
+                crc ^= b;
+                for (var k = 0; k < 8; k++)
+                {
+                    crc = (crc & 1) != 0 ? 0xEDB88320u ^ (crc >> 1) : crc >> 1;
+                }
+            }
+            return ~crc;
+        }
+    }
+
+    /// <summary>
+    /// The PreToolUse hook Perforce handling registers (DESIGN.md §18): Claude Code calls it back before the Bash
+    /// command, waits for the answer, and then asks for permission as usual; the note goes in with
+    /// --append-system-prompt.
+    /// </summary>
+    [Fact]
+    public async Task A_PreToolUse_hook_is_called_back_before_Bash_runs()
+    {
+        var calls = new List<(HookInput Input, DateTimeOffset At)>();
+        var hook = new HookRegistration("PreToolUse", "Bash", async (input, _) =>
+        {
+            lock (calls)
+            {
+                calls.Add((input, DateTimeOffset.UtcNow));
+            }
+            // Holds the command back, as a login would.
+            await Task.Delay(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+            return HookOutputs.Continue();
+        }, TimeSpan.FromMinutes(5));
+        await using var session = await StartAsync(hooks: [hook], appendSystemPrompt: "This folder is in a Perforce workspace.");
+
+        await session.SendUserMessageAsync("RUN_BASH touch hooked.txt", TestContext.Current.CancellationToken);
+        var (requested, _) = await session.ReadUntilAsync<PermissionRequested>();
+        var askedAt = DateTimeOffset.UtcNow;
+        requested.Request.Allow();
+        await session.ReadUntilAsync<TurnCompleted>();
+
+        var (input, calledAt) = Assert.Single(calls);
+        Assert.Equal(("PreToolUse", "Bash", "touch hooked.txt"), (input.EventName, input.ToolName, input.Command));
+        Assert.Equal(requested.Request.ToolUseId, input.ToolUseId);
+        Assert.True(askedAt - calledAt >= TimeSpan.FromSeconds(0.9), "The permission prompt should wait for the hook's answer.");
+        Assert.True(File.Exists(Path.Combine(Work, "hooked.txt")));
+    }
+
+    [Fact]
+    public async Task A_PreToolUse_hook_that_times_out_stops_the_command()
+    {
+        var hook = new HookRegistration("PreToolUse", "Bash", async (_, token) =>
+        {
+            await Task.Delay(Timeout.Infinite, token);
+            return HookOutputs.Continue();
+        }, TimeSpan.FromSeconds(2));
+        await using var session = await StartAsync(hooks: [hook]);
+
+        await session.SendUserMessageAsync("RUN_BASH touch never.txt", TestContext.Current.CancellationToken);
+        var (_, seen) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.DoesNotContain(seen, e => e is PermissionRequested);
+        var result = seen.OfType<ToolResultsReceived>().Single().Message.Content.OfType<Core.Protocol.ToolResultBlock>().Single();
+        Assert.True(result.IsError);
+        Assert.Contains("did not respond before its timeout", result.Text, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(Work, "never.txt")));
+    }
+
+    [Fact]
+    public async Task Subagent_traffic_and_prompts_name_the_subagent()
+    {
+        // Nesting is on by default, but a user's settings or environment can limit it; this test needs one level.
+        await using var session = await StartAsync(environment: new() { ["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"] = "3" });
+
+        await session.SendUserMessageAsync("SUBAGENTS", TestContext.Current.CancellationToken);
+        var (requested, before) = await session.ReadUntilAsync<PermissionRequested>(timeout: TimeSpan.FromSeconds(30));
+        requested.Request.Allow();
+        var (done, after) = await session.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(30));
+        var seen = before.Concat(after).ToArray();
+
+        // DESIGN.md §18: task_started ties each subagent's task id to its Agent call, and a permission request from
+        // inside a subagent names that task id in agent_id.
+        var tasks = seen.OfType<SystemNotice>().Where(n => n.Message.Subtype == "task_started" && n.Message.Raw["task_type"]?.GetValue<string>() == "local_agent")
+            .ToDictionary(n => n.Message.Raw["tool_use_id"]!.GetValue<string>(), n => n.Message.Raw["task_id"]!.GetValue<string>());
+        var calls = seen.OfType<AssistantMessageReceived>()
+            .SelectMany(a => a.Message.Content.OfType<Core.Protocol.ToolUseBlock>().Where(t => t.Name == "Agent").Select(t => (a.Message.ParentToolUseId, t)))
+            .ToArray();
+        Assert.Equal(3, calls.Length);
+        var touch = calls.Single(c => c.t.Input["description"]?.GetValue<string>() == "Touch a marker file").t;
+        var deeper = calls.Single(c => c.t.Input["description"]?.GetValue<string>() == "Delegate a deeper look").t;
+        Assert.Equal(deeper.Id, calls.Single(c => c.t.Input["description"]?.GetValue<string>() == "Search deeper").ParentToolUseId);
+        Assert.Equal(tasks[touch.Id], requested.Request.AgentId);
+        Assert.Equal(3, tasks.Count);
+        Assert.Contains(seen.OfType<AssistantMessageReceived>(), a => a.Message.ParentToolUseId == touch.Id);
+        Assert.True(File.Exists(Path.Combine(Work, "agent-marker.txt")));
+        Assert.False(done.Result.IsError);
+    }
+
+    [Fact]
+    public async Task Stop_task_stops_one_foreground_subagent_and_the_turn_carries_on()
+    {
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("LONG_AGENT", TestContext.Current.CancellationToken);
+        var (started, _) = await session.ReadUntilAsync<SystemNotice>(
+            n => n.Message.Subtype == "task_started" && n.Message.Raw["task_type"]?.GetValue<string>() == "local_agent", TimeSpan.FromSeconds(30));
+        var taskId = started.Message.Raw["task_id"]!.GetValue<string>();
+        var toolUseId = started.Message.Raw["tool_use_id"]!.GetValue<string>();
+        Assert.False(started.Message.Raw["is_backgrounded"]?.GetValue<bool>());
+        await session.ReadUntilAsync<AssistantMessageReceived>(a => a.Message.ParentToolUseId == toolUseId, TimeSpan.FromSeconds(30));
+
+        await session.StopTaskAsync(taskId, TestContext.Current.CancellationToken);
+        var (done, seen) = await session.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(30));
+
+        // DESIGN.md §18: the subagent is stopped, not the turn; its Agent call comes back as an error.
+        Assert.Contains(seen.OfType<SystemNotice>(), n => n.Message.Subtype == "task_notification"
+            && n.Message.Raw["task_id"]?.GetValue<string>() == taskId && n.Message.Raw["status"]?.GetValue<string>() == "stopped");
+        var result = seen.OfType<ToolResultsReceived>().Where(r => r.Message.ParentToolUseId is null)
+            .SelectMany(r => r.Message.Content.OfType<Core.Protocol.ToolResultBlock>()).Single(b => b.ToolUseId == toolUseId);
+        Assert.True(result.IsError);
+        Assert.False(done.Result.IsError);
+        Assert.Equal("Done with the tool.", done.Result.Result);
+    }
+
+    private async Task<ClaudeSession> StartAsync(string? permissionMode = null, string? resume = null, IReadOnlyList<HookRegistration>? hooks = null, string? appendSystemPrompt = null, Dictionary<string, string?>? environment = null)
     {
         Assert.SkipWhen(_factory is null, "Claude Code isn't installed.");
+        var overrides = new Dictionary<string, string?>
+        {
+            ["ANTHROPIC_BASE_URL"] = _api.BaseAddress.ToString().TrimEnd('/'),
+            ["ANTHROPIC_API_KEY"] = "sk-ant-mock-000",
+            ["ANTHROPIC_AUTH_TOKEN"] = null,
+            ["CLAUDE_CODE_OAUTH_TOKEN"] = null,
+            ["CLAUDE_CONFIG_DIR"] = Config,
+            ["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1",
+        };
+        foreach (var (name, value) in environment ?? [])
+        {
+            overrides[name] = value;
+        }
         return await _factory!.StartAsync(new ClaudeLaunchOptions
         {
             WorkingDirectory = Work,
             Model = "claude-haiku-4-5",
             PermissionMode = permissionMode,
             Resume = resume,
-            EnvironmentOverrides = new Dictionary<string, string?>
-            {
-                ["ANTHROPIC_BASE_URL"] = _api.BaseAddress.ToString().TrimEnd('/'),
-                ["ANTHROPIC_API_KEY"] = "sk-ant-mock-000",
-                ["ANTHROPIC_AUTH_TOKEN"] = null,
-                ["CLAUDE_CODE_OAUTH_TOKEN"] = null,
-                ["CLAUDE_CONFIG_DIR"] = Config,
-                ["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1",
-            },
+            Hooks = hooks ?? [],
+            AppendSystemPrompt = appendSystemPrompt,
+            EnvironmentOverrides = overrides,
         }, TestContext.Current.CancellationToken);
     }
 }

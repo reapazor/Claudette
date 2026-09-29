@@ -60,6 +60,28 @@
           <CheckBox Content="Confirm before closing a tab where Claude is working" IsChecked="{Binding ConfirmCloseWorkingTab}" />
           <CheckBox Content="Also rename the session in Claude Code when I rename a tab" IsChecked="{Binding RenameInClaudeCode}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Then claude --resume &lt;name&gt; in a terminal finds the session by the same name." Margin="28,-8,0,0" />
+
+          <!-- Claudette's own updates, from its GitHub releases (DESIGN.md §2, "Updating Claudette") -->
+          <TextBlock Text="Claudette updates" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <CheckBox Content="Check for Claudette updates automatically" IsChecked="{Binding CheckForAppUpdates}" />
+          <CheckBox Content="Include pre-releases" IsChecked="{Binding IncludePrereleases}" />
+          <Panel IsVisible="{Binding HasAppUpdates}">
+            <StackPanel Spacing="8" DataContext="{Binding AppUpdates}" x:DataType="vm:AppUpdateViewModel">
+              <TextBlock Text="{Binding CurrentVersionText, FallbackValue=''}" TextWrapping="Wrap" />
+              <TextBlock Classes="muted small" Text="{Binding CheckStatusText, FallbackValue=''}" TextWrapping="Wrap" />
+              <TextBlock Classes="muted small" Text="{Binding ManualText}" TextWrapping="Wrap" IsVisible="{Binding HasManualText}" />
+              <ProgressBar Minimum="0" Maximum="100" Value="{Binding DownloadPercent}" IsVisible="{Binding IsDownloading}" />
+              <TextBlock Classes="small warning" Text="{Binding ErrorText}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
+              <WrapPanel ItemSpacing="8" LineSpacing="8">
+                <Button Content="Check now" Command="{Binding CheckNowCommand}" IsEnabled="{Binding CanCheck}" IsVisible="{Binding !IsSourceBuild}" />
+                <Button Classes="accent" Content="{Binding RestartLabel}" Command="{Binding RestartToUpdateCommand}" IsVisible="{Binding CanRestartToUpdate}" />
+                <Button Content="Download" Command="{Binding DownloadCommand}" IsVisible="{Binding CanDownload}" />
+                <Button Content="Cancel download" Command="{Binding CancelDownloadCommand}" IsVisible="{Binding IsDownloading}" />
+                <Button Content="{Binding OpenPackageLabel}" Command="{Binding OpenPackageCommand}" IsVisible="{Binding CanOpenPackage}" />
+                <Button Classes="flat" Content="Release notes" Command="{Binding OpenReleasePageCommand}" IsVisible="{Binding HasRelease}" />
+              </WrapPanel>
+            </StackPanel>
+          </Panel>
           <Button Content="Reset to defaults" Command="{Binding ResetGeneralCommand}" />
         </StackPanel>
 
@@ -118,13 +140,38 @@
           <CheckBox Content="Check for Claude Code updates automatically" IsChecked="{Binding CheckForUpdates}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                      Text="At launch and every few hours. Open tabs keep the version they started with; new tabs use the newest one installed." />
-          <TextBlock Text="{Binding AccountText, StringFormat='Signed in as {0}'}" TextWrapping="Wrap" />
+          <!-- The account, with Sign in / Sign out (DESIGN.md §11, §14) -->
+          <TextBlock Text="{Binding AccountText, StringFormat='Signed in as {0}'}" TextWrapping="Wrap" IsVisible="{Binding !HasAccount}" />
+          <Panel IsVisible="{Binding HasAccount}">
+            <StackPanel Spacing="8" DataContext="{Binding Account}" x:DataType="vm:AccountViewModel">
+              <TextBlock Text="{Binding SettingsText, FallbackValue=''}" TextWrapping="Wrap" />
+              <WrapPanel ItemSpacing="8" LineSpacing="8">
+                <Button Content="Sign out…" Command="{Binding SignOutCommand}" IsVisible="{Binding IsSignedIn}" />
+                <Button Classes="accent" Content="Sign in" Command="{Binding BeginSignInCommand}" IsVisible="{Binding CanBeginSignIn}" />
+              </WrapPanel>
+              <TextBlock Classes="muted small" Text="Signing out affects Claude Code everywhere on this computer, and every tab stops working until you sign in again."
+                         TextWrapping="Wrap" IsVisible="{Binding IsSignedIn}" />
+              <TextBlock Classes="error" Text="{Binding SignOutError}" TextWrapping="Wrap" IsVisible="{Binding HasSignOutError}" />
+              <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="10,8" IsVisible="{Binding HasSignOutConfirmation}">
+                <StackPanel Spacing="8" DataContext="{Binding SignOutConfirmation}" x:DataType="vm:ConfirmationViewModel">
+                  <TextBlock FontWeight="SemiBold" Text="{Binding Title, FallbackValue=''}" />
+                  <TextBlock TextWrapping="Wrap" Text="{Binding Message, FallbackValue=''}" />
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="accent" Content="{Binding ConfirmText, FallbackValue=''}" Command="{Binding ConfirmCommand}" />
+                    <Button Content="Cancel" Command="{Binding CancelCommand}" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+              <ContentControl Content="{Binding SignIn}" IsVisible="{Binding HasSignIn}" HorizontalAlignment="Left" />
+            </StackPanel>
+          </Panel>
           <TextBlock Text="Path to claude" />
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
             <TextBox Text="{Binding ClaudePath}" PlaceholderText="Found automatically" />
             <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseClaudePathCommand}" />
           </Grid>
           <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Leave empty to find Claude Code automatically. A change takes effect the next time Claudette starts." />
+          <Button Content="Reset to defaults" Command="{Binding ResetClaudeCodeCommand}" />
         </StackPanel>
 
         <!-- New tabs -->
@@ -141,21 +188,54 @@
             <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="1" Maximum="100" Increment="1" FormatString="0" Value="{Binding RecentFolderLimit}" />
           </Grid>
           <Button Content="Clear recent folders" Command="{Binding ClearRecentFoldersCommand}" />
-          <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Favorites are kept. Manage favorites by right-clicking a folder in the new tab picker." />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,-6,0,0" Text="Favorites are kept." />
+
+          <!-- Favorite folders: always at the top of the new tab picker (DESIGN.md §4) -->
+          <TextBlock Text="Favorite folders" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <TextBlock Classes="muted small" Text="None yet. Add one here, or right-click a folder in the new tab picker." IsVisible="{Binding !HasFavorites}" TextWrapping="Wrap" />
+          <ItemsControl ItemsSource="{Binding Favorites}" IsVisible="{Binding HasFavorites}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:FavoriteFolderRow">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4" Margin="0,2">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Name}" />
+                    <TextBlock Classes="muted small" Text="{Binding Path}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
+                  </StackPanel>
+                  <Button Grid.Column="1" Classes="flat" Content="↑" ToolTip.Tip="Move up" AutomationProperties.Name="Move up"
+                          Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).MoveFavoriteUpCommand}" CommandParameter="{Binding}" />
+                  <Button Grid.Column="2" Classes="flat" Content="↓" ToolTip.Tip="Move down" AutomationProperties.Name="Move down"
+                          Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).MoveFavoriteDownCommand}" CommandParameter="{Binding}" />
+                  <Button Grid.Column="3" Classes="flat" Content="Remove"
+                          Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).RemoveFavoriteCommand}" CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Button Content="Add folder…" Command="{Binding AddFavoriteCommand}" />
+          <Button Content="Reset to defaults" Command="{Binding ResetNewTabsCommand}" Margin="0,8,0,0" />
         </StackPanel>
 
         <!-- Appearance -->
         <StackPanel Spacing="12" IsVisible="{Binding IsAppearance}">
           <TextBlock Classes="section" Text="Appearance" />
-          <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+          <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
             <TextBlock Classes="label" Text="Theme" />
             <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" />
-            <TextBlock Grid.Row="1" Classes="label" Text="Conversation font size" />
-            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="9" Maximum="28" Increment="1" FormatString="0" Value="{Binding ConversationFontSize}" />
-            <TextBlock Grid.Row="2" Classes="label" Text="Code font size" />
-            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="8" Maximum="28" Increment="1" FormatString="0" Value="{Binding CodeFontSize}" />
+            <TextBlock Grid.Row="1" Classes="label" Text="Conversation font" />
+            <AutoCompleteBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding InstalledFonts}" Text="{Binding ConversationFont}" FilterMode="ContainsOrdinal"
+                             PlaceholderText="Claudette's default" MinimumPrefixLength="0" AutomationProperties.Name="Conversation font" />
+            <TextBlock Grid.Row="2" Classes="label" Text="Conversation font size" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="9" Maximum="28" Increment="1" FormatString="0" Value="{Binding ConversationFontSize}" />
+            <TextBlock Grid.Row="3" Classes="label" Text="Code font" />
+            <AutoCompleteBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding InstalledFonts}" Text="{Binding CodeFont}" FilterMode="ContainsOrdinal"
+                             PlaceholderText="Cascadia Mono, Consolas or Menlo" MinimumPrefixLength="0" AutomationProperties.Name="Code font" />
+            <TextBlock Grid.Row="4" Classes="label" Text="Code font size" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1" Minimum="8" Maximum="28" Increment="1" FormatString="0" Value="{Binding CodeFontSize}" />
           </Grid>
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,-4,0,0"
+                     Text="Leave a font empty for the default. A font that isn't installed on this machine falls back to the default." />
           <CheckBox Content="Show thinking expanded" IsChecked="{Binding ExpandThinking}" />
+          <Button Content="Reset to defaults" Command="{Binding ResetAppearanceCommand}" />
         </StackPanel>
 
         <!-- Sessions -->
@@ -173,7 +253,7 @@
           <!-- Session library (DESIGN.md §9) -->
           <TextBlock Text="Session library folder" FontWeight="SemiBold" Margin="0,8,0,0" />
           <TextBlock Classes="muted small" TextWrapping="Wrap"
-                     Text="Claudette copies each session's transcript here after every turn. Point it at a folder Google Drive, Dropbox or OneDrive keeps in sync, and your other machines can find and continue the same sessions in History." />
+                     Text="Tabs that sync copy their session's transcript here after every turn. Point it at a folder Google Drive, Dropbox or OneDrive keeps in sync, and your other machines can find and continue those sessions in History." />
           <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
             <TextBox Text="{Binding LibraryFolder, Mode=OneWay}" IsReadOnly="True" />
             <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseLibraryFolderCommand}" ToolTip.Tip="Use another folder from now on" />
@@ -190,6 +270,9 @@
             </StackPanel>
           </Border>
           <TextBlock Classes="muted small" Text="{Binding LibraryStatus}" TextWrapping="Wrap" IsVisible="{Binding LibraryStatus, Converter={x:Static ObjectConverters.IsNotNull}}" />
+          <CheckBox Content="Sync new tabs to the session library" IsChecked="{Binding SyncNewTabs}" Margin="0,8,0,0" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="Any tab can be switched on or off with Sync to other machines in its menu. Sessions opened from the library keep syncing." />
 
           <!-- Settings sync (DESIGN.md §14) -->
           <CheckBox Content="Sync Claudette's settings through the library" IsChecked="{Binding SyncSettings}" Margin="0,8,0,0" />
@@ -205,6 +288,7 @@
               </StackPanel>
             </StackPanel>
           </Border>
+          <Button Content="Reset to defaults" Command="{Binding ResetSessionsCommand}" ToolTip.Tip="The library folder and settings sync stay as they are" />
         </StackPanel>
 
         <!-- Diff tool (DESIGN.md §8, "External diff tool") -->
@@ -224,6 +308,7 @@
             <Button Content="Test" Command="{Binding TestDiffToolCommand}" />
             <TextBlock Classes="muted small" Text="{Binding DiffToolTestResult}" VerticalAlignment="Center" TextWrapping="Wrap" />
           </StackPanel>
+          <Button Content="Reset to defaults" Command="{Binding ResetDiffToolCommand}" />
         </StackPanel>
 
         <!-- Processes (DESIGN.md §4, "Process monitor") -->
@@ -393,13 +478,108 @@
           <Button Content="Reset to defaults" Command="{Binding ResetKeyboardCommand}" />
         </StackPanel>
 
+        <!-- Perforce (DESIGN.md §18) -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsPerforce}">
+          <TextBlock Classes="section" Text="Perforce" />
+          <CheckBox Content="Keep Perforce logins fresh" IsChecked="{Binding PerforceEnabled}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="In a Perforce workspace, Claudette tells Claude it's one, and logs in again before the ticket expires so p4 commands keep working. Claude never sees the password. Applies to tabs started after the change." />
+          <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto" RowSpacing="10">
+            <TextBlock Classes="label" Text="Password source" />
+            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding PerforcePasswordSources}" SelectedItem="{Binding SelectedPasswordSource}" />
+            <TextBlock Grid.Row="1" Classes="label" Text="Renew the ticket when less than this is left (minutes)" TextWrapping="Wrap" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="1" Maximum="1440" Increment="5" FormatString="0" Value="{Binding PerforceRenewBeforeMinutes}" />
+          </Grid>
+          <TextBlock Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding IsPerforceConfigSource}"
+                     Text="P4PASSWD in a P4CONFIG file, in p4 set or in the environment is stored as plain text. Claudette only reads it." />
+          <CheckBox Content="Request tickets valid on all hosts (p4 login -a)" IsChecked="{Binding PerforceAllHostsTickets}" />
+          <CheckBox Content="Show changelist on tabs" IsChecked="{Binding ShowChangelistOnTabs}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="A CL 12345 badge after the tab's name. The tab info card always shows the changelist Claude is working in." />
+
+          <!-- The stored password: the OS credential store, never settings.json -->
+          <TextBlock Text="Stored password" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Text="{Binding StoredPasswordNote}" />
+          <TextBlock Classes="small warning" TextWrapping="Wrap" Text="{Binding CredentialStoreUnavailableText}" IsVisible="{Binding !IsCredentialStoreAvailable}" />
+          <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8" IsEnabled="{Binding IsCredentialStoreAvailable}">
+            <TextBlock Classes="label" Text="Server (P4PORT)" />
+            <TextBox Grid.Column="1" Text="{Binding PerforcePasswordServer}" PlaceholderText="ssl:perforce:1666" />
+            <TextBlock Grid.Row="1" Classes="label" Text="User" />
+            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding PerforcePasswordUser}" />
+            <TextBlock Grid.Row="2" Classes="label" Text="Password" />
+            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding PerforcePassword}" PasswordChar="•" AutomationProperties.Name="Perforce password" />
+          </Grid>
+          <StackPanel Orientation="Horizontal" Spacing="8" IsEnabled="{Binding IsCredentialStoreAvailable}">
+            <Button Content="Save password" Command="{Binding SavePerforcePasswordCommand}" />
+            <Button Content="Forget password" Command="{Binding ForgetPerforcePasswordCommand}" />
+          </StackPanel>
+          <TextBlock Classes="small" TextWrapping="Wrap" Text="{Binding PerforcePasswordStatus}"
+                     IsVisible="{Binding PerforcePasswordStatus, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+          <!-- Per-folder overrides -->
+          <TextBlock Text="Per-folder server and user" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Normally Perforce finds the server and user itself (P4CONFIG files, p4 set, the environment), the same way Claude's p4 commands do. Set them here for tabs in a folder when that isn't right." />
+          <ItemsControl ItemsSource="{Binding PerforceOverrides}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="6" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:PerforceOverrideEditor">
+                <Grid ColumnDefinitions="*,160,120,Auto" ColumnSpacing="6">
+                  <TextBlock Classes="small" Text="{Binding Folder}" TextTrimming="PathSegmentEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Folder}" />
+                  <TextBox Grid.Column="1" Text="{Binding Server}" PlaceholderText="Server" />
+                  <TextBox Grid.Column="2" Text="{Binding User}" PlaceholderText="User" />
+                  <Button Grid.Column="3" Classes="flat" Padding="6" ToolTip.Tip="Remove" AutomationProperties.Name="Remove this folder's override"
+                          Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).RemovePerforceOverrideCommand}" CommandParameter="{Binding}">
+                    <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
+                  </Button>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="Add folder…" Command="{Binding AddPerforceOverrideCommand}" />
+            <Button Content="Reset to defaults" Command="{Binding ResetPerforceCommand}" />
+          </StackPanel>
+        </StackPanel>
+
         <!-- Advanced -->
         <StackPanel Spacing="12" IsVisible="{Binding IsAdvanced}">
           <TextBlock Classes="section" Text="Advanced" />
           <TextBlock Text="Extra arguments for every claude process" />
           <TextBox Text="{Binding ExtraArguments}" FontFamily="{StaticResource MonoFont}" PlaceholderText="for example --add-dir ../shared" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Split on spaces and added after Claudette's own arguments. Applies to tabs started after the change." />
-          <Button Content="Open data folder" Command="{Binding OpenDataFolderCommand}" />
+
+          <!-- DESIGN.md §13, "Logging" -->
+          <CheckBox Content="Log protocol traffic" IsChecked="{Binding LogProtocol}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Writes everything each session sends and receives to the log folder, to help with bug reports when Claude Code changes. Logs hold your prompts and file contents, and are deleted after 7 days. Messages Claudette skips also show in the conversation. Applies to tabs started after the change." />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="Open log folder" Command="{Binding OpenLogFolderCommand}" />
+            <Button Content="Open data folder" Command="{Binding OpenDataFolderCommand}" />
+          </StackPanel>
+          <Button Content="Reset to defaults" Command="{Binding ResetAdvancedCommand}" />
+
+          <!-- DESIGN.md §16, "Staying tolerant at runtime" -->
+          <TextBlock Classes="section" Text="Diagnostics" Margin="0,8,0,0" />
+          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto" RowSpacing="6">
+            <TextBlock Text="Claude Code" />
+            <TextBlock Grid.Column="1" Text="{Binding InstalledVersionText}" />
+            <TextBlock Grid.Row="1" Text="Minimum supported Claude Code version" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MinimumVersionText}" />
+          </Grid>
+          <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6">
+            <SelectableTextBlock Text="{Binding DiagnosticsText}" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
+          </Border>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Things Claude Code sent this run that Claudette doesn't know yet. They're skipped safely; a count here after a Claude Code update is worth a bug report." />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="Copy diagnostics" Command="{Binding CopyDiagnosticsCommand}" />
+            <Button Content="Refresh" Command="{Binding RefreshDiagnosticsCommand}" />
+          </StackPanel>
         </StackPanel>
       </StackPanel>
     </ScrollViewer>

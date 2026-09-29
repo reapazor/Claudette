@@ -28,7 +28,7 @@ public class RestartTests
 
         public RestartSnapshot Capture() => shell.CaptureForRestart();
 
-        public Task CloseTabsAsync() => shell.CloseTabsForRestartAsync();
+        public Task CloseTabsAsync(string message) => shell.CloseTabsForRestartAsync();
 
         public void Recover(RestartSnapshot snapshot) => shell.Restore(null, snapshot);
 
@@ -59,9 +59,11 @@ public class RestartTests
         }
     }
 
+    private static readonly byte[] Png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+
     /// <summary>
-    /// A pinned tab, selected and running, and an unpinned one with a half-typed message and a one-off suffix. The
-    /// unpinned one wouldn't come back on a normal launch.
+    /// A pinned tab, selected and running, and an unpinned one with a half-typed message, a one-off suffix and a pasted
+    /// image. The unpinned one wouldn't come back on a normal launch.
     /// </summary>
     private static async Task<(TabViewModel Pinned, TabViewModel Unpinned)> OpenTabsAsync(TabTestHarness h)
     {
@@ -70,9 +72,10 @@ public class RestartTests
         h.Shell.Restore(null);
         h.Services.Settings.Sessions.RestoreUnpinnedTabs = false;
         var (pinned, unpinned) = (h.Shell.AllTabs.First(), h.Shell.AllTabs.Last());
-        await TabTestHarness.Eventually(() => pinned.Status == TabStatus.Idle, "the selected tab to start");
+        await TabTestHarness.Eventually(() => pinned.Status == TabStatus.Idle && pinned.IsSettled, "the selected tab to start");
         unpinned.ComposerText = "half-typed";
         unpinned.AddSuffixCommand.Execute(h.Services.Settings.QuickSuffixes[0]);
+        unpinned.AddImage(Png, "Pasted image");
         return (pinned, unpinned);
     }
 
@@ -148,6 +151,10 @@ public class RestartTests
         Assert.Equal([pinned.Id], snapshot.RunningTabIds);
         Assert.Equal("half-typed", snapshot.Drafts[unpinned.Id].Text);
         Assert.Equal([h.Services.Settings.QuickSuffixes[0].Id], snapshot.Drafts[unpinned.Id].SuffixIds);
+        var image = Assert.Single(snapshot.Drafts[unpinned.Id].Images!);
+        Assert.Equal("Pasted image", image.Name);
+        Assert.Equal(Png, image.Data);
+        Assert.False(snapshot.Drafts.ContainsKey(pinned.Id));
 
         // This build has stopped its tabs and leaves the files to the new one.
         Assert.Empty(h.Shell.AllTabs);
@@ -164,7 +171,7 @@ public class RestartTests
         {
             Tabs = [new TabState { Id = "a", Folder = h.WorkFolder, IsPinned = true, UserName = "pinned" }, new TabState { Id = "b", Folder = h.WorkFolder, UserName = "unpinned" }],
             SelectedTabId = "a",
-            Drafts = { ["b"] = new TabDraft("half-typed", [suffix.Id]) },
+            Drafts = { ["b"] = new TabDraft("half-typed", [suffix.Id], [new DraftImage("shot.png", Png)]) },
         };
 
         h.Shell.Restore(null, snapshot);
@@ -175,6 +182,11 @@ public class RestartTests
         var unpinned = h.Shell.AllTabs.Last();
         Assert.Equal("half-typed", unpinned.ComposerText);
         Assert.Equal([suffix.Id], unpinned.Chips.Select(c => c.Suffix.Id));
+        var image = Assert.Single(unpinned.Attachments);
+        Assert.Equal("shot.png", image.Name);
+        Assert.Equal(Png, image.Data);
+        Assert.True(unpinned.SendCommand.CanExecute(null));
+        Assert.Empty(h.Shell.AllTabs.First().Attachments);
         Assert.Equal(["a", "b"], h.Services.State.Tabs.Select(t => t.Id));
     }
 
@@ -202,6 +214,7 @@ public class RestartTests
         Assert.Contains("the new build is broken", restarts.LastError);
         Assert.Equal(["pinned", "unpinned"], h.Shell.AllTabs.Select(t => t.DisplayName));
         Assert.Equal("half-typed", h.Shell.AllTabs.Last().ComposerText);
+        Assert.Equal(Png, Assert.Single(h.Shell.AllTabs.Last().Attachments).Data);
         Assert.False(h.Services.SuspendSaving);
         Assert.False(File.Exists(h.Services.Paths.RestartFile));
         // Still offered, to try again by hand once it's fixed.

@@ -65,6 +65,18 @@ public sealed class ClaudeUpdateService : IAsyncDisposable
         }
     }
 
+    /// <summary>For tests: the check under way or last run, to wait for it to finish.</summary>
+    internal Task? LastCheck
+    {
+        get
+        {
+            lock (_checkLock)
+            {
+                return _checking;
+            }
+        }
+    }
+
     /// <summary>Checks now. A check already under way is shared rather than started twice.</summary>
     public Task CheckNowAsync()
     {

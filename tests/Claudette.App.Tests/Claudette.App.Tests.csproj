@@ -18,4 +18,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Claudette.App\Claudette.App.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- The pretend p4, shared with the Core tests. -->
+    <Compile Include="..\Claudette.Core.Tests\Support\FakeP4.cs" Link="Support\FakeP4.cs" />
+    <!-- Recorded Claude Code traffic, replayed through a tab (DESIGN.md §15, "Protocol fixtures"). -->
+    <None Include="..\Claudette.Core.Tests\Fixtures\protocol\**\*.jsonl" LinkBase="Fixtures\protocol" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

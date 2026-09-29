@@ -1,3 +1,4 @@
+using Claudette.Core.Development;
 using Claudette.Core.Sessions;
 
 namespace Claudette.Core.Settings;
@@ -52,6 +53,24 @@ public sealed class AppState
     /// (DESIGN.md §9, "Working on Claudette").
     /// </summary>
     public bool RestartOnNewBuild { get; set; }
+
+    /// <summary>
+    /// The models the installed Claude Code last offered, with their effort levels, so Settings lists what Claude Code
+    /// has rather than a fixed list (DESIGN.md §14). Kept per machine, since Claude Code's version differs between them.
+    /// </summary>
+    public List<ModelInfo> KnownModels { get; set; } = [];
+
+    /// <summary>The main window's position and size when Claudette last closed on this machine (DESIGN.md §14).</summary>
+    public WindowPlacement? Window { get; set; }
+
+    /// <summary>The Claude Code version whose update badge the user dismissed: hidden until a newer one (DESIGN.md §12).</summary>
+    public string? DismissedClaudeUpdate { get; set; }
+
+    /// <summary>The Claude Code version the last "update ready" notification was for: once per version (DESIGN.md §10).</summary>
+    public string? NotifiedClaudeUpdate { get; set; }
+
+    /// <summary>The Claudette release the user chose to skip: not offered again until a newer one (DESIGN.md §2).</summary>
+    public string? SkippedAppUpdate { get; set; }
 }
 
 /// <summary>What's saved for one tab (DESIGN.md §9, "Restore on launch").</summary>
@@ -71,6 +90,13 @@ public sealed class TabState
 
     public bool IsPinned { get; set; }
 
+    /// <summary>
+    /// Copy this tab's session to the session library after each turn, so another machine can open it from History
+    /// (DESIGN.md §9, "Session library"). Off unless the tab opted in: new tabs take Settings → Sessions → Sync new
+    /// tabs, and sessions opened from the library keep syncing. Not a per-tab override: it's the tab's own state.
+    /// </summary>
+    public bool SyncToLibrary { get; set; }
+
     public TabOverrides Overrides { get; set; } = new();
 
     /// <summary>Quick suffixes kept on this tab, by suffix id.</summary>
@@ -84,8 +110,17 @@ public sealed class TabState
     /// </summary>
     public string? TranscriptPath { get; set; }
 
+    /// <summary>
+    /// When the session began, for the tab info card (DESIGN.md §4): its transcript's first entry for a resumed session,
+    /// else when the tab first started it.
+    /// </summary>
+    public DateTimeOffset? SessionStartedAt { get; set; }
+
     /// <summary>Resume as a copy with a new session id ("Open a copy", DESIGN.md §9). Cleared once started.</summary>
     public bool ForkOnNextStart { get; set; }
+
+    /// <summary>The Perforce changelists Claude used in this session (DESIGN.md §18), so a restored tab shows them again.</summary>
+    public List<Perforce.TrackedChangelist> Changelists { get; set; } = [];
 }
 
 /// <summary>Per-tab settings that replace the defaults (DESIGN.md §14, "Per-tab overrides"). Null means "use the default".</summary>

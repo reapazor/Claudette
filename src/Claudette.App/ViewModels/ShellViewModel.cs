@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json;
 using Claudette.App.Services;
 using Claudette.Core.Development;
 using Claudette.Core.Git;
@@ -197,8 +198,9 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         {
             _ = tab.EnsureStartedAsync();
         }
-        // Library retention and settings sync, at launch (DESIGN.md §9, §14).
-        var keep = state.Tabs.Select(t => t.SessionId).OfType<string>().ToHashSet();
+        // Library retention and settings sync, at launch (DESIGN.md §9, §14). Retention keeps the sessions of open tabs
+        // that sync; a tab that doesn't sync has no part in the library.
+        var keep = state.Tabs.Where(t => t.SyncToLibrary).Select(t => t.SessionId).OfType<string>().ToHashSet();
         _ = Task.Run(() => _services.Library.Prune(keep));
         _ = _services.Library.SyncSettingsAsync();
         if (initialFolder is not null)
@@ -218,7 +220,11 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     public void ClosePicker() => Picker = null;
 
-    /// <summary>Opens a new tab in <paramref name="folder"/> and selects it, which starts its session.</summary>
+    /// <summary>
+    /// Opens a new tab in <paramref name="folder"/> and selects it, which starts its session. Every way to a new tab
+    /// comes here (the picker, a group's <c>+</c>, <c>--folder</c>, Open Recent, the jump list, a dropped folder), so
+    /// each starts syncing or not as Settings → Sessions says (DESIGN.md §9, "Session library").
+    /// </summary>
     public Task OpenFolderAsync(string folder)
     {
         if (!Directory.Exists(folder))
@@ -227,7 +233,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         var normalized = FolderHistory.Normalize(folder);
         FolderHistory.Touch(_services.State, normalized, _services.Time.GetUtcNow(), _services.Settings.NewTabs.RecentFolderLimit);
-        var tab = new TabViewModel(_services, this, new TabState { Folder = normalized }, isRestored: false);
+        var state = new TabState { Folder = normalized, SyncToLibrary = _services.Settings.Sessions.SyncNewTabs };
+        var tab = new TabViewModel(_services, this, state, isRestored: false);
         AddTab(tab);
         SelectedTab = tab;
         SaveTabs();
@@ -313,40 +320,54 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             SelectedTab = open;
             return;
         }
-        if (entry.IsLocal && !entry.IsConflictCopy)
+        if (entry.IsConflictCopy)
         {
-            var folder = entry.Folder is { } known && Directory.Exists(known)
-                ? known
-                : await _services.Platform.PickFolderAsync($"Choose the folder for \"{entry.Title}\"");
-            if (folder is not null)
+            if (entry.Record is not null)
             {
-                OpenSession(NewState(entry, folder, transcriptPath: null, fork: false));
+                await OpenFromLibraryAsync(entry, fork: true, takeOver: false);
             }
             return;
         }
-        if (entry.Record is null)
+        // This machine's copy, unless another machine carried the session on since: then the library's is newer.
+        var fromLibrary = !entry.IsLocal || entry.ContinuedElsewhere;
+        if (fromLibrary && entry.Record is null)
         {
             return;
         }
-        if (entry.IsConflictCopy)
-        {
-            await OpenFromLibraryAsync(entry, fork: true, takeOver: false);
-            return;
-        }
-        // One machine at a time (DESIGN.md §9).
-        if (_services.Library.CheckLease(entry.SessionId) is LeaseStatus.HeldByOther other)
+        Func<bool, bool, Task> resume = fromLibrary
+            ? (fork, takeOver) => OpenFromLibraryAsync(entry, fork, takeOver)
+            : (fork, takeOver) => OpenLocalAsync(entry, fork, takeOver);
+        // One machine at a time (DESIGN.md §9), whichever copy it opens from.
+        if (entry.Record is not null && _services.Library.CheckLease(entry.SessionId) is LeaseStatus.HeldByOther other)
         {
             Confirmation = new ConfirmationViewModel(
                 $"\"{entry.Title}\" is open on {other.Machine}",
                 $"It was last active there at {other.UpdatedAt.ToLocalTime():t}. Open a copy to continue separately, or take it over; the tab on {other.Machine} then becomes read-only.",
                 "Take over",
-                () => OpenFromLibraryAsync(entry, fork: false, takeOver: true),
+                () => resume(false, true),
                 () => Confirmation = null,
                 "Open a copy",
-                () => OpenFromLibraryAsync(entry, fork: true, takeOver: false));
+                () => resume(true, false));
             return;
         }
-        await OpenFromLibraryAsync(entry, fork: false, takeOver: false);
+        await resume(false, false);
+    }
+
+    /// <summary>A session whose transcript is on this machine: resumes it where Claude Code keeps it.</summary>
+    private async Task OpenLocalAsync(HistoryEntry entry, bool fork, bool takeOver)
+    {
+        var folder = entry.Folder is { } known && Directory.Exists(known)
+            ? known
+            : await _services.Platform.PickFolderAsync($"Choose the folder for \"{entry.Title}\"");
+        if (folder is null)
+        {
+            return;
+        }
+        if (takeOver)
+        {
+            _services.Library.Leases.Acquire(entry.SessionId, _services.Library.Library.GetSessionFolder(entry.SessionId));
+        }
+        OpenSession(NewState(entry, folder, transcriptPath: null, fork));
     }
 
     /// <summary>
@@ -454,10 +475,16 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             UserName = fork ? null : record?.UserName,
             TranscriptPath = transcriptPath,
             ForkOnNextStart = fork,
+            // A session someone synced keeps syncing wherever it's opened, a copy of one too; one that only ever lived
+            // on this machine stays here (DESIGN.md §9, "Session library").
+            SyncToLibrary = record is not null,
         };
         if (record is not null)
         {
-            state.Overrides.Effort = record.Effort;
+            // The tab's own choices come back with it (DESIGN.md §9); older records only had its model and effort.
+            state.Overrides = record.Overrides is { } overrides
+                ? JsonSerializer.Deserialize<TabOverrides>(JsonSerializer.Serialize(overrides, JsonFileStore<TabOverrides>.Options), JsonFileStore<TabOverrides>.Options) ?? new TabOverrides()
+                : new TabOverrides { Model = record.Model, Effort = record.Effort };
             if (!fork)
             {
                 state.Tokens = record.Tokens;
@@ -719,6 +746,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty]
     public partial NewBuildViewModel? NewBuild { get; set; }
 
+    /// <summary>The sidebar's entry for a new release of Claudette (DESIGN.md §2, "Updating Claudette").</summary>
+    [ObservableProperty]
+    public partial AppUpdateViewModel? AppUpdate { get; set; }
+
     /// <summary>Whether a tab is starting, in a turn, or waiting on the user.</summary>
     public bool AnyTabWorking => AllTabs.Any(t => t.IsWorking || t.Status == TabStatus.Starting);
 
@@ -828,14 +859,37 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     // ---- Sign-in ----------------------------------------------------------------------------------------------
 
-    internal void OnAuthenticationRequired() => _onAuthenticationRequired();
+    /// <summary>
+    /// Claude Code needs a sign-in (DESIGN.md §11): tabs hold the messages sent meanwhile, and deliver them once
+    /// signed in again.
+    /// </summary>
+    public bool NeedsSignIn { get; private set; }
 
+    /// <summary>A tab found Claude Code signed out.</summary>
+    internal void OnAuthenticationRequired()
+    {
+        NeedsSignIn = true;
+        _onAuthenticationRequired();
+    }
+
+    /// <summary>
+    /// Signed out from the account menu or Settings. The next sign-in may be a different account, so every tab that's
+    /// running restarts on its session then.
+    /// </summary>
+    public void OnSignedOut()
+    {
+        NeedsSignIn = true;
+        foreach (var tab in AllTabs)
+        {
+            tab.OnSignedOut();
+        }
+    }
+
+    /// <summary>Signed in again: tabs that failed restart with <c>--resume</c>, and held messages go out.</summary>
     public async Task OnSignedInAgainAsync()
     {
-        foreach (var tab in AllTabs.ToArray())
-        {
-            await tab.OnSignedInAgainAsync();
-        }
+        NeedsSignIn = false;
+        await Task.WhenAll(AllTabs.ToArray().Select(t => t.OnSignedInAgainAsync()));
     }
 
     // ---- Persistence ------------------------------------------------------------------------------------------

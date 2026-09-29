@@ -39,6 +39,12 @@ public static class MessageParser
         }
     }
 
+    /// <summary>
+    /// Types Claude Code sends that Claudette has seen and has no use for, so they aren't counted as unknown
+    /// (compat/surface.yaml).
+    /// </summary>
+    private static readonly HashSet<string> IgnoredTypes = new(StringComparer.Ordinal) { "active_goal" };
+
     private static ClaudeMessage Parse(JsonObject obj)
     {
         var type = obj.GetString("type") ?? "";
@@ -77,6 +83,13 @@ public static class MessageParser
                 obj.GetObject("modelUsage"),
                 obj),
             "rate_limit_event" => new RateLimitEventMessage(obj.GetObject("rate_limit_info") ?? [], obj),
+            "tool_progress" => new ToolProgressMessage(
+                obj.GetString("tool_use_id"),
+                obj.GetString("tool_name"),
+                obj.GetString("parent_tool_use_id"),
+                obj.GetDouble("elapsed_time_seconds"),
+                obj.GetBool("heartbeat") == true,
+                obj),
             "auth_status" => new AuthStatusMessage(
                 obj.GetBool("isAuthenticating") ?? false,
                 obj.GetStringList("output"),
@@ -90,6 +103,12 @@ public static class MessageParser
             "control_response" => ParseControlResponse(obj),
             "control_cancel_request" => new ControlCancelRequestMessage(obj.GetString("request_id") ?? "", obj),
             "conversation_reset" => new ConversationResetMessage(obj.GetString("new_conversation_id"), obj.GetString("trigger"), obj),
+            "autocompact_state" => new AutocompactStateMessage(
+                obj.GetObject("value")?.GetBool("enabled") ?? false,
+                obj.GetObject("value")?.GetDouble("effective_window") is { } window ? (long)window : null,
+                obj.GetObject("value")?.GetDouble("threshold") is { } threshold ? (long)threshold : null,
+                obj),
+            _ when IgnoredTypes.Contains(type) => new IgnoredMessage(type, obj),
             _ => new UnknownMessage(type, obj),
         };
     }

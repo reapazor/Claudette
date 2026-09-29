@@ -121,6 +121,35 @@ public sealed class UsageStore : IDisposable
         }
     }
 
+    /// <summary>
+    /// The highest usage each window reached, for every window in the history that reset by <paramref name="now"/>, newest
+    /// first (the Usage panel's past sessions and weeks, DESIGN.md §6). Reset times are compared to the second, since the
+    /// two usage sources differ by fractions of one, so they are rounded to it.
+    /// </summary>
+    public IReadOnlyList<WindowPeak> GetPastWindows(UsageWindow window, DateTimeOffset now)
+    {
+        var (percent, resetsAt) = window == UsageWindow.Session ? ("session_percent", "session_resets_at") : ("weekly_percent", "weekly_resets_at");
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            using var command = _connection.CreateCommand();
+            command.CommandText = $"""
+                SELECT ({resetsAt} + 500) / 1000, MAX({percent}) FROM samples
+                WHERE {resetsAt} IS NOT NULL AND {percent} IS NOT NULL AND {resetsAt} <= $now
+                GROUP BY ({resetsAt} + 500) / 1000
+                ORDER BY 1 DESC
+                """;
+            Add(command, "$now", now.ToUnixTimeMilliseconds());
+            using var reader = command.ExecuteReader();
+            var peaks = new List<WindowPeak>();
+            while (reader.Read())
+            {
+                peaks.Add(new WindowPeak(DateTimeOffset.FromUnixTimeSeconds(reader.GetInt64(0)), reader.GetDouble(1)));
+            }
+            return peaks;
+        }
+    }
+
     public void AddTurns(IEnumerable<TurnRecord> turns)
     {
         lock (_lock)

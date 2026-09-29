@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -22,6 +23,11 @@ public sealed class UserMessageItem(string text, string? suffixText = null, bool
 
     /// <summary>Sent by Claudette as an automatic check-in (DESIGN.md §5, "Check-ins on long turns").</summary>
     public bool IsCheckIn { get; } = isCheckIn;
+
+    /// <summary>Attached images, shown as thumbnails (DESIGN.md §5, "Attachments").</summary>
+    public IReadOnlyList<MessageImage> Images { get; init; } = [];
+
+    public bool HasImages => Images.Count > 0;
 }
 
 /// <summary>Assistant text, streamed in as Markdown.</summary>
@@ -105,6 +111,15 @@ public partial class ToolUseItem : ConversationItem
         _ => "•",
     };
 
+    /// <summary>The card's icon: the key of a vector icon in App.axaml (DESIGN.md §5).</summary>
+    public string IconKey => ToolIcons.KeyFor(Name);
+
+    /// <summary>Edit, Write and the other file tools, which can be opened in the diff view (DESIGN.md §5, §8).</summary>
+    public bool IsFileChange => Core.Diffs.ChangedFiles.IsFileTool(Name);
+
+    /// <summary>A file change that went through, so there's something to show in the diff view.</summary>
+    public bool CanOpenDiff => IsFileChange && IsComplete && !IsError;
+
     /// <summary>For Bash: the command, shown in full when expanded.</summary>
     public string? Command { get; }
 
@@ -136,9 +151,11 @@ public partial class ToolUseItem : ConversationItem
     public bool HasResultSummary => !string.IsNullOrEmpty(ResultSummary);
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanOpenDiff))]
     public partial bool IsError { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanOpenDiff))]
     public partial bool IsComplete { get; set; }
 
     [ObservableProperty]
@@ -150,7 +167,7 @@ public partial class ToolUseItem : ConversationItem
     private void Toggle() => IsExpanded = !IsExpanded;
 
     /// <summary>Fills in the result, using Claude Code's structured <c>tool_use_result</c> where it has one.</summary>
-    public void ApplyResult(string text, bool isError, JsonNode? toolUseResult)
+    public virtual void ApplyResult(string text, bool isError, JsonNode? toolUseResult)
     {
         IsComplete = true;
         IsError = isError;
@@ -225,7 +242,7 @@ public partial class ToolUseItem : ConversationItem
     protected static string? Str(JsonObject obj, string name) =>
         obj[name] is JsonValue value && value.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : null;
 
-    private static string? FirstLine(string? text)
+    protected static string? FirstLine(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -249,6 +266,89 @@ public sealed partial class SubagentItem : ToolUseItem
     public string AgentType { get; }
 
     public ObservableCollection<ConversationItem> Items { get; } = [];
+
+    /// <summary>Launched in the background: its call returns at once, and it keeps running (DESIGN.md §18).</summary>
+    [ObservableProperty]
+    public partial bool IsBackground { get; private set; }
+
+    /// <summary>Stopped, by the user or an interrupt: neither done nor failed, so its dot is muted.</summary>
+    public bool IsStopped { get; private set; }
+
+    /// <summary>Finished and returned its report: the green dot.</summary>
+    public bool IsSucceeded => IsComplete && !IsError && !IsStopped;
+
+    public override void ApplyResult(string text, bool isError, JsonNode? toolUseResult)
+    {
+        if (!isError && toolUseResult is JsonObject result && Str(result, "status") is "async_launched" or "remote_launched")
+        {
+            // Not finished: a task notification says when it is.
+            IsBackground = true;
+            ResultSummary = "Running in the background";
+            return;
+        }
+        base.ApplyResult(text, isError, toolUseResult);
+        if (!isError && FirstLine(Report(text, toolUseResult)) is { } report)
+        {
+            ResultSummary = report;
+        }
+        OnPropertyChanged(nameof(IsSucceeded));
+    }
+
+    /// <summary>How it ended, as the agent map sees it, so the group's status dot and result line agree with the map.</summary>
+    internal void ShowEnded(AgentStatus status, string? report)
+    {
+        IsComplete = true;
+        IsError = status == AgentStatus.Failed;
+        IsStopped = status == AgentStatus.Stopped;
+        OnPropertyChanged(nameof(IsStopped));
+        OnPropertyChanged(nameof(IsSucceeded));
+        ResultSummary = status switch
+        {
+            AgentStatus.Stopped => "Stopped",
+            _ => FirstLine(report) ?? ResultSummary,
+        };
+    }
+
+    private const string HandBackMarker = "The report follows:";
+
+    /// <summary>
+    /// The report a subagent handed back. Claude Code puts it in <c>tool_use_result.content</c>; nested subagents'
+    /// results have no <c>tool_use_result</c>, so their tool result text is read instead, without the frame Claude
+    /// Code puts around it ("[Subagent hand-back] … The report follows:", indented, then an <c>agentId</c> and
+    /// <c>&lt;usage&gt;</c> trailer). Null when the frame is there but can't be read.
+    /// </summary>
+    public static string? Report(string text, JsonNode? toolUseResult)
+    {
+        if (toolUseResult is JsonObject result && result["content"] is JsonArray content)
+        {
+            var joined = string.Join("\n\n", content.OfType<JsonObject>().Where(b => Str(b, "type") == "text").Select(b => Str(b, "text")).OfType<string>());
+            if (joined.Length > 0)
+            {
+                return joined;
+            }
+        }
+        if (!text.StartsWith("[Subagent hand-back]", StringComparison.Ordinal))
+        {
+            return text;
+        }
+        var start = text.IndexOf(HandBackMarker, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return null;
+        }
+        var lines = text[(start + HandBackMarker.Length)..].Split('\n').ToList();
+        var usage = lines.FindIndex(l => l.StartsWith("<usage>", StringComparison.Ordinal));
+        if (usage >= 0)
+        {
+            lines.RemoveRange(usage, lines.Count - usage);
+        }
+        if (lines.Count > 0 && lines[^1].StartsWith("agentId: ", StringComparison.Ordinal))
+        {
+            lines.RemoveAt(lines.Count - 1);
+        }
+        // The harness indents every line of the report by two spaces.
+        return string.Join('\n', lines.Select(l => l.StartsWith("  ", StringComparison.Ordinal) ? l[2..] : l)).Trim();
+    }
 }
 
 public enum NoteKind
@@ -269,6 +369,20 @@ public sealed partial class NoteItem(string text, NoteKind kind) : ConversationI
     public bool IsError => Kind == NoteKind.Error;
 
     public bool IsWarning => Kind == NoteKind.Warning;
+}
+
+/// <summary>
+/// A message Claudette doesn't know and skipped, shown only while protocol logging is on (DESIGN.md §16): a collapsed
+/// row that expands to the raw JSON.
+/// </summary>
+public sealed partial class UnsupportedMessageItem(string messageType, string json) : ConversationItem
+{
+    public string Title => $"Unsupported message from Claude Code: {messageType}";
+
+    public string Json { get; } = json;
+
+    [ObservableProperty]
+    public partial bool IsExpanded { get; set; }
 }
 
 /// <summary>The small footer after each turn: duration, tokens and model (DESIGN.md §5).</summary>

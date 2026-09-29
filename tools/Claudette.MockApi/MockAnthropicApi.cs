@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 namespace Claudette.MockApi;
 
 /// <summary>A request the mock received, for tests to check what reached the API.</summary>
+/// <param name="LastUserImages">The images in the latest user message, in order.</param>
 public sealed record RecordedRequest(
     string Method,
     string Path,
@@ -22,7 +23,11 @@ public sealed record RecordedRequest(
     int MessageCount,
     string LastUserText,
     string Reply,
-    string LastToolResultText = "");
+    string LastToolResultText = "",
+    IReadOnlyList<RecordedImage>? LastUserImages = null);
+
+/// <summary>An image that reached the API: its media type, size, and for a PNG its dimensions.</summary>
+public sealed record RecordedImage(string MediaType, int Bytes, int? Width, int? Height);
 
 /// <summary>
 /// A fake Anthropic Messages API, so the real <c>claude</c> CLI can be driven without tokens (DESIGN.md §15,
@@ -35,6 +40,14 @@ public sealed record RecordedRequest(
 /// <item><c>SLOW</c>: text streamed in small chunks over about 20 seconds.</item>
 /// <item><c>ASK_QUESTION</c>: an AskUserQuestion tool call ("Which database?": Postgres or SQLite), then done.</item>
 /// <item><c>EXIT_PLAN</c>: an ExitPlanMode tool call with a two-step plan, then done. Needs plan mode.</item>
+/// <item><c>API_ERROR</c>: the first two requests fail with 529 "overloaded", so Claude Code retries; then <c>pong</c>.</item>
+/// <item>
+/// <c>SUBAGENTS</c>: two subagents in parallel, in the foreground. "Touch a marker file" runs
+/// <c>touch agent-marker.txt</c>, which asks for permission from inside the subagent; "Delegate a deeper look" starts
+/// a nested Explore subagent that replies "Found 3 matches in src/.". Then done.
+/// </item>
+/// <item><c>LONG_AGENT</c>: one subagent that runs <c>sleep 30</c>, for stopping it; in the background with <c>BACKGROUND</c>.</item>
+/// <item><c>AGENT_REPLY &lt;text&gt;</c>: replies with the text (how the subagents above answer).</item>
 /// <item>Requests with no tools that mention "title": <c>{"title": "Mock session title"}</c>.</item>
 /// <item>Anything else: <c>pong</c>.</item>
 /// </list>
@@ -45,6 +58,7 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
     private readonly WebApplication _app;
     private readonly ConcurrentQueue<RecordedRequest> _requests = new();
     private int _counter;
+    private int _apiErrors;
 
     private MockAnthropicApi(WebApplication app)
     {
@@ -104,6 +118,15 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
             Record(request.Method, path, body, "not_found");
             context.Response.StatusCode = 404;
             await context.Response.WriteAsJsonAsync(new { type = "error", error = new { type = "not_found_error", message = "mock: not implemented" } });
+            return;
+        }
+
+        // API_ERROR: overloaded twice, so Claude Code reports its retries (system/api_retry), then a normal reply.
+        if (LastUserText(body).Text.Contains("API_ERROR", StringComparison.Ordinal) && Interlocked.Increment(ref _apiErrors) <= 2)
+        {
+            Record(request.Method, path, body, "overloaded");
+            context.Response.StatusCode = 529;
+            await context.Response.WriteAsJsonAsync(new { type = "error", error = new { type = "overloaded_error", message = "mock: overloaded" } });
             return;
         }
 
@@ -210,7 +233,8 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
             (body["messages"] as JsonArray)?.Count ?? 0,
             LastUserText(body).Text,
             reply,
-            LastToolResultText(body)));
+            LastToolResultText(body),
+            LastUserImages(body)));
     }
 
     private sealed record Plan(string Kind, List<JsonObject> Blocks, TimeSpan? ChunkDelay = null);
@@ -249,6 +273,32 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
         {
             return new Plan("after-tool", [TextBlock("Done with the tool.")]);
         }
+        // Subagents (DESIGN.md §18): each one's first request carries its prompt, which scripts it in turn.
+        var agentTool = tools.Contains("Agent") ? "Agent" : "Task";
+        if (tools.Contains(agentTool))
+        {
+            if (text.Contains("SUBAGENTS", StringComparison.Ordinal))
+            {
+                return new Plan("agents",
+                [
+                    TextBlock("I'll split this into two parts."),
+                    ToolUse(agentTool, AgentInput("Touch a marker file", "general-purpose", "Create the marker file.\n\nRUN_BASH touch agent-marker.txt")),
+                    ToolUse(agentTool, AgentInput("Delegate a deeper look", "general-purpose", "NESTED_AGENT: hand the search to a helper and report back.")),
+                ]);
+            }
+            if (text.Contains("NESTED_AGENT", StringComparison.Ordinal))
+            {
+                return new Plan("nested-agent", [ToolUse(agentTool, AgentInput("Search deeper", "Explore", "AGENT_REPLY Found 3 matches in src/."))]);
+            }
+            if (text.Contains("LONG_AGENT", StringComparison.Ordinal))
+            {
+                return new Plan("long-agent", [ToolUse(agentTool, AgentInput("Long job", "general-purpose", "RUN_BASH sleep 30", background: text.Contains("BACKGROUND", StringComparison.Ordinal)))]);
+            }
+        }
+        if (AgentReplyPattern().Match(text) is { Success: true } reply)
+        {
+            return new Plan("agent-reply", [TextBlock(reply.Groups[1].Value.Trim())]);
+        }
         if (WritePattern().Match(text) is { Success: true } write && tools.Contains("Write"))
         {
             return new Plan("tool", [ToolUse("Write", new JsonObject { ["file_path"] = write.Groups[1].Value, ["content"] = "hello from mock\n" })]);
@@ -284,6 +334,11 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
 
     private static JsonObject TextBlock(string text) => new() { ["type"] = "text", ["text"] = text };
 
+    private static JsonObject AgentInput(string description, string type, string prompt, bool background = false) => new()
+    {
+        ["description"] = description, ["subagent_type"] = type, ["prompt"] = prompt, ["run_in_background"] = background,
+    };
+
     private static (string Text, bool HasToolResult) LastUserText(JsonObject body)
     {
         var messages = (body["messages"] as JsonArray)?.OfType<JsonObject>().ToArray() ?? [];
@@ -309,6 +364,39 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
         }));
     }
 
+    /// <summary>The base64 image blocks in the latest user message.</summary>
+    private static IReadOnlyList<RecordedImage> LastUserImages(JsonObject body)
+    {
+        var last = (body["messages"] as JsonArray)?.OfType<JsonObject>().LastOrDefault(m => m["role"]?.GetValue<string>() == "user");
+        if (last?["content"] is not JsonArray blocks)
+        {
+            return [];
+        }
+        return blocks.OfType<JsonObject>()
+            .Where(b => b["type"]?.GetValue<string>() == "image")
+            .Select(b =>
+            {
+                var mediaType = b["source"]?["media_type"]?.GetValue<string>() ?? "";
+                byte[] data;
+                try
+                {
+                    data = Convert.FromBase64String(b["source"]?["data"]?.GetValue<string>() ?? "");
+                }
+                catch (FormatException)
+                {
+                    data = [];
+                }
+                // A PNG's width and height are the first fields of its IHDR chunk, at bytes 16 and 20.
+                var isPng = data.Length >= 24 && data[1] == (byte)'P' && data[2] == (byte)'N' && data[3] == (byte)'G';
+                return new RecordedImage(
+                    mediaType,
+                    data.Length,
+                    isPng ? System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(data.AsSpan(16)) : null,
+                    isPng ? System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(data.AsSpan(20)) : null);
+            })
+            .ToArray();
+    }
+
     /// <summary>A message's plain text: its string content, or its text blocks joined.</summary>
     private static string MessageText(JsonObject message) => message["content"] switch
     {
@@ -331,4 +419,7 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
 
     [GeneratedRegex(@"RUN_BASH (.+)")]
     private static partial Regex BashPattern();
+
+    [GeneratedRegex(@"AGENT_REPLY (.+)")]
+    private static partial Regex AgentReplyPattern();
 }

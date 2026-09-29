@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Claudette.App.Conversation;
 using Claudette.App.Services;
 using Claudette.Core.Development;
@@ -75,7 +76,14 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _services = services;
         _shell = shell;
         State = state;
-        _conversation = new ConversationBuilder(Items, TodoList, ModelDisplayName) { ExpandThinking = services.Settings.Appearance.ExpandThinking };
+        Agents = new AgentMap(services.Time, ModelDisplayName);
+        Agents.Changed += OnAgentsChanged;
+        _conversation = new ConversationBuilder(Items, TodoList, ModelDisplayName)
+        {
+            ExpandThinking = services.Settings.Appearance.ExpandThinking,
+            ShowUnsupportedMessages = services.Settings.Advanced.LogProtocol,
+            Agents = Agents,
+        };
         _checkIns = new CheckInMonitor(services.Time, () => CheckInSettings, SendCheckInFromTimer, stuck => _services.Dispatcher.Post(() => IsPossiblyStuck = stuck));
         Status = TabStatus.NotStarted;
         _restoredTranscript = !isRestored;
@@ -212,10 +220,12 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     {
         TabStatus.NotStarted => "Not started yet",
         TabStatus.Starting => "Starting…",
-        TabStatus.Working => "Working",
+        TabStatus.Working => IsPossiblyStuck ? "Possibly stuck: no reply to two check-ins" : "Working",
         TabStatus.NeedsInput => "Needs your input",
         TabStatus.Unread => "Finished while in the background",
-        TabStatus.Error => IsFolderMissing ? "Its folder no longer exists" : "Claude Code stopped with an error",
+        TabStatus.Error => IsFolderMissing ? "Its folder no longer exists"
+            : IsWaitingForSignIn ? "Waiting for you to sign in"
+            : ErrorMessage ?? "Claude Code stopped with an error",
         TabStatus.Exited => "Not running",
         _ => "Idle",
     };
@@ -237,7 +247,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 rows.Add(new InfoRow("Mode", PermissionModeName));
             }
-            if (_sessionStartedAt is { } started)
+            if (State.SessionStartedAt is { } started)
             {
                 rows.Add(new InfoRow("Started", started.ToLocalTime().ToString("g")));
             }
@@ -253,12 +263,15 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 rows.Add(new InfoRow("Context", $"{ContextText} ({context})"));
             }
+            if (Agents.Summary is { } agents)
+            {
+                rows.Add(new InfoRow("Agents", agents));
+            }
+            AddPerforceRows(rows);
             rows.Add(new InfoRow("Status", StatusTip));
             return rows;
         }
     }
-
-    private DateTimeOffset? _sessionStartedAt;
 
     /// <summary>The Claude Code version this tab's process runs, while it runs (DESIGN.md §12).</summary>
     public Version? RunningVersion { get; private set; }
@@ -291,7 +304,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    /// <summary>Two check-ins in a row got no reply (DESIGN.md §5, "Check-ins on long turns"); shown on the tab's row.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RowDetail), nameof(StatusTip), nameof(InfoRows))]
     public partial bool IsPossiblyStuck { get; set; }
 
     // ---- Model, effort and mode (DESIGN.md §5, "Model & effort") ------------------------------------------
@@ -318,7 +333,21 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// The second line of the tab's row in the sidebar (DESIGN.md §4): the model and effort, or what needs attention
     /// when the tab is waiting on the user or has failed.
     /// </summary>
-    public string RowDetail => Status is TabStatus.NeedsInput or TabStatus.Error ? StatusTip : ModelBadge;
+    public string RowDetail => Status is TabStatus.NeedsInput or TabStatus.Error ? StatusTip
+        : Status == TabStatus.Working && IsPossiblyStuck ? "Possibly stuck"
+        : ModelBadge;
+
+    /// <summary>What went wrong when the tab is in the Error status, shown on its row and info card (DESIGN.md §4).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusTip), nameof(RowDetail), nameof(InfoRows))]
+    public partial string? ErrorMessage { get; private set; }
+
+    /// <summary>The last line Claude Code wrote to standard error, or the exit code when it wrote nothing.</summary>
+    internal static string ExitErrorMessage(TransportExit exit)
+    {
+        var lastLine = exit.StandardErrorTail.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault();
+        return lastLine ?? $"Claude Code stopped unexpectedly (exit code {exit.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "unknown"})";
+    }
 
     public IReadOnlyList<string> EffortLevels => CurrentModelInfo?.SupportedEffortLevels ?? [];
 
@@ -453,6 +482,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 Effort = null;
                 State.Overrides.Effort = null;
             }
+            OnPropertyChanged(nameof(HasOverrides));
             _services.SaveState();
         }
         catch (Exception ex)
@@ -476,6 +506,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             await _session.SetEffortAsync(level);
             Effort = level;
             State.Overrides.Effort = level;
+            OnPropertyChanged(nameof(HasOverrides));
             _services.SaveState();
         }
         catch (Exception ex)
@@ -523,10 +554,46 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _services.SaveState();
     }
 
+    /// <summary>Per-call usage from assistant messages, for live counts mid-turn and the context estimate (DESIGN.md §6).</summary>
+    private readonly CallUsage _callUsage = new();
+
+    /// <summary><c>get_context_usage</c> failed for this session, so the context indicator is estimated from each call.</summary>
+    private bool _contextUsageUnavailable;
+
+    /// <summary>When Claude Code compacts by itself, from <c>autocompact_state</c>, for the estimate's warning.</summary>
+    private AutocompactStateMessage? _autocompact;
+
+    /// <summary>A call finished mid-turn: the token count moves on before the result gives the turn's totals.</summary>
+    private void OnCallUsage()
+    {
+        TokensShort = TokenTotals.Short(State.Tokens.Total + _callUsage.TurnTokens);
+        if (_contextUsageUnavailable)
+        {
+            ShowEstimatedContext();
+        }
+    }
+
+    /// <summary>
+    /// The context indicator without <c>get_context_usage</c>: the main agent's latest call ÷ its model's context window
+    /// (DESIGN.md §6, "Per-tab context"). Unknown until a turn has reported the window.
+    /// </summary>
+    private void ShowEstimatedContext()
+    {
+        if (_callUsage.ContextPercentage is not { } percentage || _callUsage.ContextWindow is not { } window)
+        {
+            return;
+        }
+        var tokens = _callUsage.ContextTokens ?? 0;
+        var compacts = _autocompact is { Enabled: true, Threshold: { } threshold } ? $" · auto-compacts at {threshold:N0}" : "";
+        ContextText = $"Context {percentage:0}%";
+        ContextDetail = $"about {tokens:N0} of {window:N0} tokens, estimated from the last call{compacts}";
+        IsContextHigh = _autocompact is { Enabled: true, Threshold: { } limit } ? tokens >= limit * 0.9 : percentage >= 80;
+    }
+
     private void RefreshTokens()
     {
         var totals = State.Tokens;
-        TokensShort = TokenTotals.Short(totals.Total);
+        TokensShort = TokenTotals.Short(totals.Total + _callUsage.TurnTokens);
         TokenRows.Clear();
         foreach (var (model, t) in totals.Models.OrderByDescending(m => m.Value.Total))
         {
@@ -659,15 +726,17 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(AvailableSuffixes));
         OnPropertyChanged(nameof(SuffixMenu));
         _conversation.ExpandThinking = _services.Settings.Appearance.ExpandThinking;
+        _conversation.ShowUnsupportedMessages = _services.Settings.Advanced.LogProtocol;
         UpdateSampler();
+        OnPerforceSettingsChanged();
     }
 
     // ---- Restarting into a new build (DESIGN.md §9, "Working on Claudette") -------------------------------
 
-    /// <summary>The message typed but not sent, with its one-off quick suffixes, or null when there's none.</summary>
-    public TabDraft? Draft => ComposerText.Length == 0 && Chips.All(c => c.IsKept)
+    /// <summary>The message typed but not sent, with its one-off quick suffixes and attached images, or null when there's none.</summary>
+    public TabDraft? Draft => ComposerText.Length == 0 && Chips.All(c => c.IsKept) && Attachments.Count == 0
         ? null
-        : new TabDraft(ComposerText, Chips.Where(c => !c.IsKept).Select(c => c.Suffix.Id).ToList());
+        : new TabDraft(ComposerText, Chips.Where(c => !c.IsKept).Select(c => c.Suffix.Id).ToList(), Attachments.Count > 0 ? DraftImages() : null);
 
     /// <summary>Puts back a draft from the build that restarted into this one.</summary>
     public void RestoreDraft(TabDraft draft)
@@ -677,6 +746,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             AddSuffix(_services.Settings.QuickSuffixes.FirstOrDefault(s => s.Id == id));
         }
+        RestoreDraftImages(draft.Images);
     }
 
     /// <summary>Whether this tab's Claude Code is running.</summary>
@@ -693,7 +763,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     {
         var text = ComposerText.Trim();
         var suffixes = Chips.Select(c => c.Suffix.Text).ToArray();
-        if (text.Length == 0 && suffixes.Length == 0)
+        if (text.Length == 0 && suffixes.Length == 0 && Attachments.Count == 0)
         {
             return;
         }
@@ -705,24 +775,33 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             Chips.Remove(chip);
         }
-        _conversation.AddUserMessage(text, suffixText);
+        var images = TakeAttachments();
+        _conversation.AddUserMessage(text, suffixText, images: images);
         _firstPrompt ??= text.Length > 0 ? text : suffixText;
-        await SendRawAsync(message);
+        await SendRawAsync(message, images);
         _ = RequestTitleAsync();
     }
 
-    private bool CanSend() => !IsReadOnly && Status is not (TabStatus.Starting or TabStatus.Error) && (ComposerText.Trim().Length > 0 || Chips.Count > 0);
+    private bool CanSend() => !IsReadOnly && (Status is not (TabStatus.Starting or TabStatus.Error) || IsWaitingForSignIn) && (ComposerText.Trim().Length > 0 || Chips.Count > 0 || Attachments.Count > 0);
 
-    private async Task SendRawAsync(string message)
+    private async Task SendRawAsync(string message, IReadOnlyList<MessageImage>? images = null)
     {
+        // Held while Claude Code needs a sign-in, and sent once it's done (DESIGN.md §11).
+        if (HoldForSignIn(message, images))
+        {
+            return;
+        }
         try
         {
             await EnsureStartedAsync();
             if (_session is null)
             {
+                // It couldn't start because Claude Code needs a sign-in: the message waits for it.
+                HoldForSignIn(message, images);
                 return;
             }
-            await _session.SendUserMessageAsync(message);
+            _awaitingReply.Add(new PendingMessage(message, images ?? []));
+            await _session.SendUserMessageAsync(message, images ?? []);
         }
         catch (Exception ex)
         {
@@ -769,15 +848,20 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     // ---- Lifecycle -----------------------------------------------------------------------------------------
 
-    public bool CanRestart => Status is TabStatus.Exited or TabStatus.Error && !IsFolderMissing;
+    public bool CanRestart => Status is TabStatus.Exited or TabStatus.Error && !IsFolderMissing && !IsSessionMissing;
 
     [RelayCommand(CanExecute = nameof(CanRestart))]
-    private Task RestartAsync() => EnsureStartedAsync();
+    private Task RestartAsync()
+    {
+        // By hand it tries again even while waiting for a sign-in, say after signing in from a terminal (DESIGN.md §11).
+        _restartAfterSignIn = false;
+        return EnsureStartedAsync();
+    }
 
     /// <summary>Starts the process if it isn't running: restored tabs start on first selection or message.</summary>
     public async Task EnsureStartedAsync()
     {
-        if (_session is not null || Status == TabStatus.Error && !Directory.Exists(Folder))
+        if (_session is not null || IsSessionMissing || Status == TabStatus.Error && (!Directory.Exists(Folder) || WaitsForSignIn))
         {
             return;
         }
@@ -808,12 +892,19 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
+        ErrorMessage = null;
         Status = TabStatus.Starting;
         var resume = State.SessionId;
         if (!_restoredTranscript)
         {
             _restoredTranscript = true;
             resume = await RestoreTranscriptAsync();
+            if (IsSessionMissing)
+            {
+                ErrorMessage = "Its earlier conversation is gone";
+                Status = TabStatus.Error;
+                return;
+            }
         }
         // A library session resumes from its local working copy, which Claude Code keeps writing to (DESIGN.md §9).
         if (resume is not null && State.TranscriptPath is { } localCopy && File.Exists(localCopy))
@@ -821,11 +912,16 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             resume = localCopy;
         }
         var fork = State.ForkOnNextStart && resume is not null;
+        // Only a tab that syncs takes part in leases (DESIGN.md §9, "One machine at a time").
+        if (resume is not null && !fork && State.SyncToLibrary && !await ClaimLeaseAsync())
+        {
+            return;
+        }
 
         var settings = _services.Settings;
         try
         {
-            var session = await sessions.StartAsync(new ClaudeLaunchOptions
+            var session = await sessions.StartAsync(await WithPerforceAsync(new ClaudeLaunchOptions
             {
                 WorkingDirectory = Folder,
                 Resume = resume,
@@ -834,9 +930,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 Effort = State.Overrides.Effort ?? settings.NewTabs.DefaultEffort,
                 PermissionMode = State.Overrides.PermissionMode ?? settings.NewTabs.DefaultPermissionMode,
                 AdditionalArguments = settings.Advanced.ExtraArguments.Split(' ', StringSplitOptions.RemoveEmptyEntries),
-            });
+                ProtocolLogPath = _services.ProtocolLogPath(FolderName),
+            }));
             _session = session;
-            _sessionStartedAt = _services.Time.GetUtcNow();
+            _services.RememberModels(session.Initialization?.Models);
+            State.SessionStartedAt ??= _services.Time.GetUtcNow();
             // The installed version is what just started; system/init confirms it with the first turn.
             SetRunningVersion(_services.InstalledClaudeVersion);
             if (fork)
@@ -844,6 +942,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 // The copy gets a new session id with its first turn; it no longer writes to the original.
                 State.ForkOnNextStart = false;
                 State.TranscriptPath = null;
+                _forkAwaitingId = true;
                 _conversation.AddNote("Opened as a copy. The original session is left as it was.");
             }
             AttachProcessTree(session);
@@ -855,10 +954,15 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(EffortLevels));
             Status = TabStatus.Idle;
             _pump = PumpAsync(session);
-            _ = RefreshContextUsageAsync(session);
+            _contextRefresh = RefreshContextUsageAsync(session);
+        }
+        catch (Exception ex) when (Core.Auth.SignInErrors.IsSignInFailure(ex))
+        {
+            OnStartFailedForSignIn(ex);
         }
         catch (Exception ex)
         {
+            ErrorMessage = $"Couldn't start Claude Code: {ex.Message}";
             Status = TabStatus.Error;
             _conversation.AddNote($"Couldn't start Claude Code: {ex.Message}", NoteKind.Error);
             NotifyProcessError($"Couldn't start Claude Code: {ex.Message}");
@@ -881,6 +985,33 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     {
         IsFolderMissing = true;
         Status = TabStatus.Error;
+    }
+
+    // ---- Missing session (DESIGN.md §9, "Old sessions") -----------------------------------------------------------
+
+    /// <summary>
+    /// A restored tab's transcript is gone from this machine and the session library (for example after Claude Code's
+    /// 30-day cleanup): the tab waits for <b>Start a new session</b> rather than silently starting one.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRestart))]
+    [NotifyCanExecuteChangedFor(nameof(RestartCommand))]
+    public partial bool IsSessionMissing { get; private set; }
+
+    public const string SessionMissingText =
+        "The earlier conversation couldn't be found here or in the session library (Claude Code may have cleaned it up). You can start a new session in this folder.";
+
+    /// <summary><b>Start a new session</b> in the same folder, keeping the tab's name, overrides and suffixes.</summary>
+    [RelayCommand]
+    private async Task StartNewSessionAsync()
+    {
+        IsSessionMissing = false;
+        State.SessionId = null;
+        State.SessionStartedAt = null;
+        State.TranscriptPath = null;
+        State.ForkOnNextStart = false;
+        _services.SaveState();
+        await EnsureStartedAsync();
     }
 
     /// <summary><b>Choose folder…</b>: where the folder is now, or another clone of the same project.</summary>
@@ -927,7 +1058,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         await EnsureStartedAsync();
     }
 
-    /// <summary><b>Unpin and close</b> (or <b>Close tab</b>) for a tab whose folder is gone. It's not working, so nothing to confirm.</summary>
+    /// <summary><b>Unpin and close</b> (or <b>Close tab</b>) for a tab whose folder or session is gone. It's not working, so nothing to confirm.</summary>
     [RelayCommand]
     private void UnpinAndClose()
     {
@@ -963,20 +1094,25 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         if (path is null)
         {
-            _conversation.AddNote("The earlier conversation couldn't be found here or in the session library (Claude Code may have cleaned it up). Starting a new session in this folder.", NoteKind.Warning);
-            State.SessionId = null;
-            State.TranscriptPath = null;
+            // The tab says so and waits: starting a new session is the user's choice (DESIGN.md §9, "Old sessions").
+            IsSessionMissing = true;
             return null;
         }
         try
         {
             var transcript = await TranscriptReader.ReadAsync(path);
+            State.SessionStartedAt ??= transcript.StartedAt;
+            // The agent map shows the finished tree, with no live status (DESIGN.md §18).
+            Agents.IsReplaying = true;
             foreach (var item in transcript.Items)
             {
                 switch (item)
                 {
+                    case TranscriptTaskNotification notification:
+                        Agents.OnTaskNotification(notification);
+                        break;
                     case TranscriptPrompt prompt:
-                        _conversation.AddUserMessage(prompt.Text);
+                        _conversation.AddUserMessage(prompt.Text, images: prompt.Images);
                         break;
                     case TranscriptNote note:
                         _conversation.AddNote(note.Text);
@@ -1008,6 +1144,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         catch (Exception ex)
         {
             _conversation.AddNote($"Couldn't read the earlier conversation: {ex.Message}", NoteKind.Warning);
+        }
+        finally
+        {
+            Agents.FinishReplay();
         }
         return sessionId;
     }
@@ -1044,15 +1184,42 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         var batch = new List<SessionEvent>();
         while (await reader.WaitToReadAsync().ConfigureAwait(false))
         {
+            // Counted before reading, so the events are always either queued or in flight (see IsSettled).
+            Interlocked.Increment(ref _batchesInFlight);
             while (reader.TryRead(out var sessionEvent))
             {
                 batch.Add(sessionEvent);
             }
             var events = batch.ToArray();
             batch.Clear();
-            _services.Dispatcher.Post(() => Apply(session, events));
+            _services.Dispatcher.Post(() =>
+            {
+                try
+                {
+                    Apply(session, events);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref _batchesInFlight);
+                }
+            });
         }
     }
+
+    /// <summary>Batches of session events read but not applied yet.</summary>
+    private int _batchesInFlight;
+
+    /// <summary>The context usage asked for as the session started.</summary>
+    private Task? _contextRefresh;
+
+    /// <summary>
+    /// For tests: every session event so far is applied, and the start's context usage request has finished. A tab
+    /// shows Idle as soon as its session starts, while the start's own events (its state changes) are still queued.
+    /// </summary>
+    internal bool IsSettled =>
+        Volatile.Read(ref _batchesInFlight) == 0
+        && _session?.Events is not { CanCount: true, Count: > 0 }
+        && _contextRefresh is null or { IsCompleted: true };
 
     private void Apply(ClaudeSession session, IReadOnlyList<SessionEvent> events)
     {
@@ -1064,6 +1231,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             _conversation.Apply(sessionEvent);
             RecordFileChanges(sessionEvent);
+            TrackReplies(sessionEvent);
+            ObserveForComposer(sessionEvent);
+            OnPerforceSessionEvent(sessionEvent);
             switch (sessionEvent)
             {
                 case StateChanged { State: SessionState.Working }:
@@ -1075,6 +1245,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     break;
                 case TurnStarted started:
                     State.SessionId = started.Init.SessionId;
+                    _forkAwaitingId = false;
                     if (started.Init.ClaudeCodeVersion is { } reported && Version.TryParse(reported, out var version))
                     {
                         SetRunningVersion(version);
@@ -1084,8 +1255,18 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     PermissionMode = started.Init.PermissionMode ?? PermissionMode;
                     _services.SaveState();
                     break;
-                case TextDelta or ThinkingDelta or AssistantMessageReceived or ToolResultsReceived:
+                case AssistantMessageReceived assistant:
                     _checkIns.OutputSeen();
+                    if (_callUsage.Add(assistant.Message))
+                    {
+                        OnCallUsage();
+                    }
+                    break;
+                case TextDelta or ThinkingDelta or ToolResultsReceived:
+                    _checkIns.OutputSeen();
+                    break;
+                case AutocompactStateChanged autocompact:
+                    _autocompact = autocompact.State;
                     break;
                 case PermissionRequested requested:
                     _pendingPermissions++;
@@ -1111,11 +1292,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     _checkIns.TurnEnded();
                     State.SessionId = completed.Result.SessionId ?? State.SessionId;
                     State.Tokens.Add(completed.Result);
+                    _callUsage.TurnEnded(completed.Result);
                     _services.Usage?.OnTurnCompleted(Id, completed.Result);
-                    if (State.SessionId is not null)
-                    {
-                        _ = _services.Library.SaveAfterTurnAsync(LibraryRecord(), State.TranscriptPath);
-                    }
+                    // Only a tab that syncs writes to the library (DESIGN.md §9, "Session library").
+                    CopyToLibrary();
                     RefreshTokens();
                     _services.SaveState();
                     _ = RefreshContextUsageAsync(session);
@@ -1129,6 +1309,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     }
                     break;
                 case ConversationReset:
+                    _callUsage.ContextReset();
+                    State.SessionStartedAt = _services.Time.GetUtcNow();
+                    OnPropertyChanged(nameof(InfoRows));
                     TodoList.Clear();
                     State.AutoName = null;
                     _titleRequested = false;
@@ -1136,14 +1319,14 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     NameChanged();
                     break;
                 case AuthenticationRequired:
-                    _restartAfterSignIn = true;
-                    _shell.OnAuthenticationRequired();
+                    OnAuthenticationRequired();
                     break;
                 case SessionExited exited:
                     _session = null;
                     SetRunningVersion(null);
                     _checkIns.TurnEnded();
                     _pendingPermissions = 0;
+                    ErrorMessage = exited.Exit.ExitCode == 0 ? null : ExitErrorMessage(exited.Exit);
                     Status = exited.Exit.ExitCode == 0 ? TabStatus.Exited : TabStatus.Error;
                     OnPropertyChanged(nameof(CanRestart));
                     _services.Notifications.ClearTab(Id, NotificationKind.NeedsInput);
@@ -1198,6 +1381,15 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (Exception)
         {
+            // Not offered by this Claude Code, or it failed: estimate from the last call instead.
+            _services.Dispatcher.Post(() =>
+            {
+                if (ReferenceEquals(session, _session))
+                {
+                    _contextUsageUnavailable = true;
+                    ShowEstimatedContext();
+                }
+            });
             return;
         }
         _services.Dispatcher.Post(() =>
@@ -1206,6 +1398,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 return;
             }
+            _contextUsageUnavailable = false;
             ContextText = $"Context {usage.Percentage:0}%";
             var compacts = usage is { AutoCompactEnabled: true, AutoCompactThreshold: { } threshold } ? $" · auto-compacts at {threshold:N0}" : "";
             ContextDetail = $"{usage.TotalTokens:N0} of {usage.MaxTokens:N0} tokens{compacts}";
@@ -1215,22 +1408,13 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         });
     }
 
-    /// <summary>After a sign-in: a session that hit an authentication error restarts on the same session.</summary>
-    public async Task OnSignedInAgainAsync()
-    {
-        if (!_restartAfterSignIn)
-        {
-            return;
-        }
-        _restartAfterSignIn = false;
-        await StopSessionAsync();
-        _conversation.AddNote("Signed in. Send your message again.");
-        await EnsureStartedAsync();
-    }
+    /// <summary>The tab has its own settings: its menu marks <b>Tab settings…</b> with a dot (DESIGN.md §14).</summary>
+    public bool HasOverrides => State.Overrides.HasAny;
 
     /// <summary>Applies changed per-tab overrides to the running session.</summary>
     public async Task ApplyOverridesAsync(TabOverrides previous)
     {
+        OnPropertyChanged(nameof(HasOverrides));
         _services.SaveState();
         UpdateSampler();
         if (_session is null)
@@ -1308,7 +1492,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     public async ValueTask CloseAsync(bool killProcesses)
     {
         _checkIns.Dispose();
+        StopAgentTicker();
         _services.Notifications.ClearTab(Id);
+        StopPerforce();
         ReleaseLease();
         await StopSessionAsync(killProcesses);
         CleanUpDiffFiles();

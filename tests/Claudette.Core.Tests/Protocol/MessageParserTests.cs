@@ -28,6 +28,21 @@ public class MessageParserTests
         }
     }
 
+    [Theory]
+    [MemberData(nameof(Fixtures))]
+    public void Recorded_fields_are_all_known_to_diagnostics(string fixture)
+    {
+        // Diagnostics counts fields the tested version didn't have (DESIGN.md §16), so it must know all of these.
+        var diagnostics = new ProtocolDiagnostics();
+        foreach (var line in ProtocolFixture.Load(fixture).OutputLines)
+        {
+            MessageParser.TryParse(line, out var message, out _);
+            diagnostics.RecordFields(message!);
+        }
+
+        Assert.Empty(diagnostics.Snapshot().UnknownFields);
+    }
+
     [Fact]
     public void Reads_system_init()
     {
@@ -111,6 +126,27 @@ public class MessageParserTests
 
         var unknown = Assert.IsType<UnknownMessage>(message);
         Assert.Equal("brand_new_thing", unknown.MessageType);
+    }
+
+    [Fact]
+    public void Reads_tool_progress_for_a_subagent()
+    {
+        // A foreground subagent's heartbeat, as Claude Code 2.1.284 sent it after 30 seconds.
+        Assert.True(MessageParser.TryParse(
+            """{"type":"tool_progress","tool_use_id":"toolu_1-heartbeat-0","tool_name":"Agent","parent_tool_use_id":"toolu_1","elapsed_time_seconds":30,"heartbeat":true}""",
+            out var heartbeat, out _));
+        Assert.True(MessageParser.TryParse(
+            """{"type":"tool_progress","tool_use_id":"toolu_1","tool_name":"Agent","parent_tool_use_id":"toolu_1","elapsed_time_seconds":4,"subagent_type":"Explore","subagent_retry":{"agent_id":"a1","attempt":2,"max_retries":10,"retry_delay_ms":4000,"error_status":529,"error_category":"overloaded"}}""",
+            out var retry, out _));
+
+        var beat = Assert.IsType<ToolProgressMessage>(heartbeat);
+        Assert.Equal("Agent", beat.ToolName);
+        Assert.Equal("toolu_1", beat.ParentToolUseId);
+        Assert.Equal(30, beat.ElapsedSeconds);
+        Assert.True(beat.IsHeartbeat);
+        var retrying = Assert.IsType<ToolProgressMessage>(retry);
+        Assert.False(retrying.IsHeartbeat);
+        Assert.Equal("overloaded", retrying.Raw.GetObject("subagent_retry")?.GetString("error_category"));
     }
 
     [Fact]

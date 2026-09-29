@@ -10,6 +10,9 @@ public sealed record AppPaths(string DataDirectory, string SettingsDirectory)
 
     public string LogDirectory => Path.Combine(DataDirectory, "logs");
 
+    /// <summary>Raw protocol logs, one per session, when Settings → Advanced turns them on (DESIGN.md §13).</summary>
+    public string ProtocolLogDirectory => Path.Combine(LogDirectory, "protocol");
+
     public string StateFile => Path.Combine(DataDirectory, "state.json");
 
     public string SettingsFile => Path.Combine(SettingsDirectory, "settings.json");
@@ -34,6 +37,9 @@ public sealed record AppPaths(string DataDirectory, string SettingsDirectory)
 
     /// <summary>Where the new build says it has started.</summary>
     public string RestartReadyFile => Path.Combine(DataDirectory, "restart-ready");
+
+    /// <summary>Downloaded Claudette releases, one folder per version (DESIGN.md §2, "Updating Claudette").</summary>
+    public string UpdatesDirectory => Path.Combine(DataDirectory, "updates");
 
     /// <summary>
     /// The per-user defaults. Data: <c>%LOCALAPPDATA%\Claudette</c>, <c>~/Library/Application Support/Claudette</c>,

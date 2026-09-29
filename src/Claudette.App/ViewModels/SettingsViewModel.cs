@@ -118,7 +118,7 @@ public sealed partial class QuickSuffixEditor(QuickSuffix suffix, Action changed
 public sealed partial class SettingsViewModel : ViewModelBase
 {
     public static readonly IReadOnlyList<string> AllCategories =
-        ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Notifications", "Keyboard", "Advanced"];
+        ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Notifications", "Keyboard", "Perforce", "Advanced"];
 
     private readonly AppServices _services;
     private readonly AppSettings _settings;
@@ -137,7 +137,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         {
             ShortcutRows.Add(new ShortcutRow(command, _settings.Keyboard));
         }
+        LoadFavorites();
         SelectedCategory = AllCategories[0];
+        FillPerforceLogin();
     }
 
     public IReadOnlyList<string> Categories => AllCategories;
@@ -149,11 +151,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [
         new("General", "Confirm before closing a tab where Claude is working"),
         new("General", "Also rename the session in Claude Code when I rename a tab"),
+        new("General", "Claudette version"),
+        new("General", "Check for Claudette updates automatically"),
+        new("General", "Include pre-releases"),
+        new("General", "Check for Claudette updates now"),
         new("Sessions", "Also restore unpinned tabs when Claudette starts"),
         new("Sessions", "Name for this machine"),
         new("Sessions", "Keep library sessions for"),
         new("Sessions", "Session library folder"),
         new("Sessions", "Move library"),
+        new("Sessions", "Sync new tabs to the session library"),
         new("Sessions", "Sync Claudette's settings through the library"),
         new("Processes", "Show the process monitor"),
         new("Processes", "Refresh the panel every (seconds)"),
@@ -162,14 +169,19 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Claude Code", "Check for Claude Code updates automatically"),
         new("Claude Code", "Update Claude Code"),
         new("Claude Code", "Signed-in account"),
+        new("Claude Code", "Sign in"),
+        new("Claude Code", "Sign out"),
         new("Claude Code", "Path to claude"),
         new("New tabs", "Default model"),
         new("New tabs", "Default effort"),
         new("New tabs", "Default permission mode"),
         new("New tabs", "Recent folders to keep"),
         new("New tabs", "Clear recent folders"),
+        new("New tabs", "Favorite folders"),
         new("Appearance", "Theme"),
+        new("Appearance", "Conversation font"),
         new("Appearance", "Conversation font size"),
+        new("Appearance", "Code font"),
         new("Appearance", "Code font size"),
         new("Appearance", "Show thinking expanded"),
         new("Usage", "Warn at (% of session used)"),
@@ -197,7 +209,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Notifications", "A Claude Code update is ready"),
         new("Notifications", "Dock or taskbar badge"),
         .. KeyboardShortcuts.All.Select(c => new SettingsSearchResult("Keyboard", $"{c.Label} shortcut")),
+        .. PerforceSearchEntries(),
         new("Advanced", "Extra arguments for every claude process"),
+        new("Advanced", "Log protocol traffic"),
+        new("Advanced", "Open log folder"),
+        new("Advanced", "Diagnostics"),
+        new("Advanced", "Copy diagnostics"),
+        new("Advanced", "Minimum supported Claude Code version"),
         new("Advanced", "Open data folder"),
     ];
 
@@ -285,6 +303,29 @@ public sealed partial class SettingsViewModel : ViewModelBase
         set => Set(value, v => _settings.General.RenameInClaudeCode = v);
     }
 
+    /// <summary>Check GitHub for new Claudette releases (DESIGN.md §2, "Updating Claudette").</summary>
+    public bool CheckForAppUpdates
+    {
+        get => _settings.General.CheckForAppUpdates;
+        set => Set(value, v => _settings.General.CheckForAppUpdates = v);
+    }
+
+    public bool IncludePrereleases
+    {
+        get => _settings.General.IncludePrereleases;
+        set
+        {
+            Set(value, v => _settings.General.IncludePrereleases = v);
+            // Takes effect with the next check: do that now.
+            AppUpdates?.CheckNowCommand.Execute(null);
+        }
+    }
+
+    /// <summary>Claudette's version, update status and actions, the same as the sidebar's badge. Null in some tests.</summary>
+    public AppUpdateViewModel? AppUpdates { get; init; }
+
+    public bool HasAppUpdates => AppUpdates is not null;
+
     [RelayCommand]
     private void ResetGeneral()
     {
@@ -292,11 +333,18 @@ public sealed partial class SettingsViewModel : ViewModelBase
         Save();
         OnPropertyChanged(nameof(ConfirmCloseWorkingTab));
         OnPropertyChanged(nameof(RenameInClaudeCode));
+        OnPropertyChanged(nameof(CheckForAppUpdates));
+        OnPropertyChanged(nameof(IncludePrereleases));
     }
 
     // ---- Claude Code -----------------------------------------------------------------------------------------
 
     public string AccountText { get; }
+
+    /// <summary>The account, with <b>Sign in</b> and <b>Sign out</b> wired to the header's (DESIGN.md §11). Null in some tests.</summary>
+    public AccountViewModel? Account { get; init; }
+
+    public bool HasAccount => Account is not null;
 
     /// <summary>Version, install method, update checks and <b>Update now</b> (DESIGN.md §12, §14). Null before Claude Code is found.</summary>
     public ClaudeUpdateViewModel? Updates { get; }
@@ -332,11 +380,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     // ---- New tabs ----------------------------------------------------------------------------------------------
 
-    public IReadOnlyList<Choice> ModelChoices { get; } =
-        [new(null, "Claude Code's default"), new("opus", "Opus"), new("sonnet", "Sonnet"), new("haiku", "Haiku"), new("fable", "Fable")];
+    public IReadOnlyList<Choice> ModelChoices => field ??= BuildModelChoices();
 
-    public IReadOnlyList<Choice> EffortChoices { get; } =
-        [new(null, "The model's default"), new("low", "low"), new("medium", "medium"), new("high", "high"), new("xhigh", "xhigh"), new("max", "max")];
+    public IReadOnlyList<Choice> EffortChoices => field ??= BuildEffortChoices();
 
     public IReadOnlyList<Choice> ModeChoices { get; } =
         [new(null, "Claude Code's default"), .. PermissionModeInfo.Choices.Select(m => new Choice(m.Value, m.Label))];
@@ -425,6 +471,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
     }
 
     public string MachineNamePlaceholder => Environment.MachineName;
+
+    /// <summary>New tabs start syncing to the session library (DESIGN.md §9). Each tab can change it from its menu.</summary>
+    public bool SyncNewTabs
+    {
+        get => _settings.Sessions.SyncNewTabs;
+        set => Set(value, v => _settings.Sessions.SyncNewTabs = v);
+    }
 
     // ---- Session library (DESIGN.md §9) ----------------------------------------------------------------------------
 
@@ -1080,6 +1133,63 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     [RelayCommand]
     private Task OpenDataFolderAsync() => _services.Platform.RevealFolderAsync(_services.Paths.DataDirectory);
+
+    /// <summary>Each session's raw protocol traffic, to the log folder (DESIGN.md §13, "Logging").</summary>
+    public bool LogProtocol
+    {
+        get => _settings.Advanced.LogProtocol;
+        set => Set(value, v => _settings.Advanced.LogProtocol = v);
+    }
+
+    [RelayCommand]
+    private Task OpenLogFolderAsync()
+    {
+        Directory.CreateDirectory(_services.Paths.ProtocolLogDirectory);
+        return _services.Platform.RevealFolderAsync(_services.Paths.ProtocolLogDirectory);
+    }
+
+    // ---- Diagnostics (DESIGN.md §16, "Staying tolerant at runtime") -------------------------------------------------
+
+    public string MinimumVersionText => ClaudeLocator.MinimumVersion.ToString();
+
+    public string InstalledVersionText => _services.InstalledClaudeVersion?.ToString() ?? "Not found";
+
+    /// <summary>What Claude Code has sent this run that Claudette doesn't know, in words.</summary>
+    public string DiagnosticsText => DiagnosticsReport(includeHeader: false);
+
+    [RelayCommand]
+    private void RefreshDiagnostics()
+    {
+        OnPropertyChanged(nameof(DiagnosticsText));
+        OnPropertyChanged(nameof(InstalledVersionText));
+    }
+
+    [RelayCommand]
+    private Task CopyDiagnosticsAsync() => _services.Platform.SetClipboardTextAsync(DiagnosticsReport(includeHeader: true));
+
+    /// <summary>The Diagnostics page's contents, and with the header, the report copied for a bug report.</summary>
+    internal string DiagnosticsReport(bool includeHeader)
+    {
+        var snapshot = _services.Diagnostics.Snapshot();
+        var lines = new List<string>();
+        if (includeHeader)
+        {
+            lines.Add($"Claudette {typeof(SettingsViewModel).Assembly.GetName().Version}");
+            lines.Add($"OS: {System.Runtime.InteropServices.RuntimeInformation.OSDescription} ({System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier})");
+            lines.Add($"Claude Code: {InstalledVersionText}{(_services.Install is { } install ? $" at {install.Path}" : "")}");
+            lines.Add($"Minimum supported Claude Code: {MinimumVersionText}");
+            lines.Add($"Protocol logging: {(LogProtocol ? "on" : "off")}");
+            lines.Add("");
+        }
+        lines.Add(snapshot.UnknownMessageCount == 0
+            ? "Unknown message types: none"
+            : $"Unknown message types ({snapshot.UnknownMessageCount} skipped): " + string.Join(", ", snapshot.UnknownMessageTypes.Select(t => $"{t.Key} ×{t.Value}")));
+        lines.Add(snapshot.UnknownFields.Count == 0
+            ? "New fields: none"
+            : "New fields: " + string.Join(", ", snapshot.UnknownFields.Select(f => $"{f.Key} ×{f.Value}")));
+        lines.Add($"Lines that couldn't be read: {snapshot.ParseErrors}");
+        return string.Join(Environment.NewLine, lines);
+    }
 
     // ---- Helpers ----------------------------------------------------------------------------------------------------
 

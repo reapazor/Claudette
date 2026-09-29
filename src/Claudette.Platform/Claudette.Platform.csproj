@@ -13,6 +13,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Written out and run when a macOS Claudette installs an update (DESIGN.md §2, "Updating Claudette"). -->
+    <EmbeddedResource Include="Updates/Mac/update-helper.sh" LogicalName="update-helper.sh" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Claudette.Platform.Tests" />
   </ItemGroup>
 </Project>

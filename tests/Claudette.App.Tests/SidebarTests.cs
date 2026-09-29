@@ -2,6 +2,7 @@ using Avalonia.Input;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
+using Claudette.Core.Protocol;
 using Claudette.Core.Settings;
 
 namespace Claudette.App.Tests;
@@ -108,6 +109,26 @@ public class SidebarTests
         tab.Effort = "high";
         Assert.EndsWith("High", tab.RowDetail, StringComparison.Ordinal);
         Assert.Contains(nameof(TabViewModel.RowDetail), changed);
+
+        // Check-ins that got no reply (DESIGN.md §5).
+        changed.Clear();
+        tab.IsPossiblyStuck = true;
+        Assert.Equal("Possibly stuck", tab.RowDetail);
+        Assert.Contains(nameof(TabViewModel.RowDetail), changed);
+    }
+
+    [Fact]
+    public async Task A_failed_tab_shows_the_error_on_its_row()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+
+        h.Transport.Exit(1, "Loading settings…\nError: Invalid model name: claude-nonsense\n");
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Error, "the error");
+
+        Assert.Equal("Error: Invalid model name: claude-nonsense", tab.RowDetail);
+        Assert.Contains(tab.InfoRows, r => r.Label == "Status" && r.Value == "Error: Invalid model name: claude-nonsense");
+        Assert.Equal("Claude Code stopped unexpectedly (exit code 3)", TabViewModel.ExitErrorMessage(new TransportExit(3, "  \n")));
     }
 
     [Fact]

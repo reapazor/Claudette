@@ -139,6 +139,29 @@ public sealed class UsageStoreTests : IDisposable
     }
 
     [Fact]
+    public void Past_windows_give_each_window_its_peak_newest_first_and_leave_out_the_current_one()
+    {
+        var store = Open();
+        var first = Start.AddHours(1);
+        var second = Start.AddHours(6);
+        store.AddSample(Snapshot(20, first));
+        _time.Advance(TimeSpan.FromMinutes(30));
+        store.AddSample(Snapshot(64, first));
+        _time.Advance(TimeSpan.FromMinutes(40));
+        // The same window from the other source, a fraction of a second off.
+        store.AddSample(Snapshot(71, first.AddMilliseconds(-50)));
+        _time.Advance(TimeSpan.FromHours(1));
+        store.AddSample(Snapshot(5, second));
+        _time.Advance(TimeSpan.FromHours(1));
+        store.AddSample(Snapshot(9, Start.AddHours(11)));
+
+        var past = store.GetPastWindows(UsageWindow.Session, second);
+
+        Assert.Equal([(second, 5.0), (first, 71.0)], past.Select(p => (p.ResetsAt, p.PeakPercent)));
+        Assert.Empty(store.GetPastWindows(UsageWindow.Weekly, second));
+    }
+
+    [Fact]
     public void Reopening_the_file_keeps_the_history_and_the_sampling_rule()
     {
         var store = Open();

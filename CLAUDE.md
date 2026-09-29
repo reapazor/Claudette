@@ -16,16 +16,16 @@ A .NET desktop app that wraps Claude Code in a native GUI: one tab per Claude Co
 - .NET 10, C# with nullable reference types on and warnings treated as errors. Package versions live in `Directory.Packages.props`.
 - Avalonia 12 with MVVM (CommunityToolkit.Mvvm). Markdown is rendered with LiveMarkdown.Avalonia.
 - Layout (§13):
-  - `src/Claudette.Core`: sessions, protocol, permission rules, sign-in, install checks, settings and state stores and settings sync, transcripts and History, the session library and leases, diffs and changed files, external diff tools, git (project identity, working tree), check-in timing, Claude Code updates, and source builds (copies to run from, noticing new builds, restart snapshots).
+  - `src/Claudette.Core`: sessions, protocol (with hook callbacks, protocol logs and Diagnostics counts), permission rules, sign-in (`claude auth login`/`logout` and the sign-in control requests), install checks, settings and state stores and settings sync, transcripts and History, the session library and leases, diffs and changed files, external diff tools, git (project identity, working tree), check-in timing, Claude Code updates, source builds (copies to run from, noticing new builds, restart snapshots), Claudette's own updates (`Updates/`: versions, the GitHub release feed, the downloader; `IAppInstaller`), the composer's data (`Composer/`: slash commands, the `@` file index and matcher, attachments), and Perforce (`Perforce/`: workspace detection, the ticket keeper, changelists; `ICredentialStore`).
   - `src/Claudette.Usage`: plan usage parsing, the SQLite usage history, burn rate and projection, alerts, the polling schedule. No UI.
-  - `src/Claudette.Platform`: OS-specific code: the process monitor (Job Objects on Windows, `/proc`, `ps`), notifications and the Dock/taskbar badge (WinRT toasts, `UNUserNotificationCenter`, `notify-send`), the Windows jump list, and the single-instance pipe. No UI. Windows and macOS APIs are called through source-generated COM interop and the Objective-C runtime, so the project stays a plain `net10.0` library.
+  - `src/Claudette.Platform`: OS-specific code: the process monitor (Job Objects on Windows, `/proc`, `ps`), notifications and the Dock/taskbar badge (WinRT toasts, `UNUserNotificationCenter`, `notify-send`), the Windows jump list, the single-instance pipe, the OS credential store for Perforce passwords (Credential Manager, the Keychain through Security.framework, `secret-tool`), and the installers for Claudette's own updates (`Updates/`: the MSIX update through `PackageManager`, and `update-helper.sh`, which swaps `Claudette.app` on macOS). No UI. Windows and macOS APIs are called through source-generated COM interop, P/Invoke and the Objective-C runtime, so the project stays a plain `net10.0` library.
   - `src/Claudette.App`: the Avalonia UI.
     - `ShellViewModel` holds the tab groups and History.
-    - `TabViewModel` is one session, split into partial files for the library, changed files and processes.
-    - `Conversation/ConversationBuilder` turns session events into conversation items; `PromptItems` are the permission, question and plan cards.
+    - `TabViewModel` is one session, split into partial files for the library, changed files, processes, notifications, the composer, sign-in, Perforce and agents. `SettingsViewModel` has partials too (defaults and Perforce).
+    - `Conversation/ConversationBuilder` turns session events into conversation items; `PromptItems` are the permission, question and plan cards. `Conversation/AgentMap` and `AgentNode` are the agent map (§18), kept by `ConversationBuilder` from the same routing as the subagent groups.
     - `Services/UsageTracker` and `Services/LibraryService` connect the usage engine and the session library to the tabs.
-  - `tests/`: `Claudette.Core.Tests` (unit and protocol replay), `Claudette.Usage.Tests`, `Claudette.Platform.Tests`, `Claudette.App.Tests`, `Claudette.IntegrationTests` (real processes).
-  - `tools/`: `Claudette.FakeClaude` (the `fake-claude` test double) and `Claudette.MockApi` (a mock Messages API).
+  - `tests/`: `Claudette.Core.Tests` (unit and protocol replay), `Claudette.Usage.Tests`, `Claudette.Platform.Tests`, `Claudette.App.Tests` (view models), `Claudette.App.UiTests` (rendered views, headless, with Verify snapshots), `Claudette.IntegrationTests` (real processes, the recording tests and the Live suite).
+  - `tools/`: `Claudette.FakeClaude` (the `fake-claude` test double), `Claudette.MockApi` (a mock Messages API) and `Claudette.Fixtures` (record mode: a protocol log to a cleaned fixture).
   - `compat/`: the compatibility surface list, check script and snapshots (§16).
   - `packaging/`: the MSIX and `.dmg` build scripts, manifest, `Info.plist`, entitlements and icons; `.github/workflows/package.yml` runs them (§2, "Packaging and signing").
 - `Claudette.Core`, `Claudette.Usage` and `Claudette.Platform` must not reference Avalonia.
@@ -42,6 +42,7 @@ A .NET desktop app that wraps Claude Code in a native GUI: one tab per Claude Co
 - Start processes only through `IProcessLauncher`.
 - Use the injected `TimeProvider` for anything time-based. Never use `DateTime.Now`, `DateTime.UtcNow` or real delays in logic.
 - Never hard-code paths to the app data folder, the session library or `~/.claude`. Inject them.
+- Secrets (Perforce passwords) go only to the OS credential store (`ICredentialStore`) and to child processes on standard input (`ProcessRunner`'s `inputLine`). Never in arguments, settings, state or logs.
 
 ## Claude Code integration (§13, §16)
 
@@ -70,15 +71,18 @@ A .NET desktop app that wraps Claude Code in a native GUI: one tab per Claude Co
 ## Tests
 
 - Tests must never call the real model or use anyone's account or tokens. Use the fake transport, `fake-claude`, or the mock Messages API.
+- Tests never reach the network. Claudette's own requests (the update check and download) go through `AppServices.Http`; `TabTestHarness` gives it a handler that refuses every request unless a test passes a fake one. Never run a real install in tests: use a fake `IAppInstaller`.
 - Tests that run the real `claude` binary are tagged `[Trait("Category", "RealCli")]` and must:
   - point it at `MockAnthropicApi` with `ANTHROPIC_BASE_URL` and a dummy `ANTHROPIC_API_KEY`,
   - set `CLAUDE_CONFIG_DIR` to a temporary folder,
   - set `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`,
   - never read or write the real `~/.claude`,
   - skip themselves (`Assert.SkipWhen`) when Claude Code isn't installed.
-- Tests tagged `[Trait("Category", "Live")]` use real tokens. Only run them when asked to.
+- Tests tagged `[Trait("Category", "Live")]` use real tokens. Only run them when asked to. They read `CLAUDETTE_LIVE_API_KEY` (a separate, spend-limited key) and `CLAUDETTE_LIVE_CONFIG_DIR` (a signed-in config folder) and skip without them.
+- Never use a real Perforce server or real Perforce credentials: use `FakeP4` (`tests/Claudette.Core.Tests/Support/`). The macOS Keychain round trip runs only with `CLAUDETTE_TEST_KEYCHAIN=1`.
+- UI snapshots: a changed view writes `*.received.txt` next to its `*.verified.txt` in `tests/Claudette.App.UiTests`. Read the difference; if the change is intended, rename the received file over the verified one. In a UI test, `await Verify(...)` resumes off the UI thread, so make it the last step.
 - Test time-based behavior with `FakeTimeProvider`, not sleeps.
-- Recorded protocol fixtures live in `tests/Claudette.Core.Tests/Fixtures/protocol/<claude-version>/`. Remove paths, emails and account details before checking one in.
+- Recorded protocol fixtures live in `tests/Claudette.Core.Tests/Fixtures/protocol/<claude-version>/`. Remove paths, emails and account details before checking one in: record them with `ProtocolRecordingTests` (`CLAUDETTE_RECORD_FIXTURES=<folder>`, against the mock) or convert a protocol log with `tools/Claudette.Fixtures`, both of which clean them, then read the result before committing.
 - xunit.v3 stays on 3.2.x until `Avalonia.Headless.XUnit` supports 4.x.
 
 ## Commands
@@ -106,6 +110,12 @@ Stop the app by closing its window, not by killing the process: closing interrup
 
 View model tests use `tests/Claudette.App.Tests/Support/TabTestHarness.cs`: a scripted Claude Code connection, a fake clock and an inline dispatcher.
 
-Prompts the mock understands: `WRITE_FILE <path>`, `EDIT_FILE <path>`, `RUN_BASH <command>`, `ASK_QUESTION`, `EXIT_PLAN` (in Plan mode), `SLOW`; anything else gets `pong`. An API key has no plan limits, so the usage header stays empty against the mock; the usage tests cover it.
+To see the usage header (meters, sparkline, projection) without a subscription, set Settings → Claude Code → Path to claude to `fake-claude` (built next to the integration tests) and run with `FAKE_CLAUDE_USAGE=demo`: its plan starts at 35% of the session and climbs 0.6% a minute. `FAKE_CLAUDE_USAGE=<path>` answers with a recorded `get_usage` response instead.
+
+Prompts the mock understands: `WRITE_FILE <path>`, `EDIT_FILE <path>`, `RUN_BASH <command>`, `ASK_QUESTION`, `EXIT_PLAN` (in Plan mode), `SLOW`, `API_ERROR` (two 529s, then a reply), `SUBAGENTS` (a nested fan-out with a permission prompt inside a subagent), `LONG_AGENT` (a subagent to stop; in the background with `BACKGROUND`) and `AGENT_REPLY <text>`; anything else gets `pong`. The environment may set `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`, which passes through to `claude` as user configuration, so a RealCli test that needs nesting sets it.
+
+`fake-claude`'s prompts: `ASK_PERMISSION`, `SLOW`, `CRASH`, `SPAWN [seconds] [busy]` (a child process for the process monitor), `SILENT` (waits for a check-in), `HANG`, `AUTH_FAIL`, `RUN_BASH <cmd>` (calls back PreToolUse hooks) and `SUBAGENTS`; a message with images gets a reply naming them. It keeps its sign-in in `fake-claude-auth.json` in `CLAUDE_CONFIG_DIR`: run with `FAKE_CLAUDE_LOGGED_IN=0` to see the sign-in screen, and use `FAKE_CLAUDE_LOGIN=auto|code|fail|hang` to exercise sign-in without an account. The header of its `Program.cs` lists the rest. An API key has no plan limits, so the usage header stays empty against the mock; the usage tests cover it.
 
 Compatibility check (§16): `node compat/check.mjs detect`, then `report` or `update-snapshots`. See the header of `compat/check.mjs`.
+
+Protocol fixtures (§15): `CLAUDETTE_RECORD_FIXTURES=<folder> dotnet test tests/Claudette.IntegrationTests --filter "FullyQualifiedName~ProtocolRecordingTests"` records the scenarios against the mock; `dotnet run --project tools/Claudette.Fixtures -- <protocol.log> <fixture.jsonl> --root <project folder>` converts a log from Settings → Advanced → Log protocol traffic.

@@ -1,0 +1,6 @@
+﻿"clean up"
+"Allow this command?"
+"$ rm -rf build"
+[button] Allow
+[button] Deny
+[button] Deny with a message…

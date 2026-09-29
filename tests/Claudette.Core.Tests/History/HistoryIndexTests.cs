@@ -232,4 +232,19 @@ public sealed class HistoryIndexTests : IDisposable
         Assert.Empty(HistoryIndex.Filter(sessions, "login readme"));
         Assert.Equal(3, HistoryIndex.Filter(sessions, "  ").Count);
     }
+
+    [Fact]
+    public async Task Search_looks_through_every_prompt_not_just_the_first()
+    {
+        WriteTranscript("p", "s1",
+            Prompt("Fix the login bug", "2026-01-01T00:00:00Z"),
+            AssistantText("Done", "2026-01-01T00:00:10Z"),
+            Prompt("Now   add a\nregression test for the redirect", "2026-01-01T00:01:00Z"));
+
+        var summary = Assert.Single(await _index.ScanAsync(Ct));
+
+        Assert.Equal("Fix the login bug\nNow add a regression test for the redirect\n", summary.Prompts);
+        Assert.Single(HistoryIndex.Filter([summary], "regression redirect"));
+        Assert.Empty(HistoryIndex.Filter([summary], "regression readme"));
+    }
 }

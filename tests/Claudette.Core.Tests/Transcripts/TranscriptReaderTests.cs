@@ -1,4 +1,5 @@
 using Claudette.Core.Protocol;
+using Claudette.Core.Tests.Support;
 using Claudette.Core.Transcripts;
 
 namespace Claudette.Core.Tests.Transcripts;
@@ -69,6 +70,84 @@ public class TranscriptReaderTests
         Assert.Equal("Set model to sonnet", Assert.IsType<TranscriptNote>(transcript.Items[1]).Text);
         Assert.Equal("Stopped.", Assert.IsType<TranscriptNote>(transcript.Items[2]).Text);
         Assert.Equal(3, transcript.Items.Count);
+    }
+
+    [Fact]
+    public void A_background_task_notification_is_read_as_one_not_as_a_prompt()
+    {
+        // As Claude Code 2.1.284 records a background subagent finishing: a user turn it gave the model.
+        var notification = """
+            <task-notification>
+            <task-id>a18958</task-id>
+            <tool-use-id>toolu_2</tool-use-id>
+            <output-file>/tmp/tasks/a18958.output</output-file>
+            <status>completed</status>
+            <summary>Agent "Delegate deeper" finished</summary>
+            <result>Found 3 matches.
+            In src/.</result>
+            <usage><subagent_tokens>1020</subagent_tokens><tool_uses>1</tool_uses><duration_ms>207</duration_ms></usage>
+            </task-notification>
+            """.ReplaceLineEndings("\n"); // a raw string takes the source file's line endings, which are CRLF in a Windows checkout
+        var line = new System.Text.Json.Nodes.JsonObject
+        {
+            ["type"] = "user",
+            ["origin"] = new System.Text.Json.Nodes.JsonObject { ["kind"] = "task-notification" },
+            ["message"] = new System.Text.Json.Nodes.JsonObject { ["role"] = "user", ["content"] = notification },
+        }.ToJsonString();
+
+        var item = Assert.IsType<TranscriptTaskNotification>(Assert.Single(TranscriptReader.Read([line]).Items));
+
+        Assert.Equal("a18958", item.TaskId);
+        Assert.Equal("toolu_2", item.ToolUseId);
+        Assert.Equal("completed", item.Status);
+        Assert.Equal("Found 3 matches.\nIn src/.", item.Result);
+        Assert.Equal(1020, item.Tokens);
+        Assert.Equal(1, item.ToolUses);
+        Assert.Equal(207, item.DurationMs);
+    }
+
+    [Fact]
+    public async Task Subagent_transcripts_are_merged_in_under_their_agent_call()
+    {
+        // The layout Claude Code 2.1.284 writes: <session>.jsonl, and <session>/subagents/agent-<id>.jsonl with a
+        // .meta.json naming the Agent call. Nested subagents get their own file, pointing at the call in their parent's.
+        using var folder = new TempFolder();
+        var main = folder.Write("s1.jsonl", string.Join('\n',
+            """{"type":"user","timestamp":"2026-09-29T05:00:00.000Z","message":{"role":"user","content":"Look into it"}}""",
+            """{"type":"assistant","timestamp":"2026-09-29T05:00:01.000Z","message":{"content":[{"type":"tool_use","id":"toolu_a","name":"Agent","input":{"description":"Search","prompt":"Search for it"}}]}}""",
+            """{"type":"user","timestamp":"2026-09-29T05:00:09.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_a","content":"x"}]},"toolUseResult":{"status":"completed","content":[{"type":"text","text":"Found it."}]}}""",
+            """{"type":"assistant","timestamp":"2026-09-29T05:00:10.000Z","message":{"content":[{"type":"text","text":"All done."}]}}"""));
+        folder.Write("s1/subagents/agent-a1.meta.json", """{"agentType":"general-purpose","description":"Search","toolUseId":"toolu_a","spawnDepth":1}""");
+        folder.Write("s1/subagents/agent-a1.jsonl", string.Join('\n',
+            """{"isSidechain":true,"type":"user","timestamp":"2026-09-29T05:00:01.500Z","message":{"role":"user","content":"Search for it"}}""",
+            """{"isSidechain":true,"type":"assistant","timestamp":"2026-09-29T05:00:02.000Z","message":{"content":[{"type":"tool_use","id":"toolu_b","name":"Agent","input":{"description":"Deeper"}}]}}""",
+            """{"isSidechain":true,"type":"user","timestamp":"2026-09-29T05:00:08.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_b","content":"deep"}]}}"""));
+        folder.Write("s1/subagents/agent-a2.meta.json", """{"agentType":"Explore","description":"Deeper","toolUseId":"toolu_b","parentAgentId":"a1","spawnDepth":2}""");
+        folder.Write("s1/subagents/agent-a2.jsonl",
+            """{"isSidechain":true,"type":"assistant","timestamp":"2026-09-29T05:00:05.000Z","message":{"content":[{"type":"text","text":"Deep result"}]}}""");
+        // Without its .meta.json there's no telling where a subagent belongs: skipped.
+        folder.Write("s1/subagents/agent-a3.jsonl",
+            """{"isSidechain":true,"type":"assistant","timestamp":"2026-09-29T05:00:03.000Z","message":{"content":[{"type":"text","text":"orphan"}]}}""");
+
+        var transcript = await TranscriptReader.ReadAsync(main, TestContext.Current.CancellationToken);
+
+        var order = transcript.Items.Select(i => i switch
+        {
+            TranscriptPrompt p => $"prompt {p.Text}",
+            TranscriptMessage { Message: AssistantMessage a } => $"assistant@{a.ParentToolUseId ?? "main"} {a.Content[0].Type}",
+            TranscriptMessage { Message: UserMessage u } => $"results@{u.ParentToolUseId ?? "main"}",
+            _ => i.GetType().Name,
+        });
+        Assert.Equal(
+        [
+            "prompt Look into it",
+            "assistant@main tool_use",
+            "assistant@toolu_a tool_use",
+            "assistant@toolu_b text",
+            "results@toolu_a",
+            "results@main",
+            "assistant@main text",
+        ], order);
     }
 
     [Fact]

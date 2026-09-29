@@ -181,7 +181,7 @@ public class KeyboardAndSettingsTests
         settings.SearchText = "font";
 
         Assert.True(settings.IsSearching);
-        Assert.Equal(["Conversation font size", "Code font size"], settings.SearchResults.Select(r => r.Label));
+        Assert.Equal(["Conversation font", "Conversation font size", "Code font", "Code font size"], settings.SearchResults.Select(r => r.Label));
         Assert.Equal("Appearance", settings.SelectedCategory);
 
         settings.SearchText = "badge";
@@ -190,6 +190,9 @@ public class KeyboardAndSettingsTests
 
         settings.SearchText = "usage history";
         Assert.All(settings.SearchResults, r => Assert.Equal("Usage", r.Category));
+
+        settings.SearchText = "sync new tabs";
+        Assert.Equal(new SettingsSearchResult("Sessions", "Sync new tabs to the session library"), Assert.Single(settings.SearchResults));
 
         settings.SearchText = "xyzzy";
         Assert.Empty(settings.SearchResults);

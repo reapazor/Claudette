@@ -51,6 +51,19 @@ public sealed class FakeClaudeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_message_with_images_is_accepted()
+    {
+        await using var session = await StartAsync();
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+
+        await session.SendUserMessageAsync("look", [new MessageImage("image/png", png), new MessageImage("image/jpeg", [0xFF, 0xD8, 0xFF])], TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.Equal("pong: look [images: image/png, image/jpeg]", done.Result.Result);
+        Assert.Contains(session.Initialization!.Commands, c => c.Name == "compact");
+    }
+
+    [Fact]
     public async Task Launches_with_the_expected_arguments_and_folder()
     {
         var record = _work.Combine("record.json");
@@ -94,6 +107,43 @@ public sealed class FakeClaudeTests : IDisposable
     }
 
     [Fact]
+    public async Task Subagents_fan_out_with_a_prompt_from_inside_one()
+    {
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("SUBAGENTS", TestContext.Current.CancellationToken);
+        var (requested, before) = await session.ReadUntilAsync<PermissionRequested>();
+        requested.Request.Allow();
+        var (done, after) = await session.ReadUntilAsync<TurnCompleted>();
+        var seen = before.Concat(after).ToArray();
+
+        // The same shape as Claude Code's (DESIGN.md §18): nested traffic tagged with its Agent call, and the prompt
+        // naming the subagent's task.
+        Assert.Equal("fake_task_1", requested.Request.AgentId);
+        var calls = seen.OfType<AssistantMessageReceived>()
+            .SelectMany(a => a.Message.Content.OfType<ToolUseBlock>().Where(t => t.Name == "Agent").Select(t => $"{a.Message.ParentToolUseId ?? "main"}>{t.Id}"));
+        Assert.Equal(["main>toolu_fake_agent_1", "main>toolu_fake_agent_2", "toolu_fake_agent_2>toolu_fake_agent_3"], calls);
+        Assert.Equal(3, seen.OfType<SystemNotice>().Count(n => n.Message.Subtype == "task_notification"));
+        Assert.Equal("Both parts are done.", done.Result.Result);
+    }
+
+    [Fact]
+    public async Task Stop_task_stops_a_subagent_waiting_on_permission()
+    {
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("SUBAGENTS", TestContext.Current.CancellationToken);
+        var (requested, _) = await session.ReadUntilAsync<PermissionRequested>();
+        await session.StopTaskAsync(requested.Request.AgentId!, TestContext.Current.CancellationToken);
+        var (done, seen) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.Contains(seen, e => e is PermissionCancelled);
+        Assert.Contains(seen.OfType<SystemNotice>(), n => n.Message.Subtype == "task_notification" && n.Message.Raw["status"]?.GetValue<string>() == "stopped");
+        Assert.False(done.Result.IsError);
+        await Assert.ThrowsAnyAsync<Exception>(() => session.StopTaskAsync("no-such-task", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task Interrupt_stops_a_streaming_turn()
     {
         await using var session = await StartAsync();
@@ -105,6 +155,53 @@ public sealed class FakeClaudeTests : IDisposable
 
         Assert.Equal("aborted_streaming", done.Result.TerminalReason);
         Assert.Equal(SessionState.Idle, session.State);
+    }
+
+    [Fact]
+    public async Task A_quiet_turn_answers_a_check_in_sent_mid_turn()
+    {
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("SILENT", TestContext.Current.CancellationToken);
+        await session.ReadUntilAsync<TextDelta>();
+        await session.SendUserMessageAsync("Everything OK? Give me a one or two sentence status update.", TestContext.Current.CancellationToken);
+        var (done, seen) = await session.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(10));
+
+        Assert.Equal("status sent", done.Result.Result);
+        Assert.Contains(seen.OfType<AssistantMessageReceived>(), a => a.Message.Content.OfType<TextBlock>().Any(t => t.Text.StartsWith("Status:", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task A_hung_turn_ends_only_when_interrupted()
+    {
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("HANG", TestContext.Current.CancellationToken);
+        await session.ReadUntilAsync<TurnStarted>();
+        await session.InterruptAsync(TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(10));
+
+        Assert.Equal("aborted_streaming", done.Result.TerminalReason);
+    }
+
+    [Fact]
+    public async Task A_spawned_child_process_outlives_the_turn()
+    {
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("SPAWN 20", TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(10));
+
+        var pid = int.Parse(done.Result.Result!["started child ".Length..], System.Globalization.CultureInfo.InvariantCulture);
+        using var child = System.Diagnostics.Process.GetProcessById(pid);
+        try
+        {
+            Assert.False(child.HasExited);
+        }
+        finally
+        {
+            child.Kill();
+        }
     }
 
     [Fact]

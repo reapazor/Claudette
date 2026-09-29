@@ -25,6 +25,11 @@ public sealed class HistoryIndex(string projectsDirectory)
     /// <summary>About how many characters of the first prompt a summary keeps.</summary>
     public const int FirstPromptLength = 200;
 
+    /// <summary>How much of each prompt, and of all of a session's prompts together, search looks through.</summary>
+    public const int SearchPromptLength = 1_000;
+
+    public const int SearchTextLength = 16_000;
+
     private readonly SemaphoreSlim _scanLock = new(1, 1);
     private readonly Dictionary<string, CacheEntry> _cache = new(StringComparer.Ordinal);
 
@@ -44,13 +49,13 @@ public sealed class HistoryIndex(string projectsDirectory)
         }
     }
 
-    /// <summary>Sessions whose title or first prompt contains every word of <paramref name="query"/>, ignoring case.</summary>
+    /// <summary>Sessions whose title or prompts contain every word of <paramref name="query"/>, ignoring case.</summary>
     public static IReadOnlyList<SessionSummary> Filter(IEnumerable<SessionSummary> sessions, string query)
     {
         var words = (query ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         return words.Length == 0
             ? sessions.ToArray()
-            : sessions.Where(s => words.All(w => Contains(s.Title, w) || Contains(s.FirstPrompt, w))).ToArray();
+            : sessions.Where(s => words.All(w => Contains(s.Title, w) || Contains(s.FirstPrompt, w) || Contains(s.Prompts, w))).ToArray();
 
         static bool Contains(string? text, string word) => text?.Contains(word, StringComparison.OrdinalIgnoreCase) == true;
     }
@@ -164,10 +169,10 @@ public sealed class HistoryIndex(string projectsDirectory)
         return builder.Build(Path.GetFileNameWithoutExtension(file.Name), file.FullName, new DateTimeOffset(lastWriteUtc, TimeSpan.Zero));
     }
 
-    /// <summary>One line, compacted to a single line of about <see cref="FirstPromptLength"/> characters.</summary>
-    internal static string Preview(string text)
+    /// <summary>One line, compacted to a single line of about <paramref name="length"/> characters.</summary>
+    internal static string Preview(string text, int length = FirstPromptLength)
     {
-        var builder = new StringBuilder(Math.Min(text.Length, FirstPromptLength + 1));
+        var builder = new StringBuilder(Math.Min(text.Length, length + 1));
         var pendingSpace = false;
         foreach (var c in text)
         {
@@ -182,16 +187,16 @@ public sealed class HistoryIndex(string projectsDirectory)
                 pendingSpace = false;
             }
             builder.Append(c);
-            if (builder.Length > FirstPromptLength)
+            if (builder.Length > length)
             {
                 break;
             }
         }
-        if (builder.Length <= FirstPromptLength)
+        if (builder.Length <= length)
         {
             return builder.ToString();
         }
-        var cut = char.IsHighSurrogate(builder[FirstPromptLength - 1]) ? FirstPromptLength - 1 : FirstPromptLength;
+        var cut = char.IsHighSurrogate(builder[length - 1]) ? length - 1 : length;
         return builder.ToString(0, cut).TrimEnd() + "…";
     }
 
@@ -215,6 +220,7 @@ public sealed class HistoryIndex(string projectsDirectory)
         private string? _aiTitle;
         private string? _customTitle;
         private string? _firstPrompt;
+        private readonly StringBuilder _prompts = new();
         private int _count;
         private DateTimeOffset? _lastActivity;
         private string? _gitBranch;
@@ -262,7 +268,8 @@ public sealed class HistoryIndex(string projectsDirectory)
             {
                 return null;
             }
-            return new SessionSummary(sessionId, path, _folder, title, _firstPrompt, _count, _lastActivity ?? lastWrite, _gitBranch, _version);
+            return new SessionSummary(sessionId, path, _folder, title, _firstPrompt, _count, _lastActivity ?? lastWrite, _gitBranch, _version,
+                _prompts.Length == 0 ? null : _prompts.ToString());
         }
 
         private void AddEntry(JsonObject entry)
@@ -295,6 +302,10 @@ public sealed class HistoryIndex(string projectsDirectory)
                     {
                         _count++;
                         _firstPrompt ??= Preview(prompt);
+                        if (_prompts.Length < SearchTextLength)
+                        {
+                            _prompts.Append(Preview(prompt, SearchPromptLength)).Append('\n');
+                        }
                     }
                     break;
                 case "assistant" when entry.GetObject("message")?.GetArray("content") is { } content:

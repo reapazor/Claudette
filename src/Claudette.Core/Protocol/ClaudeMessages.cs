@@ -16,7 +16,14 @@ public sealed record SystemInitMessage(
     string? Cwd,
     string? ClaudeCodeVersion,
     IReadOnlyList<string> Capabilities,
-    JsonObject Raw) : ClaudeMessage("system", Raw);
+    JsonObject Raw) : ClaudeMessage("system", Raw)
+{
+    /// <summary>The slash commands the session accepts, without the leading slash (DESIGN.md §5, "Composer").</summary>
+    public IReadOnlyList<string> SlashCommands => Raw.GetStringList("slash_commands");
+
+    /// <summary>The entries of <see cref="SlashCommands"/> bound to the terminal, such as <c>doctor</c>; not offered.</summary>
+    public IReadOnlyList<string> TerminalSlashCommands => Raw.GetStringList("terminal_slash_commands");
+}
 
 /// <summary>Any other <c>system</c> message, such as <c>status</c>, <c>task_started</c> or <c>api_retry</c>.</summary>
 public sealed record SystemMessage(string Subtype, JsonObject Raw) : ClaudeMessage("system", Raw);
@@ -91,6 +98,18 @@ public sealed record ResultMessage(
 
 public sealed record RateLimitEventMessage(JsonObject Info, JsonObject Raw) : ClaudeMessage("rate_limit_event", Raw);
 
+/// <summary>
+/// <c>tool_progress</c>: a running tool call is still going. For the <c>Agent</c> tool, <see cref="ParentToolUseId"/>
+/// names the subagent, and <c>subagent_retry</c> in <see cref="ClaudeMessage.Raw"/> says it's waiting out an API error.
+/// </summary>
+public sealed record ToolProgressMessage(
+    string? ToolUseId,
+    string? ToolName,
+    string? ParentToolUseId,
+    double? ElapsedSeconds,
+    bool IsHeartbeat,
+    JsonObject Raw) : ClaudeMessage("tool_progress", Raw);
+
 public sealed record AuthStatusMessage(bool IsAuthenticating, IReadOnlyList<string> Output, string? Error, JsonObject Raw) : ClaudeMessage("auth_status", Raw);
 
 /// <summary>A control request from Claude Code, such as <c>can_use_tool</c>.</summary>
@@ -104,6 +123,15 @@ public sealed record ControlCancelRequestMessage(string RequestId, JsonObject Ra
 
 /// <summary>The conversation was replaced without ending the session, for example by <c>/clear</c> (DESIGN.md §13).</summary>
 public sealed record ConversationResetMessage(string? NewConversationId, string? Trigger, JsonObject Raw) : ClaudeMessage("conversation_reset", Raw);
+
+/// <summary>
+/// When Claude Code compacts the conversation by itself (<b>undocumented</b>): sent at the start of each turn, with the
+/// context window it works to and the token count that triggers compaction (DESIGN.md §6, "Per-tab context").
+/// </summary>
+public sealed record AutocompactStateMessage(bool Enabled, long? EffectiveWindow, long? Threshold, JsonObject Raw) : ClaudeMessage("autocompact_state", Raw);
+
+/// <summary>A type Claudette knows about and deliberately skips, such as <c>active_goal</c>. Not counted as unknown.</summary>
+public sealed record IgnoredMessage(string MessageType, JsonObject Raw) : ClaudeMessage(MessageType, Raw);
 
 /// <summary>A message type Claudette doesn't know yet. Skipped, and counted for diagnostics (DESIGN.md §16).</summary>
 public sealed record UnknownMessage(string MessageType, JsonObject Raw) : ClaudeMessage(MessageType, Raw);

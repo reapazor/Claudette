@@ -15,9 +15,22 @@ namespace Claudette.App.Tests.Support;
 /// <summary>Plays Claude Code's side of one session for view model tests.</summary>
 internal sealed class ScriptedTransport : IClaudeTransport
 {
-    private readonly Channel<string> _output = Channel.CreateUnbounded<string>();
-    private readonly TaskCompletionSource<TransportExit> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private Channel<string> _output = Channel.CreateUnbounded<string>();
+    private TaskCompletionSource<TransportExit> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly List<JsonObject> _sent = [];
+
+    /// <summary>
+    /// After the pretend process exited, stands in for the next one, so a tab can restart (after a sign-in, say).
+    /// Everything sent so far is kept.
+    /// </summary>
+    public void RestartIfExited()
+    {
+        if (_completion.Task.IsCompleted)
+        {
+            _output = Channel.CreateUnbounded<string>();
+            _completion = new TaskCompletionSource<TransportExit>(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+    }
 
     /// <summary>Answers to control requests by subtype; null leaves the request unanswered, an exception answers with an error.</summary>
     public Dictionary<string, Func<JsonObject, JsonObject?>> Answers { get; } = new()
@@ -120,10 +133,10 @@ internal sealed class ScriptedTransport : IClaudeTransport
 
     public void Terminate() => Exit(-1);
 
-    public void Exit(int code)
+    public void Exit(int code, string standardError = "")
     {
         _output.Writer.TryComplete();
-        _completion.TrySetResult(new TransportExit(code, ""));
+        _completion.TrySetResult(new TransportExit(code, standardError));
     }
 
     public ValueTask DisposeAsync()
@@ -137,11 +150,19 @@ internal sealed class ScriptedSessionFactory(ScriptedTransport transport, TimePr
 {
     public List<ClaudeLaunchOptions> Launches { get; } = [];
 
+    /// <summary>While set, starts fail with this, as a <c>claude</c> that couldn't start would.</summary>
+    public Exception? StartFailure { get; set; }
+
     public async Task<ClaudeSession> StartAsync(ClaudeLaunchOptions options, CancellationToken cancellationToken = default)
     {
         Launches.Add(options);
+        if (StartFailure is { } failure)
+        {
+            throw failure;
+        }
+        transport.RestartIfExited();
         var session = new ClaudeSession(transport, time);
-        await session.InitializeAsync(cancellationToken);
+        await session.InitializeAsync(options.Hooks, cancellationToken);
         return session;
     }
 }
@@ -224,7 +245,24 @@ internal sealed class NoPlatform : IPlatformServices
         return Task.CompletedTask;
     }
 
-    public Task OpenFileAsync(string path) => Task.CompletedTask;
+    /// <summary>Files, an image or text "on the clipboard", for paste tests.</summary>
+    public List<string> ClipboardFiles { get; } = [];
+
+    public byte[]? ClipboardImage { get; set; }
+
+    public Task<IReadOnlyList<string>> GetClipboardFilesAsync() => Task.FromResult<IReadOnlyList<string>>(ClipboardFiles.ToArray());
+
+    public Task<string?> GetClipboardTextAsync() => Task.FromResult(Clipboard);
+
+    public Task<byte[]?> GetClipboardImageAsync() => Task.FromResult(ClipboardImage);
+
+    public List<string> OpenedFiles { get; } = [];
+
+    public Task OpenFileAsync(string path)
+    {
+        OpenedFiles.Add(path);
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>A process tree the test controls: which children are "running", and whether they were killed.</summary>
@@ -278,12 +316,17 @@ internal sealed class TabTestHarness : IAsyncDisposable
 
     /// <param name="updater">Claude Code's installation, for update tests; when given, update checks are set up too.</param>
     /// <param name="launcher">Starts processes other than Claude Code, which the scripted sessions stand in for.</param>
-    public TabTestHarness(Action<AppSettings>? configure = null, FakeClaudeUpdater? updater = null, IProcessLauncher? launcher = null)
+    /// <param name="dispatcher">The UI thread: an inline stand-in for view model tests, Avalonia's own for rendered UI tests.</param>
+    /// <param name="appInstaller">Installs Claudette's own updates; by default none can be.</param>
+    /// <param name="http">Answers Claudette's own web requests; by default every request fails, so nothing reaches the network.</param>
+    public TabTestHarness(Action<AppSettings>? configure = null, FakeClaudeUpdater? updater = null, IProcessLauncher? launcher = null, IUiDispatcher? dispatcher = null,
+        Core.Updates.IAppInstaller? appInstaller = null, HttpMessageHandler? http = null, Core.Updates.AppVersion? appVersion = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "work"));
         Directory.CreateDirectory(ProjectsDirectory);
         Trees = new FakeProcessTreeTracker(Time);
-        Services = new AppServices(AppPaths.Under(_root), launcher ?? new ProcessLauncher(), Time, Platform, new InlineDispatcher(), processTrees: Trees, notifier: Notifier);
+        Services = new AppServices(AppPaths.Under(_root), launcher ?? new ProcessLauncher(), Time, Platform, dispatcher ?? new InlineDispatcher(), processTrees: Trees, notifier: Notifier,
+            appInstaller: appInstaller, httpHandler: http ?? new OfflineHandler(), appVersion: appVersion);
         Services.Notifications.UseBadge(Notifier);
         configure?.Invoke(Services.Settings);
         if (updater is not null)
@@ -294,8 +337,11 @@ internal sealed class TabTestHarness : IAsyncDisposable
         Services.ProjectsDirectory = ProjectsDirectory;
         Factory = new ScriptedSessionFactory(Transport, Time);
         Services.UseSessionFactory(Factory);
-        Shell = new ShellViewModel(Services, () => { });
+        Shell = new ShellViewModel(Services, () => OnAuthenticationRequired());
     }
+
+    /// <summary>What the main window does when a tab finds Claude Code signed out (DESIGN.md §11).</summary>
+    public Action OnAuthenticationRequired { get; set; } = () => { };
 
     public FakeProcessTreeTracker Trees { get; }
 
@@ -334,7 +380,8 @@ internal sealed class TabTestHarness : IAsyncDisposable
     {
         await Shell.OpenFolderAsync(WorkFolder);
         var tab = Shell.SelectedTab!;
-        await Eventually(() => tab.Status == TabStatus.Idle);
+        // Idle comes first; the start's own events and context usage request follow, and would undo a status a test sets.
+        await Eventually(() => tab.Status == TabStatus.Idle && tab.IsSettled, "the tab to start");
         return tab;
     }
 
@@ -368,4 +415,11 @@ internal sealed class TabTestHarness : IAsyncDisposable
 internal static class SettingsExtensions
 {
     public static QuickSuffix Suffix(this AppServices services, string id) => services.Settings.QuickSuffixes.Single(s => s.Id == id);
+}
+
+/// <summary>Fails every request, so a test that doesn't script Claudette's web requests can't reach the network.</summary>
+public sealed class OfflineHandler : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+        throw new HttpRequestException("Tests don't reach the network.");
 }

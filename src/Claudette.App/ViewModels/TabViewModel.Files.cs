@@ -54,7 +54,7 @@ public sealed partial class TabViewModel
         }
     }
 
-    /// <summary>The side panel: Changed files, and Processes when the monitor is on (DESIGN.md §3).</summary>
+    /// <summary>The side panel: Changed files, Agents, and Processes when the monitor is on (DESIGN.md §3).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowProcessSummary))]
     public partial bool IsSidePanelOpen { get; set; }
@@ -73,15 +73,26 @@ public sealed partial class TabViewModel
     [NotifyPropertyChangedFor(nameof(IsFilesPage))]
     public partial bool IsProcessesPage { get; set; }
 
-    public bool IsFilesPage => !IsProcessesPage;
+    public bool IsFilesPage => !IsProcessesPage && !IsAgentsPage;
 
-    partial void OnIsProcessesPageChanged(bool value) => IsProcessPanelVisible = value && IsSidePanelOpen;
+    partial void OnIsProcessesPageChanged(bool value)
+    {
+        IsProcessPanelVisible = value && IsSidePanelOpen;
+        if (value)
+        {
+            IsAgentsPage = false;
+        }
+    }
 
     [RelayCommand]
     private void ToggleSidePanel() => IsSidePanelOpen = !IsSidePanelOpen;
 
     [RelayCommand]
-    private void ShowFilesPage() => IsProcessesPage = false;
+    private void ShowFilesPage()
+    {
+        IsProcessesPage = false;
+        IsAgentsPage = false;
+    }
 
     [RelayCommand]
     private void ShowProcessesPage() => IsProcessesPage = true;
@@ -241,6 +252,27 @@ public sealed partial class TabViewModel
             () => OpenFileInEditorAsync(row),
             () => RevealFileAsync(row),
             () => CopyFilePathAsync(row)));
+    }
+
+    /// <summary>
+    /// <b>Open diff</b> on an Edit or Write card (DESIGN.md §5): the file in the diff view, as Changed files shows it,
+    /// from before Claude's first change in this session to the file now.
+    /// </summary>
+    [RelayCommand]
+    private Task OpenToolDiffAsync(Conversation.ToolUseItem? tool)
+    {
+        if (tool is null || Changes.Files.FirstOrDefault(f => f.ToolUseIds.Contains(tool.ToolUseId)) is not { } file)
+        {
+            return Task.CompletedTask;
+        }
+        return OpenFileDiffAsync(new ChangedFileRow
+        {
+            Path = file.Path,
+            DisplayPath = Changes.DisplayPath(file, Folder),
+            Status = file.IsNew ? "A" : "M",
+            StatusText = file.IsNew ? "Added" : "Modified",
+            Before = file.Before,
+        });
     }
 
     /// <summary>Double-click: the external diff tool when one is set, else the built-in view.</summary>

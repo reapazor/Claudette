@@ -146,8 +146,26 @@
                                 <DockPanel>
                                   <Path DockPanel.Dock="Left" Data="{StaticResource IconPin}" Fill="{DynamicResource MutedTextBrush}" Width="8" Height="10" Stretch="Uniform"
                                         IsVisible="{Binding IsPinned}" VerticalAlignment="Center" Margin="0,0,5,0" />
+                                  <!-- The tab copies its session to the session library (DESIGN.md §9); the border gives the tip somewhere to hover -->
+                                  <Border DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding SyncToLibrary}" VerticalAlignment="Center" Margin="0,0,5,0"
+                                          ToolTip.Tip="Synced to the session library" AutomationProperties.Name="Synced to the session library">
+                                    <Path Data="{StaticResource IconSync}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="9" Height="9" Stretch="Uniform" />
+                                  </Border>
                                   <TextBlock DockPanel.Dock="Left" Classes="status busy small" Text="⚙" IsVisible="{Binding HasBusyProcesses}" VerticalAlignment="Center" Margin="0,0,5,0"
                                              ToolTip.Tip="A process this tab started is using CPU" />
+                                  <!-- The Perforce changelist (DESIGN.md §18): separate from the name, so renaming keeps it -->
+                                  <Button DockPanel.Dock="Right" Classes="flat changelist" Padding="0" Margin="5,0,0,0" VerticalAlignment="Center"
+                                          IsVisible="{Binding ShowChangelistBadge}" ToolTip.Tip="{Binding ChangelistBadgeTip}" AutomationProperties.Name="{Binding ChangelistBadge}">
+                                    <Border Background="{DynamicResource SubtleBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1" CornerRadius="4" Padding="4,0">
+                                      <TextBlock Classes="muted small" Text="{Binding ChangelistBadge}" />
+                                    </Border>
+                                    <Button.Flyout>
+                                      <MenuFlyout>
+                                        <MenuItem Header="Copy changelist number" Command="{Binding CopyChangelistCommand}" CommandParameter="{x:Null}" />
+                                        <MenuItem Header="Open in P4V" Command="{Binding OpenChangelistInP4VCommand}" CommandParameter="{x:Null}" />
+                                      </MenuFlyout>
+                                    </Button.Flyout>
+                                  </Button>
                                   <Panel>
                                     <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" IsVisible="{Binding !IsRenaming}" />
                                     <TextBox Text="{Binding RenameText}" IsVisible="{Binding IsRenaming}" Padding="4,1" MinHeight="0"
@@ -167,7 +185,15 @@
                                 <MenuItem Header="Rename" Command="{Binding StartRenameCommand}" />
                                 <MenuItem Header="Reset name" Command="{Binding ResetNameCommand}" IsVisible="{Binding HasUserName}" />
                                 <MenuItem Header="{Binding PinMenuText}" Command="{Binding TogglePinCommand}" />
-                                <MenuItem Header="Tab settings…" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).OpenTabSettingsCommand}" CommandParameter="{Binding}" />
+                                <!-- The item ticks itself as it's clicked, then runs the command, so the binding stays one-way -->
+                                <MenuItem Header="Sync to other machines" ToggleType="CheckBox" IsChecked="{Binding SyncToLibrary, Mode=OneWay}"
+                                          Command="{Binding ToggleSyncToLibraryCommand}" />
+                                <MenuItem Header="Tab settings…" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).OpenTabSettingsCommand}" CommandParameter="{Binding}">
+                                  <MenuItem.Icon>
+                                    <Ellipse Width="6" Height="6" Fill="{DynamicResource AccentStatusBrush}" IsVisible="{Binding HasOverrides}"
+                                             ToolTip.Tip="This tab has its own settings" />
+                                  </MenuItem.Icon>
+                                </MenuItem>
                                 <Separator />
                                 <MenuItem Header="Move up" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MoveTabUpCommand}" CommandParameter="{Binding}" />
                                 <MenuItem Header="Move down" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MoveTabDownCommand}" CommandParameter="{Binding}" />
@@ -236,7 +262,14 @@
                             <ContextMenu>
                               <MenuItem Header="Rename" Command="{Binding StartRenameCommand}" />
                               <MenuItem Header="{Binding PinMenuText}" Command="{Binding TogglePinCommand}" />
-                              <MenuItem Header="Tab settings…" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).OpenTabSettingsCommand}" CommandParameter="{Binding}" />
+                              <MenuItem Header="Sync to other machines" ToggleType="CheckBox" IsChecked="{Binding SyncToLibrary, Mode=OneWay}"
+                                        Command="{Binding ToggleSyncToLibraryCommand}" />
+                              <MenuItem Header="Tab settings…" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).OpenTabSettingsCommand}" CommandParameter="{Binding}">
+                                  <MenuItem.Icon>
+                                    <Ellipse Width="6" Height="6" Fill="{DynamicResource AccentStatusBrush}" IsVisible="{Binding HasOverrides}"
+                                             ToolTip.Tip="This tab has its own settings" />
+                                  </MenuItem.Icon>
+                                </MenuItem>
                               <Separator />
                               <MenuItem Header="Close" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CloseTabCommand}" CommandParameter="{Binding}" />
                             </ContextMenu>
@@ -333,6 +366,53 @@
                     </WrapPanel>
                     <CheckBox IsChecked="{Binding RestartAutomatically}" Content="Restart into new builds by itself when no tab is working" />
                     <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsRestarting}" />
+                  </StackPanel>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+            <!-- A new release of Claudette (DESIGN.md §2, "Updating Claudette"): small and non-blocking, like Claude Code's -->
+            <Button x:Name="AppUpdateBadge" Classes="flat side update" DataContext="{Binding AppUpdate}" x:DataType="vm:AppUpdateViewModel"
+                    IsVisible="{Binding HasBadge, FallbackValue=False}" ToolTip.Tip="{Binding BadgeText}" ToolTip.Placement="Right"
+                    AutomationProperties.Name="Claudette update">
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Path Classes="icon" Data="{StaticResource IconUpdate}" />
+                <TextBlock Classes="badge" Text="{Binding BadgeText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           IsVisible="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).IsSidebarExpanded, FallbackValue=False}" />
+              </StackPanel>
+              <Button.Flyout>
+                <Flyout Placement="RightEdgeAlignedBottom">
+                  <StackPanel Spacing="10" Width="420" Margin="4">
+                    <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Classes="muted small" Text="{Binding CurrentVersionText}" TextWrapping="Wrap" />
+                    <TextBlock Classes="muted small" Text="{Binding ReleasedText}" TextWrapping="Wrap"
+                               IsVisible="{Binding ReleasedText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6" MaxHeight="220" IsVisible="{Binding HasNotes}">
+                      <ScrollViewer>
+                        <SelectableTextBlock Text="{Binding NotesText}" TextWrapping="Wrap" FontSize="12" />
+                      </ScrollViewer>
+                    </Border>
+                    <Button Classes="flat" Content="Release notes on GitHub" Command="{Binding OpenReleasePageCommand}" HorizontalAlignment="Left" Padding="0,2"
+                            IsVisible="{Binding HasRelease}" />
+                    <TextBlock Classes="muted small" Text="{Binding ManualText}" TextWrapping="Wrap" IsVisible="{Binding HasManualText}" />
+                    <TextBlock Classes="warning" Text="{Binding WorkingText}" TextWrapping="Wrap"
+                               IsVisible="{Binding WorkingText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <Border Background="{DynamicResource CautionBackgroundBrush}" BorderBrush="{DynamicResource CautionBorderBrush}" BorderThickness="1"
+                            CornerRadius="6" Padding="8,6" MaxHeight="160" IsVisible="{Binding HasError}">
+                      <ScrollViewer>
+                        <SelectableTextBlock Text="{Binding ErrorText}" TextWrapping="Wrap" FontSize="12" />
+                      </ScrollViewer>
+                    </Border>
+                    <WrapPanel ItemSpacing="8" LineSpacing="8">
+                      <Button Classes="accent" Content="{Binding RestartLabel}" Command="{Binding RestartToUpdateCommand}" IsVisible="{Binding CanRestartToUpdate}" />
+                      <Button Content="Update when idle" Command="{Binding UpdateWhenIdleCommand}" IsVisible="{Binding CanUpdateWhenIdle}" />
+                      <Button Content="Don't update" Command="{Binding CancelWaitingCommand}" IsVisible="{Binding IsWaitingForIdle}" />
+                      <Button Content="Download" Command="{Binding DownloadCommand}" IsVisible="{Binding CanDownload}" />
+                      <Button Content="Cancel download" Command="{Binding CancelDownloadCommand}" IsVisible="{Binding IsDownloading}" />
+                      <Button Content="{Binding OpenPackageLabel}" Command="{Binding OpenPackageCommand}" IsVisible="{Binding CanOpenPackage}" />
+                      <Button Classes="flat" Content="Skip this version" Command="{Binding SkipCommand}" IsVisible="{Binding CanSkip}" />
+                    </WrapPanel>
+                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding DownloadPercent}" IsVisible="{Binding IsDownloading}" />
+                    <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsInstalling}" />
                   </StackPanel>
                 </Flyout>
               </Button.Flyout>

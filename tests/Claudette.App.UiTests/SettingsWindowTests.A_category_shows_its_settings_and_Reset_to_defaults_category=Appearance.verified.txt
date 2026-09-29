@@ -1,0 +1,18 @@
+﻿"Appearance"
+"Theme"
+[choice] "System"
+"Conversation font"
+[field] "Claudette's default"
+"Conversation font size"
+[button] (icon)
+[button] (icon)
+[field] "14"
+"Code font"
+[field] "Cascadia Mono, Consolas or Menlo"
+"Code font size"
+[button] (icon)
+[button] (icon)
+[field] "13"
+"Leave a font empty for the default. A font that isn't installed on this machine falls back to the default."
+[ ] Show thinking expanded
+[button] Reset to defaults

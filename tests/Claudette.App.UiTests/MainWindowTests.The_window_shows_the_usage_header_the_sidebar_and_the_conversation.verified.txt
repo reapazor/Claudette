@@ -1,0 +1,35 @@
+﻿[button] Usage details
+  "Session"
+  [meter 62%]
+  "62%"
+  "resets in 2h 14m"
+  "Weekly"
+  [meter 38%]
+  "38%"
+  "Not enough data yet."
+[button] Account: me@example.com · Max plan
+[button] New tab
+[button] Collapse the sidebar
+[button] work
+[button] New tab in this folder
+[button] (parts below)
+  "work"
+  "Opus · Default"
+  [button] Close tab
+[button] History
+[button] Settings
+"Found two problems in Parser.cs."
+"Opus"
+[field] "Message Claude…  (Enter to send, Shift+Enter for a new line, Esc to stop)"
+[button] Attach a file
+[button] Suffixes ▾
+[button] Opus ▾
+[button] Default effort ▾
+[button] Default ▾
+[button] Files (0)
+[button] Context 1%
+[button] 120 tok
+[button] ⓘ
+[button] Send
+"{root}/work"
+"Idle"

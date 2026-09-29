@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Claudette.App.Services;
 
-/// <summary>The window's side of a restart into a new build: its tabs, and closing.</summary>
+/// <summary>The window's side of a restart into a new build or a new release: its tabs, and closing.</summary>
 public interface IRestartHost
 {
     /// <summary>Whether a tab is starting, in a turn, or waiting on the user.</summary>
@@ -17,8 +17,8 @@ public interface IRestartHost
     /// <summary>The open tabs, drafts and window placement, for the new build.</summary>
     RestartSnapshot Capture();
 
-    /// <summary>Shows that Claudette is restarting and stops every tab, as closing Claudette does.</summary>
-    Task CloseTabsAsync();
+    /// <summary>Shows <paramref name="message"/> in place of the tabs and stops every tab, as closing Claudette does.</summary>
+    Task CloseTabsAsync(string message);
 
     /// <summary>The new build didn't start: brings the tabs back here.</summary>
     void Recover(RestartSnapshot snapshot);
@@ -194,7 +194,7 @@ public sealed class RestartService : IDisposable
         // From here the new build owns the settings and state files: flush, then stop writing them.
         await _services.FlushAsync();
         _services.SuspendSaving = true;
-        await _host.CloseTabsAsync();
+        await _host.CloseTabsAsync("Restarting into the new build…");
         IRunningProcess? process = null;
         var errors = new Queue<string>();
         try
