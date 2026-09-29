@@ -112,12 +112,12 @@ The visual reference is Claude Code's own Visual Studio Code extension:
   - Working (animated)
   - Needs input: a permission prompt or question is waiting (highlighted, so it stands out from any tab)
   - Finished while in the background (unread dot)
-  - Error or process exited
+  - Error or process exited. The tab's row and info card say what went wrong: the last line Claude Code wrote to its error output, or why it couldn't start.
 - **Model and effort** are easy to see for every tab. The second line of the tab's row shows them (for example `Opus · High`), and the composer bar shows the same thing in full for the selected tab. See [Model & effort](#model--effort).
 - **Tab info card.** Hovering a tab shows a card with the tab's details. It's the one place features add per-tab information, rather than putting it in the tab name. It shows:
   - The full folder path and git branch.
   - Model and effort.
-  - Session start time, tokens used and context %.
+  - When the session started (for a resumed session, its transcript's first entry; saved with the tab), tokens used and context %.
   - Later features add rows here, for example the Perforce changelist ([§18](#perforce-changelist-in-the-tab-title)).
   - The same card opens from an **ⓘ** button in the composer bar, for the selected tab.
 - **Token stats per tab.** Each tab keeps a running count of the tokens it has used:
@@ -148,7 +148,7 @@ The tabs are listed in a sidebar on the left of the window, rather than a strip 
 
 - **A tab's row** has two lines:
   - The status icon, a pin icon if pinned, a gear while a process it started is busy ([Process monitor](#process-monitor)), and the name, cut short with an ellipsis if it doesn't fit.
-  - The model and effort, or instead what needs attention: *Needs your input*, or the error.
+  - The model and effort, or instead what needs attention: *Needs your input*, the error, or *Possibly stuck* when check-ins get no reply ([§5](#check-ins-on-long-turns)).
   - The close button shows on hover and on the selected tab. Hovering the row shows the tab info card; double-clicking renames it.
 - **Top:** **New tab**, which opens the picker ([Opening a tab](#opening-a-tab)), and the button that collapses the sidebar.
 - **Foot:** **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
@@ -373,7 +373,7 @@ This is Claudette's main feature: knowing how fast you're using your plan's limi
 - Clicking the header opens a **Usage** panel (its own window) with:
   - A larger chart of the current session and the past week.
   - Tokens per tab for the current window, so you can see which session is burning the most.
-  - Past sessions and weeks, as far back as the stored [usage history](#usage-history) goes. Each past window shows the highest usage it reached.
+  - Past sessions and weeks, as far back as the stored [usage history](#usage-history) goes. Each past window shows the highest usage it reached. The lists show the latest 30 sessions and 12 weeks, with **Show more** for the next page.
 - Accounts without plan limits (an API key, for example) get no meters; the header just says Claudette.
 
 ### Per-tab context
@@ -409,8 +409,8 @@ Token and context data are documented:
 
 | Data | Source |
 |---|---|
-| Tokens per turn and per tab | `usage` and `modelUsage` on each `result` message; per-call `usage` on `assistant` messages (de-duplicated by message ID). `modelUsage` also includes `costUSD` and `contextWindow`. |
-| Context window % | The `get_context_usage` control request, or last-turn input tokens ÷ `contextWindow` |
+| Tokens per turn and per tab | `usage` and `modelUsage` on each `result` message. Per-call `usage` on `assistant` messages moves the composer's count during a turn: Claude Code repeats a call's usage on each of its content blocks, so calls are counted once by message ID, with their latest figures. `modelUsage` also includes `costUSD` and `contextWindow`. |
+| Context window % | The `get_context_usage` control request after each turn. Without it (it fails, or this Claude Code lacks it), an estimate: the main agent's latest call (everything it read plus what it wrote) ÷ that model's `contextWindow` from the last `result`, updated with each call. The estimate warns at 90% of the auto-compact threshold from `autocompact_state` (undocumented; sent before each turn with `enabled`, `effective_window` and `threshold`), or at 80% without it. |
 
 **Sampling.**
 
@@ -571,7 +571,7 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
   - Suffixes kept on the tab, and token stats.
 - Tabs come back in the same order and resume their sessions, with the earlier conversation loaded so you can scroll back.
 - **Starting fast.** Restored tabs don't start their `claude` process until you first select them or send them a message. Launching with many pinned tabs is quick, and tabs you don't touch use no resources.
-- **Old sessions.** Claude Code deletes local transcripts after 30 days by default. A pinned tab you haven't used in a while could lose its transcript, so Claudette resumes from its session library copy, which isn't affected by that cleanup. If neither copy exists, the tab says so and offers to start a new session in the same folder.
+- **Old sessions.** Claude Code deletes local transcripts after 30 days by default. A pinned tab you haven't used in a while could lose its transcript, so Claudette resumes from its session library copy, which isn't affected by that cleanup. If neither copy exists, the tab says so and waits: **Start a new session** starts one in the same folder, keeping the tab's name, pinned state, overrides and suffixes, and **Unpin and close** (**Close tab**) closes it. It doesn't start a new session by itself.
 - **Missing folder.** If a restored tab's folder no longer exists (for example a deleted clone), the tab shows an error as soon as it's restored, with **Choose folder…** and **Unpin and close** (**Close tab** for an unpinned tab).
   - **Choose folder…** is for a folder that moved, or another clone of the same project. The tab moves to the chosen folder's group and its session carries on there.
   - Claude Code finds sessions by folder, so Claudette copies the transcript to its local working folder and resumes from that file, as for a session from another machine ([Session library](#session-library-sync-across-machines)).
@@ -580,12 +580,13 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 ### History
 
 - **History** (`Ctrl/Cmd+Shift+H`, or from the new tab menu) lists past sessions, grouped by folder. Each entry shows the name/title, the machine it was last used on, last activity time, first prompt and message count.
-- Search by title and prompt text.
+- Search by title, folder and prompt text: every prompt of a session, not just the first (up to about 1,000 characters of each and 16,000 per session, kept in History's cache).
 - Opening an entry resumes that session in a new tab. The earlier conversation is loaded into the view so you can scroll back through it. A session that's already open in a tab just selects that tab.
 - History combines two sources:
   - Claude Code's own session storage on this machine, so it includes sessions started in the terminal.
   - Claudette's session library (below), which can include sessions from other machines.
-- **Merging the sources.** A session in both is one entry: the library adds its name and, when another machine used it more recently, that machine. A session only in the library (from another machine, or older than Claude Code's cleanup) opens through "Restoring on another machine" below.
+- **Merging the sources.** A session in both is one entry: the library adds its name and, when another machine used it more recently, that machine. A session only in the library (from another machine, or older than Claude Code's cleanup) opens through "Restoring on another machine" below, and so does a session in both that another machine carried on since this machine's copy: the library's copy is the newer one.
+- Opening a session applies its record's per-tab overrides (model, effort, mode, check-ins, process monitor). Records written before overrides were kept apply their model and effort.
 - **Speed.** History reads every transcript line by line, skipping lines cheaply before parsing them, and caches each file by size and date, so opening it again only reads what changed.
 
 ### Session library (sync across machines)
@@ -628,8 +629,9 @@ Claude Code's credentials and settings are never copied.
 
 **One machine at a time.**
 
-- While a session is open, Claudette keeps a small lease file next to it ("in use on DESKTOP-01", refreshed every minute).
-- Opening a session that another machine is actively using asks the user to either:
+- While a session is open, Claudette keeps a small lease file next to it ("in use on DESKTOP-01", refreshed every minute). A tab takes the lease when it starts a session that's in the library; a new session gets one with its first library copy.
+- A restored tab whose session another machine holds a live lease on (it was taken over while Claudette was closed) becomes read-only instead of starting, and says where the session continued.
+- Opening a session from History that another machine is actively using, whether its transcript is on this machine or only in the library, asks the user to either:
   - **Open a copy**, which forks it into a new session with `--fork-session`, or
   - **Take over**, after which the other machine's tab becomes read-only on its next sync.
 - A lease that hasn't been refreshed in 10 minutes counts as stale.
@@ -690,7 +692,7 @@ Clicking a notification brings Claudette to the front and goes to the relevant t
   - **Errors:** *"Claude Code stopped unexpectedly (exit code 3)."*, or why it couldn't start.
   - **Check-ins:** Settings → Check-ins → **Notify me when a check-in is sent** (off by default), which Tab settings can override ([§5](#check-ins-on-long-turns)).
 - **Skipping.** App-wide notifications (usage alerts, sign-in, updates) are skipped while Claudette is focused, because the header, the sign-in banner or the sign-in screen already shows them. Usage alerts also keep their line under the header.
-- **One per subject.** A newer notification replaces an older one of the same kind for the same tab. A tab's notifications are taken away once you look at it; a waiting-prompt notification also goes once the prompt is answered. An update is announced once per version.
+- **One per subject.** A newer notification replaces an older one of the same kind for the same tab. A tab's notifications are taken away once you look at it; a waiting-prompt notification also goes once the prompt is answered. An update is announced once per version; the version last announced is saved with this machine's state, so a restart doesn't announce it again.
 - **Clicking.**
   - A tab notification selects the tab, expanding its group if it's collapsed.
   - A usage alert opens the Usage panel, an update opens the update dialog, and the sign-in notification opens the sign-in dialog ([§11](#signing-in)).
@@ -800,7 +802,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 
 - A small, non-blocking badge appears at the foot of the sidebar: *"Claude Code 2.1.290 is ready"* (an icon when the sidebar is collapsed). Clicking it shows the current and new version, a link to the Claude Code changelog, and the actions from the table above.
   - It appears when the package manager has a newer version than the one installed, or when the installed version is newer than the one an open tab is running.
-  - **Dismiss** hides it until a newer version comes along. It also goes away once no open tab runs an older version.
+  - **Dismiss** hides it until a newer version comes along, across restarts too: the dismissed version is saved with this machine's state. It also goes away once no open tab runs an older version.
   - Settings → Claude Code shows the same details and actions, plus the install method, auto-update state, channel, last update attempt and `claude doctor`'s warnings.
 - **Open tabs are never restarted.** Each tab's `claude` process keeps running the version it started with until the tab is closed. Claudette doesn't restart tabs to apply an update, automatically or otherwise.
   - **New tabs** always start on the newly installed version.
@@ -954,7 +956,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 
 - A sidebar lists the categories.
 - Changes apply immediately; there is no Save button.
-- Each category has **Reset to defaults**.
+- Each category has **Reset to defaults**. In Sessions it leaves the library folder and settings sync as they are, since changing either moves where sessions and settings live; in New tabs it leaves favorite and recent folders, which are this machine's data rather than settings.
 - A search box filters settings by name.
 
 ### Categories
@@ -965,8 +967,8 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Sessions | Also restore unpinned tabs on launch (off by default; pinned tabs are always restored). Session library folder (with **Browse…** and **Move library…**, which copies existing sessions to the new folder). Name for this machine, as shown in History. How long to keep sessions in the library. Sync Claudette's settings through the library (off by default). See [§9](#session-library-sync-across-machines) and [Settings sync](#settings-sync-optional). |
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
 | Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. |
-| New tabs | Default model, effort level and permission mode. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (add, remove, reorder). See [Opening a tab](#opening-a-tab). |
-| Appearance | Theme: follow system, light or dark. Font and size for the conversation, and for code. Show thinking expanded or collapsed by default. |
+| New tabs | Default model, effort level and permission mode. The model and effort lists are what Claude Code offered in its last `initialize` reply on this machine (the models and each one's effort levels, kept with the machine's state), with a built-in list only until a session has started; Tab settings… lists them the same way. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (**Add folder…**, **Move up**, **Move down**, **Remove**), in the order the new tab picker shows them. See [Opening a tab](#opening-a-tab). |
+| Appearance | Theme: follow system, light or dark. Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. |
 | Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
 | Quick suffixes | The list of suffixes: label, text and optional shortcut. Add, edit, reorder, delete. See [§5](#quick-suffixes). |
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
@@ -1004,7 +1006,7 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 **Sync settings through the session library** (Settings → Sessions, off by default) keeps Claudette's settings the same on every machine that uses the same library folder ([§9](#session-library-sync-across-machines)).
 
 - **What syncs:** appearance, new-tab defaults, usage thresholds, check-ins, quick suffixes, notifications, keyboard shortcuts and process monitor options.
-- **What stays on each machine:** the path to `claude`, this machine's name, the library folder itself, the diff tool (program paths differ between machines), recent and favorite folders, folder mappings, pinned tabs, and window sizes and positions.
+- **What stays on each machine:** the path to `claude`, this machine's name, the library folder itself, the diff tool (program paths differ between machines), recent and favorite folders, folder mappings, pinned tabs, and window sizes and positions. The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
 - The synced settings are stored as one file in the library. Each setting keeps the time it was last changed, and the newest change wins, so edits on two machines don't overwrite each other wholesale.
 - The first time sync is turned on and the library already has settings from another machine, Claudette asks: **Use synced settings** or **Replace them with this machine's**.
 - Turning sync off keeps the current values on this machine and stops syncing.
@@ -1035,28 +1037,30 @@ These apply from milestone 1:
 |---|---|---|---|
 | Unit | Pure logic: burn rate and projection, check-in timers, usage retention, settings sync merging, suffix composition, diff command templates, recent folders, tab grouping, project identity matching, lease files | Plain unit tests with a fake clock and temporary folders | None |
 | Protocol replay | Turning Claude Code's output into events, and what Claudette writes back: messages, interrupts, permission replies, model and effort changes | Recorded stream-json traffic from real sessions, checked in as fixture files and replayed through a fake transport | None |
-| Fake CLI | Process handling: launch flags, stdin/stdout, interrupts, crashes, hangs, sign-in failures, `--version` and `doctor` output, child processes for the process monitor | A small `fake-claude` test program that speaks the stream-json protocol and follows a scenario file. Claudette points at it through the "path to `claude`" setting. | None |
+| Fake CLI | Process handling: launch flags, stdin/stdout, interrupts, crashes, hangs, sign-in failures, `--version` and `doctor` output, child processes for the process monitor | A small `fake-claude` test program that speaks the stream-json protocol, scripted by the prompt and environment variables. Claudette points at it through the "path to `claude`" setting. | None |
 | Real CLI, fake model | End to end against the real `claude` binary: real tools, permission prompts, file edits, transcripts and resume | A local mock server that implements the Anthropic Messages API and returns scripted replies. `claude` points at it with `ANTHROPIC_BASE_URL` and a dummy `ANTHROPIC_API_KEY`. | None |
-| UI | View models, and views: sidebar, composer, chips, permission cards, meters | View-model tests with no UI; Avalonia.Headless for rendering and input; snapshot tests with Verify | None |
+| UI | View models, and views: sidebar, composer, chips, permission cards, meters | View-model tests with no UI; Avalonia.Headless for rendering and input; snapshot tests with Verify. A snapshot is a text form of what a view shows (text, buttons, fields, meters, in tree order), not pixels, so it reads the same on every OS and only changes when what the user sees changes. | None |
 | Live (opt-in) | What only the real service can confirm: `rate_limits` data, sign-in, real model output | Tests tagged `Live`, excluded by default and run manually before a release | A few cents |
 
 ### Protocol fixtures
 
-- Recorded from real sessions by a **record** mode: the Live suite, or a developer session with protocol logging turned on.
-- Before they're checked in, they're cleaned of paths, emails, account details and session IDs.
-- Stored under `tests/fixtures/protocol/<claude-code-version>/`.
-- Scenarios covered:
-  - A simple reply, streaming text and thinking.
-  - Tool calls and subagents.
-  - A permission prompt that is allowed, and one that is denied.
-  - An interrupt.
-  - `rate_limit_event` and an authentication failure.
-  - `/clear` (conversation reset), compaction and API errors.
+- Recorded from real sessions by a **record** mode, from a protocol log ([§13](#logging)):
+  - `ProtocolRecordingTests` (`RealCli`, against the mock Messages API, so no tokens) and the Live suite write fixtures when `CLAUDETTE_RECORD_FIXTURES` names a folder.
+  - A developer session with protocol logging turned on: `dotnet run --project tools/Claudette.Fixtures -- <protocol.log> <fixture.jsonl> --root <project folder>`.
+- Before they're checked in, they're cleaned of paths (under the given roots, the home folder, and Claude Code's path-named project folders), emails, account details and session IDs (`session-1`, `session-2`…). The cleaning doesn't cover what prompts or files said, so check a fixture before committing it.
+- Stored under `tests/Claudette.Core.Tests/Fixtures/protocol/<claude-code-version>/`. Every fixture must parse with no unknown message types or fields (`MessageParserTests`).
+- Scenarios covered (2.1.284):
+  - A simple reply with streaming text (`01-mock-basic`).
+  - Tool calls: a write allowed through the control protocol (`02`), an edit with its original file (`06`), and accepting edits mid-turn (`03`).
+  - A permission prompt that is denied (`07-permission-denied`).
+  - An interrupt (`08-interrupt`).
+  - `rate_limit_event` in its API-key form, with only `status`, in every recording since `07`; and an authentication failure (`signed-out`).
+  - `/clear` (`09-clear`), compaction (`10-compact`) and API errors retried (`11-api-retry`, from the mock's `API_ERROR`).
 - When a new Claude Code version comes out, recording the same scenarios again and diffing them against the old fixtures shows protocol changes before users hit them.
 
 ### Fake CLI (`fake-claude`)
 
-- Each scenario file lists what the fake prints and what it expects to receive. It also controls timing (delays, and long silences to trigger check-ins), exit codes, crashes, and child processes to spawn.
+- The prompt picks what the fake does, rather than a scenario file: `ASK_PERMISSION`, `SLOW` (streams for about 10 seconds), `CRASH` (exit code 7), `SPAWN [seconds] [busy]` (a child process that outlives the turn, for the process monitor), `SILENT` (quiet until a message arrives mid-turn, as a check-in does, then answers with a status), `HANG` (ignores everything until interrupted) and `AUTH_FAIL`. Environment variables set its version, sign-in, `doctor` and `update` output, and `get_usage` answers; the header of its `Program.cs` lists them.
 - It also answers the other commands Claudette runs: `--version`, `auth status`, `auth login` (with a fake browser step), `doctor` and `update`. That covers sign-in and update handling without the real CLI.
 
 ### Real CLI against a fake model
@@ -1085,13 +1089,14 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 
 ### Live suite
 
-- A handful of tests using the cheapest settings: Haiku, low effort, one-line prompts.
-- Runs with a separate API key that has a spend limit, not someone's personal subscription.
-- Also used to record new protocol fixtures.
+- A handful of tests using the cheapest settings: Haiku, low effort, one-line prompts (`LiveTests`, tagged `Live`).
+- Runs with a separate API key that has a spend limit, not someone's personal subscription: `CLAUDETTE_LIVE_API_KEY`.
+- What an API key can't show (`get_usage`'s plan limits and the account) comes from a signed-in Claude Code config folder, `CLAUDETTE_LIVE_CONFIG_DIR`. Those checks make no model calls.
+- Each test skips when its variable isn't set. Also used to record new protocol fixtures (`CLAUDETTE_RECORD_FIXTURES`).
 
 ### Tools and CI
 
-- xUnit v3, Avalonia.Headless.XUnit, Verify (snapshot testing) and Microsoft.Extensions.TimeProvider.Testing (`FakeTimeProvider`). xunit.v3 stays on 3.2.x until Avalonia.Headless.XUnit supports 4.x.
+- xUnit v3, Avalonia.Headless.XUnit, Verify (snapshot testing, `Verify.XunitV3`) and Microsoft.Extensions.TimeProvider.Testing (`FakeTimeProvider`). xunit.v3 stays on 3.2.x until Avalonia.Headless.XUnit supports 4.x, and so Verify.XunitV3 stays on 32.0.x, the last built against it.
 - GitHub Actions (`.github/workflows/ci.yml`):
   - A build-and-test job on Windows, macOS and Linux runs everything except `RealCli` and `Live`, for every push and pull request.
   - A second Linux job installs Claude Code and runs the `RealCli` tests.
@@ -1101,11 +1106,14 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 | Piece | Location |
 |---|---|
 | Fake transport and replay transport | `tests/Claudette.Core.Tests/Support/` |
-| Protocol fixtures | `tests/Claudette.Core.Tests/Fixtures/protocol/2.1.284/` (recorded in the spikes, with paths and personal details removed) |
+| Protocol fixtures | `tests/Claudette.Core.Tests/Fixtures/protocol/2.1.284/`: `01`–`06` and `signed-out` from the spikes, `07`–`11` from `ProtocolRecordingTests` |
+| Record mode | `tools/Claudette.Fixtures/` (`ProtocolFixtureWriter`: a protocol log to a cleaned fixture), used by `ProtocolRecordingTests` and `LiveTests` |
 | `fake-claude` | `tools/Claudette.FakeClaude/`. Scripted by the prompt (`ASK_PERMISSION`, `SLOW`, `CRASH`, `SPAWN`, `SILENT`, `HANG`, `AUTH_FAIL`) and by environment variables, rather than scenario files; see the header of its `Program.cs`. Its sign-in (`auth login`, `auth logout`, the sign-in control requests) is kept in a file in `CLAUDE_CONFIG_DIR`, so a sign-in sticks. Its reply to a message with images names their media types. |
 | Mock Messages API | `tools/Claudette.MockApi/`. Runs in-process in tests, or on its own with `dotnet run`. |
 | Tests against `fake-claude` and the real CLI | `tests/Claudette.IntegrationTests/`. The real-CLI tests are tagged `RealCli`. |
 | View model tests | `tests/Claudette.App.Tests/`. `Support/TabTestHarness.cs` gives a tab a scripted Claude Code connection, a fake clock, a temporary data folder and a fake process tracker. |
+| Rendered UI tests | `tests/Claudette.App.UiTests/`: Claudette's own views on Avalonia's headless platform, driven by keyboard and mouse, with the view model tests' harness (on Avalonia's dispatcher) and `*.verified.txt` snapshots (`UiText` turns a view into text). |
+| Live suite | `LiveTests` in `tests/Claudette.IntegrationTests/`, tagged `Live` |
 | Usage engine tests (parsers, store, burn rate, alerts, poller) | `tests/Claudette.Usage.Tests/`, with recorded `get_usage`, `rate_limit_event` and `/usage` fixtures |
 | Process monitor tests | `tests/Claudette.Platform.Tests/`. Some start real process trees on the current OS; the Linux ones skip elsewhere. |
 | History, library, leases, settings sync, diffs, git | `tests/Claudette.Core.Tests/{History,Library,Settings,Diffs,Git}`. Git tests use the real `git` in a temporary repo and skip without it. |
@@ -1174,6 +1182,7 @@ A dry run against the two versions before 2.1.284 (`node compat/check.mjs report
 Claudette has to keep working when Claude Code adds things it doesn't know about yet:
 
 - Unknown fields are ignored. Unknown message types are skipped and counted. An unknown enum value (for example a new error category) is handled like `unknown`.
+- Types Claudette has seen and has no use for are skipped without being counted, so Diagnostics only shows what's new: `active_goal` in 2.1.284. Each is listed in `compat/surface.yaml`.
 - A line that fails to parse never ends a session. It's logged, and Claudette moves on.
 - With protocol logging on, a skipped message appears in the conversation as a collapsed *"Unsupported message from Claude Code"* row that shows the raw JSON.
 - Features are detected with the `capabilities` list from `system/init`, not by comparing version numbers.
