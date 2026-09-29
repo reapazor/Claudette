@@ -33,6 +33,12 @@ public sealed record ClaudeLaunchOptions
 
     public IReadOnlyList<string> AdditionalArguments { get; init; } = [];
 
+    /// <summary>Added to the default system prompt with <c>--append-system-prompt</c>, such as the Perforce workspace note (DESIGN.md §18).</summary>
+    public string? AppendSystemPrompt { get; init; }
+
+    /// <summary>Hook callbacks registered with <c>initialize</c> (DESIGN.md §13, "Hook callbacks"). Not command-line arguments.</summary>
+    public IReadOnlyList<HookRegistration> Hooks { get; init; } = [];
+
     /// <summary>Applied on top of the clean environment. A null value removes the variable.</summary>
     public IReadOnlyDictionary<string, string?> EnvironmentOverrides { get; init; } = new Dictionary<string, string?>();
 }
@@ -72,6 +78,7 @@ public static class ClaudeArguments
         {
             args.Add("--no-session-persistence");
         }
+        AddOption(args, "--append-system-prompt", options.AppendSystemPrompt);
         args.AddRange(options.AdditionalArguments);
         return args;
     }
