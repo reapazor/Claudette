@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Claudette.app's Info.plist (DESIGN.md §2, "Packaging"). build-dmg.sh fills in $VERSION$. -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>Claudette</string>
+  <key>CFBundleDisplayName</key>
+  <string>Claudette</string>
+  <!-- User Notifications need a bundle identifier (DESIGN.md §10). -->
+  <key>CFBundleIdentifier</key>
+  <string>com.matthewdavey.claudette</string>
+  <key>CFBundleExecutable</key>
+  <string>Claudette</string>
+  <key>CFBundleIconFile</key>
+  <string>Claudette.icns</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$VERSION$</string>
+  <key>CFBundleVersion</key>
+  <string>$VERSION$</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>12.0</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.developer-tools</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+  <!--
+    Claude Code runs as Claudette's child, so macOS asks about Claudette when it reads a project in one of these places.
+  -->
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>Claude Code, running in Claudette, reads and edits the projects you open.</string>
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>Claude Code, running in Claudette, reads and edits the projects you open.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>Claude Code, running in Claudette, reads and edits the projects you open.</string>
+  <key>NSRemovableVolumesUsageDescription</key>
+  <string>Claude Code, running in Claudette, reads and edits the projects you open.</string>
+  <key>NSNetworkVolumesUsageDescription</key>
+  <string>Claude Code, running in Claudette, reads and edits the projects you open.</string>
+</dict>
+</plist>

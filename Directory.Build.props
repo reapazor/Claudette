@@ -7,6 +7,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest</AnalysisLevel>
     <Deterministic>true</Deterministic>
+    <!-- Releases pass the real version: -p:Version=1.2.3 (packaging/). -->
+    <Version>0.7.0</Version>
     <Authors>Matthew Davey</Authors>
     <Product>Claudette</Product>
     <Copyright>Copyright (c) Matthew Davey</Copyright>

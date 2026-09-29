@@ -5,6 +5,7 @@
         x:Class="Claudette.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Claudette"
+        Icon="/Assets/claudette.ico"
         Width="1100" Height="800"
         MinWidth="520" MinHeight="400"
         WindowStartupLocation="CenterScreen">

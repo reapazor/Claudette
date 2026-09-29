@@ -4,6 +4,7 @@
     <RootNamespace>Claudette.App</RootNamespace>
     <AssemblyName>Claudette</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\claudette.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
@@ -26,6 +27,12 @@
     <ProjectReference Include="..\Claudette.Core\Claudette.Core.csproj" />
     <ProjectReference Include="..\Claudette.Platform\Claudette.Platform.csproj" />
     <ProjectReference Include="..\Claudette.Usage\Claudette.Usage.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+    <!-- Also a file next to the app: toasts from an unpackaged Claudette show it (WindowsAppIdentity). -->
+    <Content Include="Assets\claudette.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

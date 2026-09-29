@@ -31,7 +31,28 @@ Claudette does not replace Claude Code. It runs the real `claude` CLI as a child
 | Diffs | Claudette's own line diff and diff view, highlighted with TextMateSharp | The TextMate grammars and themes LiveMarkdown already ships for code blocks. AvaloniaEdit was the plan, but a read-only diff doesn't need an editor. |
 | Usage history | SQLite (Microsoft.Data.Sqlite) | [§6](#usage-history) |
 | Dependency | Claude Code CLI | Must already be installed. Claudette finds `claude` on `PATH` (or a path set in Settings), checks its version on launch against a minimum supported version, and shows a setup screen if it is missing or too old. Sign-in is handled inside Claudette (see [§11](#11-sign-in)). |
-| Packaging | Windows: MSIX or installer. macOS: signed, notarized `.app` in a `.dmg`. | |
+| Packaging | Windows: MSIX. macOS: signed, notarized `.app` in a `.dmg`. | [Below](#packaging-and-signing). |
+
+### Packaging and signing
+
+The files are in `packaging/`, and `.github/workflows/package.yml` builds them.
+
+- **Windows: MSIX**, one per architecture (x64, arm64), self-contained.
+  - `packaging/windows/build-msix.ps1` publishes the app, adds `Package.appxmanifest` and the tile images, builds `resources.pri` for the scaled taskbar icons, packs with `makeappx`, and signs with `signtool`.
+  - The identity is `MatthewDavey.Claudette`, the same as the AppUserModelID an unpackaged Claudette uses. The manifest's `Publisher` must match the signing certificate's subject; the script takes it as `-Publisher` or `MSIX_PUBLISHER`.
+  - **File and registry write virtualization are off** (`desktop6:FileSystemWriteVirtualization`, with the `unvirtualizedResources` capability). Claude Code and every tool it runs are Claudette's children and share its package container. Otherwise their writes under AppData and HKCU would go to Claudette's private copy, where a terminal `claude` wouldn't see them.
+  - Windows only installs signed packages. For a local test, sign with a self-signed certificate whose subject matches the publisher, and trust it.
+- **macOS: a `.dmg` per architecture** (arm64, x64) holding `Claudette.app` and an Applications link.
+  - `packaging/macos/build-dmg.sh` publishes into the bundle, writes `Info.plist` and the icon, signs every Mach-O file and then the bundle with the hardened runtime, builds the `.dmg`, signs it, notarizes it with `notarytool` and staples the ticket.
+  - The bundle identifier is `com.matthewdavey.claudette`; User Notifications need one ([§10](#10-notifications)). The entitlements allow only what .NET's JIT needs.
+  - `Info.plist` has purpose strings for the Documents, Desktop, Downloads, removable and network volume prompts. Claude Code runs as Claudette's child, so macOS asks about Claudette when Claude Code reads a project in one of those places.
+- **The workflow.**
+  - A `v*` tag builds signed packages and attaches them to a draft GitHub release. **Run workflow** builds them for a given version.
+  - A pull request that changes `packaging/` builds them unsigned, to check the scripts.
+  - Signing and notarization use repository secrets, listed at the top of the workflow. Without them, the packages are built unsigned.
+- **The icon** is a placeholder drawn by Claudette's own renderer: `packaging/icon/claudette-1024.png` for macOS, and `src/Claudette.App/Assets/claudette.ico` and `packaging/windows/Assets/` for Windows. Replace those files to change it.
+
+> **Not yet tested on a real machine:** installing and running the MSIX and the `.dmg`, and signing and notarization, which need the certificates. The pull request build checks that both packages build.
 
 ## 3. Main Window
 

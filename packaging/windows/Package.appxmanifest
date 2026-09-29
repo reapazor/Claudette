@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Claudette's MSIX manifest (DESIGN.md §2, "Packaging"). build-msix.ps1 fills in $VERSION$, $PUBLISHER$ and
+  $ARCHITECTURE$. The Identity Name must stay in step with WindowsAppIdentity.AppUserModelId, and Publisher must match
+  the signing certificate's subject exactly.
+-->
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
+         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+         IgnorableNamespaces="uap desktop6 rescap">
+  <Identity Name="MatthewDavey.Claudette" Publisher="$PUBLISHER$" Version="$VERSION$" ProcessorArchitecture="$ARCHITECTURE$" />
+
+  <Properties>
+    <DisplayName>Claudette</DisplayName>
+    <PublisherDisplayName>Matthew Davey</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>A native desktop app for Claude Code.</Description>
+    <!--
+      Claude Code, and every tool it runs, is a child of Claudette and would share its package container. Without these,
+      their writes under AppData and HKCU would land in Claudette's private copy, out of sight of a terminal claude.
+    -->
+    <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>
+    <desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="Claudette" Executable="Claudette.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="Claudette" Description="A native desktop app for Claude Code." BackgroundColor="transparent"
+                          Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+</Package>
