@@ -162,9 +162,10 @@ public class PerforceTabTests
         p4.TicketExpires = h.Time.GetUtcNow().AddHours(11);
         store.Secrets[StoredKey] = "s3cret";
         var tab = await h.OpenTabAsync();
+        await TabTestHarness.Eventually(() => tab.PerforceStatusText?.Contains("11h", StringComparison.Ordinal) == true, "the first check");
         h.Transport.Emit(Init());
-        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Working && p4.StatusChecks >= 2, "the turn and its check");
-        await Task.Delay(50, TestContext.Current.CancellationToken);
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Working, "the turn");
+        // Whether the turn's own check sees it or recovery does, there's one login and one retry message.
         p4.TicketExpires = h.Time.GetUtcNow().AddMinutes(-1);
 
         EmitBash(h, "b1", "p4 sync //depot/...", "Your session has expired, please login again.", isError: true);
@@ -183,7 +184,7 @@ public class PerforceTabTests
         var (h, p4, store) = Harness(p => p.PasswordSource = PerforcePasswordSource.AskEachTime);
         await using var _h = h;
 
-        var tab = await h.OpenTabAsync();
+        var tab = await OpenAsync(h);
         await TabTestHarness.Eventually(() => tab.PerforcePrompt is not null && tab.Status == TabStatus.NeedsInput, "the prompt");
 
         var prompt = tab.PerforcePrompt!;
@@ -212,7 +213,7 @@ public class PerforceTabTests
         var (h, p4, store) = Harness();
         await using var _h = h;
 
-        var tab = await h.OpenTabAsync();
+        var tab = await OpenAsync(h);
         await TabTestHarness.Eventually(() => tab.PerforcePrompt is not null, "the prompt");
         var prompt = tab.PerforcePrompt!;
         Assert.True(prompt.OfferToSave);
@@ -231,7 +232,7 @@ public class PerforceTabTests
     {
         var (h, p4, _) = Harness(p => p.PasswordSource = PerforcePasswordSource.AskEachTime);
         await using var _h = h;
-        var tab = await h.OpenTabAsync();
+        var tab = await OpenAsync(h);
         await TabTestHarness.Eventually(() => tab.PerforcePrompt is not null, "the prompt");
         var first = tab.PerforcePrompt!;
 
@@ -249,7 +250,7 @@ public class PerforceTabTests
     {
         var (h, p4, _) = Harness(p => p.PasswordSource = PerforcePasswordSource.AskEachTime);
         await using var _h = h;
-        var tab = await h.OpenTabAsync();
+        var tab = await OpenAsync(h);
         await TabTestHarness.Eventually(() => tab.PerforcePrompt is not null, "the prompt");
 
         InlineDispatcher.Read(() =>
@@ -407,6 +408,15 @@ public class PerforceTabTests
     }
 
     // ---- Helpers ----------------------------------------------------------------------------------------------------
+
+    /// <summary>Opens the tab without waiting for it to be idle: a password prompt can come first.</summary>
+    private static async Task<TabViewModel> OpenAsync(TabTestHarness h)
+    {
+        await h.Shell.OpenFolderAsync(h.WorkFolder);
+        var tab = h.Shell.SelectedTab!;
+        await TabTestHarness.Eventually(() => tab.Status is TabStatus.Idle or TabStatus.NeedsInput, "the tab to start");
+        return tab;
+    }
 
     private static AppState JsonFileStoreRoundTrip(AppState state) =>
         System.Text.Json.JsonSerializer.Deserialize<AppState>(JsonFileStore<AppState>.Serialize(state), JsonFileStore<AppState>.Options)!;
