@@ -1568,7 +1568,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Unity:** the editor for the project's version from Unity Hub's folders and lists, Open in Unity with Release or Debug code optimization, EditMode tests with their counts, regenerating the C# solution, the solution and logs, Clean Library, Kill all Unity editors, and the lock file rules.
     - **Godot:** finding the executable (a pick, Settings, the `PATH`, `Godot.app`, Scoop and WinGet) and checking for the .NET build, Open in Godot, Run project, Build C#, Open solution, Clean `.godot` or `.import`, and Kill all Godot editors.
     - **The chip** in the composer bar, the project's submenu in the tab menu, the **Project** page with the job's output and Stop, the notification, and `Ctrl/Cmd+Shift+E`.
-    - **claudette.json** and **claudette.local.json:** a folder's own actions (with trust for the shared file's commands) and links, the links in the sidebar, and the in-app editor.
+    - **claudette.json** and **claudette.local.json:** a folder's own actions (shared ones run on a click, without a confirmation) and links, the links in the sidebar, and the in-app editor.
     - **Settings → Project tools**, and the notes to Claude about Unreal, Unity and Godot projects.
     - **Still to verify:** everything on machines with Unreal, Unity and Godot installed, on Windows, macOS and Linux (see [§18](#project-tools)).
 14. **Later.** New features go in [§18](#18-future-features) first.
@@ -1744,7 +1744,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - Several projects are listed nearest first: the folder, then its subfolders, then its parents.
 - **Jobs** start through `IProcessLauncher` with `TrackProcessTree`, so they show in the process monitor ([§4](#process-monitor)) and **Stop** ends everything they started (UnrealBuildTool starts children). Closing the tab stops a running job with the tab's other processes, unless they're kept.
 - **Environment.** Jobs and launches get the user's environment: on macOS and Linux, with the login shell's merged in ([Login shell environment](#login-shell-environment)), so a build finds `dotnet`, the editor or a Homebrew tool on the same `PATH` as a terminal, and a bare program name is looked up on that `PATH`. Claude Code's session variables are removed ([§13](#integration-with-claude-code)), so a command that runs `claude` behaves as it would in a terminal. `ProjectToolEnvironment` is the one place this is built.
-- **Remembered on this machine**, in `state.json`: the project a folder uses when it has several, each project's choices (Unreal's configuration and engine folder, keyed by its `.uproject`; Unity's code optimization and editor; Godot's executable), and which folders' shared actions are trusted. None of it syncs.
+- **Remembered on this machine**, in `state.json`: the project a folder uses when it has several, each project's choices (Unreal's configuration and engine folder, keyed by its `.uproject`; Unity's code optimization and editor; Godot's executable). None of it syncs.
 - **The note to Claude.** Each provider has its own note, added through `--append-system-prompt` when Settings says so, before Perforce's note when both apply.
 
 **Unreal Engine.**
@@ -1889,9 +1889,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - **Add an action…** opens a small dialog: name, command, working folder, **Run with output** or **Launch and forget**, and which file it goes in, **Just me (claudette.local.json)** (the default) or **Shared with the project (claudette.json)**.
   - **Tab settings…** has a **Project actions** section: a choice of the two files, and the chosen file's actions with **Add…**, **Edit…**, **Remove**, **Move up**, **Move down** and **Open file**. Entries for other OSes are listed, marked "only on …", and entries that can't be read are listed with their reason and can only be removed. Nothing is written until **Apply**.
   - Saving reads the file as JSON, replaces only `actions`, keeps every other key and each entry's other fields (such as `os`), and writes it indented. The dialog says so: saving rewrites the file, so comments in it are dropped. A file that isn't valid JSON is never overwritten; the editor says to fix it by hand first.
-- **Trust.** A cloned repository can put any command behind an innocent name, so shared commands never run silently.
-  - The first time one of a folder's `claudette.json` actions is run, a confirmation lists every command in that file (for this OS), with its folder and whether it's launched. It offers **Run** (this once), **Trust this project's actions**, and **Cancel**.
-  - Trust is remembered in `state.json` by folder and a SHA-256 hash of the file's actions (their names, commands, folders and modes). When any of them changes, Claudette asks again; comments and links don't count.
+- **No confirmation.** Actions from `claudette.json` run on a click, exactly like those from `claudette.local.json`: the user chose not to be asked first, although a project from someone else can put any command behind a friendly name. Nothing in either file runs on its own: only an explicit click runs an action, and hovering one shows its whole command first.
   - `claudette.local.json` is the user's own file, so its actions run without asking.
   - Nothing from these files runs except on an explicit click or the main action's shortcut: no automatic runs and no hooks.
 

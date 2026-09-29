@@ -494,34 +494,6 @@ public sealed partial class TabViewModel
     /// <summary>A note in the conversation, for Tab settings… when it can't save an action.</summary>
     internal void AddProjectNote(string text) => _conversation.AddNote(text, NoteKind.Error);
 
-    /// <summary>
-    /// A shared action (from <c>claudette.json</c>) runs only once the user trusts the folder's shared actions as they
-    /// are (DESIGN.md §18, "Trust"). Until then, a click asks first, listing every command the file has.
-    /// </summary>
-    private bool NeedsTrust(ProjectAction action) =>
-        _customActions.Any(c => c.Action.Id == action.Id && c.Custom.Scope == ProjectFileScope.Shared)
-        && !_services.ProjectTools.IsTrusted(Folder, _projectFile);
-
-    private void AskForTrust(ProjectAction action)
-    {
-        var file = _projectFile;
-        var commands = string.Join("\n", file.SharedActions.Select(a =>
-            $"• {a.Name}: {a.Command}{(string.IsNullOrWhiteSpace(a.WorkingFolder) ? "" : $"  (in {a.WorkingFolder})")}{(a.Mode == CustomActionMode.LaunchAndForget ? "  (launched)" : "")}"));
-        _shell.Confirm(
-            $"Run commands from {ProjectFile.SharedName}?",
-            $"{ProjectFile.SharedName} in {FolderName} came with the project. It runs these commands:\n{commands}\n\n"
-                + "A project from someone else can put any command behind a friendly name, so run them only if you trust where it came from. "
-                + "Claudette asks again if the commands change.",
-            "Run",
-            () => RunTrustedAsync(action),
-            "Trust this project's actions",
-            () =>
-            {
-                _services.ProjectTools.Trust(Folder, file);
-                return RunTrustedAsync(action);
-            });
-    }
-
     // ---- Running actions -------------------------------------------------------------------------------------------
 
     /// <summary>"Run the project's main action" (Ctrl/Cmd+Shift+E): Launch editor, for Unreal.</summary>
@@ -541,16 +513,8 @@ public sealed partial class TabViewModel
             _conversation.AddNote($"{action.Label}: {action.DisabledReason}", NoteKind.Warning);
             return;
         }
-        if (NeedsTrust(action))
-        {
-            AskForTrust(action);
-            return;
-        }
-        await RunTrustedAsync(action);
-    }
-
-    private async Task RunTrustedAsync(ProjectAction action)
-    {
+        // Shared actions from claudette.json run on a click like any other, without asking first: the user's choice
+        // (DESIGN.md §18, "Custom actions"). Hovering one shows its whole command.
         switch (action.Kind)
         {
             case ProjectActionKind.Launch when action.Process is { } spec:

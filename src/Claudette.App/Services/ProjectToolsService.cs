@@ -69,18 +69,6 @@ public sealed class ProjectToolsService(AppServices services, ISystemProcesses? 
         contents.Actions.Select(a => (a, a.ToAction(folder, OS, Shell))).ToArray();
 
     /// <summary>
-    /// Whether the user trusts the folder's shared actions as they are now (DESIGN.md §18, "Trust"). The local file's
-    /// actions are the user's own and never need it.
-    /// </summary>
-    public bool IsTrusted(string folder, ProjectFileContents contents) => State.IsTrusted(folder, ProjectFile.Hash(contents.SharedActions));
-
-    public void Trust(string folder, ProjectFileContents contents)
-    {
-        State.Trust(folder, ProjectFile.Hash(contents.SharedActions));
-        services.SaveState();
-    }
-
-    /// <summary>
     /// Starts a program that outlives Claudette, such as the editor. The returned process is dropped rather than
     /// disposed: disposing it would end it.
     /// </summary>

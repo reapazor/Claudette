@@ -109,7 +109,6 @@ public sealed class ProjectJobTests : IDisposable
         var folder = _temp.CreateFolder("game");
         state.ProjectTools.Set(Path.Combine(folder, "Game.uproject"), "configuration", "DebugGame");
         state.ProjectTools.ChooseProject(folder, Path.Combine(folder, "Game.uproject"));
-        state.ProjectTools.Trust(folder, "ABC");
         state.LinksCollapsed = true;
 
         var json = JsonFileStore<AppState>.Serialize(state);
@@ -117,8 +116,6 @@ public sealed class ProjectJobTests : IDisposable
 
         Assert.Equal("DebugGame", restored.ProjectTools.Get(Path.Combine(folder, "Game.uproject"), "configuration"));
         Assert.Equal(Path.Combine(folder, "Game.uproject"), restored.ProjectTools.ChosenProjectFor(folder + Path.DirectorySeparatorChar));
-        Assert.True(restored.ProjectTools.IsTrusted(folder, "ABC"));
-        Assert.False(restored.ProjectTools.IsTrusted(folder, "DEF"));
         Assert.True(restored.LinksCollapsed);
 
         restored.ProjectTools.Set(Path.Combine(folder, "Game.uproject"), "configuration", null);

@@ -79,8 +79,8 @@ public sealed class AppState
     public string? SkippedAppUpdate { get; set; }
 
     /// <summary>
-    /// The project each folder uses, each project's choices, and which folders' shared actions are trusted
-    /// (DESIGN.md §18, "Project tools"). Per machine: paths differ between machines.
+    /// The project each folder uses and each project's choices (DESIGN.md §18, "Project tools"). Per machine: paths
+    /// differ between machines.
     /// </summary>
     public ProjectToolState ProjectTools { get; set; } = new();
 

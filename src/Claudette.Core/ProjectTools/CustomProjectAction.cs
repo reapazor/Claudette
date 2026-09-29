@@ -13,7 +13,7 @@ public enum CustomActionMode
 /// <summary>Which of a folder's two project files something comes from (DESIGN.md §18, "claudette.json").</summary>
 public enum ProjectFileScope
 {
-    /// <summary><c>claudette.json</c>: committed with the project, so its commands need the user's trust to run.</summary>
+    /// <summary><c>claudette.json</c>: committed with the project and shared with everyone who works on it.</summary>
     Shared,
 
     /// <summary><c>claudette.local.json</c>: the user's own, usually gitignored.</summary>

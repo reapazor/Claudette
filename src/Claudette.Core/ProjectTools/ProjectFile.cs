@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -14,9 +12,6 @@ public sealed record ProjectFileContents(IReadOnlyList<CustomProjectAction> Acti
     public static ProjectFileContents Empty { get; } = new([], [], []);
 
     public bool IsEmpty => Actions.Count == 0 && Links.Count == 0 && Problems.Count == 0;
-
-    /// <summary>The shared file's actions for this OS: what trusting the project covers (DESIGN.md §18, "Trust").</summary>
-    public IReadOnlyList<CustomProjectAction> SharedActions => Actions.Where(a => a.Scope == ProjectFileScope.Shared).ToArray();
 }
 
 /// <summary>One entry of a file's <c>actions</c>, as the editor sees it: the JSON as written, and what it reads as.</summary>
@@ -182,16 +177,6 @@ public static class ProjectFile
         }
         json["mode"] = action.Mode == CustomActionMode.LaunchAndForget ? "launch" : "output";
         return json;
-    }
-
-    /// <summary>
-    /// Identifies what trusting a project's actions covers (DESIGN.md §18, "Trust"): the shared file's actions for this
-    /// OS, their names, commands, folders and modes. When any of them changes, the hash does.
-    /// </summary>
-    public static string Hash(IEnumerable<CustomProjectAction> actions)
-    {
-        var canonical = new JsonArray([.. actions.Select(a => (JsonNode)new JsonArray(a.Name, a.Command, a.WorkingFolder ?? "", a.Mode == CustomActionMode.LaunchAndForget ? "launch" : "output"))]);
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToJsonString())));
     }
 
     /// <summary>Does an <c>os</c> list include <paramref name="os"/>? No list means every OS.</summary>

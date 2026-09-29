@@ -15,21 +15,6 @@ public sealed class ProjectToolState
     /// <summary>Each project's choices: its editor configuration, a chosen engine folder.</summary>
     public List<ProjectMemoryEntry> Projects { get; set; } = [];
 
-    /// <summary>
-    /// Folders whose shared actions (their <c>claudette.json</c>) the user trusts, with the hash of the actions they
-    /// trusted: when the actions change, Claudette asks again (DESIGN.md §18, "Trust").
-    /// </summary>
-    public List<TrustedActions> TrustedActions { get; set; } = [];
-
-    public bool IsTrusted(string folder, string hash) =>
-        TrustedActions.Any(t => FolderHistory.SamePath(t.Folder, folder) && t.Hash == hash);
-
-    public void Trust(string folder, string hash)
-    {
-        TrustedActions.RemoveAll(t => FolderHistory.SamePath(t.Folder, folder));
-        TrustedActions.Add(new TrustedActions { Folder = FolderHistory.Normalize(folder), Hash = hash });
-    }
-
     public string? ChosenProjectFor(string folder) =>
         ChosenProjects.FirstOrDefault(c => FolderHistory.SamePath(c.Folder, folder))?.Project;
 
@@ -82,15 +67,6 @@ public sealed class ProjectToolState
 
     private static bool SameFile(string a, string b) =>
         string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), ToolOSExtensions.Current.PathComparison());
-}
-
-/// <summary>A folder whose <c>claudette.json</c> actions the user trusts, as they were then.</summary>
-public sealed class TrustedActions
-{
-    public string Folder { get; set; } = "";
-
-    /// <summary><see cref="ProjectFile.Hash"/> of the actions trusted.</summary>
-    public string Hash { get; set; } = "";
 }
 
 public sealed class ChosenProject

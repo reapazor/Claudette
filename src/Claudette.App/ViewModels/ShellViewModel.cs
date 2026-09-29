@@ -560,10 +560,6 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     internal void Confirm(string title, string message, string confirmText, Func<Task> onConfirm) =>
         Confirmation = new ConfirmationViewModel(title, message, confirmText, onConfirm, () => Confirmation = null);
 
-    /// <summary>A confirmation with a second choice besides the main one.</summary>
-    internal void Confirm(string title, string message, string confirmText, Func<Task> onConfirm, string secondaryText, Func<Task> onSecondary) =>
-        Confirmation = new ConfirmationViewModel(title, message, confirmText, onConfirm, () => Confirmation = null, secondaryText, onSecondary);
-
     [RelayCommand]
     private async Task CloseOtherTabsAsync(TabViewModel? keep)
     {
