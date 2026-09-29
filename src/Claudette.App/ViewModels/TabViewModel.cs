@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Claudette.App.Conversation;
 using Claudette.App.Services;
 using Claudette.Core.Development;
@@ -219,7 +220,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         TabStatus.Working => "Working",
         TabStatus.NeedsInput => "Needs your input",
         TabStatus.Unread => "Finished while in the background",
-        TabStatus.Error => IsFolderMissing ? "Its folder no longer exists" : "Claude Code stopped with an error",
+        TabStatus.Error => IsFolderMissing ? "Its folder no longer exists" : ErrorMessage ?? "Claude Code stopped with an error",
         TabStatus.Exited => "Not running",
         _ => "Idle",
     };
@@ -323,6 +324,18 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// when the tab is waiting on the user or has failed.
     /// </summary>
     public string RowDetail => Status is TabStatus.NeedsInput or TabStatus.Error ? StatusTip : ModelBadge;
+
+    /// <summary>What went wrong when the tab is in the Error status, shown on its row and info card (DESIGN.md §4).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusTip), nameof(RowDetail), nameof(InfoRows))]
+    public partial string? ErrorMessage { get; private set; }
+
+    /// <summary>The last line Claude Code wrote to standard error, or the exit code when it wrote nothing.</summary>
+    internal static string ExitErrorMessage(TransportExit exit)
+    {
+        var lastLine = exit.StandardErrorTail.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault();
+        return lastLine ?? $"Claude Code stopped unexpectedly (exit code {exit.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "unknown"})";
+    }
 
     public IReadOnlyList<string> EffortLevels => CurrentModelInfo?.SupportedEffortLevels ?? [];
 
@@ -527,10 +540,41 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _services.SaveState();
     }
 
+    /// <summary>Per-call usage from assistant messages, for live counts mid-turn and the context estimate (DESIGN.md §6).</summary>
+    private readonly CallUsage _callUsage = new();
+
+    /// <summary><c>get_context_usage</c> failed for this session, so the context indicator is estimated from each call.</summary>
+    private bool _contextUsageUnavailable;
+
+    /// <summary>A call finished mid-turn: the token count moves on before the result gives the turn's totals.</summary>
+    private void OnCallUsage()
+    {
+        TokensShort = TokenTotals.Short(State.Tokens.Total + _callUsage.TurnTokens);
+        if (_contextUsageUnavailable)
+        {
+            ShowEstimatedContext();
+        }
+    }
+
+    /// <summary>
+    /// The context indicator without <c>get_context_usage</c>: the main agent's latest call ÷ its model's context window
+    /// (DESIGN.md §6, "Per-tab context"). Unknown until a turn has reported the window.
+    /// </summary>
+    private void ShowEstimatedContext()
+    {
+        if (_callUsage.ContextPercentage is not { } percentage || _callUsage.ContextWindow is not { } window)
+        {
+            return;
+        }
+        ContextText = $"Context {percentage:0}%";
+        ContextDetail = $"about {_callUsage.ContextTokens:N0} of {window:N0} tokens, estimated from the last call";
+        IsContextHigh = percentage >= 80;
+    }
+
     private void RefreshTokens()
     {
         var totals = State.Tokens;
-        TokensShort = TokenTotals.Short(totals.Total);
+        TokensShort = TokenTotals.Short(totals.Total + _callUsage.TurnTokens);
         TokenRows.Clear();
         foreach (var (model, t) in totals.Models.OrderByDescending(m => m.Value.Total))
         {
@@ -813,6 +857,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
+        ErrorMessage = null;
         Status = TabStatus.Starting;
         var resume = State.SessionId;
         if (!_restoredTranscript)
@@ -865,6 +910,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
+            ErrorMessage = $"Couldn't start Claude Code: {ex.Message}";
             Status = TabStatus.Error;
             _conversation.AddNote($"Couldn't start Claude Code: {ex.Message}", NoteKind.Error);
             NotifyProcessError($"Couldn't start Claude Code: {ex.Message}");
@@ -1090,7 +1136,14 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     PermissionMode = started.Init.PermissionMode ?? PermissionMode;
                     _services.SaveState();
                     break;
-                case TextDelta or ThinkingDelta or AssistantMessageReceived or ToolResultsReceived:
+                case AssistantMessageReceived assistant:
+                    _checkIns.OutputSeen();
+                    if (_callUsage.Add(assistant.Message))
+                    {
+                        OnCallUsage();
+                    }
+                    break;
+                case TextDelta or ThinkingDelta or ToolResultsReceived:
                     _checkIns.OutputSeen();
                     break;
                 case PermissionRequested requested:
@@ -1117,6 +1170,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     _checkIns.TurnEnded();
                     State.SessionId = completed.Result.SessionId ?? State.SessionId;
                     State.Tokens.Add(completed.Result);
+                    _callUsage.TurnEnded(completed.Result);
                     _services.Usage?.OnTurnCompleted(Id, completed.Result);
                     if (State.SessionId is not null)
                     {
@@ -1135,6 +1189,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     }
                     break;
                 case ConversationReset:
+                    _callUsage.ContextReset();
                     TodoList.Clear();
                     State.AutoName = null;
                     _titleRequested = false;
@@ -1150,6 +1205,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     SetRunningVersion(null);
                     _checkIns.TurnEnded();
                     _pendingPermissions = 0;
+                    ErrorMessage = exited.Exit.ExitCode == 0 ? null : ExitErrorMessage(exited.Exit);
                     Status = exited.Exit.ExitCode == 0 ? TabStatus.Exited : TabStatus.Error;
                     OnPropertyChanged(nameof(CanRestart));
                     _services.Notifications.ClearTab(Id, NotificationKind.NeedsInput);
@@ -1204,6 +1260,15 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (Exception)
         {
+            // Not offered by this Claude Code, or it failed: estimate from the last call instead.
+            _services.Dispatcher.Post(() =>
+            {
+                if (ReferenceEquals(session, _session))
+                {
+                    _contextUsageUnavailable = true;
+                    ShowEstimatedContext();
+                }
+            });
             return;
         }
         _services.Dispatcher.Post(() =>
@@ -1212,6 +1277,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 return;
             }
+            _contextUsageUnavailable = false;
             ContextText = $"Context {usage.Percentage:0}%";
             var compacts = usage is { AutoCompactEnabled: true, AutoCompactThreshold: { } threshold } ? $" · auto-compacts at {threshold:N0}" : "";
             ContextDetail = $"{usage.TotalTokens:N0} of {usage.MaxTokens:N0} tokens{compacts}";

@@ -93,6 +93,29 @@ public class TabViewModelTests
     }
 
     [Fact]
+    public async Task Tokens_count_up_during_a_turn_and_the_context_is_estimated_without_get_context_usage()
+    {
+        await using var h = new TabTestHarness();
+        h.Transport.Answers["get_context_usage"] = _ => throw new InvalidOperationException("Unknown control request: get_context_usage");
+        var tab = await h.OpenTabAsync();
+        tab.ComposerText = "go";
+        await tab.SendCommand.ExecuteAsync(null);
+
+        h.Transport.Emit("""{"type":"assistant","message":{"id":"m1","model":"claude-opus-5-5","content":[{"type":"text","text":"a"}],"usage":{"input_tokens":3000,"output_tokens":100,"cache_read_input_tokens":46900}}}""");
+        h.Transport.Emit("""{"type":"assistant","message":{"id":"m1","model":"claude-opus-5-5","content":[{"type":"text","text":"b"}],"usage":{"input_tokens":3000,"output_tokens":100,"cache_read_input_tokens":46900}}}""");
+        await TabTestHarness.Eventually(() => tab.TokensShort == "50k tok", "the live token count");
+        // No context window known yet: nothing to estimate from.
+        Assert.Null(tab.ContextText);
+
+        h.Transport.Emit("""{"type":"result","subtype":"success","is_error":false,"session_id":"s1","modelUsage":{"claude-opus-5-5":{"inputTokens":49900,"outputTokens":100,"contextWindow":200000}}}""");
+
+        await TabTestHarness.Eventually(() => tab.ContextText == "Context 25%", "the estimated context");
+        Assert.Equal("50k tok", tab.TokensShort);
+        Assert.Equal("about 50,000 of 200,000 tokens, estimated from the last call", tab.ContextDetail);
+        Assert.False(tab.IsContextHigh);
+    }
+
+    [Fact]
     public async Task A_permission_prompt_marks_the_tab_as_needing_input_until_answered()
     {
         await using var h = new TabTestHarness();

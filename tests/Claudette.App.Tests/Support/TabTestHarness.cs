@@ -120,10 +120,10 @@ internal sealed class ScriptedTransport : IClaudeTransport
 
     public void Terminate() => Exit(-1);
 
-    public void Exit(int code)
+    public void Exit(int code, string standardError = "")
     {
         _output.Writer.TryComplete();
-        _completion.TrySetResult(new TransportExit(code, ""));
+        _completion.TrySetResult(new TransportExit(code, standardError));
     }
 
     public ValueTask DisposeAsync()
