@@ -86,6 +86,9 @@ public sealed class TabState
 
     /// <summary>Resume as a copy with a new session id ("Open a copy", DESIGN.md §9). Cleared once started.</summary>
     public bool ForkOnNextStart { get; set; }
+
+    /// <summary>The Perforce changelists Claude used in this session (DESIGN.md §18), so a restored tab shows them again.</summary>
+    public List<Perforce.TrackedChangelist> Changelists { get; set; } = [];
 }
 
 /// <summary>Per-tab settings that replace the defaults (DESIGN.md §14, "Per-tab overrides"). Null means "use the default".</summary>

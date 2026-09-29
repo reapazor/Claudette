@@ -35,6 +35,8 @@ public sealed class AppSettings
     public KeyboardSettings Keyboard { get; set; } = new();
 
     public AdvancedSettings Advanced { get; set; } = new();
+
+    public PerforceSettings Perforce { get; set; } = new();
 }
 
 /// <summary>
