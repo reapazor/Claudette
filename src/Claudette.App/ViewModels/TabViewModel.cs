@@ -1214,6 +1214,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         State.SessionStartedAt = null;
         State.TranscriptPath = null;
         State.ForkOnNextStart = false;
+        // The marks were for the old session's changes (DESIGN.md §8, "Reviewed").
+        State.ReviewedFiles.Clear();
         _services.SaveState();
         await EnsureStartedAsync();
     }
@@ -1735,6 +1737,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _services.Notifications.ClearTab(Id);
         StopPerforce();
         CloseProjectRuns(killProcesses);
+        StopReviewSync();
         ReleaseLease();
         await StopSessionAsync(killProcesses);
         CleanUpDiffFiles();

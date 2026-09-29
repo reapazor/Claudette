@@ -56,5 +56,11 @@ public sealed class SessionRecord
 
     public string? FirstPrompt { get; set; }
 
+    /// <summary>
+    /// The changed files marked as reviewed (DESIGN.md §8, "Reviewed"), relative to <see cref="Folder"/> with forward
+    /// slashes, so another machine finds them in its own copy of the folder. Null in records written before they were kept.
+    /// </summary>
+    public List<Diffs.ReviewedFile>? ReviewedFiles { get; set; }
+
     public string? ClaudeCodeVersion { get; set; }
 }

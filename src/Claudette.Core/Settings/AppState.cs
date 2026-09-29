@@ -156,6 +156,9 @@ public sealed class TabState
 
     /// <summary>The Perforce changelists Claude used in this session (DESIGN.md §18), so a restored tab shows them again.</summary>
     public List<Perforce.TrackedChangelist> Changelists { get; set; } = [];
+
+    /// <summary>The changed files the user marked as reviewed (DESIGN.md §8, "Reviewed"), by full path.</summary>
+    public List<Diffs.ReviewedFile> ReviewedFiles { get; set; } = [];
 }
 
 /// <summary>Per-tab settings that replace the defaults (DESIGN.md §14, "Per-tab overrides"). Null means "use the default".</summary>

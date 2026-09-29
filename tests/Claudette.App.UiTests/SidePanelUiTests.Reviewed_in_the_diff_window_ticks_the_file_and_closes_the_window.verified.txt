@@ -1,0 +1,8 @@
+﻿"auth.cs"
+"+1 −0"
+[toggle] Side by side
+[toggle] Whole file
+[button] Open in editor
+[button] …
+[button] Reviewed
+"src/auth.cs · compared with before Claude's first change in this session"

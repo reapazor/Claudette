@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 using Claudette.Core.Development;
+using Claudette.Core.Diffs;
 using Claudette.Core.Library;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
@@ -272,6 +273,50 @@ public class LibraryAndHistoryTests
         }, "the library copy");
         var record = h.Services.Library.Library.List().Single(e => e.Record.SessionId == "s1").Record;
         Assert.Equal("high", record.Overrides?.Effort);
+    }
+
+    [Fact]
+    public async Task A_library_session_opens_with_its_reviewed_files_in_this_machines_folder()
+    {
+        await using var h = new TabTestHarness();
+        await SaveToLibraryAsync(h, "lib-5", "DESKTOP-01", reviewedFiles: [new ReviewedFile { Path = "src/auth.cs", Change = "e1" }]);
+        h.Shell.OpenHistoryCommand.Execute(null);
+        var history = h.Shell.History!;
+        await TabTestHarness.Eventually(() => !history.IsLoading, "History to load");
+
+        await history.OpenCommand.ExecuteAsync(history.Groups.SelectMany(g => g.Entries).Single());
+
+        await TabTestHarness.Eventually(() => h.Factory.Launches.Count == 1, "the resume");
+        Assert.Equal([(Path.Combine(h.WorkFolder, "src", "auth.cs"), "e1")], h.Shell.SelectedTab!.State.ReviewedFiles.Select(m => (m.Path, m.Change)));
+    }
+
+    [Fact]
+    public async Task Ticking_a_file_in_a_tab_that_syncs_updates_its_record_without_waiting_for_a_turn()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        h.WriteTranscript("s1", UserLine("s1", "hello", h.WorkFolder));
+        h.Transport.EmitTurn();
+        await TabTestHarness.Eventually(() => tab.State.Tokens.Total == 120, "the turn to finish");
+        tab.SetSyncToLibrary(true);
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(TimeSpan.FromSeconds(1));
+            return h.Services.Library.CheckLease("s1") is LeaseStatus.Mine;
+        }, "the first copy");
+        Assert.Empty(Record().ReviewedFiles ?? []);
+        var path = Path.Combine(h.WorkFolder, "src", "auth.cs");
+
+        tab.ToggleFileReviewedCommand.Execute(new ChangedFileRow { Path = path, DisplayPath = "src/auth.cs", Status = "M", StatusText = "Modified", FromGit = true });
+
+        // Relative to the folder, which has another path on another machine.
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(TimeSpan.FromSeconds(1));
+            return Record().ReviewedFiles is [{ Path: "src/auth.cs", Change: null }];
+        }, "the record");
+
+        SessionRecord Record() => h.Services.Library.Library.List().Single(e => e.Record.SessionId == "s1").Record;
     }
 
     // ---- Syncing is per tab, and opt-in (DESIGN.md §9, "Session library") -------------------------------------------
@@ -645,7 +690,8 @@ public class LibraryAndHistoryTests
             new JsonObject { ["machine"] = machine, ["owner"] = "other", ["updatedAt"] = h.Time.GetUtcNow().ToString("O") }.ToJsonString(),
             TestContext.Current.CancellationToken);
 
-    private static async Task SaveToLibraryAsync(TabTestHarness h, string sessionId, string machine, DateTimeOffset? lastUsed = null, TabOverrides? overrides = null)
+    private static async Task SaveToLibraryAsync(TabTestHarness h, string sessionId, string machine, DateTimeOffset? lastUsed = null, TabOverrides? overrides = null,
+        List<ReviewedFile>? reviewedFiles = null)
     {
         var source = Path.Combine(h.Root, $"{sessionId}.jsonl");
         await File.WriteAllLinesAsync(source, [UserLine(sessionId, "Add the export button", h.WorkFolder)]);
@@ -658,6 +704,7 @@ public class LibraryAndHistoryTests
             Folder = h.WorkFolder,
             Tokens = new TokenTotals(),
             Overrides = overrides,
+            ReviewedFiles = reviewedFiles,
         };
         await h.Services.Library.Library.SaveAsync(record, source, subagentsDirectory: null);
     }

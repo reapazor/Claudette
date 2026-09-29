@@ -34,6 +34,7 @@ public sealed record SideBySideDiffRow(DiffCell? Left, DiffCell? Right, bool IsH
 /// False when there's nothing to compare with: what the file held before Claude's first change isn't known (DESIGN.md
 /// §8, "Before content"). The view shows the whole file as it is now, with nothing marked as changed.
 /// </param>
+/// <param name="Review">Marking the file as reviewed from the view, or null when it can't be.</param>
 public sealed record DiffSource(
     string Path,
     string DisplayPath,
@@ -43,7 +44,14 @@ public sealed record DiffSource(
     Func<Task> OpenInEditor,
     Func<Task> Reveal,
     Func<Task> CopyPath,
-    bool BeforeKnown = true);
+    bool BeforeKnown = true,
+    DiffReview? Review = null);
+
+/// <summary>The diff view's <b>Reviewed</b> button (DESIGN.md §8, "Reviewed"). Called on the UI thread.</summary>
+/// <param name="LatestChange">The id of Claude's latest change to the file, or null when it hasn't changed it.</param>
+/// <param name="IsReviewed">Whether the file is marked as reviewed now.</param>
+/// <param name="MarkReviewed">Marks the file as reviewed as of the given change: the one the view showed.</param>
+public sealed record DiffReview(Func<string?> LatestChange, Func<bool> IsReviewed, Action<string?> MarkReviewed);
 
 /// <summary>
 /// The built-in diff view (DESIGN.md §8): the file before Claude's first change (or at HEAD) against the file now,
@@ -54,6 +62,8 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
     private readonly DiffSource _source;
     private readonly bool _dark;
     private string? _after;
+    /// <summary>Claude's latest change to the file when it was read: what <b>Reviewed</b> marks.</summary>
+    private string? _shownChange;
     private IReadOnlyList<IReadOnlyList<ColoredRun>>? _beforeColors;
     private IReadOnlyList<IReadOnlyList<ColoredRun>>? _afterColors;
 
@@ -72,6 +82,15 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
     public string BeforeLabel => _source.BeforeLabel;
 
     public bool CanOpenInDiffTool => _source.OpenInDiffTool is not null;
+
+    public bool CanMarkReviewed => _source.Review is not null;
+
+    /// <summary>The file is marked as reviewed: the <b>Reviewed</b> button shows a check.</summary>
+    [ObservableProperty]
+    public partial bool IsReviewed { get; private set; }
+
+    /// <summary>Asks the window to close, after <b>Reviewed</b>.</summary>
+    public event Action? CloseRequested;
 
     [ObservableProperty]
     public partial bool IsLoading { get; set; } = true;
@@ -117,9 +136,28 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
     [RelayCommand]
     private Task RefreshAsync() => LoadAsync();
 
+    /// <summary>
+    /// <b>Reviewed</b>: marks the file as reviewed and closes the view (DESIGN.md §8, "Reviewed"). It marks the change the
+    /// view showed, so a change Claude made since leaves the file unreviewed.
+    /// </summary>
+    [RelayCommand]
+    private void MarkReviewed()
+    {
+        if (_source.Review is not { } review)
+        {
+            return;
+        }
+        review.MarkReviewed(_shownChange);
+        IsReviewed = review.IsReviewed();
+        CloseRequested?.Invoke();
+    }
+
     private async Task LoadAsync()
     {
         IsLoading = true;
+        // Before the file is read, so a change Claude makes meanwhile isn't counted as seen.
+        _shownChange = _source.Review?.LatestChange();
+        IsReviewed = _source.Review?.IsReviewed() ?? false;
         var before = _source.Before;
         var path = _source.Path;
         var dark = _dark;

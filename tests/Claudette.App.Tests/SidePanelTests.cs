@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 using Claudette.Core.Diffs;
+using Claudette.Core.Processes;
 using Claudette.Core.Settings;
 using Claudette.Platform.Processes;
 
@@ -179,6 +180,209 @@ public class SidePanelTests
         Assert.Equal("", view.Stats);
         Assert.Equal(["one", "2"], view.InlineRows.Select(r => r.Text));
         Assert.All(view.InlineRows, r => Assert.Equal(Core.Diffs.DiffOp.Context, r.Op));
+    }
+
+    // ---- Reviewed (DESIGN.md §8) ---------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task A_ticked_file_stays_reviewed_until_Claude_changes_it_again()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        var path = Path.Combine(h.WorkFolder, "auth.cs");
+        await File.WriteAllTextAsync(path, "b\n", TestContext.Current.CancellationToken);
+        EmitEdit(h, "e1", path);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the changed file");
+
+        tab.ToggleFileReviewedCommand.Execute(tab.ChangedFiles[0]);
+
+        Assert.True(tab.ChangedFiles[0].IsReviewed);
+        Assert.Equal("1 file changed · 1 reviewed", tab.ChangedFilesSummary);
+        Assert.Equal([(path, "e1")], tab.State.ReviewedFiles.Select(m => (m.Path, m.Change)));
+
+        // Your own edits don't count.
+        await File.WriteAllTextAsync(path, "b\nmine\n", TestContext.Current.CancellationToken);
+        await tab.RefreshChangedFilesCommand.ExecuteAsync(null);
+        Assert.True(tab.ChangedFiles[0].IsReviewed);
+
+        EmitEdit(h, "e2", path);
+
+        await TabTestHarness.Eventually(() => tab.ChangedFiles is [{ LatestChange: "e2" }], "Claude's next change");
+        Assert.False(tab.ChangedFiles[0].IsReviewed);
+        Assert.Equal("1 file changed", tab.ChangedFilesSummary);
+        Assert.Empty(tab.State.ReviewedFiles);
+    }
+
+    [Fact]
+    public async Task Unticking_a_file_clears_its_mark()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        var path = Path.Combine(h.WorkFolder, "auth.cs");
+        await File.WriteAllTextAsync(path, "b\n", TestContext.Current.CancellationToken);
+        EmitEdit(h, "e1", path);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the changed file");
+        var row = tab.ChangedFiles[0];
+
+        tab.ToggleFileReviewedCommand.Execute(row);
+        tab.ToggleFileReviewedCommand.Execute(row);
+
+        Assert.False(row.IsReviewed);
+        Assert.Equal("1 file changed", tab.ChangedFilesSummary);
+        Assert.Empty(tab.State.ReviewedFiles);
+    }
+
+    [Fact]
+    public async Task Reviewed_in_the_diff_view_ticks_the_file_and_closes_the_view()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        var path = Path.Combine(h.WorkFolder, "auth.cs");
+        await File.WriteAllTextAsync(path, "b\n", TestContext.Current.CancellationToken);
+        EmitEdit(h, "e1", path);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the changed file");
+        var view = await OpenDiffAsync(tab, tab.ChangedFiles[0]);
+        Assert.True(view.CanMarkReviewed);
+        Assert.False(view.IsReviewed);
+        var closed = false;
+        view.CloseRequested += () => closed = true;
+
+        view.MarkReviewedCommand.Execute(null);
+
+        Assert.True(closed);
+        Assert.True(view.IsReviewed);
+        Assert.True(tab.ChangedFiles[0].IsReviewed);
+        Assert.Equal("1 file changed · 1 reviewed", tab.ChangedFilesSummary);
+        // Opened again, it shows the file is reviewed.
+        Assert.True((await OpenDiffAsync(tab, tab.ChangedFiles[0])).IsReviewed);
+    }
+
+    [Fact]
+    public async Task Reviewed_marks_what_the_diff_view_showed_so_a_change_since_leaves_the_file_unreviewed()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        var path = Path.Combine(h.WorkFolder, "auth.cs");
+        await File.WriteAllTextAsync(path, "b\n", TestContext.Current.CancellationToken);
+        EmitEdit(h, "e1", path);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the changed file");
+        var view = await OpenDiffAsync(tab, tab.ChangedFiles[0]);
+        var closed = false;
+        view.CloseRequested += () => closed = true;
+
+        EmitEdit(h, "e2", path);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles is [{ LatestChange: "e2" }], "Claude's next change");
+        view.MarkReviewedCommand.Execute(null);
+
+        Assert.True(closed);
+        Assert.False(view.IsReviewed);
+        Assert.False(tab.ChangedFiles[0].IsReviewed);
+
+        // Opened again, the view shows Claude's latest change, and marks that.
+        (await OpenDiffAsync(tab, tab.ChangedFiles[0])).MarkReviewedCommand.Execute(null);
+        Assert.True(tab.ChangedFiles[0].IsReviewed);
+    }
+
+    [Fact]
+    public async Task A_restored_tab_keeps_its_reviewed_files()
+    {
+        await using var h = new TabTestHarness();
+        var (reviewed, changedSince) = (Path.Combine(h.WorkFolder, "a.cs"), Path.Combine(h.WorkFolder, "b.cs"));
+        await File.WriteAllTextAsync(reviewed, "b\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(changedSince, "b\n", TestContext.Current.CancellationToken);
+        h.WriteTranscript("s1", [.. TranscriptEdit("e1", reviewed), .. TranscriptEdit("e2", changedSince), .. TranscriptEdit("e3", changedSince)]);
+        h.Services.State.Tabs =
+        [
+            new TabState
+            {
+                Folder = h.WorkFolder,
+                IsPinned = true,
+                SessionId = "s1",
+                ReviewedFiles = [new ReviewedFile { Path = reviewed, Change = "e1" }, new ReviewedFile { Path = changedSince, Change = "e2" }],
+            },
+        ];
+
+        h.Shell.Restore(null);
+        var tab = h.Shell.AllTabs.Single();
+
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle && tab.ChangedFiles is [_, { LatestChange: "e3" }], "the changed files");
+        Assert.Equal([true, false], tab.ChangedFiles.Select(r => r.IsReviewed));
+        Assert.Equal("2 files changed · 1 reviewed", tab.ChangedFilesSummary);
+    }
+
+    [Fact]
+    public async Task The_working_tree_view_shares_the_marks()
+    {
+        Assert.SkipWhen(FileProbe.Instance.FindOnPath(OperatingSystem.IsWindows() ? "git.exe" : "git") is null, "git isn't on PATH.");
+        await using var h = new TabTestHarness();
+        var init = await ProcessRunner.RunAsync(new ProcessLauncher(), new ProcessStartSpec("git", ["init", "-q"]) { WorkingDirectory = h.WorkFolder },
+            TimeSpan.FromSeconds(30), TimeProvider.System, TestContext.Current.CancellationToken);
+        Assert.Equal(0, init.ExitCode);
+        var tab = await h.OpenTabAsync();
+        var (claudes, yours) = (Path.Combine(h.WorkFolder, "a.cs"), Path.Combine(h.WorkFolder, "notes.md"));
+        await File.WriteAllTextAsync(claudes, "b\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(yours, "mine\n", TestContext.Current.CancellationToken);
+        EmitEdit(h, "e1", claudes);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the changed file");
+        tab.ToggleFileReviewedCommand.Execute(tab.ChangedFiles[0]);
+
+        tab.ShowGitChanges = true;
+
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 2, "the working tree");
+        Assert.Equal([("a.cs", true), ("notes.md", false)], tab.ChangedFiles.Select(r => (r.FileName, r.IsReviewed)).OrderBy(r => r.FileName));
+
+        // A file only you changed stays reviewed until Claude changes it.
+        tab.ToggleFileReviewedCommand.Execute(tab.ChangedFiles.Single(r => r.FileName == "notes.md"));
+        Assert.Equal("2 files changed · 2 reviewed", tab.ChangedFilesSummary);
+        EmitEdit(h, "e2", yours);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.SingleOrDefault(r => r.FileName == "notes.md") is { LatestChange: "e2", IsReviewed: false }, "Claude's change");
+        Assert.True(tab.ChangedFiles.Single(r => r.FileName == "a.cs").IsReviewed);
+    }
+
+    /// <summary>A successful Edit of <paramref name="path"/>, live.</summary>
+    private static void EmitEdit(TabTestHarness h, string id, string path)
+    {
+        h.Transport.Emit(new JsonObject
+        {
+            ["type"] = "assistant",
+            ["message"] = new JsonObject { ["content"] = new JsonArray(EditUse(id, path)) },
+        });
+        h.Transport.Emit(new JsonObject
+        {
+            ["type"] = "user",
+            ["message"] = new JsonObject { ["content"] = new JsonArray(new JsonObject { ["type"] = "tool_result", ["tool_use_id"] = id, ["content"] = "The file has been updated." }) },
+            ["tool_use_result"] = EditResult(path),
+        });
+    }
+
+    /// <summary>A successful Edit of <paramref name="path"/>, as a transcript has it.</summary>
+    private static string[] TranscriptEdit(string id, string path) =>
+    [
+        Wire.Entry("assistant", "2026-09-28T11:00:00Z", Wire.Message(EditUse(id, path))),
+        Wire.Entry("user", "2026-09-28T11:00:01Z", Wire.ResultMessage(id, "The file has been updated."), EditResult(path)),
+    ];
+
+    private static JsonObject EditUse(string id, string path) => new()
+    {
+        ["type"] = "tool_use",
+        ["id"] = id,
+        ["name"] = "Edit",
+        ["input"] = new JsonObject { ["file_path"] = path, ["old_string"] = "a", ["new_string"] = "b" },
+    };
+
+    private static JsonObject EditResult(string path) => new() { ["filePath"] = path, ["oldString"] = "a", ["newString"] = "b", ["originalFile"] = "a\n" };
+
+    /// <summary>What selecting the row opens: the built-in diff view, loaded.</summary>
+    private static async Task<Diffs.DiffWindowViewModel> OpenDiffAsync(TabViewModel tab, ChangedFileRow row)
+    {
+        Diffs.DiffSource? requested = null;
+        void OnRequested(Diffs.DiffSource source) => requested = source;
+        tab.DiffRequested += OnRequested;
+        await tab.OpenFileDiffCommand.ExecuteAsync(row);
+        tab.DiffRequested -= OnRequested;
+        var view = new Diffs.DiffWindowViewModel(requested!, dark: false);
+        await TabTestHarness.Eventually(() => !view.IsLoading, "the diff");
+        return view;
     }
 
     [Fact]
