@@ -134,9 +134,9 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
 ```
 
 1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. A chevron at its right draws it taller, with charts ([Detailed header](#detailed-header)). See [§6](#6-token-burn-awareness).
-2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder. **New tab** is at its top; **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
+2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder. **New tab** is at its top; the selected tab's **Links** ([§18](#project-tools)), **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
 3. **Conversation.** The selected tab's conversation. See [§5](#5-conversation-view).
-4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), and optionally its running processes ([§4](#process-monitor)).
+4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), its project's tools and their output when it has any ([§18](#project-tools)), and optionally its running processes ([§4](#process-monitor)).
 5. **Composer.** Where you type to the selected tab, plus the Stop button and per-tab controls.
 
 ### Visual style
@@ -187,7 +187,7 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
   - The full folder path and git branch.
   - Model and effort.
   - When the session started (for a resumed session, its transcript's first entry; saved with the tab), tokens used and context %.
-  - Later features add rows here: the Perforce login and changelist ([§18](#perforce-ticket-handling)), for example.
+  - Later features add rows here: the Perforce login and changelist ([§18](#perforce-ticket-handling)), and the **Project** the tab's folder holds and whether Claude was told about it ([§18](#project-tools)), for example.
   - **Agents**, while the tab has subagents: how many are running or waiting on you, or how they ended ([§18](#agent-map)).
   - The same card opens from an **ⓘ** button in the composer bar, for the selected tab.
 - **Token stats per tab.** Each tab keeps a running count of the tokens it has used:
@@ -225,13 +225,14 @@ The tabs are listed in a sidebar on the left of the window, rather than a strip 
     - Its tip is the composer bar's context text and detail, for example *"Context 75% (150,000 of 200,000 tokens · auto-compacts at 160,000)"*.
     - It's hidden until the tab has context data, so a tab that hasn't started has none. **Show context on tab rows** (Settings → Appearance, on by default) turns it off. The rail doesn't show it.
   - The close button shows on hover and on the selected tab. Hovering the row shows the tab info card; double-clicking renames it.
+- **A tab's menu** (right-click, in the full sidebar and the rail): Rename, Reset name, Pin, **Sync to other machines**, **Tab settings…**, the project's actions in a submenu named after the project (or **Add an action…** for a folder with none yet, [§18](#project-tools)), **Move up** and **Move down**, and Close.
 - **Top:** **New tab**, which opens the picker ([Opening a tab](#opening-a-tab)), and the button that collapses the sidebar.
-- **Foot:** **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), the Claudette update badge when there's a new release ([§2](#updating-claudette)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
+- **Foot:** the selected tab's **Links**, from its folder's `claudette.json`, when it has any ([§18](#project-tools)), **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), the Claudette update badge when there's a new release ([§2](#updating-claudette)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
 - **Resizing.** Drag the sidebar's edge to make it wider or narrower (180 to 420 pixels; 248 by default). Double-click the edge for the default width. The width is remembered.
 - **Collapsing.** The collapse button, or `Ctrl/Cmd+B`, shrinks the sidebar to a rail:
   - The rail shows each group's color, then a square per tab with the first letter of its name and a small status icon. Hovering a square shows the tab info card.
   - A collapsed group shows only its color and its most urgent status.
-  - New tab, History, the update badge and Settings stay as icons.
+  - New tab, Links, History, the update badge and Settings stay as icons.
   - Whether the sidebar is collapsed is remembered.
 - **Narrow windows.** Below 900 pixels wide the sidebar collapses to the rail by itself, and expands again when the window is widened. Expanding it by hand in a narrow window lasts until the window is widened, when the remembered choice applies again; neither changes that choice.
 
@@ -277,12 +278,13 @@ Using the picker:
 An optional view of the processes each tab has started, such as test runs, dev servers, builds and MCP servers, with their CPU and memory use. It's off by default and turned on in Settings → Processes. One tab can turn it on or off for itself in its **Tab settings…** ([§14](#per-tab-overrides)). Each tab shows its own processes on the Processes page of its side panel.
 
 - **Summary.** When it's on, the composer bar shows a compact summary for the tab, for example `3 procs · 42% CPU · 1.1 GB`, except while the side panel is open. The count leaves out `claude` itself. The tab itself gets a small activity icon while any child process is using noticeable CPU (5% or more).
-- **Processes panel.** A page of the side panel, next to Changed files and Agents. It shows a tree of the tab's processes, starting from its `claude` process, with these columns:
+- **Processes panel.** A page of the side panel, next to Changed files, Agents and Project. It shows a tree of the tab's processes, starting from its `claude` process, with these columns:
   - Name and PID.
   - CPU %, following the platform's convention: on Windows, 100% means all cores, as in Task Manager; on macOS, 100% means one core, as in Activity Monitor.
   - Memory (working set / resident size).
   - Running time.
   - **Command line.** Can be hidden in Settings, because command lines sometimes contain tokens or passwords. It's truncated in the table; hover for the full text, or use **Copy**.
+- **Project jobs.** A project action's job, such as a build ([§18](#project-tools)), is tracked from its own process and listed with the tab's, as a top-level process beside `claude`. **Stop** on one of its processes stops it within the job's tree.
 - **Link to the conversation.** When a process belongs to a Bash tool call or a background task, its row shows which one, and clicking it scrolls to that card in the conversation. Claude Code's `task_started` events give the task ID and tool call ID, and Claudette matches them to the new process.
 - **Actions.**
   - **Stop.** For a Claude Code background task, stop it through Claude Code (`stopTask`) so Claude knows it ended. Otherwise, end the process, first gracefully and then forcefully. Either way, confirm first.
@@ -345,7 +347,7 @@ Scrolling follows new output unless the user has scrolled up; a "Jump to latest"
 - You can type and send while Claude is working; the message is queued and delivered to the session.
 - `/` opens slash-command autocomplete (built-in plus the project's custom commands), and `@` file autocomplete for the tab's working folder. See [Autocomplete](#autocomplete).
 - Drag and drop, paste, or pick with the attach button images and files to attach them. See [Attachments](#attachments).
-- Per-tab controls in the bar above the composer: working folder (read-only), model, effort level, permission mode, context window usage %, tokens used.
+- Per-tab controls in the bar above the composer: working folder (read-only), model, effort level, permission mode, the project chip when the tab has project tools (`◆ NightOwl · UE 5.4 ▾`, [§18](#project-tools)), context window usage %, tokens used.
 
 ### Working line
 
@@ -847,6 +849,7 @@ Native OS notifications (Windows toast, macOS User Notifications). Each type can
 - Usage alerts (see [§6](#6-token-burn-awareness)).
 - Claude Code needs you to sign in (see [§11](#11-sign-in)).
 - A Claude Code update is ready (see [§12](#12-claude-code-updates)).
+- A project action finishes: a build or other long job ended or failed (see [§18](#project-tools)).
 
 Clicking a notification brings Claudette to the front and goes to the relevant tab or screen. Notifications are skipped when Claudette is focused and that tab is already selected. The Dock (macOS) and taskbar (Windows) show a badge with the number of tabs needing input.
 
@@ -854,12 +857,14 @@ Clicking a notification brings Claudette to the front and goes to the relevant t
   - **Finished:** the first line of Claude's reply. Only a turn that ends normally counts; one you stopped, or that ended with an error, doesn't.
   - **Needs input:** what's waiting, such as *"Allow this command? npm test"*, *"Claude has a question: Which database?"* or *"Claude has a plan for you to review."* Perforce uses it too ([§18](#perforce-ticket-handling)): *"Perforce needs your password to log in as matt @ ssl:perforce:1666."*, or *"Perforce needs you to log in: run p4 login in a terminal, or log in with P4V."*
   - **Errors:** *"Claude Code stopped unexpectedly (exit code 3)."*, or why it couldn't start.
+  - **Project actions:** *"Build editor failed (exit code 6)."* Only while Claudette isn't in front, whichever tab is selected, since the chip already shows the job; a job the user stopped doesn't notify.
   - **Check-ins:** Settings → Check-ins → **Notify me when a check-in is sent** (off by default), which Tab settings can override ([§5](#check-ins-on-long-turns)).
 - **Skipping.** App-wide notifications (usage alerts, sign-in, updates) are skipped while Claudette is focused, because the header, the sign-in banner or the sign-in screen already shows them. Usage alerts also keep their line under the header.
 - **One per subject.** A newer notification replaces an older one of the same kind for the same tab. A tab's notifications are taken away once you look at it; a waiting-prompt notification also goes once the prompt is answered. An update is announced once per version; the version last announced is saved with this machine's state, so a restart doesn't announce it again.
 - **Clicking.**
   - A tab notification selects the tab, expanding its group if it's collapsed.
   - A usage alert opens the Usage panel, an update opens the update dialog, and the sign-in notification opens the sign-in dialog ([§11](#signing-in)).
+  - A project action's notification selects its tab and opens its Project page.
 - **Badge.** Settings → Notifications → **Show the number of tabs needing input on the Dock or taskbar icon**. On Windows it's an overlay icon on the taskbar button, drawn by Claudette.
 - **How each OS does it** (the code is in `Claudette.Platform/Notifications`):
   - **Windows:** WinRT toasts (`ToastNotificationManager`), called through source-generated COM interop so the app stays a plain `net10.0` build. A click raises the toast's `Activated` event in the running Claudette. An MSIX install has package identity. Run unpackaged, Claudette sets its AppUserModelID (`reapazor.Claudette`) and registers it under `HKCU\Software\Classes\AppUserModelId`, as the Windows App SDK does. The badge uses `ITaskbarList3::SetOverlayIcon`.
@@ -1166,7 +1171,7 @@ An app started from the Dock, Finder or a desktop launcher gets a minimal enviro
   - Claude Code's session variables are never taken from the shell. `ClaudeEnvironment` strips them for `claude` anyway.
   - The shell's bookkeeping about itself (`_`, `PWD`, `OLDPWD`, `SHLVL`) is left out.
   - For `claude`, `ClaudeEnvironment` then removes the session variables and applies the changes for that launch on top.
-- **What gets it.** Every `claude` (tabs, the utility session, `--version`, `doctor`, `update` and `auth`), and the other programs Claudette runs for the user: git, `p4` and P4V, diff tools and Homebrew.
+- **What gets it.** Every `claude` (tabs, the utility session, `--version`, `doctor`, `update` and `auth`), and the other programs Claudette runs for the user: git, `p4` and P4V, diff tools, Homebrew, and project tools' builds, editors and actions ([§18](#project-tools)).
   - `claude` and the diff tool presets are looked for on the login shell's `PATH`. A bare program name (`git`, `p4`, a custom diff command's program) is found on it too, since .NET would search Claudette's own.
   - That way `p4` sees the same `P4CONFIG` and `P4PORT` as Claude's own `p4` commands ([§18](#perforce-ticket-handling)), and git finds Git LFS and credential helpers installed with Homebrew.
   - Claudette's own helpers keep Claudette's environment: `ps`, `notify-send`, `secret-tool`, the update installers and restarting Claudette. They're at fixed paths and don't depend on the user's setup.
@@ -1199,14 +1204,15 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Quick suffixes | The list of suffixes: label, text and optional shortcut. Add, edit, reorder, delete. See [§5](#quick-suffixes). |
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
 | Diff tool | Built-in, a preset or a custom command, with **Test**. See [§8](#external-diff-tool). |
-| Notifications | On/off for each type in [§10](#10-notifications). Dock/taskbar badge on/off. |
+| Project tools | Unreal's default editor configuration (Development or DebugGame). Project files for Visual Studio, VS Code or Xcode (the OS's own by default). Tell Claude about Unreal projects (on by default). Unity's default code optimization (Release or Debug), and Tell Claude about Unity projects (on by default). The Godot executable (**Browse…**, **Detect**), and Tell Claude about Godot projects (on by default). Open solutions with the OS's app, Rider, Visual Studio, VS Code or another program (**Browse…**). See [§18](#project-tools). |
+| Notifications | On/off for each type in [§10](#10-notifications), including **A project action finishes**. Dock/taskbar badge on/off. |
 | Keyboard | List of shortcuts, each one rebindable ([below](#keyboard-shortcuts)). |
 | Perforce | Off by default. Keep Perforce logins fresh. Password source. Renew-before time. Tickets for all hosts. Show changelist on tabs. The stored password (**Save** / **Forget**). Per-folder server and user. See [§18](#perforce-ticket-handling). |
 | Advanced | Protocol logging and **Open log folder**. **Diagnostics** page ([§16](#staying-tolerant-at-runtime)). Extra command-line arguments passed to `claude`. Minimum supported Claude Code version (read-only). |
 
 ### Keyboard shortcuts
 
-Settings → Keyboard lists every shortcut Claudette handles, with its default from the section that describes it: new tab, close tab, next and previous tab, go to tab 1–9, History, Settings, collapsing the sidebar, Stop, the quick suffixes menu, and allowing or denying the waiting prompt.
+Settings → Keyboard lists every shortcut Claudette handles, with its default from the section that describes it: new tab, close tab, next and previous tab, go to tab 1–9, History, Settings, collapsing the sidebar, Stop, the quick suffixes menu, allowing or denying the waiting prompt, and running the project's main action (`Ctrl/Cmd+Shift+E`, [§18](#project-tools)).
 
 - **Rebinding.** Click a shortcut and press the new keys; Esc cancels. **Reset** puts one back, **Remove** clears it, and **Reset to defaults** restores them all.
 - **One key for both OSes.** Shortcuts are stored with a *Primary* modifier: Ctrl on Windows and Linux, Cmd on macOS. That way a shortcut synced between a Windows machine and a Mac means the same thing on both. Ctrl is its own modifier only on macOS; elsewhere it is Primary.
@@ -1229,7 +1235,7 @@ The foot of the Settings sidebar shows which Claudette this is, on every page: "
 
 ### Per-tab overrides
 
-Some settings can be changed for a single tab from the tab's right-click menu, under **Tab settings…**: model, effort level, permission mode, the process monitor ([§4](#process-monitor)), and the check-in settings. A tab with overrides shows a small dot next to its settings entry, and **Use defaults** clears them. Overrides are saved with the tab.
+Some settings can be changed for a single tab from the tab's right-click menu, under **Tab settings…**: model, effort level, permission mode, the process monitor ([§4](#process-monitor)), and the check-in settings. **Tab settings…** also edits the folder's custom project actions in its `claudette.json` files ([§18](#project-tools)); they belong to the folder, not the tab, and **Use defaults** leaves them alone. A tab with overrides shows a small dot next to its settings entry, and **Use defaults** clears them. Overrides are saved with the tab.
 
 **Tab settings…** also has **Sync to other machines** ([§9](#session-library-sync-across-machines)), the same switch as the tab menu's. It isn't an override: the new-tab setting only applies when a tab opens, **Use defaults** leaves it as it is, and it doesn't count toward the dot.
 
@@ -1244,7 +1250,7 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 **Sync settings through the session library** (Settings → Sessions, off by default) keeps Claudette's settings the same on every machine that uses the same library folder ([§9](#session-library-sync-across-machines)).
 
 - **What syncs:** appearance, new-tab defaults, usage thresholds, check-ins, quick suffixes, notifications, keyboard shortcuts and process monitor options.
-- **What stays on each machine:** the path to `claude`, the login shell setting, this machine's name, the library folder itself, the diff tool (program paths differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, the sidebar's and the usage header's collapsed or detailed state, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
+- **What stays on each machine:** the path to `claude`, the login shell setting, this machine's name, the library folder itself, the diff tool and Settings → Project tools (program paths and installed IDEs differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, the sidebar's and the usage header's collapsed or detailed state, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
 - The synced settings are stored as one file in the library. Each setting keeps the time it was last changed, and the newest change wins, so edits on two machines don't overwrite each other wholesale.
 - The first time sync is turned on and the library already has settings from another machine, Claudette asks: **Use synced settings** or **Replace them with this machine's**.
 - Turning sync off keeps the current values on this machine and stops syncing.
@@ -1557,11 +1563,19 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
       - **Copy** on code blocks, user messages and replies, and each message's time on hover, from the clock live and from the transcript when restored ([§5](#copy-and-times)).
       - **Density** in Settings → Appearance: Comfortable or Compact ([§14](#categories)).
     - **Still to verify:** installing an update on a real Windows and Mac, which needs signed packages from a published release; the login shell's environment in a Claudette started from the Dock on macOS and from a desktop launcher on Linux.
-13. **Later.** New features go in [§18](#18-future-features) first.
+13. **Project tools.** ✅ Built 2026-09-29 ([§18](#project-tools)).
+    - **Unreal Engine:** finding the project (in the folder, below and above it) and its engine (a parent folder, `LauncherInstalled.dat`, the registry, `Install.ini`, a chosen folder), Launch editor with Development or DebugGame per project, Generate project files, Build editor, Build and launch, Open solution with a chosen IDE, Open latest log, Clean intermediates and Kill all Unreal editors.
+    - **Unity:** the editor for the project's version from Unity Hub's folders and lists, Open in Unity with Release or Debug code optimization, EditMode tests with their counts, regenerating the C# solution, the solution and logs, Clean Library, Kill all Unity editors, and the lock file rules.
+    - **Godot:** finding the executable (a pick, Settings, the `PATH`, `Godot.app`, Scoop and WinGet) and checking for the .NET build, Open in Godot, Run project, Build C#, Open solution, Clean `.godot` or `.import`, and Kill all Godot editors.
+    - **The chip** in the composer bar, the project's submenu in the tab menu, the **Project** page with the job's output and Stop, the notification, and `Ctrl/Cmd+Shift+E`.
+    - **claudette.json** and **claudette.local.json:** a folder's own actions (with trust for the shared file's commands) and links, the links in the sidebar, and the in-app editor.
+    - **Settings → Project tools**, and the notes to Claude about Unreal, Unity and Godot projects.
+    - **Still to verify:** everything on machines with Unreal, Unity and Godot installed, on Windows, macOS and Linux (see [§18](#project-tools)).
+14. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features
 
-Features beyond v1. All three below are built (milestones 10 and 11); new ones go here first, each with a fuller design before it's built.
+Features beyond v1. All four below are built (milestones 10, 11 and 13); new ones go here first, each with a fuller design before it's built.
 
 ### Perforce ticket handling
 
@@ -1688,6 +1702,228 @@ A live view of what a tab's subagents are doing. When Claude fans work out to se
   - `tool_progress` for a foreground subagent: a heartbeat every 30 seconds (`heartbeat: true`), and `subagent_retry` while it waits out an API error, which its row shows as *"Retrying after a rate limit (attempt 2 of 10)…"*.
   - `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`, user configuration that passes through to `claude` ([§13](#integration-with-claude-code)), limits nesting (three layers by default), so on some machines the tree is shallower.
 - **Tests.** `AgentMapTests` (the view model, including the recorded fixture replayed through a tab), `ReplayTests`, `TranscriptReaderTests`, `FakeClaudeTests` (`fake-claude`'s `SUBAGENTS` prompt, and stopping a subagent while it waits on a prompt) and `RealCliTests` (the mock's `SUBAGENTS` and `LONG_AGENT` scripts against the real CLI).
+
+### Project tools
+
+✅ Built 2026-09-29.
+
+A tab can do things for the project in its folder: launch the editor, generate project files, build, open the solution. Which things depends on the project. Claudette knows Unreal Engine, Unity and Godot projects; a folder can also have its own actions and links, in a `claudette.json` beside the project.
+
+**Where the actions are.**
+
+- **The project chip** in the composer bar ([§5](#composer)), for example `◆ NightOwl · UE 5.4 ▾`. It shows only when the tab has project tools: a detected project, or custom actions. With custom actions and no project it reads `◆ Actions ▾`. While a job runs, it shows a busy dot and the job's name instead (`● Build editor… ▾`). Its menu has:
+  - a header: the project's name and kind, the engine's version and kind, and the engine's folder, or what's wrong ("The engine for EngineAssociation "5.9" wasn't found on this machine");
+  - entries of `claudette.json` that were skipped, and why;
+  - **Projects in this folder**, when there are several, as radio items; the pick is remembered per tab folder on this machine;
+  - the project's actions;
+  - the project's choice, such as Unreal's **Editor configuration** (Development or DebugGame), as radio items;
+  - **Choose engine folder…** (or **Choose another engine folder…**);
+  - the folder's custom actions, then its **Links**;
+  - **Show output…**, which opens the Project page, **Add an action…** and **Refresh**.
+  - Disabled items say why in their tooltip ("Generate project files first"). The menu looks at the project's files again each time it opens, so it's current.
+- **The tab's menu in the sidebar** ([§4](#sidebar)) has the same entries in a submenu named after the project (`NightOwl (UE 5.4)`), in the full sidebar and the rail. A folder with no project tools gets **Add an action…** there instead, so the first one can be added.
+- **The Project page** of the side panel ([§3](#3-main-window)), beside Changed files, Agents and Processes. Its button shows a busy dot while a job runs. It shows:
+  - the project's details: its file, the engine's version, folder and kind, the editor target and the configuration;
+  - a button per action;
+  - the running or last job: its status (running, succeeded, failed with its exit code, stopped), **Stop**, which ends the job's whole process tree, and **Copy**;
+  - the job's output, monospace and scrollable, following the newest line. It keeps the last 5,000 lines and says how many were dropped.
+- **The keyboard.** **Run the project's main action**, `Ctrl/Cmd+Shift+E` by default and rebindable ([§14](#keyboard-shortcuts)): Launch editor for Unreal, Open in Unity, Open in Godot, else the folder's first custom action.
+
+**How it's built.** `Claudette.Core/ProjectTools`:
+
+- An `IProjectToolProvider` finds its kind of project for a folder and describes it as a `ProjectInfo`: kind, name, root, details, actions, a per-project choice, a fix (**Choose engine folder…**) and the note for Claude.
+- A `ProjectAction` has an id, a label, a description and one of four kinds:
+  - **Launch**: a program that outlives Claudette, such as the editor. It starts detached, and nothing of it is tracked.
+  - **Run**: a long job. Its output goes to the Project page, **Stop** ends it, and its end is notified. One job runs at a time per tab; the other jobs are disabled until it ends.
+  - **Open**: a file or folder, opened with the OS's app, or for a solution with the IDE chosen in Settings.
+  - **Destructive**: confirmed first, such as deleting folders.
+- Every command is built by a pure function that takes the OS, so all three OSes' commands are tested on any machine.
+- **Detection** runs off the UI thread when a tab opens and before its session starts, when its folder changes, when the chip menu opens, and on **Refresh**. It's cheap: a bounded walk and a few small files.
+  - The tab's folder, its subfolders two levels down (for `Game/NightOwl/NightOwl.uproject`), and its parent folders up to the repository's root: a folder with `.git` (a folder, or a worktree's file), `.p4config` or the file `P4CONFIG` names, or six levels up (for a tab opened on `Source/`).
+  - It never looks into `Intermediate`, `Saved`, `DerivedDataCache`, `Binaries`, `Content`, `Plugins`, `Source`, `Config`, `Engine`, `Templates`, `Library`, `Temp`, `obj`, `bin`, `node_modules`, hidden folders or links, and at most 2,000 folders.
+  - Several projects are listed nearest first: the folder, then its subfolders, then its parents.
+- **Jobs** start through `IProcessLauncher` with `TrackProcessTree`, so they show in the process monitor ([§4](#process-monitor)) and **Stop** ends everything they started (UnrealBuildTool starts children). Closing the tab stops a running job with the tab's other processes, unless they're kept.
+- **Environment.** Jobs and launches get the user's environment: on macOS and Linux, with the login shell's merged in ([Login shell environment](#login-shell-environment)), so a build finds `dotnet`, the editor or a Homebrew tool on the same `PATH` as a terminal, and a bare program name is looked up on that `PATH`. Claude Code's session variables are removed ([§13](#integration-with-claude-code)), so a command that runs `claude` behaves as it would in a terminal. `ProjectToolEnvironment` is the one place this is built.
+- **Remembered on this machine**, in `state.json`: the project a folder uses when it has several, each project's choices (Unreal's configuration and engine folder, keyed by its `.uproject`; Unity's code optimization and editor; Godot's executable), and which folders' shared actions are trusted. None of it syncs.
+- **The note to Claude.** Each provider has its own note, added through `--append-system-prompt` when Settings says so, before Perforce's note when both apply.
+
+**Unreal Engine.**
+
+- **Finding the project.** `*.uproject` files, found as above.
+- **The `.uproject`** is JSON, read tolerantly: comments, trailing commas and unknown fields are fine, and a file that isn't JSON still counts as a project.
+  - `EngineAssociation` says which engine it uses.
+  - The editor target comes from `Source/*Editor.Target.cs`: `<Name>Editor` when there's one, else the first; `<Name>Editor` when there are none.
+  - A project with no `Source` targets and no `Modules` has no C++ code: it has no project files to generate, and nothing to build with an installed engine.
+  - Enabled `Plugins` are listed on the Project page.
+- **Finding the engine** (`UnrealEngineLocator`). An engine only counts when it has `Engine/Build/Build.version`.
+  - A folder chosen for the project with **Choose engine folder…** comes first. The pick is checked for `Build.version` (the `Engine` folder itself is accepted too) and remembered per project.
+  - **Empty or missing association:** the engine is in a parent folder, the "native" layout. Claudette walks up from the project looking for `Engine/Build/Build.version`.
+  - **A version such as `5.4`:** a launcher install. On Windows, `%ProgramData%\Epic\UnrealEngineLauncher\LauncherInstalled.dat` (JSON: an `InstallationList` of `AppName` `UE_5.4` and `InstallLocation`), then the registry, `HKLM\SOFTWARE\EpicGames\Unreal Engine\5.4`, value `InstalledDirectory`, in the 64-bit and then the 32-bit view. On macOS, `~/Library/Application Support/Epic/UnrealEngineLauncher/LauncherInstalled.dat`. Linux has no launcher.
+  - **Anything else, usually a GUID:** a build registered by UnrealVersionSelector. On Windows, `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds`, where each value's name is a build's id and its data the engine's folder. On Linux, `~/.config/Epic/UnrealEngine/Install.ini`, and on macOS `~/Library/Application Support/Epic/UnrealEngine/Install.ini`: the `[Installations]` section's `{GUID}=path` lines. GUIDs are compared with and without braces, ignoring case.
+  - The registry is read in `Claudette.Platform` (`WindowsUnrealEngineRegistry`), behind `IUnrealEngineRegistry`.
+  - **The version** is `Build.version`'s `MajorVersion`, `MinorVersion` and `PatchVersion` (and `BranchName`), shown as "Unreal Engine 5.4.2". The chip shows `UE 5.4`, from the association when the engine isn't found.
+  - **Its kind:** "launcher install", "source build", "installed build" (one with `Engine/Build/InstalledBuild.txt` that isn't the launcher's), "engine in a parent folder", or "chosen by you".
+  - **Unreal Engine 4** calls its editor `UE4Editor`; the build scripts are the same.
+  - **Not found:** the menu says so, the engine's actions are disabled ("The engine wasn't found: choose its folder in this menu"), and **Choose engine folder…** is offered.
+- **Actions.**
+  - **Launch editor** (the main action), detached: `Engine/Binaries/Win64/UnrealEditor.exe "<uproject>"`, `Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor "<uproject>"` or `Engine/Binaries/Linux/UnrealEditor "<uproject>"`. DebugGame adds `-debug`, which loads the DebugGame module DLLs, and the label says "Launch editor (DebugGame)". Disabled when the editor isn't built yet.
+  - **Generate project files**, a job: `Engine/Build/BatchFiles/Build.bat -projectfiles -project="<uproject>" -game -progress`, or `Mac/Build.sh` or `Linux/Build.sh` under `BatchFiles`. This is what UnrealVersionSelector runs, and `Build.bat` is in launcher installs as well as source builds (`GenerateProjectFiles.bat` is only in source builds). VS Code adds `-vscode`. Visual Studio and Xcode are UnrealBuildTool's defaults on Windows and macOS, so they add nothing, which leaves the user's `BuildConfiguration.xml` in charge.
+  - **Build editor**, a job: `Build.bat <EditorTarget> Win64 <Development|DebugGame> -Project="<uproject>" -WaitMutex`, with `Build.sh` and `Mac` or `Linux` elsewhere. A project without code builds `UnrealEditor` with a source build.
+  - **Build and launch**: Build editor, then Launch editor if the build succeeded.
+  - **Open solution**: `<Name>.sln` for Visual Studio, `<Name> (Mac).xcworkspace` or `<Name>.xcworkspace` for Xcode (a folder, which macOS opens as a document), `<Name>.code-workspace` for VS Code, in the project's folder. Disabled with "Generate project files first" when it's missing. It opens with the OS's app, or the IDE chosen in Settings:
+    - Rider: `rider64.exe` on the `PATH`, the Toolbox's `rider.cmd`, or the newest `%ProgramFiles%\JetBrains\JetBrains Rider*\bin\rider64.exe` on Windows; `open -a Rider` on macOS; `rider` or the Toolbox's script on Linux. Rider opens the `.sln`, or can open the `.uproject` itself.
+    - Visual Studio: the newest `%ProgramFiles%\Microsoft Visual Studio\*\*\Common7\IDE\devenv.exe` on Windows; `open -a "Visual Studio"` on macOS.
+    - VS Code: `Code.exe` in `%LOCALAPPDATA%\Programs` or `%ProgramFiles%`, else `code.cmd` on the `PATH`, on Windows; `open -a "Visual Studio Code"` on macOS; `code` on Linux.
+    - Another program, given the solution's path.
+    - When the IDE isn't found, the OS's app opens it and a note says so.
+  - **Open latest log**: `Saved/Logs/<Name>.log`, disabled when there's none yet.
+  - **Clean intermediates…**, destructive. It deletes `Binaries` and `Intermediate` in the project, and in each plugin under `Plugins/` (a folder with a `.uplugin`, however deeply nested). Nothing else: not `Saved`, `DerivedDataCache`, `Content` or `Config`.
+    - The confirmation lists the folders and their total size. It warns when an editor seems to have the project open: an `UnrealEditor`, `UnrealEditor-Cmd`, `UE4Editor` or `UE4Editor-Cmd` process whose command line names the `.uproject`. Where command lines can't be read, it doesn't guess.
+    - The folders are deleted off the UI thread, as a job with its lines on the Project page. Read-only files are made writable first, and links inside are removed without following them.
+  - **Kill all Unreal editors…**, destructive. It ends every running Unreal editor, not just this project's, and each one's process tree, which takes ShaderCompileWorker and the like with it.
+    - The editors are `UnrealEditor`, `UnrealEditor-Cmd`, `UE4Editor` and `UE4Editor-Cmd` (`.exe` on Windows; on macOS, the executable inside `UnrealEditor.app`).
+    - The confirmation says how many are running and lists each with its PID and, when its command line shows it, its project: "End 2 Unreal editors?", "• UnrealEditor (PID 501): NightOwl".
+    - It's disabled with "No Unreal editor is running" when none is found. The menu checks each time it opens; where processes can't be listed, it stays enabled and doesn't guess.
+- **Processes by name** (`ISystemProcesses` in Core, `SystemProcesses` in `Claudette.Platform`), shared by every provider, with the process monitor's own ways of reading processes: a Toolhelp snapshot and `NtQueryInformationProcess` for command lines on Windows, `/proc` on Linux (the `exe` link, else the first argument, since `comm` is cut to 15 characters), and one `ps` run on macOS, where a program's path can have spaces (`/Users/Shared/Epic Games/…`), so its name is taken from the longest start of the command line that is a file. Claudette itself is never listed. Ending a tree uses .NET's `Process.Kill(entireProcessTree: true)`.
+- **Running `.bat` files on Windows.** They run as `cmd.exe /d /s /c ""<bat>" <args>"`: `/d` skips AutoRun, and `/s` takes off only the outer quotes. cmd doesn't read its command line by the rules .NET quotes arguments with, so `CommandLines.BatchFile` builds it and the launcher passes it as it is (`ProcessStartSpec.CommandLine`). An argument is quoted when it has a space or a character cmd treats specially; an option such as `-project=<path>` has only its value quoted, as Unreal's tools write it. An argument with a quote or a line break is refused. `.sh` files run through `/bin/bash`.
+- **Telling Claude.** With **Tell Claude about Unreal projects** on (the default), a session that starts in a detected project gets a note through `--append-system-prompt`, before Perforce's note when both apply ([§18](#perforce-ticket-handling)):
+  > This is an Unreal Engine 5.4 project, NightOwl, at D:\Games\NightOwl\NightOwl.uproject.
+  > The engine is at C:\Program Files\Epic Games\UE_5.4 (a launcher install).
+  > To build the editor, run: "C:\Program Files\Epic Games\UE_5.4\Engine\Build\BatchFiles\Build.bat" NightOwlEditor Win64 Development -Project="D:\Games\NightOwl\NightOwl.uproject" -WaitMutex
+  > To regenerate project files, run: "C:\…\Build.bat" -projectfiles -project="D:\Games\NightOwl\NightOwl.uproject" -game -progress
+  > Don't start the editor or packaging unless asked.
+  - It's about 550 characters for typical paths. The build command uses the project's configuration as the session starts.
+  - The tab info card ([§4](#4-tabs--sessions)) gets a **Project** row: "NightOwl: Unreal Engine 5.4.2 · launcher install. Claude was told how to build it."
+
+**Unity.**
+
+- **Finding the project.** A folder with `ProjectSettings/ProjectVersion.txt` and `Assets/`, found as above. Its name is the folder's (the C# solution is named after it); `productName` and `companyName` from `ProjectSettings/ProjectSettings.asset` are shown and name the player log's folder.
+- **The version** is `m_EditorVersion` (`2022.3.20f1`), with the changeset from `m_EditorVersionWithRevision` when it's there. The chip shows `Unity 2022.3`.
+- **Finding the editor** for that exact version (`UnityEditors`). Only an editor that exists counts.
+  - A pick remembered for the project, from **Choose Unity editor…**: the executable, or a version's folder or `Unity.app` that holds it.
+  - Unity Hub's default folder: `C:\Program Files\Unity\Hub\Editor\<version>\Editor\Unity.exe`, `/Applications/Unity/Hub/Editor/<version>/Unity.app/Contents/MacOS/Unity`, `~/Unity/Hub/Editor/<version>/Editor/Unity`.
+  - Hub's custom install folder, `secondaryInstallPath.json` (a JSON string) in Hub's config folder: `%APPDATA%\UnityHub`, `~/Library/Application Support/UnityHub` or `~/.config/UnityHub`.
+  - Editors added to Hub by hand: `editors-v2.json` (`{ "data": [ { "version", "location" } ] }`) or the older `editors.json` (`{ "<version>": { "version", "location" } }`) in the same folder, read tolerantly; a location can be a string or a list.
+  - When the version isn't installed, the chip menu's header says so and offers **Choose Unity editor…**.
+- **Whether Unity has the project open.** `Temp/UnityLockfile` exists and a `Unity` process's command line names the project. A lock left by a crashed editor doesn't count. Where processes can't be listed, or a Unity process's command line can't be read, the lock file alone counts, since Unity refuses a locked project anyway.
+- **Actions.**
+  - **Open in Unity** (the main action), detached: `Unity -projectPath "<path>"`. The per-project radio **Code optimization: Release / Debug** (its default from Settings, Release) adds `-debugCodeOptimization` for Debug, and the label says "Open in Unity (Debug)". While the project is open it reads **Unity has this project open**, disabled.
+  - **Run EditMode tests**, a job: `Unity -batchmode -projectPath "<path>" -runTests -testPlatform EditMode -testResults "<results>" -logFile -`. Unity quits by itself when the tests are done. The results file is in Claudette's data folder (`project-jobs/`), deleted before each run; when the job ends, its status adds the counts from the NUnit XML: *"Run EditMode tests failed (exit code 2). 11 passed, 1 failed."*
+  - **Regenerate the C# solution**, a job: `Unity -batchmode -quit -projectPath "<path>" -executeMethod <method> -logFile -`. The method comes from the IDE package in `Packages/manifest.json`: `com.jetbrains.rider`'s `Packages.Rider.Editor.RiderScriptEditor.SyncSolution`, or `com.unity.ide.visualstudio`'s `Microsoft.Unity.VisualStudio.Editor.VisualStudioEditor.SyncAll`, which a project with the old `com.unity.ide.vscode` package also uses when it has it. Rider's comes first when Settings opens solutions with Rider. Without either package, it's disabled and says why.
+  - **Open solution**: `<FolderName>.sln` in the project's folder, disabled when missing, opened like Unreal's with the IDE from Settings.
+  - **Open Editor log**: `%LOCALAPPDATA%\Unity\Editor\Editor.log`, `~/Library/Logs/Unity/Editor.log` or `~/.config/unity3d/Editor.log`.
+  - **Open Player log**: `%USERPROFILE%\AppData\LocalLow\<company>\<product>\Player.log`, `~/Library/Logs/<company>/<product>/Player.log` or `~/.config/unity3d/<company>/<product>/Player.log`. Disabled when missing.
+  - **Clean Library…**, destructive: deletes `Library`, `Temp` and `obj` in the project, and nothing else. The confirmation warns that Unity reimports every asset next time, which can take a long while, and shows the size.
+  - **Kill all Unity editors…**, destructive: every `Unity` process (`Unity.exe` on Windows) and its tree, with the project from its `-projectPath`, as Unreal's. Not Unity Hub, and not Unity's own helpers such as `UnityShaderCompiler`, whose names differ.
+  - While Unity has the project open, EditMode tests, regenerating the solution and Clean are refused: "Unity has this project open, and locks it while it does: close the editor first."
+- **Telling Claude.** With **Tell Claude about Unity projects** on (the default):
+  > This is a Unity 2022.3.20f1 project, NightOwl, at /g/NightOwl.
+  > The editor is at /opt/Unity/Hub/Editor/2022.3.20f1/Editor/Unity.
+  > To run the EditMode tests, with the editor closed, run: /opt/Unity/Hub/Editor/2022.3.20f1/Editor/Unity -batchmode -projectPath /g/NightOwl -runTests -testPlatform EditMode -testResults /g/NightOwl/Logs/EditModeResults.xml -logFile -
+  > Library/, Temp/ and obj/ are generated: don't edit them.
+  > A .meta file must move and be renamed with its asset.
+  > Don't open the editor unless asked.
+
+> **Still to verify with Unity installed:** each Hub layout and file as Hub writes them; the lock file with a real editor; regenerating the solution with each IDE package in batch mode (the methods are the packages' public entry points, but running them with `-executeMethod` hasn't been tried); the results file of `-runTests`; and the logs' places on each OS.
+
+**Godot.**
+
+- **Finding the project.** A folder with `project.godot`, found as above. It's a Godot `ConfigFile`, read line by line and tolerantly:
+  - `config_version`: 5 is Godot 4, 4 is Godot 3.
+  - `config/name` under `[application]`, else the folder's name.
+  - `config/features`, such as `PackedStringArray("4.3", "C#", "Forward Plus")` (`PoolStringArray` in Godot 3): its first version is the project's (`Godot 4.3`), else `config_version` gives `Godot 4` or `Godot 3`.
+  - It's a C# project when its features have `C#`, it has a `[dotnet]` or `[mono]` section, or its folder has a `.sln` or `.csproj`.
+- **Finding Godot** (`GodotExecutables`). There's no standard install, so in order:
+  1. a pick remembered for the project, from **Choose Godot executable…**;
+  2. the path in Settings → Project tools;
+  3. `godot`, `godot4`, `Godot` or `godot-mono` on the `PATH`;
+  4. on macOS, `/Applications/Godot.app` or `/Applications/Godot_mono.app`;
+  5. on Windows, Scoop's shims (`~\scoop\shims\godot.exe`, `godot-mono.exe`), WinGet's `Links\godot.exe`, and the newest `Godot*.exe` in WinGet's `GodotEngine.GodotEngine*` package folder, not the console one.
+  - **Detect** in Settings runs 3–5 and fills in the path.
+  - A C# project needs the .NET ("mono") build of Godot: one whose name has `mono` in it, or with a `GodotSharp` folder beside it (in `Contents/Resources` on macOS). When the Godot found isn't one, the chip menu's header says so.
+- **Actions.**
+  - **Open in Godot** (the main action), detached: `godot --editor --path "<folder>"`.
+  - **Run project**, detached: `godot --path "<folder>"`.
+  - **Build C#**, a job, for C# projects: `dotnet build "<Name>.sln"`, or the `.csproj` when there's no `.sln`. Disabled until Godot has made them.
+  - **Open solution**, for C# projects: the `.sln`, disabled when missing.
+  - **Clean .godot…** (Godot 4) or **Clean .import…** (Godot 3), destructive: deletes that folder, with a confirmation that Godot reimports every asset next time.
+  - **Kill all Godot editors…**, destructive: every process whose name starts with `godot` (any build, such as `Godot_v4.3-stable_mono_win64`), with the project from its `--path`, never Claudette itself.
+- **Telling Claude.** With **Tell Claude about Godot projects** on (the default):
+  > This is a Godot 4.3 project (C#), Night Owl, at /g/owl.
+  > To check it without the editor, run: /opt/godot-mono --headless --path /g/owl --quit
+  > To check one script, run: /opt/godot-mono --headless --path /g/owl --check-only --script res://path/to/script.gd
+  > To build the C# code, run: dotnet build '/g/owl/Night Owl.sln'
+  > Don't open the editor unless asked.
+
+> **Still to verify with Godot installed:** each place Godot is looked for, the .NET build check, `--check-only` on Godot 3 and 4, and Kill all Godot editors with real editors.
+
+**claudette.json.** A folder's own actions and links are in two files in the tab's folder (only there; they aren't looked for elsewhere):
+
+- `claudette.json` is shared: committed with the project.
+- `claudette.local.json` is personal, and belongs in `.gitignore`. It has the same shape, and its entries come after the shared file's.
+- Both are read tolerantly, like everything else Claudette reads: comments and trailing commas are fine, unknown fields are ignored, and a bad entry is skipped with a reason, which the chip menu and the Project page show ("claudette.json: actions[2] has no command, so it was skipped."). A file that isn't JSON is skipped whole, with the parser's reason. A missing file means nothing.
+
+```json
+{
+  "actions": [
+    { "name": "Run tests", "command": "dotnet test", "folder": "src", "mode": "output" },
+    { "name": "Open Grafana", "command": "start https://grafana.example", "mode": "launch", "os": ["windows"] }
+  ],
+  "links": [
+    { "name": "Board", "url": "https://example.atlassian.net/jira/software/projects/ABC/boards/1" },
+    { "name": "Pull request", "url": "https://github.com/org/repo/compare/{branch}?expand=1" }
+  ]
+}
+```
+
+- **Actions.**
+  - `name` and `command` are required.
+  - `folder` is relative to the tab's folder; the tab's folder by default.
+  - `mode` is `output` (the default: output on the Project page, **Stop**, and the notification) or `launch` (started and left alone).
+  - `os` is optional: `windows`, `macos` or `linux`. An action whose `os` leaves out this machine isn't shown.
+  - Commands run through the user's shell: `cmd.exe /d /s /c "<command>"` on Windows, `$SHELL -c` (or `/bin/sh -c`) elsewhere. Otherwise they run like built-in actions.
+  - An action's id is its file and position, such as `shared:0`, which Stop and the notification use.
+  - They're listed in the chip menu after the project's actions, under a separator.
+- **Picking up edits.** The files are read again when the tab is selected, when Claudette comes to the front, when a turn ends (Claude may have edited them), when the chip menu opens, and after the in-app editor saves. Claudette doesn't watch them with the file system: a watcher per tab runs into the OS's limits (128 inotify instances per user on many Linux machines) and doesn't work on some network drives, and these moments cover when an edit can matter.
+- **The in-app editor.**
+  - **Add an action…** opens a small dialog: name, command, working folder, **Run with output** or **Launch and forget**, and which file it goes in, **Just me (claudette.local.json)** (the default) or **Shared with the project (claudette.json)**.
+  - **Tab settings…** has a **Project actions** section: a choice of the two files, and the chosen file's actions with **Add…**, **Edit…**, **Remove**, **Move up**, **Move down** and **Open file**. Entries for other OSes are listed, marked "only on …", and entries that can't be read are listed with their reason and can only be removed. Nothing is written until **Apply**.
+  - Saving reads the file as JSON, replaces only `actions`, keeps every other key and each entry's other fields (such as `os`), and writes it indented. The dialog says so: saving rewrites the file, so comments in it are dropped. A file that isn't valid JSON is never overwritten; the editor says to fix it by hand first.
+- **Trust.** A cloned repository can put any command behind an innocent name, so shared commands never run silently.
+  - The first time one of a folder's `claudette.json` actions is run, a confirmation lists every command in that file (for this OS), with its folder and whether it's launched. It offers **Run** (this once), **Trust this project's actions**, and **Cancel**.
+  - Trust is remembered in `state.json` by folder and a SHA-256 hash of the file's actions (their names, commands, folders and modes). When any of them changes, Claudette asks again; comments and links don't count.
+  - `claudette.local.json` is the user's own file, so its actions run without asking.
+  - Nothing from these files runs except on an explicit click or the main action's shortcut: no automatic runs and no hooks.
+
+**Links.**
+
+- **In the sidebar**, a **Links** section above History shows the selected tab's links: the shared file's, then the local file's. It's hidden when the tab has none. It can be folded to its heading, which is remembered. On the rail it's one globe icon with the links in a flyout. The chip menu lists them too, under **Links**.
+- **Opening.** A click opens the link in the browser (`IPlatformServices.OpenUrlAsync`). Hovering shows the address it opens. Links have a globe icon; favicons would need network requests, so there are none.
+- **Allowed schemes.** Only `https`, `http` and `mailto`. Anything else (`file:`, `javascript:`, an app's own scheme) is shown disabled with the reason, and never opened. So is an address that isn't absolute.
+- **Placeholders**, filled from the selected tab and URL-escaped: `{branch}` (the git branch), `{changelist}` (the Perforce changelist Claude is working in, [§18](#perforce-changelist-in-the-tab-title)) and `{folderName}`. A link whose placeholder can't be filled right now is disabled and says why ("No git branch").
+- **Updates.** Links follow the selected tab, and are read again as its files are.
+
+**Notifications.** When a job finishes or fails and Claudette isn't in front, a notification says so: *"Build editor failed (exit code 6)."* A stopped job doesn't notify. Clicking it selects the tab and opens its Project page. Settings → Notifications → **A project action finishes**, on by default ([§10](#10-notifications)).
+
+**Settings → Project tools** ([§14](#14-settings)), kept on each machine like the diff tool:
+
+- Default editor configuration for Unreal: Development (the default) or DebugGame. A project's own choice in the chip menu wins.
+- Project files for: Visual Studio, VS Code or Xcode. The default is Visual Studio on Windows, Xcode on macOS and VS Code on Linux.
+- Open solutions with: the OS's default app, Rider, Visual Studio, VS Code, or another program (with **Browse…**).
+- Tell Claude about Unreal projects: on by default.
+- Unity: the default code optimization, Release (the default) or Debug; a project's own choice wins. Tell Claude about Unity projects: on by default.
+- Godot: the executable's path, empty to find it, with **Browse…** and **Detect**. Tell Claude about Godot projects: on by default.
+- **Reset to defaults**, and search entries for each.
+
+**Testing.** No test runs a real engine: engines are a few files in temporary folders, the registry and running processes are fakes, and every process is a fake launcher's. `ProjectDiscoveryTests`, `UnrealEngineTests`, `UnrealCommandTests`, `CommandLineTests`, `UnrealProviderTests`, `UnityProviderTests`, `GodotProviderTests`, `ProjectJobTests` and `ProjectFileTests` in Core; `SystemProcessesTests` in Platform; `ProjectToolsTests` for the tab; and `ProjectToolsUiTests` for the rendered chip, its menu, the tab menu's submenu and the Links section.
+
+> **Still to verify on a machine with Unreal installed:**
+> - Launching the editor and building from a launcher install and a source build on Windows, macOS and Linux, including DebugGame and `-debug`.
+> - `Build.bat -projectfiles` in an installed build, and the format each OS gets without a switch.
+> - The registry entries and `Install.ini` as UnrealVersionSelector writes them.
+> - That Stop ends UnrealBuildTool and its compilers, and the process monitor lists them.
+> - Opening a `.xcworkspace` and each IDE for real.
+> - The editor-open warning, and Kill all Unreal editors, with real editors on each OS (on macOS, reading their command lines through `ps`).
 
 ## 19. Open Questions
 

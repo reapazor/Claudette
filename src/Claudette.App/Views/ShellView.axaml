@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Claudette.App.ViewModels"
              xmlns:views="using:Claudette.App.Views"
+             xmlns:tools="using:Claudette.Core.ProjectTools"
              x:Class="Claudette.App.Views.ShellView"
              x:DataType="vm:ShellViewModel"
              Classes.compact="{Binding IsCompact}"
@@ -11,6 +12,18 @@
        the Claude apps' shapes. -->
 
   <UserControl.Resources>
+    <!-- The project's submenu in a tab's menu (DESIGN.md §18): the same entries as the composer's project chip. -->
+    <ControlTheme x:Key="ProjectMenuItem" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}" x:DataType="vm:ProjectMenuEntry">
+      <Setter Property="Header" Value="{Binding MenuHeader}" />
+      <Setter Property="Command" Value="{Binding Command}" />
+      <Setter Property="CommandParameter" Value="{Binding Parameter}" />
+      <Setter Property="IsEnabled" Value="{Binding IsMenuEnabled}" />
+      <Setter Property="ToggleType" Value="{Binding IsOption, Converter={x:Static vm:Converters.RadioIfTrue}}" />
+      <Setter Property="IsChecked" Value="{Binding IsChecked}" />
+      <Setter Property="ToolTip.Tip" Value="{Binding Tip}" />
+      <Setter Property="ToolTip.ShowOnDisabled" Value="True" />
+    </ControlTheme>
+
     <!-- The tab info card (DESIGN.md §4), used as the tab tooltip. -->
     <DataTemplate x:Key="InfoCard" DataType="vm:TabViewModel">
       <StackPanel Spacing="4" MaxWidth="480">
@@ -212,6 +225,10 @@
                                              ToolTip.Tip="This tab has its own settings" />
                                   </MenuItem.Icon>
                                 </MenuItem>
+                                <!-- Project tools (DESIGN.md §18): the chip's menu under the project's name, or the first custom action -->
+                                <MenuItem Header="{Binding ProjectMenuTitle}" ItemsSource="{Binding ProjectMenu}" IsVisible="{Binding HasProjectTools}"
+                                          ItemContainerTheme="{StaticResource ProjectMenuItem}" />
+                                <MenuItem Header="Add an action…" Command="{Binding AddProjectActionCommand}" IsVisible="{Binding OffersFirstProjectAction}" />
                                 <Separator />
                                 <MenuItem Header="Move up" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MoveTabUpCommand}" CommandParameter="{Binding}" />
                                 <MenuItem Header="Move down" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MoveTabDownCommand}" CommandParameter="{Binding}" />
@@ -288,6 +305,9 @@
                                              ToolTip.Tip="This tab has its own settings" />
                                   </MenuItem.Icon>
                                 </MenuItem>
+                              <MenuItem Header="{Binding ProjectMenuTitle}" ItemsSource="{Binding ProjectMenu}" IsVisible="{Binding HasProjectTools}"
+                                        ItemContainerTheme="{StaticResource ProjectMenuItem}" />
+                              <MenuItem Header="Add an action…" Command="{Binding AddProjectActionCommand}" IsVisible="{Binding OffersFirstProjectAction}" />
                               <Separator />
                               <MenuItem Header="Close" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CloseTabCommand}" CommandParameter="{Binding}" />
                             </ContextMenu>
@@ -302,9 +322,56 @@
           </ItemsControl>
         </ScrollViewer>
 
-        <!-- History, the Claude Code update badge (DESIGN.md §12) and Settings -->
+        <!-- The selected tab's links, History, the Claude Code update badge (DESIGN.md §12) and Settings -->
         <Border Grid.Row="2" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0" Padding="6">
           <StackPanel Spacing="2">
+            <!-- Links from the selected tab's claudette.json files (DESIGN.md §18, "Links") -->
+            <StackPanel x:Name="LinksSection" Spacing="1" IsVisible="{Binding HasLinks}">
+              <StackPanel Spacing="1" IsVisible="{Binding IsSidebarExpanded}">
+                <Button Classes="flat side" Command="{Binding ToggleLinksCommand}" AutomationProperties.Name="Links"
+                        ToolTip.Tip="Links for this tab's folder, from its claudette.json" ToolTip.Placement="Right">
+                  <DockPanel>
+                    <Panel DockPanel.Dock="Right" VerticalAlignment="Center">
+                      <Path Data="{StaticResource IconChevronDown}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="9" Height="9" Stretch="Uniform"
+                            IsVisible="{Binding IsLinksExpanded}" />
+                      <Path Data="{StaticResource IconChevronRight}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="9" Height="9" Stretch="Uniform"
+                            IsVisible="{Binding IsLinksCollapsed}" />
+                    </Panel>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                      <Path Classes="icon" Data="{StaticResource IconToolWeb}" />
+                      <TextBlock Text="Links" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </DockPanel>
+                </Button>
+                <ItemsControl x:Name="LinkList" ItemsSource="{Binding Links}" IsVisible="{Binding IsLinksExpanded}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="tools:ResolvedLink">
+                      <Button Classes="flat side" Padding="36,4,8,4" IsEnabled="{Binding IsEnabled}" ToolTip.Tip="{Binding Tip}" ToolTip.ShowOnDisabled="True"
+                              ToolTip.Placement="Right" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).OpenLinkCommand}" CommandParameter="{Binding}">
+                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+              <!-- The rail: one icon, with the links in a flyout -->
+              <Button Classes="flat side" IsVisible="{Binding IsSidebarCollapsed}" ToolTip.Tip="Links" ToolTip.Placement="Right" AutomationProperties.Name="Links">
+                <Path Classes="icon" Data="{StaticResource IconToolWeb}" />
+                <Button.Flyout>
+                  <Flyout Placement="RightEdgeAlignedBottom">
+                    <ItemsControl ItemsSource="{Binding Links}" MinWidth="220">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="tools:ResolvedLink">
+                          <Button Classes="flat row" IsEnabled="{Binding IsEnabled}" ToolTip.Tip="{Binding Tip}" ToolTip.ShowOnDisabled="True"
+                                  Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).OpenLinkCommand}" CommandParameter="{Binding}"
+                                  Content="{Binding Name}" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </Flyout>
+                </Button.Flyout>
+              </Button>
+            </StackPanel>
             <Button Classes="flat side" Command="{Binding OpenHistoryCommand}" ToolTip.Tip="{Binding Tips.History}" ToolTip.Placement="Right" AutomationProperties.Name="History">
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <Path Classes="icon" Data="{StaticResource IconHistory}" />
@@ -499,6 +566,45 @@
         <ContentControl.DataTemplates>
           <DataTemplate DataType="vm:TabSettingsViewModel">
             <views:TabSettingsView />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+    </Border>
+
+    <!-- A custom project action (DESIGN.md §18, "Custom actions"): over Tab settings when it's opened from there -->
+    <Border Grid.ColumnSpan="2" Classes="overlay" IsVisible="{Binding HasActionEditor}">
+      <ContentControl Content="{Binding ActionEditor}" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <ContentControl.DataTemplates>
+          <DataTemplate DataType="vm:ProjectActionEditorViewModel">
+            <Border Classes="dialog" Width="460">
+              <StackPanel Spacing="8">
+                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="16" />
+                <TextBlock Text="Name" />
+                <TextBox Text="{Binding Name}" PlaceholderText="for example: Run the game's tests" AutomationProperties.Name="Name" />
+                <TextBlock Text="Command" Margin="0,4,0,0" />
+                <TextBox Classes="mono" Text="{Binding Command}" PlaceholderText="{Binding CommandPlaceholder}" AutomationProperties.Name="Command" />
+                <TextBlock Classes="muted small" Text="{Binding ShellText}" TextWrapping="Wrap" />
+                <TextBlock Text="Working folder" Margin="0,4,0,0" />
+                <TextBox Classes="mono" Text="{Binding WorkingFolder}" PlaceholderText="The tab's folder" AutomationProperties.Name="Working folder" />
+                <TextBlock Classes="muted small" Text="{Binding Folder, StringFormat='Relative to {0}'}" TextWrapping="Wrap" />
+                <StackPanel Spacing="4" IsVisible="{Binding AsksForFile}" Margin="0,4,0,0">
+                  <TextBlock Text="Save in" />
+                  <RadioButton GroupName="ProjectActionFile" Content="{Binding LocalText}" IsChecked="{Binding SaveToLocal}" />
+                  <RadioButton GroupName="ProjectActionFile" Content="{Binding SharedText}" IsChecked="{Binding SaveToShared}" />
+                  <TextBlock Classes="muted small" Text="{Binding FileNote}" TextWrapping="Wrap" />
+                </StackPanel>
+                <RadioButton GroupName="ProjectActionMode" Content="Run with output" IsChecked="{Binding RunWithOutput}" Margin="0,4,0,0" />
+                <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-6,0,0"
+                           Text="The output shows on the Project page, with Stop, and a notification says when it ends." />
+                <RadioButton GroupName="ProjectActionMode" Content="Launch and forget" IsChecked="{Binding LaunchAndForget}" />
+                <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-6,0,0"
+                           Text="For programs that keep running on their own, such as an editor or a server." />
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,6,0,0">
+                  <Button Content="Cancel" Command="{Binding CancelCommand}" />
+                  <Button Classes="accent" Content="Save" Command="{Binding SaveCommand}" IsDefault="True" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
           </DataTemplate>
         </ContentControl.DataTemplates>
       </ContentControl>

@@ -9,6 +9,7 @@
              xmlns:protocol="using:Claudette.Core.Protocol"
              xmlns:services="using:Claudette.App.Services"
              xmlns:views="using:Claudette.App.Views"
+             xmlns:tools="using:Claudette.Core.ProjectTools"
              x:Class="Claudette.App.Views.TabView"
              x:DataType="vm:TabViewModel"
              FontSize="{DynamicResource ConversationFontSize}"
@@ -222,6 +223,11 @@
     </Style>
     <Style Selector="Border.composer.dropping">
       <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
+    </Style>
+    <!-- A project job's output (DESIGN.md §18): dense lines, like a terminal -->
+    <Style Selector="ListBox#ProjectOutputList ListBoxItem">
+      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="MinHeight" Value="0" />
     </Style>
     <!-- The / and @ autocomplete (DESIGN.md §5, "Composer") -->
     <Style Selector="Button.completion.selected /template/ ContentPresenter#PART_ContentPresenter">
@@ -529,11 +535,11 @@
 
   <Grid RowDefinitions="*,Auto" ColumnDefinitions="*,Auto">
 
-    <!-- Side panel (DESIGN.md §3): changed files, agents and, when the monitor is on, processes -->
+    <!-- Side panel (DESIGN.md §3): changed files, agents, the project's tools and, when the monitor is on, processes -->
     <Border Grid.Column="1" Grid.RowSpan="2" Width="340" IsVisible="{Binding IsSidePanelOpen}"
             BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1,0,0,0" Background="{DynamicResource SubtleBrush}">
       <DockPanel>
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="8,6">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="8,6">
           <Button Classes="flat" Command="{Binding ShowFilesPageCommand}">
             <TextBlock Text="Changed files" FontWeight="{Binding IsFilesPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
           </Button>
@@ -544,10 +550,17 @@
               <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding HasActiveAgents}" />
             </StackPanel>
           </Button>
-          <Button Grid.Column="2" Classes="flat" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding IsProcessMonitorOn}">
+          <!-- Project tools (DESIGN.md §18); a busy dot while a job runs -->
+          <Button Grid.Column="2" Classes="flat" Command="{Binding ShowProjectPageCommand}" IsVisible="{Binding HasProjectTools}" ToolTip.Tip="{Binding ProjectHeaderTitle}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <TextBlock Text="Project" FontWeight="{Binding IsProjectPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
+              <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding IsProjectJobRunning}" />
+            </StackPanel>
+          </Button>
+          <Button Grid.Column="3" Classes="flat" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding IsProcessMonitorOn}">
             <TextBlock Text="Processes" FontWeight="{Binding IsProcessesPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
           </Button>
-          <Button Grid.Column="4" Classes="flat" Padding="6" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
+          <Button Grid.Column="5" Classes="flat" Padding="6" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
             <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
           </Button>
         </Grid>
@@ -608,6 +621,59 @@
                           BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" />
             <views:AgentDetails Grid.Row="3" IsVisible="{Binding HasAgents}" />
           </Grid>
+
+          <!-- Project (DESIGN.md §18, "Project tools"): the project's details, its actions, and the running or last job -->
+          <DockPanel x:Name="ProjectPage" IsVisible="{Binding IsProjectPage}">
+            <StackPanel DockPanel.Dock="Top" Margin="12,0,12,6" Spacing="8">
+              <TextBlock Text="{Binding ProjectHeaderTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <ItemsControl ItemsSource="{Binding ProjectFileProblems}" IsVisible="{Binding HasProjectFileProblems}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="x:String">
+                    <TextBlock Classes="small warning" Text="{Binding}" TextWrapping="Wrap" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <ItemsControl ItemsSource="{Binding ProjectDetails}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="tools:ProjectDetail">
+                    <Grid ColumnDefinitions="84,*" Margin="0,1">
+                      <TextBlock Classes="muted small" Text="{Binding Label}" />
+                      <SelectableTextBlock Grid.Column="1" Classes="small" Text="{Binding Value}" TextWrapping="Wrap" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <ItemsControl ItemsSource="{Binding ProjectActions}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel ItemSpacing="6" LineSpacing="6" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="tools:ProjectAction">
+                    <Button Content="{Binding Label}" IsEnabled="{Binding IsEnabled}" ToolTip.Tip="{Binding Tip}" ToolTip.ShowOnDisabled="True"
+                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RunProjectActionCommand}" CommandParameter="{Binding}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" IsVisible="{Binding HasProjectJob}">
+                <TextBlock Classes="small" Classes.error="{Binding ProjectJobFailed}" Text="{Binding ProjectJobStatus}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Content="Stop" Command="{Binding StopProjectJobCommand}" IsVisible="{Binding IsProjectJobRunning}"
+                        ToolTip.Tip="Ends the job and every process it started" />
+                <Button Grid.Column="2" Content="Copy" Command="{Binding CopyProjectOutputCommand}" ToolTip.Tip="Copy the output" />
+              </Grid>
+              <TextBlock Classes="muted small" Text="{Binding ProjectOutputNote}" TextWrapping="Wrap"
+                         IsVisible="{Binding ProjectOutputNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+            <ListBox x:Name="ProjectOutputList" ItemsSource="{Binding ProjectOutput}" Background="Transparent" Margin="8,0,8,8"
+                     IsVisible="{Binding HasProjectJob}" AutomationProperties.Name="Output">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <TextBlock Classes="mono small" Text="{Binding}" />
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
 
           <!-- Processes (DESIGN.md §4, "Process monitor") -->
           <DockPanel IsVisible="{Binding IsProcessesPage}">
@@ -991,6 +1057,57 @@
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                  </Flyout>
+                </Button.Flyout>
+              </Button>
+
+              <!-- Project tools (DESIGN.md §18): "◆ NightOwl · UE 5.4 ▾", or "◆ Actions ▾" for a folder's own actions -->
+              <Button x:Name="ProjectChip" Classes="flat" IsVisible="{Binding HasProjectTools}" ToolTip.Tip="{Binding ProjectChipTip}"
+                      AutomationProperties.Name="Project tools">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Classes="muted small" Text="◆" VerticalAlignment="Center" IsVisible="{Binding !IsProjectJobRunning}" />
+                  <TextBlock Classes="status busy" Text="●" FontSize="9" VerticalAlignment="Center" IsVisible="{Binding IsProjectJobRunning}" />
+                  <TextBlock Classes="muted small" Text="{Binding ProjectChipText, StringFormat='{}{0} ▾'}" MaxWidth="240" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <Button.Flyout>
+                  <Flyout Placement="TopEdgeAlignedLeft" Opened="OnProjectMenuOpened">
+                    <StackPanel x:Name="ProjectMenu" MinWidth="300" MaxWidth="440" Spacing="1">
+                      <TextBlock Text="{Binding ProjectHeaderTitle}" FontWeight="SemiBold" Margin="8,2,8,0" />
+                      <ItemsControl ItemsSource="{Binding ProjectHeaderLines}" Margin="8,0,8,2">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="x:String">
+                            <TextBlock Classes="muted small" Text="{Binding}" TextWrapping="Wrap" />
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <!-- Entries of claudette.json that were skipped, and why (DESIGN.md §18) -->
+                      <ItemsControl ItemsSource="{Binding ProjectFileProblems}" Margin="8,0,8,2" IsVisible="{Binding HasProjectFileProblems}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="x:String">
+                            <TextBlock Classes="small warning" Text="{Binding}" TextWrapping="Wrap" />
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <Separator Margin="0,2" />
+                      <ItemsControl ItemsSource="{Binding ProjectMenu}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="vm:ProjectMenuEntry">
+                            <Panel>
+                              <Separator Margin="0,3" IsVisible="{Binding IsSeparator}" />
+                              <TextBlock Classes="muted small" Text="{Binding Label}" Margin="8,4,8,1" IsVisible="{Binding IsHeader}" />
+                              <Button Classes="flat row" IsVisible="{Binding IsButton}" IsEnabled="{Binding IsEnabled}" HorizontalContentAlignment="Stretch"
+                                      ToolTip.Tip="{Binding Tip}" ToolTip.ShowOnDisabled="True" Click="OnFlyoutItemPicked"
+                                      Command="{Binding Command}" CommandParameter="{Binding Parameter}">
+                                <Grid ColumnDefinitions="16,*">
+                                  <TextBlock Classes="small" Text="{Binding Mark}" VerticalAlignment="Center" IsVisible="{Binding HasMark}" />
+                                  <TextBlock Grid.Column="1" Text="{Binding Label}" />
+                                </Grid>
+                              </Button>
+                            </Panel>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
                   </Flyout>
                 </Button.Flyout>
               </Button>

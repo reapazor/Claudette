@@ -17,6 +17,7 @@ using Claudette.Platform.Credentials;
 using Claudette.Platform.LoginShell;
 using Claudette.Platform.Notifications;
 using Claudette.Platform.Processes;
+using Claudette.Platform.ProjectTools;
 using Claudette.Platform.Shell;
 using Claudette.Platform.Shell.Windows;
 using Claudette.Platform.Updates;
@@ -61,7 +62,9 @@ public partial class App : Application
                 notifier: Notifier.CreateForCurrentOS(launcher),
                 credentials: CredentialStores.CreateForCurrentOS(launcher, TimeProvider.System),
                 appInstaller: AppInstallers.CreateForCurrentOS(launcher, TimeProvider.System, paths.UpdatesDirectory, NullLogger.Instance),
-                loginShell: LoginShellReader.CreateForCurrentOS(launcher, TimeProvider.System));
+                loginShell: LoginShellReader.CreateForCurrentOS(launcher, TimeProvider.System),
+                systemProcesses: new SystemProcesses(launcher, TimeProvider.System),
+                unrealRegistry: UnrealEngineRegistries.CreateForCurrentOS());
             // In the background, so the window isn't held up; the first claude start waits for it (DESIGN.md §13).
             _services.UserEnvironment.Start();
             var services = _services;

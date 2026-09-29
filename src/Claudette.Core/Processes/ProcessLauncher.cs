@@ -24,9 +24,16 @@ public sealed class ProcessLauncher : IProcessLauncher
             startInfo.StandardOutputEncoding = Encoding.UTF8;
             startInfo.StandardErrorEncoding = Encoding.UTF8;
         }
-        foreach (var argument in spec.Arguments)
+        if (spec.CommandLine is { } commandLine)
         {
-            startInfo.ArgumentList.Add(argument);
+            startInfo.Arguments = commandLine;
+        }
+        else
+        {
+            foreach (var argument in spec.Arguments)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
         }
         if (spec.WorkingDirectory is not null)
         {

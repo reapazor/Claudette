@@ -52,6 +52,23 @@ public sealed class AvaloniaPlatformServices(Func<TopLevel?> topLevel) : IPlatfo
         }
     }
 
+    /// <summary>A folder opens as the OS opens it: a macOS package such as an <c>.xcworkspace</c> opens in its app.</summary>
+    public async Task OpenPathAsync(string path)
+    {
+        if (topLevel() is not { } top)
+        {
+            return;
+        }
+        if (Directory.Exists(path))
+        {
+            await top.Launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(path));
+        }
+        else if (File.Exists(path))
+        {
+            await top.Launcher.LaunchFileInfoAsync(new FileInfo(path));
+        }
+    }
+
     public IReadOnlyList<string> InstalledFonts()
     {
         try

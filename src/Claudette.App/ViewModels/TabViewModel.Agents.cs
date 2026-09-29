@@ -25,6 +25,7 @@ public sealed partial class TabViewModel
         if (value)
         {
             IsProcessesPage = false;
+            IsProjectPage = false;
         }
     }
 

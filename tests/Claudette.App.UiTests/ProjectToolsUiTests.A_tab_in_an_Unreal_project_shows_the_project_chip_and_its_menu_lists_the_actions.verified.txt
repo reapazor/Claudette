@@ -1,0 +1,22 @@
+﻿"NightOwl · Unreal Engine"
+"Unreal Engine 5.4.2 · engine in a parent folder"
+"{root}"
+[button] Launch editor
+[button] Generate project files
+[button] Build editor
+[button] Build and launch
+[button] Open solution
+[button] Open latest log
+[button] Clean intermediates…
+[button] Kill all Unreal editors…
+"Editor configuration"
+[button] (parts below)
+  "●"
+  "Development"
+[button] (parts below)
+  "○"
+  "DebugGame"
+[button] Choose another engine folder…
+[button] Show output…
+[button] Add an action…
+[button] Refresh

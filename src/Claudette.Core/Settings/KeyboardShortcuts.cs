@@ -173,6 +173,7 @@ public static class KeyboardShortcuts
     public const string AllowPrompt = "prompt.allow";
     public const string DenyPrompt = "prompt.deny";
     public const string ToggleSidebar = "sidebar.toggle";
+    public const string RunProjectAction = "project.runMain";
 
     /// <summary>Every rebindable command, in the order Settings lists them.</summary>
     public static IReadOnlyList<ShortcutCommand> All { get; } =
@@ -189,6 +190,7 @@ public static class KeyboardShortcuts
         new(Suffixes, "Quick suffixes menu", Chord("Primary+Shift+S")),
         new(AllowPrompt, "Allow the waiting prompt", Chord("Primary+Enter")),
         new(DenyPrompt, "Deny the waiting prompt", Chord("Primary+Back")),
+        new(RunProjectAction, "Run the project's main action", Chord("Primary+Shift+E")),
     ];
 
     public static ShortcutCommand Find(string id) => All.First(c => c.Id == id);

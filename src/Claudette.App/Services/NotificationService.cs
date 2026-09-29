@@ -17,6 +17,8 @@ public enum NotificationKind
     UpdateReady,
     /// <summary>A check-in was sent (DESIGN.md §5); a check-in setting, so a tab can override it.</summary>
     CheckIn,
+    /// <summary>A long project action, such as a build, finished or failed (DESIGN.md §18, "Project tools").</summary>
+    ProjectAction,
 }
 
 /// <summary>Where clicking a notification goes: a tab, or an app-wide screen.</summary>
@@ -66,7 +68,8 @@ public sealed class NotificationService : IDisposable
         {
             return false;
         }
-        if (IsAppActive && (tabId is null || tabId == SelectedTabId()))
+        // A project action's end is news whichever tab is showing, until Claudette is in front: the chip already says it.
+        if (IsAppActive && (tabId is null || tabId == SelectedTabId() || kind == NotificationKind.ProjectAction))
         {
             return false;
         }
@@ -88,6 +91,7 @@ public sealed class NotificationService : IDisposable
             NotificationKind.SignIn => settings.SignIn,
             NotificationKind.UpdateReady => settings.UpdateReady,
             NotificationKind.CheckIn => (checkIns ?? _services.Settings.CheckIns).Notify,
+            NotificationKind.ProjectAction => settings.ProjectActions,
             _ => false,
         };
     }

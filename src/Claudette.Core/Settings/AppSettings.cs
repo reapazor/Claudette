@@ -30,6 +30,9 @@ public sealed class AppSettings
 
     public DiffToolSettings DiffTool { get; set; } = new();
 
+    /// <summary>Settings → Project tools (DESIGN.md §18). Per machine, like the diff tool.</summary>
+    public ProjectToolSettings ProjectTools { get; set; } = new();
+
     public NotificationSettings Notifications { get; set; } = new();
 
     public KeyboardSettings Keyboard { get; set; } = new();
@@ -60,6 +63,9 @@ public sealed class NotificationSettings
     public bool SignIn { get; set; } = true;
 
     public bool UpdateReady { get; set; } = true;
+
+    /// <summary>A long project action, such as a build, finished or failed (DESIGN.md §18, "Project tools").</summary>
+    public bool ProjectActions { get; set; } = true;
 
     /// <summary>The number of tabs needing input on the Dock icon or taskbar button.</summary>
     public bool Badge { get; set; } = true;

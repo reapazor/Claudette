@@ -131,9 +131,13 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         if (oldValue is not null)
         {
             oldValue.IsSelected = false;
+            oldValue.PropertyChanged -= OnSelectedTabPropertyChanged;
         }
+        OnPropertyChanged(nameof(Links));
+        OnPropertyChanged(nameof(HasLinks));
         if (newValue is not null)
         {
+            newValue.PropertyChanged += OnSelectedTabPropertyChanged;
             newValue.IsSelected = true;
             if (_services.Notifications.IsAppActive)
             {
@@ -556,6 +560,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     internal void Confirm(string title, string message, string confirmText, Func<Task> onConfirm) =>
         Confirmation = new ConfirmationViewModel(title, message, confirmText, onConfirm, () => Confirmation = null);
 
+    /// <summary>A confirmation with a second choice besides the main one.</summary>
+    internal void Confirm(string title, string message, string confirmText, Func<Task> onConfirm, string secondaryText, Func<Task> onSecondary) =>
+        Confirmation = new ConfirmationViewModel(title, message, confirmText, onConfirm, () => Confirmation = null, secondaryText, onSecondary);
+
     [RelayCommand]
     private async Task CloseOtherTabsAsync(TabViewModel? keep)
     {
@@ -872,7 +880,66 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     {
         if (tab is not null)
         {
-            TabSettings = new TabSettingsViewModel(_services, tab, () => TabSettings = null);
+            TabSettings = new TabSettingsViewModel(_services, tab, () => TabSettings = null, this) { EditAction = EditProjectAction };
+        }
+    }
+
+    // ---- Project tools (DESIGN.md §18) ------------------------------------------------------------------------
+
+    /// <summary>The small dialog for a custom project action, while it's open.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActionEditor))]
+    public partial ProjectActionEditorViewModel? ActionEditor { get; set; }
+
+    public bool HasActionEditor => ActionEditor is not null;
+
+    /// <summary>
+    /// Opens the custom action dialog: a new action when <paramref name="existing"/> is null. With
+    /// <paramref name="askForFile"/>, it asks which of the folder's project files the action goes in.
+    /// </summary>
+    internal void EditProjectAction(string folder, Core.ProjectTools.CustomProjectAction? existing, Action<Core.ProjectTools.CustomProjectAction, Core.ProjectTools.ProjectFileScope> save, bool askForFile = false) =>
+        ActionEditor = new ProjectActionEditorViewModel(folder, existing, save, () => ActionEditor = null) { AsksForFile = askForFile };
+
+    /// <summary>A folder's project files changed: every tab in that folder reads them again.</summary>
+    internal void OnProjectActionsChanged(string folder)
+    {
+        foreach (var tab in AllTabs.Where(t => FolderHistory.SamePath(t.Folder, folder)))
+        {
+            tab.ReloadCustomActions();
+        }
+    }
+
+    // ---- Links (DESIGN.md §18, "Links"): the selected tab's, in the sidebar ------------------------------------------
+
+    /// <summary>The selected tab's links, from its folder's claudette.json and claudette.local.json.</summary>
+    public IReadOnlyList<Core.ProjectTools.ResolvedLink> Links => SelectedTab?.Links ?? [];
+
+    public bool HasLinks => SelectedTab?.HasLinks == true;
+
+    /// <summary>The Links section is folded to its heading. Remembered on this machine.</summary>
+    public bool IsLinksCollapsed => _services.State.LinksCollapsed;
+
+    public bool IsLinksExpanded => !IsLinksCollapsed;
+
+    [RelayCommand]
+    private void ToggleLinks()
+    {
+        _services.State.LinksCollapsed = !_services.State.LinksCollapsed;
+        _services.SaveState();
+        OnPropertyChanged(nameof(IsLinksCollapsed));
+        OnPropertyChanged(nameof(IsLinksExpanded));
+    }
+
+    [RelayCommand]
+    private Task OpenLinkAsync(Core.ProjectTools.ResolvedLink? link) =>
+        link is { Url: { } url } ? _services.Platform.OpenUrlAsync(url) : Task.CompletedTask;
+
+    private void OnSelectedTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(TabViewModel.Links) or nameof(TabViewModel.HasLinks) or null or "")
+        {
+            OnPropertyChanged(nameof(Links));
+            OnPropertyChanged(nameof(HasLinks));
         }
     }
 

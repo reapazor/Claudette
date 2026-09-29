@@ -317,6 +317,11 @@ public partial class ShellView : UserControl
         {
             shell.ToggleSidebarCommand.Execute(null);
         }
+        else if (Is(KeyboardShortcuts.RunProjectAction) && shell.SelectedTab is { } projectTab)
+        {
+            // Launch the editor, for Unreal (DESIGN.md §18, "Project tools").
+            projectTab.RunMainProjectActionCommand.Execute(null);
+        }
         else if (Is(KeyboardShortcuts.GoToTab) && Shortcuts.Digit(e.Key) is { } number)
         {
             shell.SelectNumber(number);

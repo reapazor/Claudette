@@ -54,7 +54,10 @@ public sealed partial class TabViewModel
         }
     }
 
-    /// <summary>The side panel: Changed files, Agents, and Processes when the monitor is on (DESIGN.md §3).</summary>
+    /// <summary>
+    /// The side panel: Changed files, Agents, Project when the tab has project tools, and Processes when the monitor is
+    /// on (DESIGN.md §3).
+    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowProcessSummary))]
     public partial bool IsSidePanelOpen { get; set; }
@@ -73,7 +76,7 @@ public sealed partial class TabViewModel
     [NotifyPropertyChangedFor(nameof(IsFilesPage))]
     public partial bool IsProcessesPage { get; set; }
 
-    public bool IsFilesPage => !IsProcessesPage && !IsAgentsPage;
+    public bool IsFilesPage => !IsProcessesPage && !IsAgentsPage && !IsProjectPage;
 
     partial void OnIsProcessesPageChanged(bool value)
     {
@@ -81,6 +84,7 @@ public sealed partial class TabViewModel
         if (value)
         {
             IsAgentsPage = false;
+            IsProjectPage = false;
         }
     }
 
@@ -92,6 +96,7 @@ public sealed partial class TabViewModel
     {
         IsProcessesPage = false;
         IsAgentsPage = false;
+        IsProjectPage = false;
     }
 
     [RelayCommand]

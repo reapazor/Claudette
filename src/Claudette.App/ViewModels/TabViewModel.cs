@@ -108,6 +108,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             }
         }
         RefreshTokens();
+        // Project tools (DESIGN.md §18): the project and the folder's own actions and links, as soon as they're read.
+        _ = RefreshProjectAsync();
     }
 
     /// <summary>What's saved for this tab.</summary>
@@ -280,6 +282,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 rows.Add(new InfoRow("Agents", agents));
             }
+            AddProjectRows(rows);
             AddPerforceRows(rows);
             rows.Add(new InfoRow("Status", StatusTip));
             return rows;
@@ -315,6 +318,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             }
             RefreshMessageTimes();
             _ = EnsureStartedAsync();
+            // Its claudette.json may have changed while another tab was showing (DESIGN.md §18).
+            _ = RefreshProjectFileAsync();
         }
     }
 
@@ -774,6 +779,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(ShowContextRing));
         UpdateSampler();
         OnPerforceSettingsChanged();
+        OnProjectToolSettingsChanged();
     }
 
     // ---- Restarting into a new build (DESIGN.md §9, "Working on Claudette") -------------------------------
@@ -1033,7 +1039,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         var settings = _services.Settings;
         try
         {
-            var session = await sessions.StartAsync(await WithPerforceAsync(new ClaudeLaunchOptions
+            var session = await sessions.StartAsync(await WithPerforceAsync(await WithProjectToolsAsync(new ClaudeLaunchOptions
             {
                 WorkingDirectory = Folder,
                 Resume = resume,
@@ -1043,7 +1049,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 PermissionMode = State.Overrides.PermissionMode ?? settings.NewTabs.DefaultPermissionMode,
                 AdditionalArguments = settings.Advanced.ExtraArguments.Split(' ', StringSplitOptions.RemoveEmptyEntries),
                 ProtocolLogPath = _services.ProtocolLogPath(FolderName),
-            }));
+            })));
             _session = session;
             _ = LoadSpinnerVerbsAsync();
             _services.RememberModels(session.Initialization?.Models);
@@ -1167,6 +1173,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(DisplayName));
         OnPropertyChanged(nameof(InfoRows));
         OnPropertyChanged(nameof(IsGitRepository));
+        ReloadCustomActions();
         _conversation.AddNote($"Now working in {State.Folder}.");
         await EnsureStartedAsync();
     }
@@ -1421,6 +1428,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     {
                         NotifyTurnFinished(completed.Result);
                     }
+                    // Claude may have edited claudette.json or switched branches: the actions and links follow.
+                    _ = RefreshProjectFileAsync();
                     break;
                 case ConversationReset:
                     _callUsage.ContextReset();
@@ -1615,6 +1624,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         StopAgentTicker();
         _services.Notifications.ClearTab(Id);
         StopPerforce();
+        StopProjectJobOnClose(killProcesses);
         ReleaseLease();
         await StopSessionAsync(killProcesses);
         CleanUpDiffFiles();
