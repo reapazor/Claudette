@@ -40,10 +40,10 @@ public sealed partial class ChangelistTracker(List<TrackedChangelist> changelist
     };
 
     /// <summary>The tab's changelist: the most recently used one, or null when it was deleted or there's none.</summary>
-    public TrackedChangelist? Current => changelists.MaxBy(c => c.LastUsed) is { State: not ChangelistState.Deleted } latest ? latest : null;
+    public TrackedChangelist? Current => Latest() is { State: not ChangelistState.Deleted } latest ? latest : null;
 
     /// <summary>Every changelist used in the session that still exists, most recent first.</summary>
-    public IReadOnlyList<TrackedChangelist> All => changelists.Where(c => c.State != ChangelistState.Deleted).OrderByDescending(c => c.LastUsed).ToArray();
+    public IReadOnlyList<TrackedChangelist> All => Recent().Where(c => c.State != ChangelistState.Deleted).ToArray();
 
     /// <summary>
     /// A Bash command finished. Returns whether anything changed. Only <c>p4</c> commands count; a command that
@@ -122,12 +122,12 @@ public sealed partial class ChangelistTracker(List<TrackedChangelist> changelist
             changelists.Add(new TrackedChangelist { Number = number, State = ChangelistState.Pending, LastUsed = at });
             return true;
         }
-        var changed = existing.State == ChangelistState.Deleted || Current != existing;
+        var changed = existing.State == ChangelistState.Deleted || Latest() != existing;
         if (existing.State == ChangelistState.Deleted)
         {
             existing.State = ChangelistState.Pending;
         }
-        existing.LastUsed = at;
+        Touch(existing, at);
         return changed;
     }
 
@@ -143,10 +143,23 @@ public sealed partial class ChangelistTracker(List<TrackedChangelist> changelist
             changelists.Add(new TrackedChangelist { Number = number, State = state, LastUsed = at });
             return true;
         }
-        var changed = existing.State != state || Current != existing;
+        var changed = existing.State != state || Latest() != existing;
         existing.State = state;
-        existing.LastUsed = at;
+        Touch(existing, at);
         return changed;
+    }
+
+    /// <summary>Most recent first. The list is kept in the order they were last used, which breaks ties in time.</summary>
+    private IEnumerable<TrackedChangelist> Recent() =>
+        changelists.Select((c, i) => (Changelist: c, Index: i)).OrderByDescending(e => e.Changelist.LastUsed).ThenByDescending(e => e.Index).Select(e => e.Changelist);
+
+    private TrackedChangelist? Latest() => Recent().FirstOrDefault();
+
+    private void Touch(TrackedChangelist changelist, DateTimeOffset at)
+    {
+        changelist.LastUsed = at;
+        changelists.Remove(changelist);
+        changelists.Add(changelist);
     }
 
     [GeneratedRegex(@"\bChange (?<n>\d+) (?:(?<what>created|updated|submitted|deleted)\b|renamed change (?<to>\d+) and submitted)")]

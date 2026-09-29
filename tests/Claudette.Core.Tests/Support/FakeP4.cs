@@ -10,9 +10,12 @@ namespace Claudette.Testing;
 /// records every command and what was written to it. Anything else started through it exits 1 straight away, unless
 /// <see cref="Other"/> answers it. Shared by the Core and App tests.
 /// </summary>
-internal sealed class FakeP4(TimeProvider time) : IProcessLauncher
+internal sealed class FakeP4(TimeProvider? time = null) : IProcessLauncher
 {
     private readonly List<FakeP4Run> _runs = [];
+
+    /// <summary>The clock tickets expire by; settable, for a harness that makes its clock after its launcher.</summary>
+    public TimeProvider Time { get; set; } = time ?? TimeProvider.System;
 
     public string User { get; set; } = "matt";
 
@@ -69,7 +72,7 @@ internal sealed class FakeP4(TimeProvider time) : IProcessLauncher
     public int StatusChecks => Runs.Count(r => r.Command == "login" && r.Arguments.Contains("-s"));
 
     /// <summary>Logs in the way the user would in a terminal.</summary>
-    public void LogInYourself() => TicketExpires = time.GetUtcNow() + TicketLifetime;
+    public void LogInYourself() => TicketExpires = Time.GetUtcNow() + TicketLifetime;
 
     /// <summary>Everything started, <c>p4</c> or not.</summary>
     public IReadOnlyList<ProcessStartSpec> Started
@@ -107,7 +110,7 @@ internal sealed class FakeP4(TimeProvider time) : IProcessLauncher
             return Other?.Invoke(run.Spec) is { } other ? (other.ExitCode, other.Output, "") : (1, "", "not p4");
         }
         const string connectFailed = "Perforce client error:\n\tConnect to server failed; check $P4PORT.\n\tTCP connect to perforce:1666 failed.";
-        var now = time.GetUtcNow();
+        var now = Time.GetUtcNow();
         switch (run.Command)
         {
             case "info" when Unreachable:
@@ -147,7 +150,7 @@ internal sealed class FakeP4(TimeProvider time) : IProcessLauncher
                 {
                     return (1, "Enter password: ", "Password invalid.");
                 }
-                TicketExpires = time.GetUtcNow() + TicketLifetime;
+                TicketExpires = Time.GetUtcNow() + TicketLifetime;
                 return (0, $"Enter password: \nUser {run.User ?? User} logged in.\n", "");
             default:
                 return (0, "", "");

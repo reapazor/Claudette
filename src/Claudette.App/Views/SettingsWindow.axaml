@@ -393,6 +393,74 @@
           <Button Content="Reset to defaults" Command="{Binding ResetKeyboardCommand}" />
         </StackPanel>
 
+        <!-- Perforce (DESIGN.md §18) -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsPerforce}">
+          <TextBlock Classes="section" Text="Perforce" />
+          <CheckBox Content="Keep Perforce logins fresh" IsChecked="{Binding PerforceEnabled}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="In a Perforce workspace, Claudette tells Claude it's one, and logs in again before the ticket expires so p4 commands keep working. Claude never sees the password. Applies to tabs started after the change." />
+          <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto" RowSpacing="10">
+            <TextBlock Classes="label" Text="Password source" />
+            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding PerforcePasswordSources}" SelectedItem="{Binding SelectedPasswordSource}" />
+            <TextBlock Grid.Row="1" Classes="label" Text="Renew the ticket when less than this is left (minutes)" TextWrapping="Wrap" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="1" Maximum="1440" Increment="5" FormatString="0" Value="{Binding PerforceRenewBeforeMinutes}" />
+          </Grid>
+          <TextBlock Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding IsPerforceConfigSource}"
+                     Text="P4PASSWD in a P4CONFIG file, in p4 set or in the environment is stored as plain text. Claudette only reads it." />
+          <CheckBox Content="Request tickets valid on all hosts (p4 login -a)" IsChecked="{Binding PerforceAllHostsTickets}" />
+          <CheckBox Content="Show changelist on tabs" IsChecked="{Binding ShowChangelistOnTabs}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="A CL 12345 badge after the tab's name. The tab info card always shows the changelist Claude is working in." />
+
+          <!-- The stored password: the OS credential store, never settings.json -->
+          <TextBlock Text="Stored password" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Text="{Binding StoredPasswordNote}" />
+          <TextBlock Classes="small warning" TextWrapping="Wrap" Text="{Binding CredentialStoreUnavailableText}" IsVisible="{Binding !IsCredentialStoreAvailable}" />
+          <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8" IsEnabled="{Binding IsCredentialStoreAvailable}">
+            <TextBlock Classes="label" Text="Server (P4PORT)" />
+            <TextBox Grid.Column="1" Text="{Binding PerforcePasswordServer}" PlaceholderText="ssl:perforce:1666" />
+            <TextBlock Grid.Row="1" Classes="label" Text="User" />
+            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding PerforcePasswordUser}" />
+            <TextBlock Grid.Row="2" Classes="label" Text="Password" />
+            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding PerforcePassword}" PasswordChar="•" AutomationProperties.Name="Perforce password" />
+          </Grid>
+          <StackPanel Orientation="Horizontal" Spacing="8" IsEnabled="{Binding IsCredentialStoreAvailable}">
+            <Button Content="Save password" Command="{Binding SavePerforcePasswordCommand}" />
+            <Button Content="Forget password" Command="{Binding ForgetPerforcePasswordCommand}" />
+          </StackPanel>
+          <TextBlock Classes="small" TextWrapping="Wrap" Text="{Binding PerforcePasswordStatus}"
+                     IsVisible="{Binding PerforcePasswordStatus, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+          <!-- Per-folder overrides -->
+          <TextBlock Text="Per-folder server and user" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Normally Perforce finds the server and user itself (P4CONFIG files, p4 set, the environment), the same way Claude's p4 commands do. Set them here for tabs in a folder when that isn't right." />
+          <ItemsControl ItemsSource="{Binding PerforceOverrides}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="6" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:PerforceOverrideEditor">
+                <Grid ColumnDefinitions="*,160,120,Auto" ColumnSpacing="6">
+                  <TextBlock Classes="small" Text="{Binding Folder}" TextTrimming="PathSegmentEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Folder}" />
+                  <TextBox Grid.Column="1" Text="{Binding Server}" PlaceholderText="Server" />
+                  <TextBox Grid.Column="2" Text="{Binding User}" PlaceholderText="User" />
+                  <Button Grid.Column="3" Classes="flat" Padding="6" ToolTip.Tip="Remove" AutomationProperties.Name="Remove this folder's override"
+                          Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).RemovePerforceOverrideCommand}" CommandParameter="{Binding}">
+                    <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
+                  </Button>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="Add folder…" Command="{Binding AddPerforceOverrideCommand}" />
+            <Button Content="Reset to defaults" Command="{Binding ResetPerforceCommand}" />
+          </StackPanel>
+        </StackPanel>
+
         <!-- Advanced -->
         <StackPanel Spacing="12" IsVisible="{Binding IsAdvanced}">
           <TextBlock Classes="section" Text="Advanced" />

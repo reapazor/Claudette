@@ -100,6 +100,19 @@ public class ChangelistTrackerTests
     }
 
     [Fact]
+    public void At_the_same_moment_the_later_one_wins()
+    {
+        var tracker = Tracker;
+        tracker.Observe("p4 edit -c 100 a.cpp", "", false, Start);
+        tracker.Observe("p4 edit -c 200 b.cpp", "", false, Start);
+        Assert.Equal(200, tracker.Current?.Number);
+
+        tracker.Observe("p4 edit -c 100 c.cpp", "", false, Start);
+        Assert.Equal(100, tracker.Current?.Number);
+        Assert.Equal([100, 200], tracker.All.Select(c => c.Number));
+    }
+
+    [Fact]
     public void Submitting_marks_it_submitted()
     {
         Run("p4 edit -c 12345 a.cpp");

@@ -148,6 +148,19 @@
                                         IsVisible="{Binding IsPinned}" VerticalAlignment="Center" Margin="0,0,5,0" />
                                   <TextBlock DockPanel.Dock="Left" Classes="status busy small" Text="⚙" IsVisible="{Binding HasBusyProcesses}" VerticalAlignment="Center" Margin="0,0,5,0"
                                              ToolTip.Tip="A process this tab started is using CPU" />
+                                  <!-- The Perforce changelist (DESIGN.md §18): separate from the name, so renaming keeps it -->
+                                  <Button DockPanel.Dock="Right" Classes="flat changelist" Padding="0" Margin="5,0,0,0" VerticalAlignment="Center"
+                                          IsVisible="{Binding ShowChangelistBadge}" ToolTip.Tip="{Binding ChangelistBadgeTip}" AutomationProperties.Name="{Binding ChangelistBadge}">
+                                    <Border Background="{DynamicResource SubtleBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1" CornerRadius="4" Padding="4,0">
+                                      <TextBlock Classes="muted small" Text="{Binding ChangelistBadge}" />
+                                    </Border>
+                                    <Button.Flyout>
+                                      <MenuFlyout>
+                                        <MenuItem Header="Copy changelist number" Command="{Binding CopyChangelistCommand}" CommandParameter="{x:Null}" />
+                                        <MenuItem Header="Open in P4V" Command="{Binding OpenChangelistInP4VCommand}" CommandParameter="{x:Null}" />
+                                      </MenuFlyout>
+                                    </Button.Flyout>
+                                  </Button>
                                   <Panel>
                                     <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" IsVisible="{Binding !IsRenaming}" />
                                     <TextBox Text="{Binding RenameText}" IsVisible="{Binding IsRenaming}" Padding="4,1" MinHeight="0"

@@ -489,6 +489,24 @@
           </StackPanel>
         </Border>
       </Border>
+
+      <!-- Perforce password (DESIGN.md §18): "Ask each time", or a first "Stored by Claudette" login -->
+      <Border Classes="overlay" IsVisible="{Binding HasPerforcePrompt}">
+        <Border Classes="dialog" MaxWidth="460" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <StackPanel Spacing="12" DataContext="{Binding PerforcePrompt}" x:DataType="vm:PerforcePasswordPrompt">
+            <TextBlock Text="Log in to Perforce" FontWeight="SemiBold" FontSize="16" />
+            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+            <TextBlock Classes="small error" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
+            <TextBox Text="{Binding Password}" PasswordChar="•" PlaceholderText="Password" AutomationProperties.Name="Perforce password" />
+            <CheckBox Content="{Binding SaveText}" IsChecked="{Binding Save}" IsVisible="{Binding OfferToSave}" />
+            <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Claude never sees it: it goes straight to p4 login." />
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+              <Button Content="Cancel" Command="{Binding CancelCommand}" />
+              <Button Classes="accent" Content="Log in" Command="{Binding LogInCommand}" IsDefault="True" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Border>
     </Grid>
 
     <!-- Composer (DESIGN.md §5) -->
@@ -723,16 +741,32 @@
                 <TextBlock Classes="muted small" Text="ⓘ" />
                 <Button.Flyout>
                   <Flyout Placement="TopEdgeAlignedRight">
-                    <ItemsControl ItemsSource="{Binding InfoRows}" MinWidth="320" MaxWidth="480">
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:InfoRow">
-                          <Grid ColumnDefinitions="72,*" Margin="0,1">
-                            <TextBlock Classes="muted small" Text="{Binding Label}" />
-                            <SelectableTextBlock Grid.Column="1" Classes="small" Text="{Binding Value}" TextWrapping="Wrap" />
-                          </Grid>
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <StackPanel Spacing="8" MinWidth="320" MaxWidth="480">
+                      <ItemsControl ItemsSource="{Binding InfoRows}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="vm:InfoRow">
+                            <Grid ColumnDefinitions="72,*" Margin="0,1">
+                              <TextBlock Classes="muted small" Text="{Binding Label}" />
+                              <SelectableTextBlock Grid.Column="1" Classes="small" Text="{Binding Value}" TextWrapping="Wrap" />
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <!-- Perforce changelists, with Copy and Open in P4V (DESIGN.md §18) -->
+                      <ItemsControl ItemsSource="{Binding ChangelistRows}" IsVisible="{Binding HasChangelists}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="vm:ChangelistRow">
+                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
+                              <TextBlock Classes="small" Text="{Binding Text}" VerticalAlignment="Center" />
+                              <Button Grid.Column="1" Classes="flat" Content="Copy" Click="OnFlyoutItemPicked"
+                                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyChangelistCommand}" CommandParameter="{Binding Number}" />
+                              <Button Grid.Column="2" Classes="flat" Content="Open in P4V" Click="OnFlyoutItemPicked"
+                                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenChangelistInP4VCommand}" CommandParameter="{Binding Number}" />
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
                   </Flyout>
                 </Button.Flyout>
               </Button>

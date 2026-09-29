@@ -118,7 +118,7 @@ public sealed partial class QuickSuffixEditor(QuickSuffix suffix, Action changed
 public sealed partial class SettingsViewModel : ViewModelBase
 {
     public static readonly IReadOnlyList<string> AllCategories =
-        ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Notifications", "Keyboard", "Advanced"];
+        ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Notifications", "Keyboard", "Perforce", "Advanced"];
 
     private readonly AppServices _services;
     private readonly AppSettings _settings;
@@ -138,6 +138,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             ShortcutRows.Add(new ShortcutRow(command, _settings.Keyboard));
         }
         SelectedCategory = AllCategories[0];
+        FillPerforceLogin();
     }
 
     public IReadOnlyList<string> Categories => AllCategories;
@@ -197,6 +198,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Notifications", "A Claude Code update is ready"),
         new("Notifications", "Dock or taskbar badge"),
         .. KeyboardShortcuts.All.Select(c => new SettingsSearchResult("Keyboard", $"{c.Label} shortcut")),
+        .. PerforceSearchEntries(),
         new("Advanced", "Extra arguments for every claude process"),
         new("Advanced", "Open data folder"),
     ];
