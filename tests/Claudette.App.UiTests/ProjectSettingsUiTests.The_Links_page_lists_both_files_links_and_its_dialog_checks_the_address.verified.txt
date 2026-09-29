@@ -1,6 +1,6 @@
 ﻿"Links"
 "For the tab in {root}/work"
-"Web links for this project, in the sidebar above History and in the project's menus; a click opens one in the browser. Shared links are in claudette.json, committed with the project; yours alone are in claudette.local.json. Changes are saved as you make them, and saving rewrites the file, so comments in it are dropped."
+"Web links for this project, in the project's menu in the sidebar; a click opens one in the browser. Shared links are in claudette.json, committed with the project; yours alone are in claudette.local.json. Changes are saved as you make them, and saving rewrites the file, so comments in it are dropped."
 "Board"
 "Shared (claudette.json)"
 "https://example.atlassian.net/jira/software/projects/ABC/boards/1"

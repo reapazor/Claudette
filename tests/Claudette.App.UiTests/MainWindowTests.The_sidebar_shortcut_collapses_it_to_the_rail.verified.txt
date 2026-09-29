@@ -3,5 +3,6 @@
 [button] work
 [button] work
   "W"
+[button] Project tools
 [button] History
 [button] Settings

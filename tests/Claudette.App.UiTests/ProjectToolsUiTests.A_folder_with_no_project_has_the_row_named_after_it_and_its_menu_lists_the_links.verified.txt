@@ -1,0 +1,12 @@
+﻿"work"
+"{root}/work"
+"Links"
+[button] (parts below)
+  "↗"
+  "Board"
+[button] (parts below)
+  "↗"
+  "Pull request"
+[button] Add an action…
+[button] Add a link…
+[button] Refresh

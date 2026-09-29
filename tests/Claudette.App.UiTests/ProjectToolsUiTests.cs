@@ -140,7 +140,7 @@ public class ProjectToolsUiTests
         UiText.Settle(window);
         var menu = Assert.IsAssignableFrom<Control>(flyout.Content);
         await UiText.SettleUntilAsync(window, () => menu.IsEffectivelyVisible, "the menu");
-        var shown = UiText.Describe(menu, (h.WorkFolder, "{folder}"), (tab.FolderName, "{folderName}"));
+        var shown = UiText.Describe(menu, (h.Root, "{root}"));
         var buttons = menu.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible).ToList();
         var board = buttons.Single(b => UiText.Describe(b).Contains("Board", StringComparison.Ordinal));
         Assert.True(board.IsEffectivelyEnabled);
