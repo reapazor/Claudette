@@ -41,6 +41,9 @@ public class ProjectToolsTests
 
     private static ProjectMenuEntry Entry(TabViewModel tab, string label) => InlineDispatcher.Read(() => tab.ProjectMenu.Single(e => e.Label == label));
 
+    /// <summary>The newest run: the one the last job made.</summary>
+    internal static ProjectRunViewModel? LastRun(TabViewModel tab) => InlineDispatcher.Read(() => tab.ProjectRuns.LastOrDefault());
+
     // ---- The chip and its menu --------------------------------------------------------------------------------------------
 
     [Fact]
@@ -221,25 +224,29 @@ public class ProjectToolsTests
         Assert.True(tab.IsProjectJobRunning);
         Assert.Equal("Build editor…", tab.ProjectChipText);
         Assert.False(Entry(tab, "Generate project files").IsEnabled);
+        Assert.Contains("Stop it first", Entry(tab, "Generate project files").Tip, StringComparison.Ordinal);
+        var build = LastRun(tab)!;
+        Assert.Same(build, tab.SelectedProjectRun);
         process.WriteOutput("Building NightOwlEditor...");
         process.WriteError("warning: deprecated");
-        await TabTestHarness.Eventually(() => tab.ProjectOutput.Contains("warning: deprecated"), "the output");
-        Assert.StartsWith("$ ", tab.ProjectOutput[0], StringComparison.Ordinal);
+        await TabTestHarness.Eventually(() => build.Output.Contains("warning: deprecated"), "the output");
+        Assert.StartsWith("$ ", build.Output[0], StringComparison.Ordinal);
 
         process.Exit(0);
         await TabTestHarness.Eventually(() => !tab.IsProjectJobRunning, "the end");
 
-        Assert.Equal("Build editor succeeded.", tab.ProjectJobStatus);
-        Assert.False(tab.ProjectJobFailed);
+        Assert.Equal("Build editor succeeded.", build.Status);
+        Assert.False(build.Failed);
         Assert.Equal("NightOwl · UE 5.4", tab.ProjectChipText);
 
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "generate-project-files"));
         launcher.Processes.Last().Exit(6);
-        await TabTestHarness.Eventually(() => tab.ProjectJobState == ProjectJobState.Failed, "the failure");
+        var generate = LastRun(tab)!;
+        await TabTestHarness.Eventually(() => generate.State == ProjectJobState.Failed, "the failure");
 
-        Assert.Equal("Generate project files failed (exit code 6).", tab.ProjectJobStatus);
-        Assert.True(tab.ProjectJobFailed);
-        Assert.DoesNotContain("Building NightOwlEditor...", tab.ProjectOutput);
+        Assert.Equal("Generate project files failed (exit code 6).", generate.Status);
+        Assert.True(generate.Failed);
+        Assert.DoesNotContain("Building NightOwlEditor...", generate.Output);
     }
 
     [Fact]
@@ -251,13 +258,16 @@ public class ProjectToolsTests
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-editor"));
         var process = launcher.Processes.Last();
 
-        Assert.True(tab.StopProjectJobCommand.CanExecute(null));
-        tab.StopProjectJobCommand.Execute(null);
-        await TabTestHarness.Eventually(() => tab.ProjectJobState == ProjectJobState.Stopped, "the stop");
+        var run = tab.SelectedProjectRun!;
+
+        Assert.True(run.StopCommand.CanExecute(null));
+        run.StopCommand.Execute(null);
+        await TabTestHarness.Eventually(() => run.State == ProjectJobState.Stopped, "the stop");
 
         Assert.True(h.Trees.Trees[process.Id].Killed);
         Assert.True(process.Killed);
-        Assert.Equal("Build editor was stopped.", tab.ProjectJobStatus);
+        Assert.Equal("Build editor was stopped.", run.Status);
+        Assert.False(run.StopCommand.CanExecute(null));
         Assert.Null(h.Notifier.Last("ProjectAction:"));
     }
 
@@ -284,7 +294,7 @@ public class ProjectToolsTests
         var count = h.Notifier.Shown.Count;
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-editor"));
         launcher.Processes.Last().Exit(0);
-        await TabTestHarness.Eventually(() => tab.ProjectJobState == ProjectJobState.Succeeded, "the end");
+        await TabTestHarness.Eventually(() => LastRun(tab)!.Succeeded, "the end");
         Assert.Equal(count, h.Notifier.Shown.Count);
 
         h.Services.Settings.Notifications.ProjectActions = false;
@@ -302,7 +312,7 @@ public class ProjectToolsTests
 
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-and-launch"));
         launcher.Processes.Last().Exit(2);
-        await TabTestHarness.Eventually(() => tab.ProjectJobState == ProjectJobState.Failed, "the failed build");
+        await TabTestHarness.Eventually(() => LastRun(tab)!.Failed, "the failed build");
         await Task.Delay(50, TestContext.Current.CancellationToken);
         Assert.DoesNotContain(launcher.Started, s => s.FileName == editor);
 
@@ -325,12 +335,13 @@ public class ProjectToolsTests
         {
             process.WriteOutput($"line {i}");
         }
-        await TabTestHarness.Eventually(() => tab.ProjectOutput.LastOrDefault() == "line 5200", "the output");
+        var run = tab.SelectedProjectRun!;
+        await TabTestHarness.Eventually(() => run.Output.LastOrDefault() == "line 5200", "the output");
 
-        Assert.Equal(TabViewModel.MaxProjectOutputLines, tab.ProjectOutput.Count);
-        Assert.Equal("line 201", tab.ProjectOutput[0]);
-        Assert.Equal(201, tab.ProjectOutputDropped);
-        Assert.Contains("5,000", tab.ProjectOutputNote!.Replace(".", ",", StringComparison.Ordinal).Replace(" ", ",", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.Equal(ProjectRunViewModel.MaxOutputLines, run.Output.Count);
+        Assert.Equal("line 201", run.Output[0]);
+        Assert.Equal(201, run.OutputDropped);
+        Assert.Contains("5,000", run.OutputNote!.Replace(".", ",", StringComparison.Ordinal).Replace(" ", ",", StringComparison.Ordinal), StringComparison.Ordinal);
         await tab.CopyProjectOutputCommand.ExecuteAsync(null);
         Assert.EndsWith("line 5200", h.Platform.Clipboard, StringComparison.Ordinal);
     }
@@ -379,13 +390,13 @@ public class ProjectToolsTests
         Assert.DoesNotContain("open", confirmation.Message, StringComparison.Ordinal);
 
         await confirmation.ConfirmCommand.ExecuteAsync(null);
-        await TabTestHarness.Eventually(() => tab.ProjectJobState == ProjectJobState.Succeeded, "the clean");
+        await TabTestHarness.Eventually(() => LastRun(tab) is { Succeeded: true }, "the clean");
 
         Assert.False(Directory.Exists(Path.Combine(h.WorkFolder, "Intermediate")));
         Assert.False(Directory.Exists(Path.Combine(h.WorkFolder, "Plugins", "Owl", "Binaries")));
         Assert.True(File.Exists(Path.Combine(h.WorkFolder, "Saved", "Logs", "NightOwl.log")));
         Assert.True(File.Exists(Path.Combine(h.WorkFolder, "Plugins", "Owl", "Owl.uplugin")));
-        Assert.Contains("Deleted 2 folders.", tab.ProjectOutput);
+        Assert.Contains("Deleted 2 folders.", LastRun(tab)!.Output);
         await TabTestHarness.Eventually(() => !Action(tab, "clean").IsEnabled, "nothing left to clean");
     }
 
@@ -465,9 +476,9 @@ public class ProjectToolsTests
         Assert.True(Directory.Exists(Path.GetDirectoryName(results)));
         File.WriteAllText(results, """<test-run total="12" passed="11" failed="1" skipped="0" />""");
         launcher.Processes.Last().Exit(2);
-        await TabTestHarness.Eventually(() => tab.ProjectJobState == ProjectJobState.Failed, "the tests");
+        await TabTestHarness.Eventually(() => LastRun(tab)!.Failed, "the tests");
 
-        Assert.Equal("Run EditMode tests failed (exit code 2). 11 passed, 1 failed.", tab.ProjectJobStatus);
+        Assert.Equal("Run EditMode tests failed (exit code 2). 11 passed, 1 failed.", LastRun(tab)!.Status);
     }
 
     // ---- Custom actions (claudette.json and claudette.local.json) ----------------------------------------------------------
@@ -506,8 +517,8 @@ public class ProjectToolsTests
         }
         launcher.Processes.Last().WriteOutput("ok 12 tests");
         launcher.Processes.Last().Exit(0);
-        await TabTestHarness.Eventually(() => tab.ProjectJobStatus == "Run tests succeeded.", "the end");
-        Assert.Contains("ok 12 tests", tab.ProjectOutput);
+        await TabTestHarness.Eventually(() => LastRun(tab)!.Status == "Run tests succeeded.", "the end");
+        Assert.Contains("ok 12 tests", LastRun(tab)!.Output);
     }
 
     [Fact]

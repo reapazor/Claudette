@@ -142,7 +142,7 @@ public partial class TabView : UserControl
             _tab.DiffRequested -= OnDiffRequested;
             _tab.ScrollToRequested -= OnScrollToRequested;
             _tab.AgentWindowRequested -= OnAgentWindowRequested;
-            _tab.ProjectOutput.CollectionChanged -= OnProjectOutputChanged;
+            _tab.PropertyChanged -= OnTabPropertyChanged;
         }
         _tab = ViewModel;
         if (_tab is not null)
@@ -150,11 +150,38 @@ public partial class TabView : UserControl
             _tab.DiffRequested += OnDiffRequested;
             _tab.ScrollToRequested += OnScrollToRequested;
             _tab.AgentWindowRequested += OnAgentWindowRequested;
-            _tab.ProjectOutput.CollectionChanged += OnProjectOutputChanged;
+            _tab.PropertyChanged += OnTabPropertyChanged;
         }
+        WatchProjectOutput();
     }
 
     private TabViewModel? _tab;
+
+    /// <summary>The output of the run the Project page shows, which it follows.</summary>
+    private System.Collections.ObjectModel.ObservableCollection<string>? _projectOutput;
+
+    private void OnTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TabViewModel.SelectedProjectRun))
+        {
+            WatchProjectOutput();
+        }
+    }
+
+    /// <summary>Another run's log is showing: follow its lines instead, from its newest.</summary>
+    private void WatchProjectOutput()
+    {
+        if (_projectOutput is not null)
+        {
+            _projectOutput.CollectionChanged -= OnProjectOutputChanged;
+        }
+        _projectOutput = _tab?.SelectedProjectRun?.Output;
+        if (_projectOutput is not null)
+        {
+            _projectOutput.CollectionChanged += OnProjectOutputChanged;
+            ScrollProjectOutputToEnd();
+        }
+    }
 
     /// <summary>The built-in diff view, in its own window so it can stay open beside the conversation (DESIGN.md §8).</summary>
     private void OnDiffRequested(DiffSource source)
@@ -284,16 +311,25 @@ public partial class TabView : UserControl
     /// <summary>A project job's output follows its newest line, as a terminal does.</summary>
     private void OnProjectOutputChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
-        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && ProjectOutputList.IsEffectivelyVisible)
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
         {
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                if (ProjectOutputList.ItemCount > 0)
-                {
-                    ProjectOutputList.ScrollIntoView(ProjectOutputList.ItemCount - 1);
-                }
-            }, Avalonia.Threading.DispatcherPriority.Background);
+            ScrollProjectOutputToEnd();
         }
+    }
+
+    private void ScrollProjectOutputToEnd()
+    {
+        if (!ProjectOutputList.IsEffectivelyVisible)
+        {
+            return;
+        }
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (ProjectOutputList.ItemCount > 0)
+            {
+                ProjectOutputList.ScrollIntoView(ProjectOutputList.ItemCount - 1);
+            }
+        }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
     /// <summary>Closes the dropdown a picked item lives in.</summary>

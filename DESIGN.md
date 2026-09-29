@@ -135,7 +135,7 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
 ```
 
 1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. A chevron at its right draws it taller, with charts ([Detailed header](#detailed-header)). See [§6](#6-token-burn-awareness). At its right, before the account name, a dot shows Claude's service status, and while Claude has an incident a banner runs across the top under it ([§18](#service-status)).
-2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder. **New tab** is at its top; the selected tab's **Links** ([§18](#project-tools)), **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
+2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder, and under a tab's row, the runs of its project actions ([§18](#project-tools)). **New tab** is at its top; the selected tab's **Links** ([§18](#project-tools)), **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
 3. **Conversation.** The selected tab's conversation. See [§5](#5-conversation-view).
 4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), its project's tools and their output when it has any ([§18](#project-tools)), and optionally its running processes ([§4](#process-monitor)).
 5. **Composer.** Where you type to the selected tab, plus the Stop button and per-tab controls.
@@ -227,12 +227,18 @@ The tabs are listed in a sidebar on the left of the window, rather than a strip 
     - Its tip is the composer bar's context text and detail, for example *"Context 75% (150,000 of 200,000 tokens · auto-compacts at 160,000)"*.
     - It's hidden until the tab has context data, so a tab that hasn't started has none. **Show context on tab rows** (Settings → Appearance, on by default) turns it off. The rail doesn't show it.
   - The close button shows on hover and on the selected tab. Hovering the row shows the tab info card; double-clicking renames it.
+- **Project runs.** Each time one of the tab's project actions runs as a job, such as a build, it gets a small entry under the tab's row, indented to the tab's name, newest last ([§18](#project-tools)):
+  - A glyph for how it's going: the busy dot while it runs, ✓ when it succeeded, ✕ in the error color when it failed, and a muted ■ when it was stopped.
+  - Its name, and under it how long it has been running (*Running · 1m 05s*), or how it ended and when (*Failed · exit code 6 · 14:32*, in the error color). Hovering it shows its status line, when it started and how long it took.
+  - Clicking it selects the tab and opens the side panel's Project page on its log. The entry whose log the page shows is picked out.
+  - An entry never closes on its own, whatever the result. A finished one has a close button (×) that takes the entry and its log away. While it runs, a **Stop** button (■) is in that place instead, and ends the job as the Project page's Stop does; so a click on × never stops a build.
+  - Closing the tab takes its entries away. They aren't saved, so they're gone when Claudette quits or restarts.
 - **A tab's menu** (right-click, in the full sidebar and the rail): Rename, Reset name, Pin, **Sync to other machines**, **Connect to the Claude app** (disabled, with the reason as its tip, when the account can't use it) and **Open in the Claude app** while it's connected ([§18](#remote-control-the-claude-app)), **Tab settings…**, the project's actions in a submenu named after the project (or **Add an action…** for a folder with none yet, [§18](#project-tools)), **Move up** and **Move down**, and Close.
 - **Top:** **New tab**, which opens the picker ([Opening a tab](#opening-a-tab)), and the button that collapses the sidebar.
 - **Foot:** the selected tab's **Links**, from its folder's `claudette.json`, when it has any ([§18](#project-tools)), **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), the Claudette update badge when there's a new release ([§2](#updating-claudette)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
 - **Resizing.** Drag the sidebar's edge to make it wider or narrower (180 to 420 pixels; 248 by default). Double-click the edge for the default width. The width is remembered.
 - **Collapsing.** The collapse button, or `Ctrl/Cmd+B`, shrinks the sidebar to a rail:
-  - The rail shows each group's color, then a square per tab with the first letter of its name and a small status icon. Hovering a square shows the tab info card.
+  - The rail shows each group's color, then a square per tab with the first letter of its name and a small status icon. Hovering a square shows the tab info card. It doesn't list project runs.
   - A collapsed group shows only its color and its most urgent status.
   - New tab, Links, History, the update badge and Settings stay as icons.
   - Whether the sidebar is collapsed is remembered.
@@ -869,7 +875,7 @@ Clicking a notification brings Claudette to the front and goes to the relevant t
 - **Clicking.**
   - A tab notification selects the tab, expanding its group if it's collapsed.
   - A usage alert opens the Usage panel, an update opens the update dialog, and the sign-in notification opens the sign-in dialog ([§11](#signing-in)).
-  - A project action's notification selects its tab and opens its Project page.
+  - A project action's notification selects its tab and opens its Project page on the log of the run it's about.
 - **Badge.** Settings → Notifications → **Show the number of tabs needing input on the Dock or taskbar icon**. On Windows it's an overlay icon on the taskbar button, drawn by Claudette.
 - **How each OS does it** (the code is in `Claudette.Platform/Notifications`):
   - **Windows:** WinRT toasts (`ToastNotificationManager`), called through source-generated COM interop so the app stays a plain `net10.0` build. A click raises the toast's `Activated` event in the running Claudette. An MSIX install has package identity. Run unpackaged, Claudette sets its AppUserModelID (`reapazor.Claudette`) and registers it under `HKCU\Software\Classes\AppUserModelId`, as the Windows App SDK does. The badge uses `ITaskbarList3::SetOverlayIcon`.
@@ -1576,6 +1582,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Unity:** the editor for the project's version from Unity Hub's folders and lists, Open in Unity with Release or Debug code optimization, EditMode tests with their counts, regenerating the C# solution, the solution and logs, Clean Library, Kill all Unity editors, and the lock file rules.
     - **Godot:** finding the executable (a pick, Settings, the `PATH`, `Godot.app`, Scoop and WinGet) and checking for the .NET build, Open in Godot, Run project, Build C#, Open solution, Clean `.godot` or `.import`, and Kill all Godot editors.
     - **The chip** in the composer bar, the project's submenu in the tab menu, the **Project** page with the job's output and Stop, the notification, and `Ctrl/Cmd+Shift+E`.
+    - **Runs in the sidebar:** each job gets an entry under its tab's row with its own log, which stays until it's closed, with Stop while it runs.
     - **claudette.json** and **claudette.local.json:** a folder's own actions (shared ones run on a click, without a confirmation) and links, the links in the sidebar, and the in-app editor.
     - **Settings → Project tools**, and the notes to Claude about Unreal, Unity and Godot projects.
     - **Still to verify:** everything on machines with Unreal, Unity and Godot installed, on Windows, macOS and Linux (see [§18](#project-tools)).
@@ -1748,8 +1755,13 @@ A tab can do things for the project in its folder: launch the editor, generate p
 - **The Project page** of the side panel ([§3](#3-main-window)), beside Changed files, Agents and Processes. Its button shows a busy dot while a job runs. It shows:
   - the project's details: its file, the engine's version, folder and kind, the editor target and the configuration;
   - a button per action;
-  - the running or last job: its status (running, succeeded, failed with its exit code, stopped), **Stop**, which ends the job's whole process tree, and **Copy**;
-  - the job's output, monospace and scrollable, following the newest line. It keeps the last 5,000 lines and says how many were dropped.
+  - the selected run (see **Runs**, below): its status (running, succeeded, failed with its exit code, stopped), **Stop**, which ends the job's whole process tree, and **Copy**;
+  - its output, monospace and scrollable, following the newest line. Each run keeps its last 5,000 lines and says how many were dropped.
+- **Runs.** Each job is a run: a build, generating project files, a custom action with output, Clean's deletion, or one that couldn't start, whose log says why. Launch and Open actions start a program that runs on its own, with no output, so they don't make one.
+  - **In the sidebar**, each run is an entry under its tab's row, newest last ([§4](#sidebar)): its state, its name, and how long it has run or how it ended. Clicking one selects the tab and opens the Project page on its log.
+  - **Entries stay** until the user closes them, whatever the result: × on a finished one takes it and its log away. A running one has **Stop** in the × button's place, so a stray click never ends a build.
+  - **Which log the page shows:** a run that starts shows itself; clicking an entry shows that one; closing the one showing shows the newest left. With no runs, the page has only the project's details and actions.
+  - Closing the tab takes its runs away. They aren't saved: they're gone when Claudette quits or restarts.
 - **The keyboard.** **Run the project's main action**, `Ctrl/Cmd+Shift+E` by default and rebindable ([§14](#keyboard-shortcuts)): Launch editor for Unreal, Open in Unity, Open in Godot, else the folder's first custom action.
 
 **How it's built.** `Claudette.Core/ProjectTools`:
@@ -1757,7 +1769,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
 - An `IProjectToolProvider` finds its kind of project for a folder and describes it as a `ProjectInfo`: kind, name, root, details, actions, a per-project choice, a fix (**Choose engine folder…**) and the note for Claude.
 - A `ProjectAction` has an id, a label, a description and one of four kinds:
   - **Launch**: a program that outlives Claudette, such as the editor. It starts detached, and nothing of it is tracked.
-  - **Run**: a long job. Its output goes to the Project page, **Stop** ends it, and its end is notified. One job runs at a time per tab; the other jobs are disabled until it ends.
+  - **Run**: a long job. It gets an entry in the sidebar with its own log, shown on the Project page; **Stop** ends it, and its end is notified. One job runs at a time per tab; the other jobs are disabled until it ends.
   - **Open**: a file or folder, opened with the OS's app, or for a solution with the IDE chosen in Settings.
   - **Destructive**: confirmed first, such as deleting folders.
 - Every command is built by a pure function that takes the OS, so all three OSes' commands are tested on any machine.
@@ -1802,7 +1814,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - **Open latest log**: `Saved/Logs/<Name>.log`, disabled when there's none yet.
   - **Clean intermediates…**, destructive. It deletes `Binaries` and `Intermediate` in the project, and in each plugin under `Plugins/` (a folder with a `.uplugin`, however deeply nested). Nothing else: not `Saved`, `DerivedDataCache`, `Content` or `Config`.
     - The confirmation lists the folders and their total size. It warns when an editor seems to have the project open: an `UnrealEditor`, `UnrealEditor-Cmd`, `UE4Editor` or `UE4Editor-Cmd` process whose command line names the `.uproject`. Where command lines can't be read, it doesn't guess.
-    - The folders are deleted off the UI thread, as a job with its lines on the Project page. Read-only files are made writable first, and links inside are removed without following them.
+    - The folders are deleted off the UI thread, as a job with its own entry and log, like a build's. Read-only files are made writable first, and links inside are removed without following them.
   - **Kill all Unreal editors…**, destructive. It ends every running Unreal editor, not just this project's, and each one's process tree, which takes ShaderCompileWorker and the like with it.
     - The editors are `UnrealEditor`, `UnrealEditor-Cmd`, `UE4Editor` and `UE4Editor-Cmd` (`.exe` on Windows; on macOS, the executable inside `UnrealEditor.app`).
     - The confirmation says how many are running and lists each with its PID and, when its command line shows it, its project: "End 2 Unreal editors?", "• UnrealEditor (PID 501): NightOwl".
@@ -1902,7 +1914,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
 - **Actions.**
   - `name` and `command` are required.
   - `folder` is relative to the tab's folder; the tab's folder by default.
-  - `mode` is `output` (the default: output on the Project page, **Stop**, and the notification) or `launch` (started and left alone).
+  - `mode` is `output` (the default: a run in the sidebar with its log on the Project page, **Stop**, and the notification) or `launch` (started and left alone).
   - `os` is optional: `windows`, `macos` or `linux`. An action whose `os` leaves out this machine isn't shown.
   - Commands run through the user's shell: `cmd.exe /d /s /c "<command>"` on Windows, `$SHELL -c` (or `/bin/sh -c`) elsewhere. Otherwise they run like built-in actions.
   - An action's id is its file and position, such as `shared:0`, which Stop and the notification use.
@@ -1924,7 +1936,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
 - **Placeholders**, filled from the selected tab and URL-escaped: `{branch}` (the git branch), `{changelist}` (the Perforce changelist Claude is working in, [§18](#perforce-changelist-in-the-tab-title)) and `{folderName}`. A link whose placeholder can't be filled right now is disabled and says why ("No git branch").
 - **Updates.** Links follow the selected tab, and are read again as its files are.
 
-**Notifications.** When a job finishes or fails and Claudette isn't in front, a notification says so: *"Build editor failed (exit code 6)."* A stopped job doesn't notify. Clicking it selects the tab and opens its Project page. Settings → Notifications → **A project action finishes**, on by default ([§10](#10-notifications)).
+**Notifications.** When a job finishes or fails and Claudette isn't in front, a notification says so: *"Build editor failed (exit code 6)."* A stopped job doesn't notify. Clicking it selects the tab and opens its Project page on that run's log. Settings → Notifications → **A project action finishes**, on by default ([§10](#10-notifications)).
 
 **Settings → Project tools** ([§14](#14-settings)), kept on each machine like the diff tool:
 
@@ -1936,7 +1948,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
 - Godot: the executable's path, empty to find it, with **Browse…** and **Detect**. Tell Claude about Godot projects: on by default.
 - **Reset to defaults**, and search entries for each.
 
-**Testing.** No test runs a real engine: engines are a few files in temporary folders, the registry and running processes are fakes, and every process is a fake launcher's. `ProjectDiscoveryTests`, `UnrealEngineTests`, `UnrealCommandTests`, `CommandLineTests`, `UnrealProviderTests`, `UnityProviderTests`, `GodotProviderTests`, `ProjectJobTests` and `ProjectFileTests` in Core; `SystemProcessesTests` in Platform; `ProjectToolsTests` for the tab; and `ProjectToolsUiTests` for the rendered chip, its menu, the tab menu's submenu and the Links section.
+**Testing.** No test runs a real engine: engines are a few files in temporary folders, the registry and running processes are fakes, and every process is a fake launcher's. `ProjectDiscoveryTests`, `UnrealEngineTests`, `UnrealCommandTests`, `CommandLineTests`, `UnrealProviderTests`, `UnityProviderTests`, `GodotProviderTests`, `ProjectJobTests` and `ProjectFileTests` in Core; `SystemProcessesTests` in Platform; `ProjectToolsTests` and `ProjectRunsTests` for the tab; and `ProjectToolsUiTests` for the rendered chip, its menu, the tab menu's submenu, the Links section and the runs in the sidebar.
 
 > **Still to verify on a machine with Unreal installed:**
 > - Launching the editor and building from a launcher install and a source build on Windows, macOS and Linux, including DebugGame and `-debug`.
