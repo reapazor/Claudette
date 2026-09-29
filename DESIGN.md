@@ -1313,7 +1313,20 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
      - The replacement for the placeholder icon.
 8. **Working on Claudette.** ✅ Built 2026-09-29. A source build runs from a copy of its build output, notices new builds, and restarts into them with every tab, draft and the window as they were, taking its tabs back if the new build doesn't start ([§9](#working-on-claudette)). Checked end to end on Linux under Xvfb: rebuilding while it ran, the automatic restart, and a broken build being refused.
    - **Still to verify on Windows:** rebuilding while a copy runs, which is what the copy is for, and starting the new build from Explorer and from `dotnet run`.
-9. **Later.** The features in [§18](#18-future-features), in an order decided after v1 ships.
+9. **Filling the gaps.** ✅ Built 2026-09-29. What an audit of §2–§16 found still missing:
+   - **Sign-in ([§11](#11-sign-in)):** the banner across the tabs mid-session, messages held while signed out and delivered after, resuming failed tabs, a start that fails for a sign-in, **More options** (Console account, SSO), the `claude auth login` fallback, **Try again**, the header's account menu with **Sign out…**, and Sign in / Sign out in Settings → Claude Code.
+   - **Composer ([§5](#5-conversation-view)):** `/` and `@` autocomplete, attaching images and files (drop, paste, the attach button) with thumbnails on sent and restored messages, tool icons on tool cards, and **Open diff** on Edit and Write cards.
+   - **Tabs ([§4](#4-tabs--sessions)):** a failed tab's row shows its error, a tab whose check-ins go unanswered says *Possibly stuck*, and the info card shows when the session started.
+   - **Usage and context ([§6](#6-token-burn-awareness)):** tokens count up during a turn from per-call usage, the context indicator is estimated when `get_context_usage` isn't available, and the Usage panel lists every past session and week.
+   - **Sessions ([§9](#9-sessions-history-restore--sync)):** a restored tab whose transcript is gone offers a new session, leases are taken on open and checked for sessions on this machine too, session records keep per-tab overrides, and History searches every prompt.
+   - **Settings ([§14](#14-settings)):** **Reset to defaults** everywhere, favorite folders, fonts for the conversation and code, the overrides dot, model and effort lists from Claude Code, and the window's place and size remembered.
+   - **Remembered on this machine:** a dismissed update badge and the once-per-version update notification ([§12](#applying-it)).
+   - **Diagnostics ([§13](#13-architecture), [§16](#staying-tolerant-at-runtime)):** protocol logging with **Open log folder**, the Diagnostics page with **Copy diagnostics**, and skipped messages shown in the conversation while logging.
+   - **Testing ([§15](#15-testing)):** rendered UI tests with Verify snapshots, record mode and fixtures for a denied permission, an interrupt, `/clear`, compaction and API retries, the Live suite (built, not run), and `fake-claude` child processes, quiet and hung turns, sign-in and `get_usage`.
+   - **Still to verify:** a real sign-in through both paths with a throwaway account; pasting and dropping from Finder, Explorer and screenshot tools; running the Live suite with a spend-limited key.
+10. **Perforce.** ✅ Built 2026-09-29. Ticket handling and the changelist in the tab title ([§18](#18-future-features)), with hook callbacks through `initialize` (confirmed against 2.1.284, [§13](#integration-with-claude-code)) and the OS credential stores.
+    - **Still to verify:** a real Perforce server (including SSO and multi-factor), P4V, and the Windows and macOS credential stores in the running app.
+11. **Later.** The Agent map ([§18](#agent-map)).
 
 ## 18. Future Features
 
