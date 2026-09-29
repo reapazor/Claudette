@@ -11,6 +11,10 @@ A .NET desktop app that wraps Claude Code in a native GUI: one tab per Claude Co
 - Build in the order given in §17 Milestones.
 - Record spike findings in DESIGN.md, replacing the spike note.
 
+## Backlog
+
+The backlog is the open GitHub issues on `reapazor/Claudette` assigned to `reapazor`. The `issues` skill (`.claude/skills/issues/SKILL.md`) lists them, plans one and builds it once the user says go. A pull request that resolves one says `Fixes #N`; don't comment on the issue itself.
+
 ## Stack
 
 - .NET 10, C# with nullable reference types on and warnings treated as errors. Package versions live in `Directory.Packages.props`.
