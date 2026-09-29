@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -22,6 +23,11 @@ public sealed class UserMessageItem(string text, string? suffixText = null, bool
 
     /// <summary>Sent by Claudette as an automatic check-in (DESIGN.md §5, "Check-ins on long turns").</summary>
     public bool IsCheckIn { get; } = isCheckIn;
+
+    /// <summary>Attached images, shown as thumbnails (DESIGN.md §5, "Attachments").</summary>
+    public IReadOnlyList<MessageImage> Images { get; init; } = [];
+
+    public bool HasImages => Images.Count > 0;
 }
 
 /// <summary>Assistant text, streamed in as Markdown.</summary>
@@ -105,6 +111,15 @@ public partial class ToolUseItem : ConversationItem
         _ => "•",
     };
 
+    /// <summary>The card's icon: the key of a vector icon in App.axaml (DESIGN.md §5).</summary>
+    public string IconKey => ToolIcons.KeyFor(Name);
+
+    /// <summary>Edit, Write and the other file tools, which can be opened in the diff view (DESIGN.md §5, §8).</summary>
+    public bool IsFileChange => Core.Diffs.ChangedFiles.IsFileTool(Name);
+
+    /// <summary>A file change that went through, so there's something to show in the diff view.</summary>
+    public bool CanOpenDiff => IsFileChange && IsComplete && !IsError;
+
     /// <summary>For Bash: the command, shown in full when expanded.</summary>
     public string? Command { get; }
 
@@ -136,9 +151,11 @@ public partial class ToolUseItem : ConversationItem
     public bool HasResultSummary => !string.IsNullOrEmpty(ResultSummary);
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanOpenDiff))]
     public partial bool IsError { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanOpenDiff))]
     public partial bool IsComplete { get; set; }
 
     [ObservableProperty]

@@ -25,6 +25,7 @@ public partial class TabView : UserControl
         AddHandler(KeyDownEvent, OnPromptKeyDown, RoutingStrategies.Tunnel);
         Composer.AddHandler(KeyDownEvent, OnComposerKeyDown, RoutingStrategies.Tunnel);
         ConversationScroll.ScrollChanged += OnConversationScrollChanged;
+        WireComposerAssist();
     }
 
     private TabViewModel? ViewModel => DataContext as TabViewModel;
@@ -75,6 +76,10 @@ public partial class TabView : UserControl
 
     private void OnComposerKeyDown(object? sender, KeyEventArgs e)
     {
+        if (HandleCompletionKey(e))
+        {
+            return;
+        }
         if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift) && ViewModel is { } tab)
         {
             e.Handled = true;

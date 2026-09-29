@@ -693,7 +693,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     {
         var text = ComposerText.Trim();
         var suffixes = Chips.Select(c => c.Suffix.Text).ToArray();
-        if (text.Length == 0 && suffixes.Length == 0)
+        if (text.Length == 0 && suffixes.Length == 0 && Attachments.Count == 0)
         {
             return;
         }
@@ -705,15 +705,16 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             Chips.Remove(chip);
         }
-        _conversation.AddUserMessage(text, suffixText);
+        var images = TakeAttachments();
+        _conversation.AddUserMessage(text, suffixText, images: images);
         _firstPrompt ??= text.Length > 0 ? text : suffixText;
-        await SendRawAsync(message);
+        await SendRawAsync(message, images);
         _ = RequestTitleAsync();
     }
 
-    private bool CanSend() => !IsReadOnly && Status is not (TabStatus.Starting or TabStatus.Error) && (ComposerText.Trim().Length > 0 || Chips.Count > 0);
+    private bool CanSend() => !IsReadOnly && Status is not (TabStatus.Starting or TabStatus.Error) && (ComposerText.Trim().Length > 0 || Chips.Count > 0 || Attachments.Count > 0);
 
-    private async Task SendRawAsync(string message)
+    private async Task SendRawAsync(string message, IReadOnlyList<MessageImage>? images = null)
     {
         try
         {
@@ -722,7 +723,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 return;
             }
-            await _session.SendUserMessageAsync(message);
+            await _session.SendUserMessageAsync(message, images ?? []);
         }
         catch (Exception ex)
         {
@@ -976,7 +977,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 switch (item)
                 {
                     case TranscriptPrompt prompt:
-                        _conversation.AddUserMessage(prompt.Text);
+                        _conversation.AddUserMessage(prompt.Text, images: prompt.Images);
                         break;
                     case TranscriptNote note:
                         _conversation.AddNote(note.Text);
@@ -1064,6 +1065,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             _conversation.Apply(sessionEvent);
             RecordFileChanges(sessionEvent);
+            ObserveForComposer(sessionEvent);
             switch (sessionEvent)
             {
                 case StateChanged { State: SessionState.Working }:

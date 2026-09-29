@@ -41,10 +41,10 @@ public sealed class ConversationBuilder
     /// <summary>Show thinking expanded rather than collapsed (Settings → Appearance).</summary>
     public bool ExpandThinking { get; set; }
 
-    public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false)
+    public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null)
     {
         CloseOpen();
-        var item = new UserMessageItem(text, suffixText, isCheckIn);
+        var item = new UserMessageItem(text, suffixText, isCheckIn) { Images = images ?? [] };
         Items.Add(item);
         return item;
     }

@@ -243,6 +243,27 @@ public sealed partial class TabViewModel
             () => CopyFilePathAsync(row)));
     }
 
+    /// <summary>
+    /// <b>Open diff</b> on an Edit or Write card (DESIGN.md §5): the file in the diff view, as Changed files shows it,
+    /// from before Claude's first change in this session to the file now.
+    /// </summary>
+    [RelayCommand]
+    private Task OpenToolDiffAsync(Conversation.ToolUseItem? tool)
+    {
+        if (tool is null || Changes.Files.FirstOrDefault(f => f.ToolUseIds.Contains(tool.ToolUseId)) is not { } file)
+        {
+            return Task.CompletedTask;
+        }
+        return OpenFileDiffAsync(new ChangedFileRow
+        {
+            Path = file.Path,
+            DisplayPath = Changes.DisplayPath(file, Folder),
+            Status = file.IsNew ? "A" : "M",
+            StatusText = file.IsNew ? "Added" : "Modified",
+            Before = file.Before,
+        });
+    }
+
     /// <summary>Double-click: the external diff tool when one is set, else the built-in view.</summary>
     [RelayCommand]
     private Task OpenFileAsync(ChangedFileRow? row) => HasDiffTool ? OpenFileInDiffToolAsync(row) : OpenFileDiffAsync(row);
