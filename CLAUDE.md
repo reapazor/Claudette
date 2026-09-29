@@ -16,14 +16,19 @@ A .NET desktop app that wraps Claude Code in a native GUI: one tab per Claude Co
 - .NET 10, C# with nullable reference types on and warnings treated as errors. Package versions live in `Directory.Packages.props`.
 - Avalonia 12 with MVVM (CommunityToolkit.Mvvm). Markdown is rendered with LiveMarkdown.Avalonia.
 - Layout (§13):
-  - `src/Claudette.Core`: sessions, protocol, sign-in, install checks, settings and state stores, transcripts, check-in timing. Later also updates and the session library.
-  - `src/Claudette.App`: the Avalonia UI. `ShellViewModel` holds the tab groups; `TabViewModel` is one session; `Conversation/ConversationBuilder` turns session events into conversation items.
-  - `src/Claudette.Usage` and `src/Claudette.Platform` are created when the first code for them is written (milestones 5 and 6).
-  - `tests/`: `Claudette.Core.Tests` (unit and protocol replay), `Claudette.App.Tests`, `Claudette.IntegrationTests` (real processes).
+  - `src/Claudette.Core`: sessions, protocol, permission rules, sign-in, install checks, settings and state stores and settings sync, transcripts and History, the session library and leases, diffs and changed files, external diff tools, git (project identity, working tree), check-in timing. Later also updates.
+  - `src/Claudette.Usage`: plan usage parsing, the SQLite usage history, burn rate and projection, alerts, the polling schedule. No UI.
+  - `src/Claudette.Platform`: OS-specific code, so far the process monitor (Job Objects on Windows, `/proc`, `ps`). No UI.
+  - `src/Claudette.App`: the Avalonia UI.
+    - `ShellViewModel` holds the tab groups and History.
+    - `TabViewModel` is one session, split into partial files for the library, changed files and processes.
+    - `Conversation/ConversationBuilder` turns session events into conversation items; `PromptItems` are the permission, question and plan cards.
+    - `Services/UsageTracker` and `Services/LibraryService` connect the usage engine and the session library to the tabs.
+  - `tests/`: `Claudette.Core.Tests` (unit and protocol replay), `Claudette.Usage.Tests`, `Claudette.Platform.Tests`, `Claudette.App.Tests`, `Claudette.IntegrationTests` (real processes).
   - `tools/`: `Claudette.FakeClaude` (the `fake-claude` test double) and `Claudette.MockApi` (a mock Messages API).
   - `compat/`: the compatibility surface list, check script and snapshots (§16).
-- `Claudette.Core` must not reference Avalonia.
-- Development happens on Windows, but the app must also run on macOS and Linux. Keep OS-specific code behind interfaces (in `Claudette.Platform` once it exists).
+- `Claudette.Core`, `Claudette.Usage` and `Claudette.Platform` must not reference Avalonia.
+- Development happens on Windows, but the app must also run on macOS and Linux. Keep OS-specific code behind interfaces, in `Claudette.Platform`.
 - In XAML:
   - Use the app's own color tokens from `App.axaml` (`MutedTextBrush`, `DividerBrush` and so on), not Fluent's internal resource names.
   - Reference `Application.Resources` from `Application.Styles` with `DynamicResource`, because styles load before resources.
@@ -94,10 +99,10 @@ dotnet run --project tools/Claudette.MockApi -- 8787    # in one terminal
 dotnet run --project src/Claudette.App -- --folder <path>
 ```
 
-Stop the app by closing its window, not by killing the process: closing interrupts running turns and stops the `claude` children. A killed app can leave them running until the process monitor's Job Objects arrive (§4).
+Stop the app by closing its window, not by killing the process: closing interrupts running turns and stops each tab's `claude` and everything it started. A killed app leaves them running; the Job Objects deliberately don't kill on close, so a user can keep a tab's processes (§4).
 
 View model tests use `tests/Claudette.App.Tests/Support/TabTestHarness.cs`: a scripted Claude Code connection, a fake clock and an inline dispatcher.
 
-Prompts the mock understands: `WRITE_FILE <path>`, `EDIT_FILE <path>`, `RUN_BASH <command>`, `SLOW`; anything else gets `pong`.
+Prompts the mock understands: `WRITE_FILE <path>`, `EDIT_FILE <path>`, `RUN_BASH <command>`, `ASK_QUESTION`, `EXIT_PLAN` (in Plan mode), `SLOW`; anything else gets `pong`. An API key has no plan limits, so the usage header stays empty against the mock; the usage tests cover it.
 
 Compatibility check (§16): `node compat/check.mjs detect`, then `report` or `update-snapshots`. See the header of `compat/check.mjs`.

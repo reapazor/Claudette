@@ -13,6 +13,9 @@ public interface IPlatformServices
     Task RevealFolderAsync(string path);
 
     Task SetClipboardTextAsync(string text);
+
+    /// <summary>Opens a file in the app the OS uses for it, for example the user's editor (DESIGN.md §8).</summary>
+    Task OpenFileAsync(string path);
 }
 
 /// <summary>Runs work on the UI thread.</summary>

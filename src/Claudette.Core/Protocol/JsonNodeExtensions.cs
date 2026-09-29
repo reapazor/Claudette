@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace Claudette.Core.Protocol;
 
 /// <summary>Lenient readers for protocol JSON: a missing or wrongly typed field reads as null instead of throwing.</summary>
-internal static class JsonNodeExtensions
+public static class JsonNodeExtensions
 {
     public static string? GetString(this JsonObject obj, string name) =>
         obj[name] is JsonValue value && value.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : null;

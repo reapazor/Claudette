@@ -61,6 +61,9 @@ public sealed class ClaudeSession : IAsyncDisposable
 
     public IReadOnlyList<string> Capabilities { get; private set; } = [];
 
+    /// <summary>The <c>claude</c> process id, for the process monitor (DESIGN.md §4). Null for test transports.</summary>
+    public int? ProcessId => _transport.ProcessId;
+
     /// <summary>Messages of a type Claudette doesn't know yet, skipped so far.</summary>
     public int UnknownMessageCount => _unknownMessageCount;
 
@@ -134,6 +137,10 @@ public sealed class ClaudeSession : IAsyncDisposable
     public async Task<ContextUsage> GetContextUsageAsync(CancellationToken cancellationToken = default) =>
         ContextUsage.Parse(await SendControlRequestAsync(new JsonObject { ["subtype"] = "get_context_usage" }, cancellationToken: cancellationToken)
             .ConfigureAwait(false));
+
+    /// <summary>Stops a background task (for example a <c>run_in_background</c> command) so Claude knows it ended.</summary>
+    public Task StopTaskAsync(string taskId, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(new JsonObject { ["subtype"] = "stop_task", ["task_id"] = taskId }, cancellationToken: cancellationToken);
 
     /// <summary>Sends any control request and returns Claude Code's response payload.</summary>
     public Task<JsonObject> SendControlRequestAsync(JsonObject request, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>

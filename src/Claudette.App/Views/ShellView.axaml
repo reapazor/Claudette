@@ -70,7 +70,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                           <DataTemplate DataType="vm:TabViewModel">
-                            <Button Classes="tab" Classes.selected="{Binding IsSelected}"
+                            <Button Classes="tab" Classes.selected="{Binding IsSelected}" Classes.bypass="{Binding IsBypassMode}"
                                     Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).SelectCommand}"
                                     CommandParameter="{Binding}"
                                     DoubleTapped="OnTabDoubleTapped"
@@ -84,6 +84,8 @@
                                            Text="{Binding StatusGlyph}" ToolTip.Tip="{Binding StatusTip}" VerticalAlignment="Center" />
                                 <Path Data="{StaticResource IconPin}" Fill="{DynamicResource MutedTextBrush}" Width="8" Height="10" Stretch="Uniform"
                                       IsVisible="{Binding IsPinned}" VerticalAlignment="Center" />
+                                <TextBlock Classes="status busy small" Text="⚙" IsVisible="{Binding HasBusyProcesses}" VerticalAlignment="Center"
+                                           ToolTip.Tip="A process this tab started is using CPU" />
                                 <TextBlock Text="{Binding DisplayName}" MaxWidth="220" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                            IsVisible="{Binding !IsRenaming}" />
                                 <TextBox Text="{Binding RenameText}" IsVisible="{Binding IsRenaming}" MinWidth="140" Padding="4,1" MinHeight="0"
@@ -167,6 +169,17 @@
       </ContentControl>
     </Border>
 
+    <!-- History (DESIGN.md §9) -->
+    <Border Grid.Row="0" Grid.RowSpan="2" Classes="overlay" IsVisible="{Binding IsHistoryOpen}">
+      <ContentControl Content="{Binding History}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,50,0,20">
+        <ContentControl.DataTemplates>
+          <DataTemplate DataType="vm:HistoryViewModel">
+            <views:HistoryView />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+    </Border>
+
     <!-- Tab settings (per-tab overrides) -->
     <Border Grid.Row="0" Grid.RowSpan="2" Classes="overlay" IsVisible="{Binding HasTabSettings}">
       <ContentControl Content="{Binding TabSettings}" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -186,6 +199,7 @@
           <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
           <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
             <Button Content="Cancel" Command="{Binding CancelCommand}" />
+            <Button Content="{Binding SecondaryText}" Command="{Binding SecondaryCommand}" IsVisible="{Binding HasSecondary}" />
             <Button Classes="accent" Content="{Binding ConfirmText}" Command="{Binding ConfirmCommand}" />
           </StackPanel>
         </StackPanel>

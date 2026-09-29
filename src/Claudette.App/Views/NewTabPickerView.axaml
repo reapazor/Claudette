@@ -42,6 +42,7 @@
                    Text="Enter opens · 1–9 picks · right-click for more" TextTrimming="CharacterEllipsis" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
           <Button Content="Cancel" Command="{Binding CloseCommand}" />
+          <Button Content="Open from History…" Command="{Binding OpenHistoryCommand}" ToolTip.Tip="Resume a past session (Ctrl/Cmd+Shift+H)" />
           <Button Classes="accent" Content="Browse…" Command="{Binding BrowseCommand}" />
         </StackPanel>
       </Grid>

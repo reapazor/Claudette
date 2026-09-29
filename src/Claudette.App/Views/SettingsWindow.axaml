@@ -83,8 +83,121 @@
         <StackPanel Spacing="12" IsVisible="{Binding IsSessions}">
           <TextBlock Classes="section" Text="Sessions" />
           <CheckBox Content="Also restore unpinned tabs when Claudette starts" IsChecked="{Binding RestoreUnpinnedTabs}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0" Text="Pinned tabs are always restored." />
+          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto" RowSpacing="10">
+            <TextBlock Classes="label" Text="Name for this machine" />
+            <TextBox Grid.Column="1" Text="{Binding MachineName}" PlaceholderText="{Binding MachineNamePlaceholder}" />
+            <TextBlock Grid.Row="1" Classes="label" Text="Keep library sessions for" />
+            <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding LibraryRetentionChoices}" SelectedItem="{Binding KeepLibrarySessions}" />
+          </Grid>
+
+          <!-- Session library (DESIGN.md §9) -->
+          <TextBlock Text="Session library folder" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Claudette copies each session's transcript here after every turn. Point it at a folder Google Drive, Dropbox or OneDrive keeps in sync, and your other machines can find and continue the same sessions in History." />
+          <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <TextBox Text="{Binding LibraryFolder, Mode=OneWay}" IsReadOnly="True" />
+            <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseLibraryFolderCommand}" ToolTip.Tip="Use another folder from now on" />
+            <Button Grid.Column="2" Content="Move library…" Command="{Binding MoveLibraryCommand}" ToolTip.Tip="Copy the existing sessions to another folder and use it" />
+          </Grid>
+          <Button Classes="flat" Content="Use the default folder" Command="{Binding UseDefaultLibraryFolderCommand}" IsVisible="{Binding !IsDefaultLibraryFolder}" HorizontalAlignment="Left" />
+          <Border Classes="codeblock" IsVisible="{Binding IsConfirmingLibraryFolder}">
+            <StackPanel Spacing="8">
+              <TextBlock TextWrapping="Wrap" Text="{Binding LibraryConfirmText}" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="accent" Content="Use this folder" Command="{Binding ConfirmLibraryFolderCommand}" />
+                <Button Content="Cancel" Command="{Binding CancelLibraryFolderCommand}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+          <TextBlock Classes="muted small" Text="{Binding LibraryStatus}" TextWrapping="Wrap" IsVisible="{Binding LibraryStatus, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+          <!-- Settings sync (DESIGN.md §14) -->
+          <CheckBox Content="Sync Claudette's settings through the library" IsChecked="{Binding SyncSettings}" Margin="0,8,0,0" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
-                     Text="Pinned tabs are always restored. The session library and syncing between machines come in a later version." />
+                     Text="Appearance, new-tab defaults, usage thresholds, check-ins, quick suffixes and process monitor options. The path to claude, this machine's name, the library folder, the diff tool and your folders stay on each machine." />
+          <Border Classes="codeblock" IsVisible="{Binding IsChoosingSyncSource}">
+            <StackPanel Spacing="8">
+              <TextBlock TextWrapping="Wrap" Text="The library already has settings from another machine. Which should this machine use?" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="accent" Content="Use synced settings" Command="{Binding UseSyncedSettingsCommand}" />
+                <Button Content="Replace them with this machine's" Command="{Binding ReplaceSyncedSettingsCommand}" />
+                <Button Classes="flat" Content="Cancel" Command="{Binding CancelSyncChoiceCommand}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- Diff tool (DESIGN.md §8, "External diff tool") -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsDiffTool}">
+          <TextBlock Classes="section" Text="Diff tool" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="How changed files open. Tools that are installed on this machine are listed. With a tool set, double-click a changed file to open it there; the built-in view is still in the file's menu." />
+          <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding DiffToolOptions}" SelectedItem="{Binding SelectedDiffTool}" />
+          <StackPanel Spacing="6" IsVisible="{Binding IsCustomDiffTool}">
+            <TextBlock Text="Command" />
+            <TextBox Classes="mono" Text="{Binding CustomDiffCommand}" PlaceholderText="&quot;C:\Program Files\Beyond Compare 5\BCompare.exe&quot; &quot;{left}&quot; &quot;{right}&quot; /title1=&quot;{leftTitle}&quot; /title2=&quot;{rightTitle}&quot;" />
+            <TextBlock Classes="small error" Text="{Binding CustomDiffCommandError}" TextWrapping="Wrap" IsVisible="{Binding CustomDiffCommandError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       Text="A program and its arguments. {left} is the file before Claude's changes (a read-only copy), {right} is the file now; {leftTitle} and {rightTitle} are their titles." />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanTestDiffTool}">
+            <Button Content="Test" Command="{Binding TestDiffToolCommand}" />
+            <TextBlock Classes="muted small" Text="{Binding DiffToolTestResult}" VerticalAlignment="Center" TextWrapping="Wrap" />
+          </StackPanel>
+        </StackPanel>
+
+        <!-- Processes (DESIGN.md §4, "Process monitor") -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsProcesses}">
+          <TextBlock Classes="section" Text="Processes" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="See the processes each tab has started (test runs, dev servers, builds, MCP servers) with their CPU and memory use. When a tab closes, the processes it started are stopped too." />
+          <CheckBox Content="Show the process monitor" IsChecked="{Binding ShowProcessMonitor}" />
+          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto" IsEnabled="{Binding ShowProcessMonitor}">
+            <TextBlock Classes="label" Text="Refresh the panel every (seconds)" />
+            <NumericUpDown Grid.Column="1" Minimum="1" Maximum="60" Increment="1" FormatString="0" Value="{Binding ProcessRefreshSeconds}" />
+          </Grid>
+          <CheckBox Content="Show command lines" IsChecked="{Binding ShowCommandLines}" IsEnabled="{Binding ShowProcessMonitor}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="Command lines sometimes contain tokens or passwords. Turn this off if others can see your screen." />
+          <Button Content="Reset to defaults" Command="{Binding ResetProcessesCommand}" />
+        </StackPanel>
+
+        <!-- Usage (DESIGN.md §6) -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsUsage}">
+          <TextBlock Classes="section" Text="Usage" />
+          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+            <TextBlock Classes="label" Text="Warn at (% of session used)" />
+            <NumericUpDown Grid.Column="1" Minimum="1" Maximum="100" Increment="5" FormatString="0" Value="{Binding WarnPercent}" />
+            <TextBlock Grid.Row="1" Classes="label" Text="Alert at (% of session used)" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="1" Maximum="100" Increment="5" FormatString="0" Value="{Binding CriticalPercent}" />
+            <TextBlock Grid.Row="2" Classes="label" Text="Burn rate window (minutes)" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="5" Maximum="300" Increment="5" FormatString="0" Value="{Binding BurnRateWindowMinutes}" />
+          </Grid>
+          <CheckBox Content="Show model-specific weekly limits" IsChecked="{Binding ShowModelMeters}" />
+          <CheckBox Content="If Claude Code stops reporting them, read model limits from /usage" IsChecked="{Binding UseUsageCommandFallback}" IsEnabled="{Binding ShowModelMeters}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="A fallback that reads the text /usage prints. It's free, but can break when Claude Code changes its wording." />
+          <Grid ColumnDefinitions="220,*,Auto" ColumnSpacing="8">
+            <TextBlock Classes="label" Text="Keep usage history" />
+            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding HistoryRetentionChoices}" SelectedItem="{Binding KeepUsageHistory}" />
+            <Button Grid.Column="2" Content="Clear usage history…" Command="{Binding ClearUsageHistoryCommand}" />
+          </Grid>
+          <Border Classes="codeblock" IsVisible="{Binding IsConfirmingClearUsage}">
+            <StackPanel Spacing="8">
+              <TextBlock FontWeight="SemiBold" Text="Clear all usage history?" />
+              <TextBlock TextWrapping="Wrap" Text="This deletes every stored usage sample and per-turn token record. The header fills in again at the next update from Claude Code." />
+              <CheckBox Content="Also reset per-tab token totals" IsChecked="{Binding AlsoResetTabTotals}" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="accent" Content="Clear" Command="{Binding ConfirmClearUsageCommand}" />
+                <Button Content="Cancel" Command="{Binding CancelClearUsageCommand}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+          <TextBlock Classes="muted small" Text="{Binding UsageClearedText}" IsVisible="{Binding UsageClearedText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Usage history is kept on this machine only. It holds usage percentages and token counts, never your prompts, replies or code." />
+          <Button Content="Reset to defaults" Command="{Binding ResetUsageCommand}" />
         </StackPanel>
 
         <!-- Check-ins -->

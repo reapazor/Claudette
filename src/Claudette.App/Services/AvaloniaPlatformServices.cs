@@ -43,6 +43,14 @@ public sealed class AvaloniaPlatformServices(Func<TopLevel?> topLevel) : IPlatfo
         }
     }
 
+    public async Task OpenFileAsync(string path)
+    {
+        if (topLevel() is { } top && File.Exists(path))
+        {
+            await top.Launcher.LaunchFileInfoAsync(new FileInfo(path));
+        }
+    }
+
     public async Task SetClipboardTextAsync(string text)
     {
         if (topLevel()?.Clipboard is { } clipboard)

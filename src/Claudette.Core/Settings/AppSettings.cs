@@ -24,7 +24,90 @@ public sealed class AppSettings
 
     public List<QuickSuffix> QuickSuffixes { get; set; } = QuickSuffix.Defaults();
 
+    public UsageSettings Usage { get; set; } = new();
+
+    public ProcessSettings Processes { get; set; } = new();
+
+    public DiffToolSettings DiffTool { get; set; } = new();
+
     public AdvancedSettings Advanced { get; set; } = new();
+}
+
+/// <summary>How long to keep something: usage history (DESIGN.md §6) or library sessions (§9).</summary>
+public enum RetentionPeriod
+{
+    OneDay,
+    OneWeek,
+    OneMonth,
+    OneYear,
+    Forever,
+}
+
+public static class RetentionPeriodExtensions
+{
+    /// <summary>Null means forever.</summary>
+    public static TimeSpan? ToTimeSpan(this RetentionPeriod period) => period switch
+    {
+        RetentionPeriod.OneDay => TimeSpan.FromDays(1),
+        RetentionPeriod.OneWeek => TimeSpan.FromDays(7),
+        RetentionPeriod.OneMonth => TimeSpan.FromDays(31),
+        RetentionPeriod.OneYear => TimeSpan.FromDays(366),
+        _ => null,
+    };
+
+    public static string Label(this RetentionPeriod period) => period switch
+    {
+        RetentionPeriod.OneDay => "1 day",
+        RetentionPeriod.OneWeek => "1 week",
+        RetentionPeriod.OneMonth => "1 month",
+        RetentionPeriod.OneYear => "1 year",
+        _ => "Forever",
+    };
+}
+
+/// <summary>DESIGN.md §6 and the Usage row of §14.</summary>
+public sealed class UsageSettings
+{
+    /// <summary>The session meter turns amber here.</summary>
+    public double WarnPercent { get; set; } = 75;
+
+    /// <summary>The session meter turns red here.</summary>
+    public double CriticalPercent { get; set; } = 90;
+
+    /// <summary>The burn rate is measured over this many recent minutes.</summary>
+    public int BurnRateWindowMinutes { get; set; } = 30;
+
+    /// <summary>Show model-specific weekly limits (for example Fable).</summary>
+    public bool ShowModelMeters { get; set; } = true;
+
+    /// <summary>If <c>get_usage</c> stops working, read model-specific limits from <c>/usage</c> text instead.</summary>
+    public bool UseUsageCommandFallback { get; set; }
+
+    public RetentionPeriod KeepHistory { get; set; } = RetentionPeriod.OneMonth;
+}
+
+/// <summary>DESIGN.md §4, "Process monitor". Off by default.</summary>
+public sealed class ProcessSettings
+{
+    public bool ShowMonitor { get; set; }
+
+    /// <summary>How often the Processes panel refreshes while visible. The composer summary refreshes every 10 seconds.</summary>
+    public int RefreshSeconds { get; set; } = 2;
+
+    /// <summary>Command lines can contain tokens or passwords, so they can be hidden.</summary>
+    public bool ShowCommandLines { get; set; } = true;
+}
+
+/// <summary>How changed files open (DESIGN.md §8, "External diff tool"). Per machine: program paths differ.</summary>
+public sealed class DiffToolSettings
+{
+    /// <summary><c>builtIn</c>, <c>preset</c> or <c>custom</c>.</summary>
+    public string Kind { get; set; } = "builtIn";
+
+    public string? PresetId { get; set; }
+
+    /// <summary>A program and arguments with <c>{left}</c>, <c>{right}</c>, <c>{leftTitle}</c> and <c>{rightTitle}</c>.</summary>
+    public string? CustomCommand { get; set; }
 }
 
 public sealed class GeneralSettings
@@ -75,6 +158,18 @@ public sealed class SessionSettings
 {
     /// <summary>Pinned tabs are always restored; this also restores the unpinned ones (DESIGN.md §9).</summary>
     public bool RestoreUnpinnedTabs { get; set; }
+
+    /// <summary>The session library folder (DESIGN.md §9). Null uses the app data folder.</summary>
+    public string? LibraryFolder { get; set; }
+
+    /// <summary>This machine's name in History and leases. Null uses the computer name.</summary>
+    public string? MachineName { get; set; }
+
+    /// <summary>How long sessions stay in the library after they were last used.</summary>
+    public RetentionPeriod KeepLibrarySessions { get; set; } = RetentionPeriod.Forever;
+
+    /// <summary>Sync Claudette's settings through the library (DESIGN.md §14, "Settings sync").</summary>
+    public bool SyncSettings { get; set; }
 }
 
 /// <summary>DESIGN.md §5, "Check-ins on long turns".</summary>

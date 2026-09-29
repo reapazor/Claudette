@@ -7,6 +7,7 @@ using Claudette.Core.Processes;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
+using Claudette.Platform.Processes;
 using Microsoft.Extensions.Time.Testing;
 
 namespace Claudette.App.Tests.Support;
@@ -46,6 +47,9 @@ internal sealed class ScriptedTransport : IClaudeTransport
     public IEnumerable<string> SentUserTexts => Sent.Where(m => m["type"]?.GetValue<string>() == "user").Select(m => m["message"]!["content"]!.GetValue<string>());
 
     public IEnumerable<string> SentControlSubtypes => Sent.Where(m => m["type"]?.GetValue<string>() == "control_request").Select(m => m["request"]!["subtype"]!.GetValue<string>());
+
+    /// <summary>The pretend <c>claude</c> process id, for the process monitor.</summary>
+    public int? ProcessId { get; set; } = 4242;
 
     public ChannelReader<string> Output => _output.Reader;
 
@@ -167,6 +171,52 @@ internal sealed class NoPlatform : IPlatformServices
     public Task RevealFolderAsync(string path) => Task.CompletedTask;
 
     public Task SetClipboardTextAsync(string text) => Task.CompletedTask;
+
+    public Task OpenFileAsync(string path) => Task.CompletedTask;
+}
+
+/// <summary>A process tree the test controls: which children are "running", and whether they were killed.</summary>
+internal sealed class FakeProcessTree(int rootPid, TimeProvider time) : ProcessTree(rootPid)
+{
+    public List<(int Pid, string Name)> Children { get; } = [];
+
+    public bool Killed { get; private set; }
+
+    public List<int> Stopped { get; } = [];
+
+    public override IReadOnlyList<ProcessSnapshot> Sample(bool includeCommandLines) =>
+    [
+        new ProcessSnapshot { Pid = RootPid, ParentPid = 1, Name = "claude", IsRoot = true, MemoryBytes = 100 << 20, CpuPercent = 1, FirstSeen = time.GetUtcNow() },
+        .. Children.Select(c => new ProcessSnapshot
+        {
+            Pid = c.Pid, ParentPid = RootPid, Name = c.Name, MemoryBytes = 50 << 20, CpuPercent = 20,
+            CommandLine = includeCommandLines ? $"{c.Name} --serve" : null, FirstSeen = time.GetUtcNow(),
+        }),
+    ];
+
+    public override IReadOnlyList<int> DescendantIds() => Children.Select(c => c.Pid).ToArray();
+
+    public override void KillAll()
+    {
+        Killed = true;
+        Children.Clear();
+    }
+
+    public override Task StopAsync(int pid, TimeSpan grace, CancellationToken cancellationToken = default)
+    {
+        Stopped.Add(pid);
+        Children.RemoveAll(c => c.Pid == pid);
+        return Task.CompletedTask;
+    }
+}
+
+internal sealed class FakeProcessTreeTracker(TimeProvider time) : IProcessTreeTracker
+{
+    public Dictionary<int, FakeProcessTree> Trees { get; } = [];
+
+    public ProcessTree Track(int rootPid) => Trees.TryGetValue(rootPid, out var tree) ? tree : Trees[rootPid] = new FakeProcessTree(rootPid, time);
+
+    public ProcessTree? Find(int rootPid) => Trees.GetValueOrDefault(rootPid);
 }
 
 /// <summary>A tab wired to a scripted Claude Code, with a fake clock and a temporary data folder.</summary>
@@ -174,13 +224,34 @@ internal sealed class TabTestHarness : IAsyncDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"claudette-tabtest-{Guid.NewGuid():N}");
 
-    public TabTestHarness()
+    public TabTestHarness(Action<AppSettings>? configure = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "work"));
-        Services = new AppServices(AppPaths.Under(_root), new ProcessLauncher(), Time, new NoPlatform(), new InlineDispatcher());
+        Directory.CreateDirectory(ProjectsDirectory);
+        Trees = new FakeProcessTreeTracker(Time);
+        Services = new AppServices(AppPaths.Under(_root), new ProcessLauncher(), Time, new NoPlatform(), new InlineDispatcher(), processTrees: Trees);
+        configure?.Invoke(Services.Settings);
+        Services.ProjectsDirectory = ProjectsDirectory;
         Factory = new ScriptedSessionFactory(Transport, Time);
         Services.UseSessionFactory(Factory);
         Shell = new ShellViewModel(Services, () => { });
+    }
+
+    public FakeProcessTreeTracker Trees { get; }
+
+    /// <summary>Stands in for Claude Code's <c>projects</c> folder.</summary>
+    public string ProjectsDirectory => Path.Combine(_root, "projects");
+
+    public string Root => _root;
+
+    /// <summary>Writes a transcript where Claude Code would keep it.</summary>
+    public string WriteTranscript(string sessionId, params string[] lines)
+    {
+        var folder = Path.Combine(ProjectsDirectory, "work-project");
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, $"{sessionId}.jsonl");
+        File.WriteAllLines(path, lines);
+        return path;
     }
 
     public FakeTimeProvider Time { get; } = new(DateTimeOffset.Parse("2026-09-28T12:00:00Z"));
@@ -219,6 +290,7 @@ internal sealed class TabTestHarness : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await Shell.DisposeAsync();
+        await Services.DisposeAsync();
         try
         {
             Directory.Delete(_root, recursive: true);

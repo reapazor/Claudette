@@ -14,6 +14,18 @@ public sealed record AppPaths(string DataDirectory, string SettingsDirectory)
 
     public string SettingsFile => Path.Combine(SettingsDirectory, "settings.json");
 
+    /// <summary>Usage history (DESIGN.md §6): per machine, never synced.</summary>
+    public string UsageDatabase => Path.Combine(DataDirectory, "usage.db");
+
+    /// <summary>The default session library, when no folder is chosen (DESIGN.md §9).</summary>
+    public string DefaultLibraryDirectory => Path.Combine(DataDirectory, "library");
+
+    /// <summary>Local working copies of library transcripts, which Claude Code resumes from and writes to.</summary>
+    public string LocalSessionsDirectory => Path.Combine(DataDirectory, "sessions");
+
+    /// <summary>"Before" files handed to external diff tools, per tab (DESIGN.md §8).</summary>
+    public string DiffTempDirectory => Path.Combine(DataDirectory, "diff-temp");
+
     /// <summary>
     /// The per-user defaults. Data: <c>%LOCALAPPDATA%\Claudette</c>, <c>~/Library/Application Support/Claudette</c>,
     /// <c>~/.local/share/claudette</c>. Settings: <c>%APPDATA%\Claudette</c>, the same Application Support folder on

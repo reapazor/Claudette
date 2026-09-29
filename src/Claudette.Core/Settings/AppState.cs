@@ -25,6 +25,15 @@ public sealed class AppState
 
     /// <summary>Folder groups the user collapsed.</summary>
     public List<string> CollapsedGroups { get; set; } = [];
+
+    /// <summary>
+    /// Where a project from another machine lives on this one, keyed by normalized git remote and path in the repo
+    /// (DESIGN.md §9, "Restoring on another machine").
+    /// </summary>
+    public Dictionary<string, string> FolderMappings { get; set; } = [];
+
+    /// <summary>What settings sync last saw or published, per setting path (DESIGN.md §14).</summary>
+    public SettingsSyncState? SettingsSync { get; set; }
 }
 
 /// <summary>What's saved for one tab (DESIGN.md §9, "Restore on launch").</summary>
@@ -50,6 +59,15 @@ public sealed class TabState
     public List<string> KeptSuffixes { get; set; } = [];
 
     public TokenTotals Tokens { get; set; } = new();
+
+    /// <summary>
+    /// The local transcript to resume from, for a session opened from the library (DESIGN.md §9). Null means Claude
+    /// Code's own copy, found by <see cref="SessionId"/>.
+    /// </summary>
+    public string? TranscriptPath { get; set; }
+
+    /// <summary>Resume as a copy with a new session id ("Open a copy", DESIGN.md §9). Cleared once started.</summary>
+    public bool ForkOnNextStart { get; set; }
 }
 
 /// <summary>Per-tab settings that replace the defaults (DESIGN.md §14, "Per-tab overrides"). Null means "use the default".</summary>

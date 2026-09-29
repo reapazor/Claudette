@@ -21,7 +21,8 @@ public sealed record RecordedRequest(
     int ToolCount,
     int MessageCount,
     string LastUserText,
-    string Reply);
+    string Reply,
+    string LastToolResultText = "");
 
 /// <summary>
 /// A fake Anthropic Messages API, so the real <c>claude</c> CLI can be driven without tokens (DESIGN.md §15,
@@ -32,6 +33,8 @@ public sealed record RecordedRequest(
 /// <item><c>EDIT_FILE &lt;path&gt;</c>: a Read, then an Edit replacing <c>ORIGINAL LINE</c> with <c>EDITED LINE</c>, then done.</item>
 /// <item><c>RUN_BASH &lt;command&gt;</c>: a Bash tool call, then done.</item>
 /// <item><c>SLOW</c>: text streamed in small chunks over about 20 seconds.</item>
+/// <item><c>ASK_QUESTION</c>: an AskUserQuestion tool call ("Which database?": Postgres or SQLite), then done.</item>
+/// <item><c>EXIT_PLAN</c>: an ExitPlanMode tool call with a two-step plan, then done. Needs plan mode.</item>
 /// <item>Requests with no tools that mention "title": <c>{"title": "Mock session title"}</c>.</item>
 /// <item>Anything else: <c>pong</c>.</item>
 /// </list>
@@ -206,7 +209,8 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
             (body["tools"] as JsonArray)?.Count ?? 0,
             (body["messages"] as JsonArray)?.Count ?? 0,
             LastUserText(body).Text,
-            reply));
+            reply,
+            LastToolResultText(body)));
     }
 
     private sealed record Plan(string Kind, List<JsonObject> Blocks, TimeSpan? ChunkDelay = null);
@@ -253,6 +257,21 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
         {
             return new Plan("tool", [ToolUse("Bash", new JsonObject { ["command"] = bash.Groups[1].Value.Trim(), ["description"] = "mock command" })]);
         }
+        if (text.Contains("ASK_QUESTION", StringComparison.Ordinal) && tools.Contains("AskUserQuestion"))
+        {
+            var question = new JsonObject
+            {
+                ["question"] = "Which database?", ["header"] = "Database", ["multiSelect"] = false,
+                ["options"] = new JsonArray(
+                    new JsonObject { ["label"] = "Postgres", ["description"] = "Relational" },
+                    new JsonObject { ["label"] = "SQLite", ["description"] = "A single file" }),
+            };
+            return new Plan("tool-ask", [ToolUse("AskUserQuestion", new JsonObject { ["questions"] = new JsonArray(question) })]);
+        }
+        if (text.Contains("EXIT_PLAN", StringComparison.Ordinal) && tools.Contains("ExitPlanMode"))
+        {
+            return new Plan("tool-plan", [ToolUse("ExitPlanMode", new JsonObject { ["plan"] = "1. Read the code\n2. Fix the bug" })]);
+        }
         if (text.Contains("SLOW", StringComparison.Ordinal))
         {
             return new Plan("slow", [TextBlock(string.Concat(Enumerable.Repeat("slow ", 40)))], TimeSpan.FromMilliseconds(500));
@@ -273,6 +292,23 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
         return (last is null ? "" : MessageText(last), hasToolResult);
     }
 
+    /// <summary>The text of the tool results in the latest user message, so tests can see what a tool returned.</summary>
+    private static string LastToolResultText(JsonObject body)
+    {
+        var messages = (body["messages"] as JsonArray)?.OfType<JsonObject>().ToArray() ?? [];
+        var last = messages.LastOrDefault(m => m["role"]?.GetValue<string>() == "user");
+        if (last?["content"] is not JsonArray blocks)
+        {
+            return "";
+        }
+        return string.Join("\n", blocks.OfType<JsonObject>().Where(b => b["type"]?.GetValue<string>() == "tool_result").Select(b => b["content"] switch
+        {
+            JsonValue value when value.TryGetValue<string>(out var s) => s,
+            JsonArray parts => string.Join("\n", parts.OfType<JsonObject>().Select(p => p["text"]?.GetValue<string>())),
+            _ => "",
+        }));
+    }
+
     /// <summary>A message's plain text: its string content, or its text blocks joined.</summary>
     private static string MessageText(JsonObject message) => message["content"] switch
     {
@@ -284,7 +320,7 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
     [GeneratedRegex("title", RegexOptions.IgnoreCase)]
     private static partial Regex TitlePattern();
 
-    [GeneratedRegex("EDIT_FILE|WRITE_FILE|RUN_BASH|SLOW|hello")]
+    [GeneratedRegex("EDIT_FILE|WRITE_FILE|RUN_BASH|SLOW|ASK_QUESTION|EXIT_PLAN|hello")]
     private static partial Regex KeywordPattern();
 
     [GeneratedRegex(@"EDIT_FILE (\S+)")]

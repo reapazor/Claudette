@@ -28,7 +28,8 @@ Claudette does not replace Claude Code. It runs the real `claude` CLI as a child
 | Look & feel | Fluent theme on Windows, macOS-style theme on macOS | Follows the OS light/dark setting and accent color. Mica backdrop on Windows 11; native title bar, traffic lights and menu bar on macOS. |
 | Pattern | MVVM with CommunityToolkit.Mvvm | |
 | Markdown | LiveMarkdown.Avalonia | For assistant messages. Built for streaming: text is appended as it arrives instead of re-rendering the whole message. Includes syntax-highlighted code blocks. (Markdown.Avalonia only had an alpha for Avalonia 12.) |
-| Diffs | AvaloniaEdit with a diff renderer | |
+| Diffs | Claudette's own line diff and diff view, highlighted with TextMateSharp | The TextMate grammars and themes LiveMarkdown already ships for code blocks. AvaloniaEdit was the plan, but a read-only diff doesn't need an editor. |
+| Usage history | SQLite (Microsoft.Data.Sqlite) | [§6](#usage-history) |
 | Dependency | Claude Code CLI | Must already be installed. Claudette finds `claude` on `PATH` (or a path set in Settings), checks its version on launch against a minimum supported version, and shows a setup screen if it is missing or too old. Sign-in is handled inside Claudette (see [§11](#11-sign-in)). |
 | Packaging | Windows: MSIX or installer. macOS: signed, notarized `.app` in a `.dmg`. | |
 
@@ -159,9 +160,9 @@ Using the picker:
 
 ### Process monitor
 
-An optional view of the processes each tab has started, such as test runs, dev servers, builds and MCP servers, with their CPU and memory use. It's off by default and turned on in Settings → Processes. Each tab can also show or hide it.
+An optional view of the processes each tab has started, such as test runs, dev servers, builds and MCP servers, with their CPU and memory use. It's off by default and turned on in Settings → Processes. There's no per-tab switch yet; each tab shows its own processes on the Processes page of its side panel.
 
-- **Summary.** When it's on, the composer bar shows a compact summary for the tab, for example `3 procs · 42% CPU · 1.1 GB`. The tab itself gets a small activity icon while any child process is using noticeable CPU.
+- **Summary.** When it's on, the composer bar shows a compact summary for the tab, for example `3 procs · 42% CPU · 1.1 GB`, except while the side panel is open. The count leaves out `claude` itself. The tab itself gets a small activity icon while any child process is using noticeable CPU (5% or more).
 - **Processes panel.** A second page of the side panel, next to Changed files. It shows a tree of the tab's processes, starting from its `claude` process, with these columns:
   - Name and PID.
   - CPU %, following the platform's convention: on Windows, 100% means all cores, as in Task Manager; on macOS, 100% means one core, as in Activity Monitor.
@@ -173,11 +174,19 @@ An optional view of the processes each tab has started, such as test runs, dev s
   - **Stop.** For a Claude Code background task, stop it through Claude Code (`stopTask`) so Claude knows it ended. Otherwise, end the process, first gracefully and then forcefully. Either way, confirm first.
   - **Copy command line.**
   - **Reveal executable.**
-- **Sampling.** Every 2 seconds while the panel is visible, and every 10 seconds when only the summary is showing. Nothing runs when the monitor is off.
-- **How processes are tracked.**
-  - Windows: each tab's `claude` process runs in its own Job Object, so every descendant is tracked, even if its parent exits. CPU and memory come from the process APIs, and command lines from WMI (`Win32_Process`).
-  - macOS and Linux: Claudette walks the process tree from the tab's `claude` process (libproc / `sysctl` on macOS, `/proc` on Linux). A process that detaches and gets re-parented (for example a daemonized dev server) drops out of the tree. Claudette keeps listing any process it has already seen, marked "detached", until it exits.
-- **Cleanup.** The same tracking lets Claudette end a tab's whole process tree when the tab closes, so no orphaned dev servers are left running. If processes are still running, the close confirmation lists them, with an option to leave them running.
+- **Sampling.** Every 2 seconds while the panel is visible (Settings → Processes → Refresh), and every 10 seconds when only the summary is showing. No sampling runs when the monitor is off.
+- **How processes are tracked.** Tracking is always on, even with the monitor off, because tab cleanup relies on it; only sampling is off.
+  - **Windows.**
+    - Each tab's `claude` process goes into its own Job Object right after it starts, so every descendant is tracked, even if its parent exits. Nested jobs work, so this holds when Claudette itself runs inside a job (as it does when started from VS Code or a terminal).
+    - The job doesn't kill on close, so "leave them running" stays possible. If the job can't be created, Claudette falls back to walking parent links.
+    - CPU, memory and start times come from the process APIs, and command lines from `NtQueryInformationProcess` (no WMI).
+    - Windows gives every console program a console host (`conhost.exe`) in the job; it's hidden from the list and the counts.
+  - **macOS and Linux.** Claudette walks the process tree from the tab's `claude` process: `/proc` on Linux, and `ps` on macOS, which is simpler to get right than libproc. A process that detaches and gets re-parented (for example a daemonized dev server) drops out of the tree. Claudette keeps listing any process it has already seen, marked "detached", until it exits. This code compiles but hasn't run on either OS yet.
+- **Linking a process to its tool call.** A process that first appears while a Bash call is running is linked to that call. A `task_started` message ties a background task to its Bash call, so **Stop** goes through Claude Code (`stop_task`) for those.
+- **Cleanup.** The same tracking lets Claudette end a tab's whole process tree when the tab closes, so no orphaned dev servers are left running.
+  - If processes are still running, the close confirmation lists them. The choices are **Close and stop them** and **Close, leave running**.
+  - Claudette lets `claude` exit on its own first, so it finishes its transcript, then ends whatever it left behind.
+  - Quitting Claudette stops every tab's processes.
 
 ## 5. Conversation View
 
@@ -282,14 +291,18 @@ This is Claudette's main feature: knowing how fast you're using your plan's limi
   - "At this rate you'll hit the limit in 1h 05m, 1h 09m before it resets" (amber/red), or
   - "On track: about 70% used when the session resets" (neutral).
 - **Rate** is measured over a recent window (by default the last 30 minutes, using a moving average), so a single big turn doesn't swing the projection wildly. When nothing is running, the projection says so instead of showing a stale rate.
-- Clicking the header opens a **Usage** panel with:
+- Clicking the header opens a **Usage** panel (its own window) with:
   - A larger chart of the current session and the past week.
   - Tokens per tab for the current window, so you can see which session is burning the most.
-  - Past sessions and weeks, as far back as the stored [usage history](#usage-history) goes.
+  - Past sessions and weeks, as far back as the stored [usage history](#usage-history) goes. Each past window shows the highest usage it reached.
+- Accounts without plan limits (an API key, for example) get no meters; the header just says Claudette.
 
 ### Per-tab context
 
 Separate from plan limits, each tab shows how full its **context window** is (in the composer bar). It warns near the auto-compact threshold and has a quick **Compact** action.
+
+- Clicking the context indicator shows the detail and **Compact now**, which sends `/compact` to the session.
+- A `compact_boundary` message adds a "Conversation compacted" note, or says Claude Code compacted it by itself.
 
 ### Alerts
 
@@ -298,6 +311,8 @@ An OS notification (optional) when:
 - Session usage crosses the warning thresholds.
 - The projection says you'll hit the limit before it resets.
 - A limit resets.
+
+Each alert fires once per window. The first reading after a restart doesn't alert for levels that were already crossed. Until OS notifications arrive (milestone 7), the alert shows as a dismissible line under the header.
 
 ### Data source
 
@@ -322,8 +337,11 @@ Token and context data are documented:
 
 - All tabs share one account, so plan usage is tracked app-wide, not per tab.
 - Claudette calls `get_usage` on launch, after each turn (at most once a minute), and every 5 minutes otherwise. It uses a hidden **utility session** for this ([§13](#integration-with-claude-code)), so the header stays current even when no tab is working.
-- `rate_limit_event` messages from any tab update the header immediately between polls.
-- If `get_usage` fails or changes shape, Claudette falls back to `rate_limit_event`, and hides the model-specific meters unless the `/usage` fallback is turned on in Settings.
+- `rate_limit_event` messages from any tab update the header immediately between polls. They carry only the session and weekly windows, so the model-specific readings from the last poll are kept.
+- If `get_usage` fails or changes shape, Claudette falls back to `rate_limit_event`, and hides the model-specific meters unless the `/usage` fallback is turned on in Settings. It keeps trying `get_usage` on the normal schedule.
+- The `/usage` fallback sends `/usage` to the utility session as a message and reads the text it prints.
+- Reset times from the two sources differ by fractions of a second (`02:19:59.95` against `02:20:00`), so they're rounded to the second before being compared.
+- After a restart, the header shows the last stored sample (with "as of" its time) until the first poll.
 
 **Extra data.** `get_usage` also reports what's contributing to usage, such as the share of requests at long context and the top skills and subagents over the last day and week. That could become a panel later; it's not in v1.
 
@@ -377,10 +395,29 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
   - **Always allow** saves an allow rule for that tool and input pattern (for example `Bash(dotnet test:*)`) to the project's `.claude/settings.local.json`. That is Claude Code's personal, uncommitted project settings file, so the rule also applies to terminal sessions in that folder. The rule is sent as part of the permission reply, and Claude Code writes the file itself.
   - The **Always allow** button has a menu with **Allow for this session only**, which doesn't save anything.
   - Before saving, the card shows the exact rule, and the user can edit it to make it broader or narrower.
-- A tab with a waiting prompt gets the "Needs input" status. If Claudette isn't focused or the tab isn't selected, it also sends an OS notification.
-- Keyboard: `Ctrl/Cmd+Enter` allows, `Ctrl/Cmd+Backspace` denies the focused prompt.
-- **Permission mode picker** per tab: Default, Accept edits, Plan, Bypass permissions. Bypass needs a confirmation and gives the tab a visible warning style.
-- Claude Code's own allow/deny rules in settings still apply; Claudette only shows prompts that Claude Code actually asks for.
+- When Claude Code suggests a mode switch instead of a rule (for a file edit it suggests `acceptEdits` for the session), the card offers **Allow all edits this session** in place of **Always allow**.
+- When Claude Code marks a request `suppressAlwaysAllowRule` (the rule would grant more than this request), **Always allow** isn't offered.
+- A tab with a waiting prompt gets the "Needs input" status. If Claudette isn't focused or the tab isn't selected, it also sends an OS notification (milestone 7).
+- Keyboard: `Ctrl/Cmd+Enter` allows, `Ctrl/Cmd+Backspace` denies the oldest waiting prompt in the tab.
+  - Not while typing in one of the prompt's own fields, and `Ctrl/Cmd+Backspace` still deletes a word in a field with text.
+  - A request Claude Code marks `defaultToNo` can't be allowed from the keyboard.
+- **Permission mode picker** per tab: Default, Accept edits, Plan, Bypass permissions.
+  - Picking a mode changes it for this session only. The mode a tab starts in comes from Tab settings or the New tabs default.
+  - The picker always shows the mode Claude Code reports, including changes it makes itself (for example after a plan is approved).
+  - Bypass needs a confirmation and gives the tab a visible warning style: a red border on the tab and the composer, and a warning line above the composer.
+  - Claude Code only allows switching into Bypass in a session that was started with bypass allowed. Claudette doesn't start sessions that way, so the switch is refused unless the tab started in Bypass mode, and the tab says how to do that. Launching every session with `--allow-dangerously-skip-permissions` would lift this, but that's left to a deliberate decision.
+- Claude Code's own allow/deny rules in settings still apply; Claudette only shows prompts that Claude Code actually asks for. When a rule or the mode denies a tool without asking (a `permission_denied` message), the conversation shows a note.
+
+**Questions and plans.** Two tools reach Claudette through the same `can_use_tool` request and get their own cards:
+
+- **Clarifying questions** (`AskUserQuestion`): each question with its options (radio buttons, or checkboxes for multi-select) and an "Other" field for the user's own answer.
+  - **Send answers** allows the tool with `updatedInput` set to the original `questions` plus `answers`, keyed by question text. Several choices are joined with ", ".
+  - **Dismiss** denies it.
+  - The card replaces the tool's own row.
+- **A plan to approve** (`ExitPlanMode`, in Plan mode): the plan as Markdown, taken from the tool's `plan` input. The buttons are:
+  - **Approve, accept edits** and **Approve, ask before edits**. These allow the tool with a `setMode` update to `acceptEdits` or `default`, so the session leaves plan mode.
+  - **Keep planning…**, which denies it with optional feedback.
+- The real-CLI tests confirmed both against Claude Code 2.1.284.
 
 **How it works** (confirmed by the spike):
 
@@ -393,10 +430,20 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 
 ## 8. File Changes / Diff View
 
-- A collapsible side panel lists the files changed in the selected tab's session: added, modified or deleted, with `+/−` line counts. It is built from the session's Edit/Write tool calls.
+- A collapsible side panel lists the files changed in the selected tab's session: added, modified or deleted, with `+/−` line counts. It is built from the session's Edit/Write tool calls, live and when a transcript is replayed.
+  - The **Files (n)** button in the composer bar opens it.
+  - The counts compare Claude's "before" with the file on disk now, so later edits by you show up too.
+  - A file that's back to how it was shows as unchanged.
 - Selecting a file opens a diff view (side-by-side or inline) with syntax highlighting.
-- Actions: open in external diff tool, open in external editor, reveal in Finder/Explorer, copy path.
+  - The view is a window of its own, so it can stay open beside the conversation.
+  - It shows the changes with a few lines of context, or the **Whole file**.
+  - Highlighting uses TextMate grammars, by file extension, with the dark or light theme to match the app. Files over 20,000 lines, and binary files, are shown without it.
+  - A leading byte order mark isn't counted as a change.
+- Actions: open in external diff tool, open in external editor (the app the OS uses for that file type), reveal in Finder/Explorer, copy path.
 - If the folder is a git repo, a toggle switches to **working tree vs HEAD**. This also shows changes made by Bash commands or by the user.
+  - It covers the whole repository, not only the tab's folder.
+  - Untracked files count as added.
+  - Git runs with `--no-optional-locks`, so refreshing never takes git's index lock.
 - **Before content.** Claude Code reports it. The result of every Edit and Write tool call (the `tool_use_result` field on the `user` message that carries the tool result) includes:
   - `originalFile`: the file's full content before the change, or `null` for a new file.
   - `structuredPatch`: the change as diff hunks.
@@ -405,7 +452,7 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 ### External diff tool
 
 - In Settings → Diff tool, the user chooses how diffs open: **Built-in** (the default), a **preset**, or a **custom command**.
-- Once a tool is set, **Open in diff tool** appears on every changed file. Double-clicking a file in the changed files panel uses the external tool instead of the built-in view.
+- Once a tool is set, **Open in diff tool** appears on every changed file. Double-clicking a file in the changed files panel uses the external tool instead of the built-in view, and a single click only selects it; the built-in view stays in the file's menu.
 - **Presets** are found automatically: Claudette looks in each tool's standard install locations and on `PATH`, and a preset only appears if its tool is found.
 
   | Tool | Windows | macOS |
@@ -426,10 +473,12 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
   ```
 
 - **Files passed to the tool.**
-  - The "before" side is written to a temporary read-only file.
+  - The "before" side is written to a temporary read-only file, in a folder of its own per launch. The file keeps its name and extension, for example `auth (before).cs`, so the tool picks the right language.
   - The "now" side is the real file in the working folder, so edits made in the diff tool are saved directly.
   - Temporary files are deleted when the tab closes.
 - **Test** in Settings opens a sample diff so the user can check their command works.
+- Only presets whose tool is installed are listed. Detection only looks for files, so opening Settings stays quick.
+- **Batch-file safety.** On Windows, `.cmd` and `.bat` tools (VS Code's `code.cmd`, or a custom command) run through `cmd.exe`, where a file name could inject commands. Claudette refuses arguments that `cmd.exe` would interpret, such as `%` or `"`. The rare file name that trips this, for example `Q&A.md` in a path without spaces, can still be opened in the built-in view.
 
 ## 9. Sessions: History, Restore & Sync
 
@@ -451,10 +500,12 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 
 - **History** (`Ctrl/Cmd+Shift+H`, or from the new tab menu) lists past sessions, grouped by folder. Each entry shows the name/title, the machine it was last used on, last activity time, first prompt and message count.
 - Search by title and prompt text.
-- Opening an entry resumes that session in a new tab. The earlier conversation is loaded into the view so you can scroll back through it.
+- Opening an entry resumes that session in a new tab. The earlier conversation is loaded into the view so you can scroll back through it. A session that's already open in a tab just selects that tab.
 - History combines two sources:
   - Claude Code's own session storage on this machine, so it includes sessions started in the terminal.
   - Claudette's session library (below), which can include sessions from other machines.
+- **Merging the sources.** A session in both is one entry: the library adds its name and, when another machine used it more recently, that machine. A session only in the library (from another machine, or older than Claude Code's cleanup) opens through "Restoring on another machine" below.
+- **Speed.** History reads every transcript line by line, skipping lines cheaply before parsing them, and caches each file by size and date, so opening it again only reads what changed.
 
 ### Session library (sync across machines)
 
@@ -469,13 +520,18 @@ Claude Code's credentials and settings are never copied.
 
 **Writing.**
 
-- Claudette copies the transcript into the library after each turn finishes, never while Claude Code is writing it.
-- Each file is written to a temporary name, then renamed, so a sync client never uploads a half-written file.
+- Claudette copies the transcript into the library after each turn finishes, never while Claude Code is writing it. It waits a second after the turn's result, so Claude Code has finished writing.
+- Each file is written to a temporary name, then renamed, so a sync client never uploads a half-written file. The record is written last, so a record in the library means its transcript is there too.
+- A file that hasn't changed (same size, and a modified time within 2 seconds, since some synced drives store coarse times) isn't copied again.
 - Library copies aren't affected by Claude Code's own cleanup of local transcripts (30 days by default), so the library also works as a longer-term archive. It has its own retention setting.
 
 **Restoring on another machine.**
 
-1. **Find the project.** Folder paths differ between machines (`D:\Repos\api` vs `/Users/me/src/api`), so the session record stores a project identity: the git remote URL, the branch, and the path inside the repo. Claudette looks for a matching folder among recent folders. If it can't find one, it asks the user to pick the folder and remembers the answer for that machine.
+1. **Find the project.** Folder paths differ between machines (`D:\Repos\api` vs `/Users/me/src/api`), so the session record stores a project identity: the git remote URL, the branch, and the path inside the repo.
+   - Remote URLs are compared in a normal form, so `git@github.com:Owner/Repo.git` and `https://github.com/owner/repo` match.
+   - Claudette looks for a matching folder among the folders it remembered, recent and favorite folders, and open tabs, and prefers a clone on the recorded branch. Then it tries the recorded path, in case it exists here too.
+   - If it can't find one, it asks the user to pick the folder and remembers the answer for that machine.
+   - The identity is read from the `.git` folder's files (including worktrees), without running git. Whether there were uncommitted changes needs `git status`, so that part runs git.
 2. **Check the code.** The library moves the conversation, not the code. If the branch or commit on this machine differs from what the other machine had, or the other machine had uncommitted changes, Claudette warns: *"This session was last used on DESKTOP-01 on branch `feature/auth` at `a1b2c3d`. This folder is on `main`. Claude's earlier file changes may not be here."* The user can continue anyway or cancel and sync the code first (push/pull).
 3. **Resume.**
    - Claudette copies the library's `<session-id>.jsonl` to a local working folder (`<app data>/sessions/`) and resumes with `claude --resume <local path>`.
@@ -496,7 +552,12 @@ Claude Code's credentials and settings are never copied.
   - **Open a copy**, which forks it into a new session with `--fork-session`, or
   - **Take over**, after which the other machine's tab becomes read-only on its next sync.
 - A lease that hasn't been refreshed in 10 minutes counts as stale.
+- The lease names the machine and a random id for this run of Claudette, so two copies of Claudette on one machine are told apart.
+- When a refresh finds another machine's name in the lease, the session was taken over. The tab stops its `claude` process, becomes read-only, and says where the session continued.
 - If the sync client creates conflict copies (for example `session (1).jsonl`), Claudette shows them in History as separate, forked entries. It never merges them.
+  - It recognizes the numbered copies Google Drive and OneDrive make, Dropbox's "conflicted copy", Syncthing's `.sync-conflict-…`, and `<id>-<machine>.jsonl`.
+  - Opening one copies it to a folder of its own and resumes it with `--fork-session`, so it can't overwrite the working copy of the original.
+- Library retention (Settings → Sessions) never deletes a session that's open here or held by a live lease.
 
 **Privacy.** Transcripts contain code, command output and anything else Claude read in the project. When the user picks a library folder inside a known cloud-sync location, Claudette says so and asks them to confirm.
 
@@ -598,16 +659,17 @@ Last update attempt: success → 2.1.284 (2026-09-28)
                 │                               │
 ┌───────────────▼──────────────┐  ┌─────────────▼──────────────┐  ┌───────────────────┐
 │ Claudette.Core               │  │ Claudette.Usage            │  │ Claudette.Platform│
-│  SessionManager              │  │  UsageSampler / store      │  │  Notifications    │
-│  ClaudeSession (1 per tab)   │  │  BurnRateCalculator        │  │  Dock/taskbar     │
-│   ├ process + stdio          │  │  Projection                │  │  Window chrome    │
-│   ├ protocol reader/writer   │  │  TabTokenStats             │  │  External diff    │
-│   └ typed event stream       │  └────────────────────────────┘  │  Process monitor  │
-│  TranscriptReader (history)  │                                  │  (Job Objects /   │
-│  SessionLibrary (sync)       │                                  │   libproc, /proc) │
-│  AuthService (sign-in)       │                                  └───────────────────┘
-│  InstallService (updates)    │
-│  Settings / persistence      │
+│  ClaudeSession (1 per tab)   │  │  UsagePoller (sampling)    │  │  Process monitor  │
+│   ├ process + stdio          │  │  UsageStore (SQLite)       │  │  (Job Objects,    │
+│   ├ protocol reader/writer   │  │  BurnRate (projection)     │  │   /proc, ps)      │
+│   └ typed event stream       │  │  UsageAlerts               │  │  Later:           │
+│  TranscriptReader, History   │  └────────────────────────────┘  │  Notifications    │
+│  SessionLibrary, leases      │                                  │  Dock/taskbar     │
+│  Diffs: line diff, changed   │                                  │  Window chrome    │
+│   files, external diff tools │                                  └───────────────────┘
+│  Git: identity, working tree │
+│  Auth, install checks        │
+│  Settings, state, sync       │
 └───────────────┬──────────────┘
                 │ stdin/stdout (JSON lines)
         ┌───────▼───────┐
@@ -615,7 +677,9 @@ Last update attempt: success → 2.1.284 (2026-09-28)
         └───────────────┘
 ```
 
-- **Claudette.Core** has no UI dependencies, so it can be unit tested and could be reused by another front end.
+- **Claudette.Core** has no UI dependencies, so it can be unit tested and could be reused by another front end. External diff tools live here rather than in Platform: they only look for files and start processes through `IProcessLauncher`.
+- **Claudette.Usage** holds the usage engine, with no UI: parsing, the SQLite history, the burn rate and projection, alerts and the polling schedule.
+- **Claudette.Platform** holds the OS-specific process monitor. Notifications, the Dock and taskbar, and window chrome join it in milestone 7.
   - `ClaudeSession` owns one `claude` process. It turns the output stream into typed events (`AssistantDelta`, `ToolUse`, `ToolResult`, `PermissionRequest`, `TurnCompleted`, `TitleChanged`, `UsageUpdated`, `RateLimit`, `AuthRequired`, `Exited`…), and exposes commands such as `SendAsync`, `InterruptAsync`, `RespondToPermissionAsync`, `SetModelAsync`, `SetEffortAsync` and `SetPermissionModeAsync`.
 - **Threading.** Each session reads its process on a background task. Events go to the UI thread through a channel, and streaming text is batched so the UI isn't updated for every token.
 - **Resilience.** If a process exits unexpectedly, the tab shows an error with a **Restart** button that resumes the same session ID.
@@ -736,7 +800,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account, with **Sign in** / **Sign out**. Check for Claude Code updates automatically. |
 | New tabs | Default model, effort level and permission mode. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (add, remove, reorder). See [Opening a tab](#opening-a-tab). |
 | Appearance | Theme: follow system, light or dark. Font and size for the conversation, and for code. Show thinking expanded or collapsed by default. |
-| Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters. Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
+| Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
 | Quick suffixes | The list of suffixes: label, text and optional shortcut. Add, edit, reorder, delete. See [§5](#quick-suffixes). |
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
 | Diff tool | Built-in, a preset or a custom command, with **Test**. See [§8](#external-diff-tool). |
@@ -763,6 +827,13 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 - The synced settings are stored as one file in the library. Each setting keeps the time it was last changed, and the newest change wins, so edits on two machines don't overwrite each other wholesale.
 - The first time sync is turned on and the library already has settings from another machine, Claudette asks: **Use synced settings** or **Replace them with this machine's**.
 - Turning sync off keeps the current values on this machine and stops syncing.
+- **When it syncs.** At launch, after each settings change, and once a minute to pick up changes from other machines.
+- **How it merges.** Each setting is a path such as `appearance.theme`; lists such as the quick suffixes sync as one value. Claudette remembers the value and time it last saw or published for each path.
+  - A local edit is published with the current time.
+  - A newer synced change is applied here.
+  - When both changed, the newer one wins.
+  - Equal values are never a conflict.
+- Keyboard shortcuts and notification settings sync once they exist (milestone 7).
 
 ## 15. Testing
 
@@ -844,7 +915,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
   - A build-and-test job on Windows, macOS and Linux runs everything except `RealCli` and `Live`, for every push and pull request.
   - A second Linux job installs Claude Code and runs the `RealCli` tests.
 
-### Where things are (milestone 1)
+### Where things are
 
 | Piece | Location |
 |---|---|
@@ -853,7 +924,11 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 | `fake-claude` | `tools/Claudette.FakeClaude/`. Scripted by the prompt (`ASK_PERMISSION`, `SLOW`, `CRASH`) and by environment variables, rather than scenario files. |
 | Mock Messages API | `tools/Claudette.MockApi/`. Runs in-process in tests, or on its own with `dotnet run`. |
 | Tests against `fake-claude` and the real CLI | `tests/Claudette.IntegrationTests/`. The real-CLI tests are tagged `RealCli`. |
-| Conversation view tests | `tests/Claudette.App.Tests/` |
+| View model tests | `tests/Claudette.App.Tests/`. `Support/TabTestHarness.cs` gives a tab a scripted Claude Code connection, a fake clock, a temporary data folder and a fake process tracker. |
+| Usage engine tests (parsers, store, burn rate, alerts, poller) | `tests/Claudette.Usage.Tests/`, with recorded `get_usage`, `rate_limit_event` and `/usage` fixtures |
+| Process monitor tests | `tests/Claudette.Platform.Tests/`. Some start real process trees on the current OS; the Linux ones skip elsewhere. |
+| History, library, leases, settings sync, diffs, git | `tests/Claudette.Core.Tests/{History,Library,Settings,Diffs,Git}`. Git tests use the real `git` in a temporary repo and skip without it. |
+| Real-CLI checks of questions and plans | `RealCliTests`, with the mock's `ASK_QUESTION` and `EXIT_PLAN` scripts |
 
 ## 16. Tracking Claude Code Changes
 
@@ -963,9 +1038,37 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
      - Per-suffix shortcuts and number keys in the suffix menu.
      - The "this session window" token split, which needs milestone 5's usage data.
      - OS notifications for check-ins (milestone 7).
-4. **Permissions.** Inline prompts, permission mode picker.
-5. **Usage.** Header meters, local sample store, burn trendline and projection, Usage panel, alerts.
-6. **History, sync & diffs.** Session history and resume, session library and cross-machine restore, changed files panel, built-in diff view, external diff tools, process monitor.
+4. **Permissions.** ✅ Built 2026-09-28.
+   - **Prompts:** inline prompts with the tool's input and a diff preview for edits.
+     - **Always allow** shows the exact rule and lets you edit it; the menu offers **Allow for this session only**.
+     - Mode suggestions (accept edits), and **Deny with a message**.
+     - `defaultToNo` and `suppressAlwaysAllowRule` are respected.
+   - **Questions and plans:** cards for clarifying questions (`AskUserQuestion`) and plan approval (`ExitPlanMode`), both confirmed against the real CLI.
+   - **Mode picker:** the permission mode picker, with a confirmation and warning style for Bypass.
+   - **Keyboard and notes:** Ctrl/Cmd+Enter and Ctrl/Cmd+Backspace answer prompts, and notes appear for denials Claude Code made by itself.
+   - **Deferred:**
+     - The OS notification for a waiting prompt (milestone 7).
+     - Switching into Bypass mid-session works only for tabs started in Bypass mode ([§7](#7-permission-prompts)).
+5. **Usage.** ✅ Built 2026-09-28.
+   - **Header:** meters, countdowns and the sparkline with projection.
+   - **Polling:** `get_usage` through the utility session, plus `rate_limit_event` updates and the `/usage` fallback.
+   - **History and panel:** the SQLite usage history with retention and **Clear usage history**, and the Usage panel.
+   - **Alerts:** shown in the header.
+   - **Per tab:** each tab's "this session window" tokens and per-turn chart, and **Compact**.
+   - **Deferred:** OS notifications for alerts (milestone 7).
+6. **History, sync & diffs.** ✅ Built 2026-09-28.
+   - **History:** History (Ctrl/Cmd+Shift+H, or from the new-tab picker).
+   - **Session library:**
+     - Copies after each turn, leases with take-over and **Open a copy**, and conflict copies.
+     - Restoring on another machine, with project identity and the code check.
+     - Retention, **Move library…**, the cloud-folder warning, and settings sync.
+   - **Changed files:** the Changed files panel (session edits, or working tree vs HEAD), the built-in diff view with syntax highlighting, and external diff tools with presets, a custom command and **Test**.
+   - **Processes:** the process monitor, and stopping a tab's processes when it closes.
+   - **Deferred:**
+     - The per-tab switch for the process monitor.
+     - Running the macOS and Linux process code for real (it compiles and its parsers are tested).
+     - Resuming a transcript recorded on the other OS ([§9](#session-library-sync-across-machines)).
+     - **Choose folder…** and **Unpin and close** for a restored tab whose folder is gone; it still shows a note.
 7. **Polish & ship.** Notifications, Claude Code update handling, keyboard shortcuts, platform chrome, packaging and signing for Windows and macOS.
 8. **Later.** The features in [§18](#18-future-features), in an order decided after v1 ships.
 
@@ -1027,6 +1130,34 @@ When Claude is working in a specific Perforce changelist, Claudette shows its nu
 - **Actions** (on the info card row or the badge): copy the number, or open it in P4V (`p4v -cmd "open changelist 12345"`).
 - **Saved with the tab**, so a restored tab shows it again.
 - **Resetting it.** When the changelist is submitted (*"Change 12345 submitted."*) or deleted, the badge changes to "submitted" or goes away.
+
+### Agent map
+
+A live view of what a tab's subagents are doing. When Claude fans work out to several subagents, possibly nested, the conversation shows each one as a collapsed group ([§5](#5-conversation-view)). That's fine for one agent at a time, but hard to follow when several run in parallel.
+
+- **What it shows.** A map of the tab's agents: the main agent at the root, and each subagent as a node under the agent that started it, with nesting kept.
+- **Each node** shows:
+  - The agent type (for example `Explore` or `general-purpose`) and its task description.
+  - Its status: running, waiting on a permission prompt, done or failed.
+  - What it's doing right now: its latest tool call (for example `Grep "auth" in src/`) or a line of its text.
+  - Running time, tool calls so far and tokens used, where Claude Code reports them.
+- **The prompt each subagent was given.** Selecting a node shows the full instructions the parent agent sent it: the `prompt` input of its `Agent` tool call, rendered as Markdown, with **Copy**. It also shows what the subagent returned, the tool result its parent received, once it finishes. This is often the quickest way to see why a subagent did what it did.
+- **Look and feel.** Follow how Claude Code's VS Code extension presents subagents ([§3](#visual-style)), and check it again when this feature is designed: compact rows, the task description up front, and the prompt and activity one click away rather than always expanded.
+- **Where it lives.** A page of the side panel next to Changed files and Processes, and optionally a larger view of its own. The tab's info card gets a row such as "3 agents running".
+- **Interaction.**
+  - Clicking a node scrolls the conversation to that subagent's group and expands it.
+  - A node waiting on a permission prompt is highlighted, and clicking it goes to the prompt.
+  - Stopping one subagent, if Claude Code offers a way to (for example `stop_task` for background agents), with the whole-turn Stop as the fallback.
+- **Data source.** Everything needed is already in the stream:
+  - Subagent traffic is tagged with `parent_tool_use_id`, which gives the tree, including nesting.
+  - The `Agent` tool call's input gives the type and description, and its result marks the end.
+  - `--forward-subagent-text` includes the subagents' own text and thinking.
+  - `task_started` / `task_notification` and `tool_progress` messages give background tasks and progress.
+  - The map is a different view of what the conversation builder already routes into subagent groups, so the two stay consistent.
+- **Restored tabs.** A transcript replay shows the finished tree, with no live status.
+- **Open questions:**
+  - A tree list is simpler, but a graph layout reads better for wide fan-outs; which one?
+  - Does it need to show agent teams (teammates), which Claude Code reports differently from subagents?
 
 ## 19. Open Questions
 

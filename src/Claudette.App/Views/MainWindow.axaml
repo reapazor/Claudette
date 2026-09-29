@@ -1,27 +1,114 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Claudette.App.ViewModels"
+        xmlns:controls="using:Claudette.App.Controls"
         x:Class="Claudette.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Claudette"
         Width="1100" Height="800"
         MinWidth="520" MinHeight="400"
         WindowStartupLocation="CenterScreen">
+  <Window.Styles>
+    <Style Selector="ProgressBar.meter">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Height" Value="6" />
+      <Setter Property="MinHeight" Value="6" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Minimum" Value="0" />
+      <Setter Property="Maximum" Value="100" />
+      <Setter Property="Background" Value="{DynamicResource MeterTrackBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource MeterBrush}" />
+    </Style>
+    <Style Selector="ProgressBar.meter.warning">
+      <Setter Property="Foreground" Value="{DynamicResource MeterWarningBrush}" />
+    </Style>
+    <Style Selector="ProgressBar.meter.critical">
+      <Setter Property="Foreground" Value="{DynamicResource MeterCriticalBrush}" />
+    </Style>
+    <Style Selector="Button.header">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="8,4" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.header:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+    </Style>
+  </Window.Styles>
+
   <DockPanel>
-    <!-- Header. Milestone 5 adds the usage meters here (DESIGN.md §6). -->
-    <Border DockPanel.Dock="Top"
-            Padding="16,10"
-            BorderThickness="0,0,0,1"
-            BorderBrush="{DynamicResource DividerBrush}">
+    <!-- Header: usage meters (DESIGN.md §6) and the account -->
+    <Border DockPanel.Dock="Top" Padding="10,6" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource DividerBrush}">
       <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Text="Claudette" FontWeight="SemiBold" VerticalAlignment="Center" />
-        <TextBlock Grid.Column="1"
-                   Classes="muted"
-                   Text="{Binding AccountText}"
-                   IsVisible="{Binding AccountText, Converter={x:Static ObjectConverters.IsNotNull}}"
-                   VerticalAlignment="Center" />
+        <TextBlock Text="Claudette" FontWeight="SemiBold" VerticalAlignment="Center" Margin="6,0"
+                   IsVisible="{Binding !HasUsage}" />
+
+        <!-- Click anywhere on the meters for the Usage panel -->
+        <Button Classes="header" IsVisible="{Binding HasUsage}" Command="{Binding Usage.OpenPanelCommand}"
+                ToolTip.Tip="Usage details (click)" AutomationProperties.Name="Usage details">
+          <Grid ColumnDefinitions="Auto,Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="14">
+            <!-- Session, the most prominent -->
+            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="8" ToolTip.Tip="{Binding Usage.Session.Tooltip}">
+              <TextBlock Text="Session" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <ProgressBar Classes="meter" Width="160" Value="{Binding Usage.Session.Percent}"
+                           Classes.warning="{Binding Usage.Session.IsWarning}" Classes.critical="{Binding Usage.Session.IsCritical}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Usage.Session.PercentText}" FontWeight="SemiBold" VerticalAlignment="Center"
+                         Classes.warning="{Binding Usage.Session.IsWarning}" Classes.error="{Binding Usage.Session.IsCritical}" />
+              <TextBlock Classes="muted small" Text="{Binding Usage.Session.ResetText}" VerticalAlignment="Center" />
+            </StackPanel>
+            <controls:UsageChart Grid.Row="0" Grid.Column="1" Width="120" Height="22" VerticalAlignment="Center"
+                                 Points="{Binding Usage.SessionPoints}" Projection="{Binding Usage.SessionProjection}"
+                                 RangeStart="{Binding Usage.WindowStart}" RangeEnd="{Binding Usage.WindowEnd}"
+                                 WarnLevel="{Binding Usage.WarnPercent}" CriticalLevel="{Binding Usage.CriticalPercent}"
+                                 LineBrush="{DynamicResource MeterBrush}" ProjectionBrush="{DynamicResource MutedTextBrush}"
+                                 WarnBrush="{DynamicResource MeterWarningBrush}" CriticalBrush="{DynamicResource MeterCriticalBrush}" />
+
+            <!-- Weekly limits, smaller -->
+            <ItemsControl Grid.Row="0" Grid.Column="2" ItemsSource="{Binding Usage.Weekly}" VerticalAlignment="Center">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" Spacing="14" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:MeterViewModel">
+                  <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding Tooltip}">
+                    <TextBlock Classes="muted small" Text="{Binding Label}" VerticalAlignment="Center" />
+                    <ProgressBar Classes="meter" Width="60" Value="{Binding Percent}"
+                                 Classes.warning="{Binding IsWarning}" Classes.critical="{Binding IsCritical}" VerticalAlignment="Center" />
+                    <TextBlock Classes="small" Text="{Binding PercentText}" VerticalAlignment="Center"
+                               Classes.warning="{Binding IsWarning}" Classes.error="{Binding IsCritical}" />
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- The plain-language projection -->
+            <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="10" Margin="0,2,0,0">
+              <TextBlock Classes="small muted" Classes.warning="{Binding Usage.IsProjectionWarning}" Text="{Binding Usage.ProjectionText}" />
+              <TextBlock Classes="small muted" Text="{Binding Usage.AsOfText}" IsVisible="{Binding Usage.AsOfText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+            </StackPanel>
+          </Grid>
+        </Button>
+
+        <TextBlock Grid.Column="1" Classes="muted" Text="{Binding AccountText}" Margin="12,0,6,0"
+                   IsVisible="{Binding AccountText, Converter={x:Static ObjectConverters.IsNotNull}}" VerticalAlignment="Center" />
       </Grid>
     </Border>
+
+    <!-- A usage alert, until OS notifications arrive (milestone 7) -->
+    <Border DockPanel.Dock="Top" IsVisible="{Binding Usage.HasAlert, FallbackValue=False}" Background="{DynamicResource CautionBackgroundBrush}"
+            BorderBrush="{DynamicResource CautionBorderBrush}" BorderThickness="0,0,0,1" Padding="16,6">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock TextWrapping="Wrap" VerticalAlignment="Center">
+          <Run FontWeight="SemiBold" Text="{Binding Usage.Alert.Title, FallbackValue=''}" />
+          <Run Text="{Binding Usage.Alert.Message, FallbackValue=''}" />
+        </TextBlock>
+        <Button Grid.Column="1" Classes="flat" Content="Dismiss" Command="{Binding Usage.DismissAlertCommand}" />
+      </Grid>
+    </Border>
+
     <ContentControl Content="{Binding CurrentPage}" />
   </DockPanel>
 </Window>

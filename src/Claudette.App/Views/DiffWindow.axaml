@@ -1,0 +1,116 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:diffs="using:Claudette.App.Diffs"
+        xmlns:controls="using:Claudette.App.Controls"
+        x:Class="Claudette.App.Views.DiffWindow"
+        x:DataType="diffs:DiffWindowViewModel"
+        Title="{Binding Title, StringFormat='{}{0} — diff'}"
+        Width="1000" Height="720" MinWidth="560" MinHeight="360"
+        WindowStartupLocation="CenterOwner">
+  <Window.Styles>
+    <Style Selector="ListBox.diff">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ListBox.diff ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="ListBox.diff ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBox.diff ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.line.added">
+      <Setter Property="Background" Value="{DynamicResource DiffAddedBrush}" />
+    </Style>
+    <Style Selector="Border.line.removed">
+      <Setter Property="Background" Value="{DynamicResource DiffRemovedBrush}" />
+    </Style>
+    <Style Selector="Border.line.header">
+      <Setter Property="Background" Value="{DynamicResource DiffHunkBrush}" />
+    </Style>
+    <Style Selector="Border.line.empty">
+      <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
+    </Style>
+  </Window.Styles>
+
+  <!-- DESIGN.md §8: the built-in diff view -->
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Padding="14,10" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="4">
+        <StackPanel Orientation="Horizontal" Spacing="10">
+          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
+          <TextBlock Classes="mono" Text="{Binding Stats}" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <ToggleButton Content="Side by side" IsChecked="{Binding IsSideBySide}" />
+          <ToggleButton Content="Whole file" IsChecked="{Binding ShowWholeFile}" />
+          <Button Content="Open in diff tool" Command="{Binding OpenInDiffToolCommand}" IsVisible="{Binding CanOpenInDiffTool}" />
+          <Button Content="Open in editor" Command="{Binding OpenInEditorCommand}" />
+          <Button Content="…">
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="Reveal in folder" Command="{Binding RevealCommand}" />
+                <MenuItem Header="Copy path" Command="{Binding CopyPathCommand}" />
+                <MenuItem Header="Refresh" Command="{Binding RefreshCommand}" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </StackPanel>
+        <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Classes="muted small" TextTrimming="PathSegmentEllipsis">
+          <Run Text="{Binding DisplayPath}" />
+          <Run Text="·" />
+          <Run Text="{Binding BeforeLabel}" />
+        </TextBlock>
+      </Grid>
+    </Border>
+
+    <Panel>
+      <TextBlock Classes="muted" Margin="16" Text="Loading…" IsVisible="{Binding IsLoading}" />
+      <TextBlock Classes="muted" Margin="16" Text="{Binding Message}" IsVisible="{Binding Message, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+      <!-- Inline -->
+      <ListBox Classes="diff" ItemsSource="{Binding InlineRows}" IsVisible="{Binding IsInline}">
+        <ListBox.ItemTemplate>
+          <DataTemplate DataType="diffs:InlineDiffRow">
+            <Border Classes="line" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}" Padding="6,0">
+              <Grid ColumnDefinitions="48,48,16,*">
+                <TextBlock Classes="mono muted small" Text="{Binding OldNumber}" HorizontalAlignment="Right" Margin="0,0,8,0" />
+                <TextBlock Grid.Column="1" Classes="mono muted small" Text="{Binding NewNumber}" HorizontalAlignment="Right" Margin="0,0,8,0" />
+                <TextBlock Grid.Column="2" Classes="mono" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Text="{Binding Marker}" />
+                <controls:ColoredTextBlock Grid.Column="3" Classes="mono" Code="{Binding Text}" Runs="{Binding Runs}" />
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+
+      <!-- Side by side -->
+      <ListBox Classes="diff" ItemsSource="{Binding SideRows}" IsVisible="{Binding IsSideBySide}">
+        <ListBox.ItemTemplate>
+          <DataTemplate DataType="diffs:SideBySideDiffRow">
+            <Panel>
+              <Border Classes="line header" Padding="6,0" IsVisible="{Binding IsHeader}">
+                <TextBlock Classes="mono muted small" Text="{Binding HeaderText}" />
+              </Border>
+              <Grid ColumnDefinitions="*,1,*" IsVisible="{Binding !IsHeader}">
+                <Border Classes="line" Classes.removed="{Binding Left.IsRemoved, FallbackValue=False}" Classes.empty="{Binding !HasLeft}" Padding="6,0">
+                  <Grid ColumnDefinitions="48,*">
+                    <TextBlock Classes="mono muted small" Text="{Binding Left.Number, FallbackValue=''}" HorizontalAlignment="Right" Margin="0,0,8,0" />
+                    <controls:ColoredTextBlock Grid.Column="1" Classes="mono" Code="{Binding Left.Text, FallbackValue=''}" Runs="{Binding Left.Runs, FallbackValue={x:Null}}" />
+                  </Grid>
+                </Border>
+                <Border Grid.Column="1" Background="{DynamicResource DividerBrush}" />
+                <Border Grid.Column="2" Classes="line" Classes.added="{Binding Right.IsAdded, FallbackValue=False}" Classes.empty="{Binding !HasRight}" Padding="6,0">
+                  <Grid ColumnDefinitions="48,*">
+                    <TextBlock Classes="mono muted small" Text="{Binding Right.Number, FallbackValue=''}" HorizontalAlignment="Right" Margin="0,0,8,0" />
+                    <controls:ColoredTextBlock Grid.Column="1" Classes="mono" Code="{Binding Right.Text, FallbackValue=''}" Runs="{Binding Right.Runs, FallbackValue={x:Null}}" />
+                  </Grid>
+                </Border>
+              </Grid>
+            </Panel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Panel>
+  </DockPanel>
+</Window>

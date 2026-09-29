@@ -17,6 +17,14 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     [ObservableProperty]
     public partial string? AccountText { get; set; }
 
+    /// <summary>The usage header (DESIGN.md §6), once signed in.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasUsage))]
+    public partial UsageViewModel? Usage { get; set; }
+
+    /// <summary>True once plan usage has arrived. API-key accounts have no plan limits, so the header stays plain.</summary>
+    public bool HasUsage => Usage is { HasData: true };
+
     /// <summary>The main UI, once Claude Code is installed and signed in.</summary>
     public ShellViewModel? Shell => _shell;
 
@@ -79,11 +87,37 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
             OnPropertyChanged(nameof(Shell));
             CurrentPage = _shell;
             _shell.Restore(initialFolder);
+            StartUsage();
         }
         else
         {
             CurrentPage = _shell;
             await _shell.OnSignedInAgainAsync();
+        }
+    }
+
+    /// <summary>Starts plan usage tracking and the header. A failure here never stops the tabs from working.</summary>
+    private void StartUsage()
+    {
+        try
+        {
+            var tracker = services.StartUsageTracking();
+            var usage = new UsageViewModel(services, tracker);
+            usage.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(UsageViewModel.HasData))
+                {
+                    OnPropertyChanged(nameof(HasUsage));
+                }
+            };
+            services.SettingsChanged += (_, _) => tracker.OnSettingsChanged();
+            tracker.TurnRecorded += () => _shell?.OnTurnRecorded();
+            _shell?.OnTurnRecorded();
+            Usage = usage;
+        }
+        catch (Exception ex)
+        {
+            AccountText = $"{AccountText} · usage unavailable ({ex.Message})";
         }
     }
 
@@ -106,6 +140,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
 
     public async ValueTask DisposeAsync()
     {
+        Usage?.Dispose();
         if (_shell is not null)
         {
             await _shell.DisposeAsync();

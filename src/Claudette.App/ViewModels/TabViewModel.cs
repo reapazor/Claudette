@@ -50,8 +50,6 @@ public sealed record TokenRow(string Model, string Input, string Output, string 
 /// </summary>
 public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 {
-    public static readonly IReadOnlyList<string> PermissionModes = ["default", "acceptEdits", "plan", "bypassPermissions"];
-
     private readonly AppServices _services;
     private readonly ShellViewModel _shell;
     private readonly ConversationBuilder _conversation;
@@ -177,7 +175,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusGlyph), nameof(StatusTip), nameof(InfoRows), nameof(IsWorking), nameof(NeedsInput), nameof(IsBusyStatus), nameof(IsAlertStatus), nameof(IsErrorStatus), nameof(IsUnread))]
-    [NotifyCanExecuteChangedFor(nameof(StopCommand), nameof(SendCommand), nameof(RestartCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopCommand), nameof(SendCommand), nameof(RestartCommand), nameof(CompactCommand))]
     public partial TabStatus Status { get; set; }
 
     public bool IsWorking => Status is TabStatus.Working or TabStatus.NeedsInput;
@@ -227,9 +225,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 rows.Add(new InfoRow("Branch", branch));
             }
             rows.Add(new InfoRow("Model", $"{ModelName ?? "Default"} · {EffortName}"));
-            if (PermissionMode is { } mode)
+            if (PermissionMode is not null)
             {
-                rows.Add(new InfoRow("Mode", mode));
+                rows.Add(new InfoRow("Mode", PermissionModeName));
             }
             if (_sessionStartedAt is { } started)
             {
@@ -289,9 +287,80 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     private ModelInfo? CurrentModelInfo => FindModel(_modelId) ?? _session?.Initialization?.Models.FirstOrDefault(m => m.Value == "default");
 
+    /// <summary>The session's permission mode, as Claude Code reports it (it changes it too, for example after a plan).</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(InfoRows))]
+    [NotifyPropertyChangedFor(nameof(InfoRows), nameof(PermissionModeName), nameof(IsBypassMode))]
     public partial string? PermissionMode { get; set; }
+
+    public string PermissionModeName => PermissionModeInfo.Label(PermissionMode);
+
+    /// <summary>Bypass mode gives the tab a warning style (DESIGN.md §7).</summary>
+    public bool IsBypassMode => PermissionMode == PermissionModeInfo.Bypass;
+
+    public IReadOnlyList<PermissionModeChoice> PermissionModeChoices => PermissionModeInfo.Choices;
+
+    /// <summary>Bypass waiting for confirmation.</summary>
+    [ObservableProperty]
+    public partial bool IsConfirmingBypass { get; set; }
+
+    /// <summary>
+    /// Switches this session's permission mode (DESIGN.md §7). Session-only: the mode a tab starts in is set in Tab
+    /// settings, and Claude Code changes the mode itself too, for example after a plan is approved.
+    /// </summary>
+    [RelayCommand]
+    private async Task ChooseModeAsync(PermissionModeChoice? choice)
+    {
+        if (choice is null || choice.Value == PermissionMode)
+        {
+            return;
+        }
+        if (choice.IsBypass)
+        {
+            IsConfirmingBypass = true;
+            return;
+        }
+        await SetModeAsync(choice.Value);
+    }
+
+    [RelayCommand]
+    private Task ConfirmBypassAsync()
+    {
+        IsConfirmingBypass = false;
+        return SetModeAsync(PermissionModeInfo.Bypass);
+    }
+
+    [RelayCommand]
+    private void CancelBypass() => IsConfirmingBypass = false;
+
+    private async Task SetModeAsync(string mode)
+    {
+        await EnsureStartedAsync();
+        if (_session is null)
+        {
+            return;
+        }
+        try
+        {
+            await _session.SetPermissionModeAsync(mode);
+            PermissionMode = mode;
+        }
+        catch (Exception ex)
+        {
+            var hint = mode == PermissionModeInfo.Bypass
+                ? " Claude Code only allows this in a session that started in Bypass permissions mode; set that in Tab settings and reopen the tab."
+                : "";
+            _conversation.AddNote($"Couldn't switch to {PermissionModeInfo.Label(mode)} mode: {ex.Message}.{hint}", NoteKind.Error);
+        }
+    }
+
+    // ---- Prompts from the keyboard (DESIGN.md §7: Ctrl/Cmd+Enter allows, Ctrl/Cmd+Backspace denies) ----------
+
+    /// <summary>The oldest prompt still waiting for an answer.</summary>
+    public PromptItem? WaitingPrompt => Items.OfType<PromptItem>().FirstOrDefault(p => p.IsPending);
+
+    public bool AcceptWaitingPrompt() => WaitingPrompt?.TryAcceptFromKeyboard() == true;
+
+    public bool DeclineWaitingPrompt() => WaitingPrompt?.TryDeclineFromKeyboard() == true;
 
     /// <summary>A model change waiting for confirmation (DESIGN.md §5: switching drops the prompt cache).</summary>
     [ObservableProperty]
@@ -390,6 +459,16 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty]
     public partial bool IsContextHigh { get; set; }
 
+    /// <summary>Summarizes the conversation to free context, like <c>/compact</c> in the terminal (DESIGN.md §6).</summary>
+    [RelayCommand(CanExecute = nameof(CanCompact))]
+    private async Task CompactAsync()
+    {
+        _conversation.AddNote("Compacting the conversation…");
+        await SendRawAsync("/compact");
+    }
+
+    private bool CanCompact() => Status is TabStatus.Idle or TabStatus.Unread;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(InfoRows))]
     public partial string TokensShort { get; set; } = "0 tok";
@@ -398,6 +477,14 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     [ObservableProperty]
     public partial string TokenSummary { get; set; } = "";
+
+    /// <summary>"Clear usage history" with "Also reset per-tab token totals" (DESIGN.md §6).</summary>
+    public void ResetTokenTotals()
+    {
+        State.Tokens = new TokenTotals();
+        RefreshTokens();
+        _services.SaveState();
+    }
 
     private void RefreshTokens()
     {
@@ -409,8 +496,55 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             TokenRows.Add(new TokenRow(ModelDisplayName(model) ?? model, N(t.Input), N(t.Output), N(t.CacheWrite), N(t.CacheRead), $"${t.EstimatedCostUsd:0.00}"));
         }
         TokenSummary = $"{totals.Turns} turn{(totals.Turns == 1 ? "" : "s")} · {totals.Total:N0} tokens · about ${totals.EstimatedCostUsd:0.00} at list price (an estimate, not your bill)";
+        _ = RefreshTokenWindowAsync();
 
         static string N(long n) => n.ToString("N0");
+    }
+
+    /// <summary>
+    /// This tab's tokens since the current 5-hour window started, the part that counts against the session limit, and
+    /// its recent turns for the popover's chart (DESIGN.md §4, "Token stats per tab"). From the usage history.
+    /// </summary>
+    [ObservableProperty]
+    public partial string? TokenWindowText { get; set; }
+
+    [ObservableProperty]
+    public partial IReadOnlyList<Controls.ChartPoint> TurnPoints { get; set; } = [];
+
+    [ObservableProperty]
+    public partial double TurnChartMaximum { get; set; } = 1;
+
+    public void RefreshTokenWindow() => _ = RefreshTokenWindowAsync();
+
+    private async Task RefreshTokenWindowAsync()
+    {
+        if (_services.Usage is not { } usage)
+        {
+            return;
+        }
+        var now = _services.Time.GetUtcNow();
+        var windowStart = usage.Current?.Session?.ResetsAt is { } resets ? resets - TimeSpan.FromHours(5) : now - TimeSpan.FromHours(5);
+        try
+        {
+            var (inWindow, turns) = await Task.Run(() =>
+            {
+                var window = usage.Store.GetTurns(windowStart, now, Id).Sum(t => t.Total);
+                var recent = usage.Store.GetTurns(now - TimeSpan.FromDays(7), now, Id)
+                    .GroupBy(t => t.Timestamp)
+                    .Select(g => new Controls.ChartPoint(g.Key, g.Sum(t => t.Total)))
+                    .OrderBy(p => p.Time)
+                    .TakeLast(40)
+                    .ToArray();
+                return (window, recent);
+            });
+            TokenWindowText = $"This session window: {TokenTotals.Short(inWindow)}";
+            TurnPoints = turns;
+            TurnChartMaximum = turns.Length > 0 ? turns.Max(p => p.Value) : 1;
+        }
+        catch (Exception)
+        {
+            // The usage history is optional here.
+        }
     }
 
     // ---- Composer and quick suffixes (DESIGN.md §5) -------------------------------------------------------
@@ -461,6 +595,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     {
         OnPropertyChanged(nameof(AvailableSuffixes));
         _conversation.ExpandThinking = _services.Settings.Appearance.ExpandThinking;
+        UpdateSampler();
     }
 
     private void SaveKeptSuffixes()
@@ -492,7 +627,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _ = RequestTitleAsync();
     }
 
-    private bool CanSend() => Status is not (TabStatus.Starting or TabStatus.Error) && (ComposerText.Trim().Length > 0 || Chips.Count > 0);
+    private bool CanSend() => !IsReadOnly && Status is not (TabStatus.Starting or TabStatus.Error) && (ComposerText.Trim().Length > 0 || Chips.Count > 0);
 
     private async Task SendRawAsync(string message)
     {
@@ -596,6 +731,12 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             _restoredTranscript = true;
             resume = await RestoreTranscriptAsync();
         }
+        // A library session resumes from its local working copy, which Claude Code keeps writing to (DESIGN.md §9).
+        if (resume is not null && State.TranscriptPath is { } localCopy && File.Exists(localCopy))
+        {
+            resume = localCopy;
+        }
+        var fork = State.ForkOnNextStart && resume is not null;
 
         var settings = _services.Settings;
         try
@@ -604,6 +745,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 WorkingDirectory = Folder,
                 Resume = resume,
+                ForkSession = fork,
                 Model = State.Overrides.Model ?? settings.NewTabs.DefaultModel,
                 Effort = State.Overrides.Effort ?? settings.NewTabs.DefaultEffort,
                 PermissionMode = State.Overrides.PermissionMode ?? settings.NewTabs.DefaultPermissionMode,
@@ -611,6 +753,14 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             });
             _session = session;
             _sessionStartedAt = _services.Time.GetUtcNow();
+            if (fork)
+            {
+                // The copy gets a new session id with its first turn; it no longer writes to the original.
+                State.ForkOnNextStart = false;
+                State.TranscriptPath = null;
+                _conversation.AddNote("Opened as a copy. The original session is left as it was.");
+            }
+            AttachProcessTree(session);
             Effort = State.Overrides.Effort ?? settings.NewTabs.DefaultEffort;
             PermissionMode = session.PermissionMode;
             _modelId = session.Model ?? State.Overrides.Model;
@@ -638,11 +788,24 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             return null;
         }
-        var path = _services.ProjectsDirectory is { } projects ? TranscriptReader.Find(projects, sessionId) : null;
+        var path = _services.Library.FindTranscript(sessionId, State.TranscriptPath);
+        if (path is null && _services.Library.Library.GetTranscriptPath(sessionId) is not null)
+        {
+            // Claude Code cleans up old transcripts; the library copy isn't affected (DESIGN.md §9, "Old sessions").
+            try
+            {
+                path = State.TranscriptPath = await _services.Library.CopyToLocalAsync(sessionId);
+            }
+            catch (Exception)
+            {
+                path = null;
+            }
+        }
         if (path is null)
         {
-            _conversation.AddNote("The earlier conversation couldn't be found (Claude Code may have cleaned it up). Starting a new session in this folder.", NoteKind.Warning);
+            _conversation.AddNote("The earlier conversation couldn't be found here or in the session library (Claude Code may have cleaned it up). Starting a new session in this folder.", NoteKind.Warning);
             State.SessionId = null;
+            State.TranscriptPath = null;
             return null;
         }
         try
@@ -659,10 +822,14 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                         _conversation.AddNote(note.Text);
                         break;
                     case TranscriptMessage { Message: AssistantMessage assistant }:
-                        _conversation.Apply(new AssistantMessageReceived(assistant));
+                        var assistantEvent = new AssistantMessageReceived(assistant);
+                        _conversation.Apply(assistantEvent);
+                        RecordFileChanges(assistantEvent);
                         break;
                     case TranscriptMessage { Message: UserMessage results }:
-                        _conversation.Apply(new ToolResultsReceived(results));
+                        var resultsEvent = new ToolResultsReceived(results);
+                        _conversation.Apply(resultsEvent);
+                        RecordFileChanges(resultsEvent);
                         break;
                 }
             }
@@ -736,6 +903,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         foreach (var sessionEvent in events)
         {
             _conversation.Apply(sessionEvent);
+            RecordFileChanges(sessionEvent);
             switch (sessionEvent)
             {
                 case StateChanged { State: SessionState.Working }:
@@ -764,10 +932,25 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 case PermissionCancelled:
                     PermissionResolved();
                     break;
+                case SystemNotice { Message.Subtype: "task_started" } task:
+                    OnTaskStarted(task.Message);
+                    break;
+                case SystemNotice { Message.Subtype: "status" }:
+                    // Claude Code reports mode changes it makes itself, such as leaving plan mode.
+                    PermissionMode = session.PermissionMode ?? PermissionMode;
+                    break;
+                case RateLimitUpdated rateLimit:
+                    _services.Usage?.OnRateLimitEvent(rateLimit.Message);
+                    break;
                 case TurnCompleted completed:
                     _checkIns.TurnEnded();
                     State.SessionId = completed.Result.SessionId ?? State.SessionId;
                     State.Tokens.Add(completed.Result);
+                    _services.Usage?.OnTurnCompleted(Id, completed.Result);
+                    if (State.SessionId is not null)
+                    {
+                        _ = _services.Library.SaveAfterTurnAsync(LibraryRecord(), State.TranscriptPath);
+                    }
                     RefreshTokens();
                     _services.SaveState();
                     _ = RefreshContextUsageAsync(session);
@@ -800,7 +983,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     private void WatchPermission(PermissionRequest request)
     {
-        var item = Items.OfType<PermissionItem>().LastOrDefault(p => ReferenceEquals(p.Request, request));
+        var item = Items.OfType<PromptItem>().LastOrDefault(p => ReferenceEquals(p.Request, request));
         if (item is not null)
         {
             item.Answered += (_, _) => PermissionResolved();
@@ -905,12 +1088,14 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    private async Task StopSessionAsync()
+    /// <param name="killProcesses">Also end every process the session started (DESIGN.md §4, "Cleanup").</param>
+    private async Task StopSessionAsync(bool killProcesses = false)
     {
         var session = _session;
         _session = null;
         if (session is null)
         {
+            await EndProcessTreeAsync(killProcesses);
             return;
         }
         if (session.State == SessionState.Working)
@@ -925,6 +1110,15 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 // Best effort; the process is stopped next either way.
             }
         }
+        if (killProcesses)
+        {
+            // Note the children while claude is still their parent; on macOS and Linux they can't be found afterwards.
+            RunningChildProcesses();
+        }
+        // Let claude exit on its own, so it finishes its transcript; then end what it left running, before disposing
+        // the session releases the process tree.
+        await session.StopAsync(TimeSpan.FromSeconds(3));
+        await EndProcessTreeAsync(killProcesses);
         await session.DisposeAsync();
         if (_pump is not null)
         {
@@ -932,11 +1126,16 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Closing the tab. By default everything the tab started is stopped too; the user can keep it running.</summary>
+    public async ValueTask CloseAsync(bool killProcesses)
     {
         _checkIns.Dispose();
-        await StopSessionAsync();
+        ReleaseLease();
+        await StopSessionAsync(killProcesses);
+        CleanUpDiffFiles();
     }
+
+    public ValueTask DisposeAsync() => CloseAsync(killProcesses: true);
 
     // ---- Helpers --------------------------------------------------------------------------------------------
 

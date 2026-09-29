@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using Claudette.App.Services;
+using Claudette.Core.Git;
+using Claudette.Core.Library;
 using Claudette.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -24,6 +26,23 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             foreach (var tab in AllTabs)
             {
                 tab.OnSettingsChanged();
+            }
+        };
+        _services.Library.LeaseLost += (sessionId, machine) =>
+        {
+            foreach (var tab in AllTabs.Where(t => t.State.SessionId == sessionId))
+            {
+                _ = tab.OnTakenOverAsync(machine);
+            }
+        };
+        _services.UsageHistoryCleared += (_, resetTabTotals) =>
+        {
+            if (resetTabTotals)
+            {
+                foreach (var tab in AllTabs)
+                {
+                    tab.ResetTokenTotals();
+                }
             }
         };
     }
@@ -93,6 +112,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         SelectedTab = AllTabs.FirstOrDefault(t => t.Id == state.SelectedTabId) ?? AllTabs.FirstOrDefault();
         SaveTabs();
+        // Library retention and settings sync, at launch (DESIGN.md §9, §14).
+        var keep = state.Tabs.Select(t => t.SessionId).OfType<string>().ToHashSet();
+        _ = Task.Run(() => _services.Library.Prune(keep));
+        _ = _services.Library.SyncSettingsAsync();
         if (initialFolder is not null)
         {
             _ = OpenFolderAsync(initialFolder);
@@ -153,6 +176,194 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         OpenTabs.Add(tab);
     }
 
+    // ---- History (DESIGN.md §9) -------------------------------------------------------------------------
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsHistoryOpen))]
+    public partial HistoryViewModel? History { get; set; }
+
+    public bool IsHistoryOpen => History is not null;
+
+    /// <summary>Ctrl/Cmd+Shift+H, or "Open from History…" in the new-tab picker.</summary>
+    [RelayCommand]
+    private void OpenHistory()
+    {
+        Picker = null;
+        History = new HistoryViewModel(_services, this);
+    }
+
+    public void CloseHistory() => History = null;
+
+    /// <summary>Resumes a past session in a new tab, with its earlier conversation loaded.</summary>
+    public async Task OpenFromHistoryAsync(HistoryEntry entry)
+    {
+        if (!entry.IsConflictCopy && AllTabs.FirstOrDefault(t => t.State.SessionId == entry.SessionId) is { } open)
+        {
+            SelectedTab = open;
+            return;
+        }
+        if (entry.IsLocal && !entry.IsConflictCopy)
+        {
+            var folder = entry.Folder is { } known && Directory.Exists(known)
+                ? known
+                : await _services.Platform.PickFolderAsync($"Choose the folder for \"{entry.Title}\"");
+            if (folder is not null)
+            {
+                OpenSession(NewState(entry, folder, transcriptPath: null, fork: false));
+            }
+            return;
+        }
+        if (entry.Record is null)
+        {
+            return;
+        }
+        if (entry.IsConflictCopy)
+        {
+            await OpenFromLibraryAsync(entry, fork: true, takeOver: false);
+            return;
+        }
+        // One machine at a time (DESIGN.md §9).
+        if (_services.Library.CheckLease(entry.SessionId) is LeaseStatus.HeldByOther other)
+        {
+            Confirmation = new ConfirmationViewModel(
+                $"\"{entry.Title}\" is open on {other.Machine}",
+                $"It was last active there at {other.UpdatedAt.ToLocalTime():t}. Open a copy to continue separately, or take it over; the tab on {other.Machine} then becomes read-only.",
+                "Take over",
+                () => OpenFromLibraryAsync(entry, fork: false, takeOver: true),
+                () => Confirmation = null,
+                "Open a copy",
+                () => OpenFromLibraryAsync(entry, fork: true, takeOver: false));
+            return;
+        }
+        await OpenFromLibraryAsync(entry, fork: false, takeOver: false);
+    }
+
+    /// <summary>
+    /// A session from the library, possibly recorded on another machine (DESIGN.md §9, "Restoring on another machine"):
+    /// find the project here, warn if the code differs, then copy the transcript to a local working copy and resume it.
+    /// </summary>
+    private async Task OpenFromLibraryAsync(HistoryEntry entry, bool fork, bool takeOver)
+    {
+        var record = entry.Record!;
+        var folder = await FindProjectFolderAsync(record, entry.Title);
+        if (folder is null)
+        {
+            return;
+        }
+        if (record.Project is { } recorded)
+        {
+            var local = ProjectIdentity.Read(folder);
+            var difference = ProjectIdentity.Compare(recorded, record.HadUncommittedChanges, local);
+            if (difference.Any)
+            {
+                Confirmation = new ConfirmationViewModel(
+                    "The code here may be different",
+                    difference.Describe(record.Machine, recorded, local) + " Sync the code first (push and pull), or continue anyway.",
+                    "Continue anyway",
+                    () => ResumeFromLibraryAsync(entry, folder, fork, takeOver),
+                    () => Confirmation = null);
+                return;
+            }
+        }
+        await ResumeFromLibraryAsync(entry, folder, fork, takeOver);
+    }
+
+    private async Task ResumeFromLibraryAsync(HistoryEntry entry, string folder, bool fork, bool takeOver)
+    {
+        var library = _services.Library;
+        string transcript;
+        try
+        {
+            if (entry.IsConflictCopy && entry.LibraryTranscript is { } copy)
+            {
+                // A conflict copy gets its own folder, so it can't overwrite the working copy of the original.
+                var separate = Path.Combine(_services.Paths.LocalSessionsDirectory, $"copy-{Guid.NewGuid():N}");
+                Directory.CreateDirectory(separate);
+                transcript = Path.Combine(separate, $"{entry.SessionId}.jsonl");
+                await Task.Run(() => File.Copy(copy, transcript, overwrite: true));
+            }
+            else
+            {
+                transcript = await library.CopyToLocalAsync(entry.SessionId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Confirmation = new ConfirmationViewModel("Couldn't open the session", ex.Message, "OK", () => Task.CompletedTask, () => Confirmation = null);
+            return;
+        }
+        if (takeOver)
+        {
+            library.Leases.Acquire(entry.SessionId, library.Library.GetSessionFolder(entry.SessionId));
+        }
+        OpenSession(NewState(entry, folder, transcript, fork));
+    }
+
+    /// <summary>
+    /// Where a project lives on this machine: a folder remembered for it, a recent or favorite folder in the same
+    /// repository, the recorded path if it exists here, or else the user picks one, which is remembered.
+    /// </summary>
+    private async Task<string?> FindProjectFolderAsync(SessionRecord record, string title)
+    {
+        var state = _services.State;
+        var key = record.Project is { RemoteUrl: { } remote } project ? $"{ProjectIdentity.NormalizeRemote(remote)}|{project.PathInRepo}" : null;
+        if (key is not null && state.FolderMappings.TryGetValue(key, out var mapped) && Directory.Exists(mapped))
+        {
+            return mapped;
+        }
+        if (record.Project is { RemoteUrl: not null } identity)
+        {
+            var candidates = state.FavoriteFolders.Concat(state.RecentFolders.Select(r => r.Path)).Concat(AllTabs.Select(t => t.Folder)).Distinct();
+            if (ProjectIdentity.FindMatchingFolder(identity, candidates) is { } match)
+            {
+                return match;
+            }
+        }
+        if (record.Folder is { } recordedFolder && Directory.Exists(recordedFolder))
+        {
+            return recordedFolder;
+        }
+        var picked = await _services.Platform.PickFolderAsync($"Where is the folder for \"{title}\" on this machine?");
+        if (picked is not null && key is not null)
+        {
+            state.FolderMappings[key] = picked;
+            _services.SaveState();
+        }
+        return picked;
+    }
+
+    private static TabState NewState(HistoryEntry entry, string folder, string? transcriptPath, bool fork)
+    {
+        var record = entry.Record;
+        var state = new TabState
+        {
+            Folder = FolderHistory.Normalize(folder),
+            SessionId = entry.SessionId,
+            AutoName = record?.AutoName ?? entry.Title,
+            UserName = fork ? null : record?.UserName,
+            TranscriptPath = transcriptPath,
+            ForkOnNextStart = fork,
+        };
+        if (record is not null)
+        {
+            state.Overrides.Effort = record.Effort;
+            if (!fork)
+            {
+                state.Tokens = record.Tokens;
+            }
+        }
+        return state;
+    }
+
+    private void OpenSession(TabState state)
+    {
+        FolderHistory.Touch(_services.State, state.Folder, _services.Time.GetUtcNow(), _services.Settings.NewTabs.RecentFolderLimit);
+        var tab = new TabViewModel(_services, this, state, isRestored: true);
+        AddTab(tab);
+        SelectedTab = tab;
+        SaveTabs();
+    }
+
     // ---- Closing tabs -----------------------------------------------------------------------------------
 
     [RelayCommand]
@@ -171,6 +382,17 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         {
             reasons.Add("Claude is still working in it and will be stopped.");
         }
+        // Processes the tab started, such as dev servers, are stopped with it unless the user keeps them (DESIGN.md §4).
+        var running = tab.RunningChildProcesses();
+        if (running.Count > 0)
+        {
+            var names = string.Join(", ", running.Take(5).Select(p => $"{p.Name} ({p.Pid})")) + (running.Count > 5 ? $" and {running.Count - 5} more" : "");
+            reasons.Add($"It started {(running.Count == 1 ? "a process that is" : $"{running.Count} processes that are")} still running: {names}.");
+            Confirmation = new ConfirmationViewModel($"Close \"{tab.DisplayName}\"?", string.Join(" ", reasons),
+                running.Count == 1 ? "Close and stop it" : "Close and stop them", () => RemoveTabAsync(tab), () => Confirmation = null,
+                "Close, leave running", () => RemoveTabAsync(tab, killProcesses: false));
+            return;
+        }
         if (reasons.Count == 0)
         {
             _ = RemoveTabAsync(tab);
@@ -178,6 +400,19 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         Confirmation = new ConfirmationViewModel($"Close \"{tab.DisplayName}\"?", string.Join(" ", reasons), "Close", () => RemoveTabAsync(tab), () => Confirmation = null);
     }
+
+    /// <summary>A turn reached the usage history: refresh each tab's "this session window" tokens.</summary>
+    internal void OnTurnRecorded()
+    {
+        foreach (var tab in AllTabs)
+        {
+            tab.RefreshTokenWindow();
+        }
+    }
+
+    /// <summary>A plain confirmation over the whole window.</summary>
+    internal void Confirm(string title, string message, string confirmText, Func<Task> onConfirm) =>
+        Confirmation = new ConfirmationViewModel(title, message, confirmText, onConfirm, () => Confirmation = null);
 
     [RelayCommand]
     private async Task CloseOtherTabsAsync(TabViewModel? keep)
@@ -200,7 +435,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     [RelayCommand]
     private void CloseSelectedTab() => CloseTab(SelectedTab);
 
-    private async Task RemoveTabAsync(TabViewModel tab)
+    private async Task RemoveTabAsync(TabViewModel tab, bool killProcesses = true)
     {
         var ordered = AllTabs.ToList();
         var index = ordered.IndexOf(tab);
@@ -219,7 +454,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             SelectedTab = remaining.Count == 0 ? null : remaining[Math.Clamp(index, 0, remaining.Count - 1)];
         }
         SaveTabs();
-        await tab.DisposeAsync();
+        await tab.CloseAsync(killProcesses);
     }
 
     // ---- Selection and groups -------------------------------------------------------------------------------

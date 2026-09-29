@@ -116,6 +116,38 @@ public sealed class RealCliTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_clarifying_question_is_answered_through_the_permission_reply()
+    {
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("ASK_QUESTION", TestContext.Current.CancellationToken);
+        var (requested, _) = await session.ReadUntilAsync<PermissionRequested>();
+        Assert.Equal("AskUserQuestion", requested.Request.ToolName);
+        var input = (JsonObject)requested.Request.Input.DeepClone();
+        input["answers"] = new JsonObject { ["Which database?"] = "SQLite" };
+        requested.Request.Allow(input);
+        await session.ReadUntilAsync<TurnCompleted>();
+
+        // The answer reaches the model as the tool's result (DESIGN.md §7).
+        Assert.Contains(_api.Requests, r => r.LastToolResultText.Contains("SQLite", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Approving_a_plan_leaves_plan_mode()
+    {
+        await using var session = await StartAsync(permissionMode: "plan");
+
+        await session.SendUserMessageAsync("EXIT_PLAN", TestContext.Current.CancellationToken);
+        var (requested, _) = await session.ReadUntilAsync<PermissionRequested>();
+        Assert.Equal("ExitPlanMode", requested.Request.ToolName);
+        Assert.Equal("1. Read the code\n2. Fix the bug", requested.Request.Input["plan"]?.GetValue<string>());
+        requested.Request.AllowAndSetMode("acceptEdits");
+        await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.Equal("acceptEdits", session.PermissionMode);
+    }
+
+    [Fact]
     public async Task An_edit_reports_the_original_file()
     {
         await using var session = await StartAsync(permissionMode: "acceptEdits");

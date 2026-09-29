@@ -132,6 +132,10 @@ public sealed partial class NewTabPickerViewModel : ViewModelBase
     [RelayCommand]
     private void Close() => _shell.ClosePicker();
 
+    /// <summary>"Open from History…" (DESIGN.md §4, "Opening a tab").</summary>
+    [RelayCommand]
+    private void OpenHistory() => _shell.OpenHistoryCommand.Execute(null);
+
     [RelayCommand]
     private void ToggleFavorite(FolderEntry? entry)
     {

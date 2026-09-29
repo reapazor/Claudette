@@ -10,9 +10,15 @@
     <PackageVersion Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="LiveMarkdown.Avalonia" Version="2.4.3" />
+    <!-- Also what LiveMarkdown uses; the diff view highlights code with it. -->
+    <PackageVersion Include="TextMateSharp" Version="2.0.0" />
+    <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.0" />
   </ItemGroup>
   <ItemGroup Label="Core">
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+  <ItemGroup Label="Usage">
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
   </ItemGroup>
   <ItemGroup Label="Tests">
     <!-- xunit.v3 stays on 3.2.x: Avalonia.Headless.XUnit 12.1.3 is built against xunit.v3.extensibility.core 3.2.2. -->

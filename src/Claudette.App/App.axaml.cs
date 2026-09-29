@@ -9,6 +9,7 @@ using Claudette.App.Views;
 using Claudette.Core;
 using Claudette.Core.Processes;
 using Claudette.Core.Settings;
+using Claudette.Platform.Processes;
 
 namespace Claudette.App;
 
@@ -25,12 +26,15 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var window = new MainWindow();
+            var launcher = new ProcessLauncher();
+            var trees = TryCreateProcessTracker(launcher);
             _services = new AppServices(
                 AppPaths.ForCurrentUser(),
-                new ProcessLauncher(),
+                trees is null ? launcher : new TrackingProcessLauncher(launcher, trees),
                 TimeProvider.System,
                 new AvaloniaPlatformServices(() => TopLevel.GetTopLevel(window)),
-                new AvaloniaUiDispatcher());
+                new AvaloniaUiDispatcher(),
+                processTrees: trees);
             ApplyAppearance();
             _services.SettingsChanged += (_, _) => ApplyAppearance();
             _mainViewModel = new MainWindowViewModel(_services, FolderArgument(desktop.Args ?? []));
@@ -41,6 +45,19 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>Process tracking for the process monitor and tab cleanup (DESIGN.md §4). Optional: tabs work without it.</summary>
+    private static IProcessTreeTracker? TryCreateProcessTracker(IProcessLauncher launcher)
+    {
+        try
+        {
+            return ProcessTreeTracker.CreateForCurrentOS(launcher, TimeProvider.System);
+        }
+        catch (PlatformNotSupportedException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Applies Settings → Appearance: theme and font sizes (DESIGN.md §14).</summary>

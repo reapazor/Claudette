@@ -2,11 +2,15 @@
   <Folder Name="/src/">
     <Project Path="src/Claudette.App/Claudette.App.csproj" />
     <Project Path="src/Claudette.Core/Claudette.Core.csproj" />
+    <Project Path="src/Claudette.Platform/Claudette.Platform.csproj" />
+    <Project Path="src/Claudette.Usage/Claudette.Usage.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Claudette.App.Tests/Claudette.App.Tests.csproj" />
     <Project Path="tests/Claudette.Core.Tests/Claudette.Core.Tests.csproj" />
     <Project Path="tests/Claudette.IntegrationTests/Claudette.IntegrationTests.csproj" />
+    <Project Path="tests/Claudette.Platform.Tests/Claudette.Platform.Tests.csproj" />
+    <Project Path="tests/Claudette.Usage.Tests/Claudette.Usage.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Claudette.FakeClaude/Claudette.FakeClaude.csproj" />

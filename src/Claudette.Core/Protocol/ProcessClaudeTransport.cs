@@ -26,6 +26,8 @@ public sealed class ProcessClaudeTransport : IClaudeTransport
 
     public Task<TransportExit> Completion => _completion;
 
+    public int? ProcessId => _process.Id;
+
     public ValueTask SendAsync(string line, CancellationToken cancellationToken = default) =>
         _process.WriteLineAsync(line, cancellationToken);
 

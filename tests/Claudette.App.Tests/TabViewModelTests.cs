@@ -149,6 +149,19 @@ public class TabViewModelTests
     }
 
     [Fact]
+    public async Task Compact_sends_the_compact_command()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+
+        await tab.CompactCommand.ExecuteAsync(null);
+        h.Transport.Emit("""{"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"manual","pre_tokens":1000}}""");
+
+        Assert.Contains("/compact", h.Transport.SentUserTexts);
+        await TabTestHarness.Eventually(() => tab.Items.OfType<NoteItem>().Any(n => n.Text == "Conversation compacted."), "the compacted note");
+    }
+
+    [Fact]
     public async Task Launch_uses_the_tab_overrides_over_the_defaults()
     {
         await using var h = new TabTestHarness();

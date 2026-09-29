@@ -26,6 +26,7 @@ public sealed class ClaudeSessionFactory(
         {
             WorkingDirectory = options.WorkingDirectory,
             Environment = ClaudeEnvironment.Create(options.EnvironmentOverrides),
+            TrackProcessTree = true,
         };
         var transport = new ProcessClaudeTransport(launcher.Start(spec), _loggerFactory.CreateLogger<ProcessClaudeTransport>());
         var session = new ClaudeSession(transport, timeProvider, _loggerFactory.CreateLogger<ClaudeSession>());

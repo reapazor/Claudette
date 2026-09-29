@@ -34,7 +34,7 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
             ModelChoices = [.. ModelChoices, new Choice(model, model)];
         }
         EffortChoices = [new Choice(null, $"Default ({defaults.NewTabs.DefaultEffort ?? "model default"})"), .. new[] { "low", "medium", "high", "xhigh", "max" }.Select(e => new Choice(e, e))];
-        ModeChoices = [new Choice(null, $"Default ({defaults.NewTabs.DefaultPermissionMode ?? "default"})"), .. TabViewModel.PermissionModes.Select(m => new Choice(m, m))];
+        ModeChoices = [new Choice(null, $"Default ({PermissionModeInfo.Label(defaults.NewTabs.DefaultPermissionMode)})"), .. PermissionModeInfo.Choices.Select(m => new Choice(m.Value, m.Label))];
 
         SelectedModel = ModelChoices.First(c => c.Value == overrides.Model);
         SelectedEffort = EffortChoices.FirstOrDefault(c => c.Value == overrides.Effort) ?? EffortChoices[0];

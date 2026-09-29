@@ -70,6 +70,13 @@ public partial class ShellView : UserControl
             e.Handled = true;
             return;
         }
+        if (e.Key == Key.H && mods == (command | KeyModifiers.Shift))
+        {
+            // History (DESIGN.md §9).
+            shell.OpenHistoryCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
         if (!mods.HasFlag(command) || mods.HasFlag(KeyModifiers.Shift) || mods.HasFlag(KeyModifiers.Alt))
         {
             return;

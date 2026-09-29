@@ -1,0 +1,15 @@
+{"session":{"total_cost_usd":0,"model_usage":{}},"subscription_type":"max","rate_limits_available":true,
+ "rate_limits":{
+  "five_hour":{"utilization":13,"resets_at":"2026-09-29T02:19:59.953628+00:00","limit_dollars":null},
+  "seven_day":{"utilization":57,"resets_at":"2026-09-30T10:59:59.953655+00:00"},
+  "seven_day_opus":null,"seven_day_sonnet":null,
+  "iguana_necktie":{"utilization":19.1717708,"resets_at":"2026-11-05T07:59:00+00:00","limit_dollars":250,"used_dollars":47.93},
+  "extra_usage":{"is_enabled":false,"utilization":null},
+  "limits":[
+   {"kind":"session","group":"session","percent":13,"severity":"normal","resets_at":"2026-09-29T02:19:59.953628+00:00","scope":null,"is_active":false},
+   {"kind":"weekly_all","group":"weekly","percent":57,"severity":"normal","resets_at":"2026-09-30T10:59:59.953655+00:00","scope":null,"is_active":false},
+   {"kind":"weekly_scoped","group":"weekly","percent":100,"severity":"critical","resets_at":"2026-09-30T10:59:59.953885+00:00","scope":{"model":{"id":null,"display_name":"Fable"},"surface":null},"is_active":true}
+  ],
+  "model_scoped":[{"display_name":"Fable","utilization":100,"resets_at":"2026-09-30T10:59:59.953885+00:00"}]
+ },
+ "behaviors":{"day":{"request_count":884}}}

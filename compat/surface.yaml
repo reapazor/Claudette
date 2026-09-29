@@ -206,9 +206,9 @@ items:
   - id: "originalFile"
     kind: field
     status: undocumented
-    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
-    test: RealCliTests
-    fallback: See tool_use_result.
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.Core/Diffs/ChangedFiles.cs
+    test: RealCliTests, ChangedFilesTests
+    fallback: See tool_use_result. Without it, a changed file's "before" side is unknown; the Working tree vs HEAD view still works in a git repository.
   - id: "<local-command-stdout>"
     kind: field
     status: undocumented
@@ -230,9 +230,9 @@ items:
   - id: "rate_limit_event"
     kind: message
     status: documented
-    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.Usage/UsageParser.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: none yet (milestone 5)
+    test: UsageParserTests, UsageHeaderTests
   - id: "auth_status"
     kind: message
     status: documented
@@ -336,6 +336,89 @@ items:
     usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: RealCliTests
+  - id: "permission_suggestions"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/user-input
+    test: PermissionRequestTests, RealCliTests
+    fallback: The wire name of the documented canUseTool "suggestions" option (addRules, setMode, addDirectories). Without it, hide "Always allow" and offer Allow and Deny only.
+  - id: "destination: session"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: PermissionRequestTests
+  - id: "setMode"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs, src/Claudette.App/Conversation/PromptItems.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+  - id: "decision_reason"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: PermissionRequestTests
+    fallback: Documented as the canUseTool option decisionReason; both spellings are read. Without it the card just doesn't say why.
+  - id: "default_to_no"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: PermissionRequestTests, PromptTests
+    fallback: Documented as the canUseTool option defaultToNo; both spellings are read. If neither arrives, Ctrl/Cmd+Enter can approve every prompt, as before.
+  - id: "suppress_always_allow_rule"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: PermissionRequestTests
+    fallback: Documented as the canUseTool option suppressAlwaysAllowRule; both spellings are read. If neither arrives, "Always allow" shows the suggested rule, which the user can still edit.
+  - id: "AskUserQuestion"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/PromptItems.cs, tools/Claudette.MockApi/MockAnthropicApi.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/user-input
+    test: PromptTests, RealCliTests
+  - id: "ExitPlanMode"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/PromptItems.cs, tools/Claudette.MockApi/MockAnthropicApi.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: PromptTests, RealCliTests
+  - id: "plan"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.App/Conversation/PromptItems.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+    fallback: ExitPlanMode's input schema is open ([k: string]: unknown); 2.1.284 sends the plan text as input.plan. Without it the card says Claude is ready to start and the plan stays in Claude's last message.
+  - id: "permission_denied"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: PromptTests
+  - id: "compact_boundary"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: TabViewModelTests
+  - id: "/compact"
+    kind: command
+    status: documented
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/headless
+    test: TabViewModelTests
+  - id: "--fork-session"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: ClaudeEnvironmentTests
   - id: "set_model"
     kind: control
     status: undocumented
@@ -367,8 +450,8 @@ items:
   - id: "get_usage"
     kind: control
     status: experimental
-    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs
-    test: none yet (milestone 5)
+    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs, src/Claudette.Usage/UsagePoller.cs, src/Claudette.App/Services/UsageTracker.cs
+    test: UsagePollerTests
     fallback: The SDK calls it usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET. Fall back to rate_limit_event, then parsing /usage (DESIGN.md §6).
   - id: "claude_authenticate"
     kind: control
@@ -405,14 +488,14 @@ items:
   - id: "ai-title"
     kind: file
     status: undocumented
-    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs
-    test: TranscriptReaderTests
-    fallback: The format is internal to Claude Code. Without titles, a restored tab keeps the name Claudette saved.
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs, src/Claudette.Core/History/HistoryIndex.cs
+    test: TranscriptReaderTests, HistoryIndexTests
+    fallback: The format is internal to Claude Code. Without titles, a restored tab keeps the name Claudette saved, and History shows the first prompt.
   - id: "custom-title"
     kind: file
     status: undocumented
-    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs
-    test: TranscriptReaderTests
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs, src/Claudette.Core/History/HistoryIndex.cs
+    test: TranscriptReaderTests, HistoryIndexTests
     fallback: See ai-title.
   - id: "toolUseResult"
     kind: file
@@ -423,9 +506,9 @@ items:
   - id: "isSidechain"
     kind: file
     status: undocumented
-    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs
-    test: TranscriptReaderTests
-    fallback: Restored tabs could show subagent messages at the top level.
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs, src/Claudette.Core/History/HistoryIndex.cs
+    test: TranscriptReaderTests, HistoryIndexTests
+    fallback: Restored tabs could show subagent messages at the top level, and History could count them.
 
   # --- Files and behavior ------------------------------------------------------------------------------
   - id: "settings.local.json"
@@ -437,7 +520,7 @@ items:
   - id: "resume from a transcript path writes <session-id>.jsonl next to it"
     kind: behavior
     status: undocumented
-    usedIn: DESIGN.md §9 (session library, milestone 6)
+    usedIn: src/Claudette.Core/Library/SessionLibrary.cs, src/Claudette.App/ViewModels/TabViewModel.cs
     docs: https://code.claude.com/docs/en/sessions
     test: RealCliTests
     fallback: Copy the updated transcript from the projects folder back to the library after each turn.
@@ -447,3 +530,183 @@ items:
     usedIn: tools/Claudette.MockApi/MockAnthropicApi.cs
     test: RealCliTests
     fallback: A connectivity check Claude Code makes against ANTHROPIC_BASE_URL. The mock answers 404 and Claude Code carries on; if that stops working, answer 200.
+
+  # --- Plan usage (DESIGN.md §6) ------------------------------------------------------------------------
+  - id: "rate_limits_available"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Usage/UsageParser.cs
+    test: UsageParserTests
+    fallback: Part of the get_usage response. If it goes away, the limits are read anyway; false means no plan limits (for example an API key), and the meters stay hidden.
+  - id: "rate_limits.limits"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Usage/UsageParser.cs
+    test: UsageParserTests
+    fallback: Reads kind (session, weekly_all, weekly_scoped), percent, severity, resets_at, is_active and scope.model.display_name; unknown kinds are skipped. Without the list, read rate_limits.five_hour, seven_day and model_scoped, then rely on rate_limit_event.
+  - id: "rate_limits.five_hour"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Usage/UsageParser.cs
+    test: UsageParserTests
+    fallback: Only read when rate_limits.limits is missing (utilization 0-100, resets_at). Otherwise rate_limit_event.
+  - id: "rate_limits.seven_day"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Usage/UsageParser.cs
+    test: UsageParserTests
+    fallback: See rate_limits.five_hour.
+  - id: "rate_limits.model_scoped"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Usage/UsageParser.cs
+    test: UsageParserTests
+    fallback: Only read when rate_limits.limits is missing (display_name, utilization, resets_at). Otherwise the model meters hide unless the /usage fallback is on.
+  - id: "unifiedWindows"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Usage/UsageParser.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: UsageParserTests
+    fallback: rate_limit_info.unifiedWindows.five_hour / seven_day (utilization 0-1, resetsAt epoch seconds). Without it, use the documented top-level utilization and resetsAt for the window named by rateLimitType.
+  - id: "rateLimitType"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Usage/UsageParser.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: UsageParserTests
+    fallback: Only needed when unifiedWindows is missing (five_hour = session, seven_day = weekly). Without it, such an event is ignored and get_usage still supplies the readings.
+  - id: "/usage"
+    kind: command
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/UtilitySession.cs, src/Claudette.App/Services/UsageTracker.cs
+    docs: https://code.claude.com/docs/en/commands
+    test: UsagePollerTests
+  - id: "/usage output format"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Usage/UsageParser.cs
+    docs: https://code.claude.com/docs/en/commands
+    test: UsageParserTests
+    fallback: "Current session / Current week (all models) / Current week (<model>): N% used · resets <date>, <time> (<IANA zone>)", in one-line or block form. Last resort and off by default; if it can't be read, the model-specific meters stay hidden.
+  - id: "modelUsage"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/TokenTotals.cs, src/Claudette.Usage/UsageRecords.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: UsageStoreTests
+
+  # --- History and the session library (DESIGN.md §9) --------------------------------------------------
+  - id: "isMeta"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs, src/Claudette.Core/Transcripts/TranscriptPrompts.cs, src/Claudette.Core/History/HistoryIndex.cs
+    test: TranscriptReaderTests, HistoryIndexTests
+    fallback: Injected context would count as a prompt in restored tabs and in History's first prompt and message count.
+  - id: "cwd"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/History/HistoryIndex.cs
+    test: HistoryIndexTests
+    fallback: History can't group the session by folder; it lists it under "Unknown folder" and asks for the folder when it's opened.
+  - id: "gitBranch"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/History/HistoryIndex.cs
+    test: HistoryIndexTests
+    fallback: History shows no branch.
+  - id: "timestamp"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/History/HistoryIndex.cs
+    test: HistoryIndexTests
+    fallback: Last activity falls back to the transcript's last-write time.
+  - id: "version"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/History/HistoryIndex.cs
+    test: HistoryIndexTests
+    fallback: Informational only; History shows no version.
+  - id: "projects/<project>/<session-id>.jsonl"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/History/HistoryIndex.cs, src/Claudette.Core/Transcripts/TranscriptReader.cs
+    docs: https://code.claude.com/docs/en/sessions
+    test: HistoryIndexTests
+    fallback: History lists only Claudette's saved tabs and the session library; resuming by session id still works.
+  - id: "<session-id>/subagents/*.jsonl"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/History/HistoryIndex.cs, src/Claudette.Core/Library/SessionLibrary.cs, src/Claudette.App/Services/LibraryService.cs
+    test: HistoryIndexTests, SessionLibraryTests
+    fallback: History ignores the folder. If it moves, the library copies only the main transcript and a session restored on another machine loses subagent detail.
+  - id: "compact JSONL transcript lines"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Core/History/HistoryIndex.cs
+    test: HistoryIndexTests
+    fallback: HistoryIndex pre-filters lines with substrings such as "type":"user" before parsing them. If Claude Code starts writing spaced JSON, History shows no prompts; parse every line instead (slower on large transcripts).
+
+  # --- Changed files (DESIGN.md §8) --------------------------------------------------------------------
+  - id: "Edit"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ChangedFilesTests
+  - id: "Write"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ChangedFilesTests
+  - id: "NotebookEdit"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ChangedFilesTests
+  - id: "MultiEdit"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs
+    test: ChangedFilesTests
+    fallback: No longer in the SDK reference; handled like Edit so older transcripts replay. Nothing is lost if it never appears.
+  - id: "file_path"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ChangedFilesTests
+  - id: "filePath"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ChangedFilesTests
+  - id: 'type: "create" | "update"'
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs, src/Claudette.App/Conversation/ConversationItems.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ChangedFilesTests
+  - id: "notebook_path"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ChangedFilesTests
+
+  # --- Processes (DESIGN.md §4, "Process monitor") ------------------------------------------------------
+  - id: "task_started"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.Processes.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: SidePanelTests
+  - id: "stop_task"
+    kind: control
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: SidePanelTests

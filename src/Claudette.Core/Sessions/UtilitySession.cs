@@ -19,16 +19,23 @@ public sealed class UtilitySession : IAsyncDisposable
 
     private readonly ClaudeSession _session;
     private readonly Task _drain;
+    private readonly SemaphoreSlim _commandLock = new(1, 1);
+    private TaskCompletionSource<ResultMessage>? _pendingCommand;
 
     private UtilitySession(ClaudeSession session)
     {
         _session = session;
-        // Nobody reads this session's events; drain them so they don't pile up.
+        // Nobody reads this session's events except to finish a local command; drain them so they don't pile up.
         _drain = Task.Run(async () =>
         {
-            await foreach (var _ in session.Events.ReadAllAsync().ConfigureAwait(false))
+            await foreach (var sessionEvent in session.Events.ReadAllAsync().ConfigureAwait(false))
             {
+                if (sessionEvent is TurnCompleted completed)
+                {
+                    Volatile.Read(ref _pendingCommand)?.TrySetResult(completed.Result);
+                }
             }
+            Volatile.Read(ref _pendingCommand)?.TrySetCanceled();
         });
     }
 
@@ -54,6 +61,28 @@ public sealed class UtilitySession : IAsyncDisposable
     /// </summary>
     public Task<JsonObject> GetUsageAsync(CancellationToken cancellationToken = default) =>
         _session.SendControlRequestAsync(new JsonObject { ["subtype"] = "get_usage" }, cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Runs a local slash command such as <c>/usage</c> and returns the text it prints. Local commands make no model
+    /// call, so this is free (DESIGN.md §6, "Data source", source 3). One at a time.
+    /// </summary>
+    public async Task<string?> RunLocalCommandAsync(string command, TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        await _commandLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var pending = new TaskCompletionSource<ResultMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Volatile.Write(ref _pendingCommand, pending);
+            await _session.SendUserMessageAsync(command, cancellationToken).ConfigureAwait(false);
+            var result = await pending.Task.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
+            return result.IsError ? null : result.Result;
+        }
+        finally
+        {
+            Volatile.Write(ref _pendingCommand, null);
+            _commandLock.Release();
+        }
+    }
 
     /// <summary>Starts sign-in and returns the URLs. Claude Code doesn't open a browser itself. Undocumented request.</summary>
     public async Task<SignInUrls> StartSignInAsync(bool claudeAiAccount = true, CancellationToken cancellationToken = default)
@@ -90,5 +119,6 @@ public sealed class UtilitySession : IAsyncDisposable
     {
         await _session.DisposeAsync().ConfigureAwait(false);
         await _drain.ConfigureAwait(false);
+        _commandLock.Dispose();
     }
 }

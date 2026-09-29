@@ -13,7 +13,7 @@ namespace Claudette.App.Conversation;
 public sealed class ConversationBuilder
 {
     private readonly Dictionary<string, ToolUseItem> _toolUses = [];
-    private readonly Dictionary<string, PermissionItem> _permissions = [];
+    private readonly Dictionary<string, PromptItem> _permissions = [];
     private readonly Dictionary<string, ConversationBuilder> _subagents = [];
     private readonly HashSet<string> _todoToolUses = [];
     private readonly TodoList? _todoList;
@@ -106,21 +106,31 @@ public sealed class ConversationBuilder
                 break;
 
             case PermissionRequested permission:
-                CloseOpen();
-                var item = new PermissionItem(permission.Request);
-                _permissions[permission.Request.RequestId] = item;
-                Items.Add(item);
+                AddPrompt(permission.Request);
                 break;
 
             case PermissionCancelled cancelled:
-                if (_permissions.TryGetValue(cancelled.RequestId, out var cancelledItem) && cancelledItem.IsPending)
+                if (_permissions.TryGetValue(cancelled.RequestId, out var cancelledItem))
                 {
-                    cancelledItem.State = PermissionState.Cancelled;
+                    cancelledItem.Cancel();
                 }
                 break;
 
             case SystemNotice { Message.Subtype: "api_retry" } retry:
                 ApplyRetry(retry.Message.Raw);
+                break;
+
+            case SystemNotice { Message.Subtype: "compact_boundary" } compacted:
+                var trigger = compacted.Message.Raw.GetObject("compact_metadata")?.GetString("trigger");
+                AddNote(trigger == "auto" ? "Claude Code compacted the conversation to free up context." : "Conversation compacted.");
+                break;
+
+            case SystemNotice { Message.Subtype: "permission_denied" } denied:
+                // Denied without asking, by a rule or the permission mode.
+                var raw = denied.Message.Raw;
+                var tool = raw.GetString("tool_name") ?? "a tool";
+                var why = raw.GetString("decision_reason") ?? raw.GetString("message");
+                AddNote(why is null ? $"Claude Code denied {tool}." : $"Claude Code denied {tool}: {why}", NoteKind.Warning);
                 break;
 
             case TurnCompleted completed:
@@ -140,15 +150,36 @@ public sealed class ConversationBuilder
 
             case SessionExited exited:
                 CloseOpen();
-                foreach (var pending in _permissions.Values.Where(p => p.IsPending))
+                foreach (var pending in _permissions.Values)
                 {
-                    pending.State = PermissionState.Cancelled;
+                    pending.Cancel();
                 }
                 var code = exited.Exit.ExitCode?.ToString() ?? "unknown";
                 var detail = string.IsNullOrWhiteSpace(exited.Exit.StandardErrorTail) ? "" : $"\n{LastLines(exited.Exit.StandardErrorTail, 5)}";
                 AddNote($"Claude Code exited (code {code}).{detail}", exited.Exit.ExitCode == 0 ? NoteKind.Info : NoteKind.Error);
                 break;
         }
+    }
+
+    /// <summary>
+    /// A permission prompt, a clarifying question or a plan to approve (DESIGN.md §7). A question or plan replaces its
+    /// own tool row, which would only repeat it.
+    /// </summary>
+    private void AddPrompt(PermissionRequest request)
+    {
+        CloseOpen();
+        PromptItem item = request.ToolName switch
+        {
+            "AskUserQuestion" => new QuestionItem(request),
+            "ExitPlanMode" => new PlanItem(request),
+            _ => new PermissionItem(request),
+        };
+        if (item is not PermissionItem && request.ToolUseId is { } id && _toolUses.TryGetValue(id, out var row))
+        {
+            Items.Remove(row);
+        }
+        _permissions[request.RequestId] = item;
+        Items.Add(item);
     }
 
     private void ApplyAssistant(AssistantMessage message)

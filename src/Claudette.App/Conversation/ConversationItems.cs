@@ -100,6 +100,8 @@ public partial class ToolUseItem : ConversationItem
         "WebFetch" or "WebSearch" => "◍",
         "Agent" or "Task" => "◈",
         "Skill" => "✦",
+        "AskUserQuestion" => "?",
+        "ExitPlanMode" => "☰",
         _ => "•",
     };
 
@@ -190,6 +192,8 @@ public partial class ToolUseItem : ConversationItem
             "Grep" when Str(input, "pattern") is { } pattern
                 => Str(input, "path") is { } where ? $"{pattern}  in {where}" : pattern,
             "Agent" or "Task" => Str(input, "description"),
+            "AskUserQuestion" => (input["questions"] as JsonArray)?.OfType<JsonObject>().Select(q => Str(q, "question")).FirstOrDefault(q => q is not null),
+            "ExitPlanMode" => "Plan ready for review",
             _ => null,
         };
         if (summary is null)
@@ -211,6 +215,9 @@ public partial class ToolUseItem : ConversationItem
     {
         "Bash" or "Edit" or "Write" or "Read" => null,
         "Agent" or "Task" => Str(input, "prompt"),
+        "ExitPlanMode" => Str(input, "plan"),
+        "AskUserQuestion" => string.Join("\n\n", (input["questions"] as JsonArray ?? []).OfType<JsonObject>().Select(q =>
+            $"{Str(q, "question")}\n" + string.Join("\n", (q["options"] as JsonArray ?? []).OfType<JsonObject>().Select(o => $"  • {Str(o, "label")}")))),
         "WebFetch" => Str(input, "prompt") is { } prompt ? $"{Str(input, "url")}\n\n{prompt}" : null,
         _ => input.Count > 0 ? input.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) : null,
     };
@@ -242,63 +249,6 @@ public sealed partial class SubagentItem : ToolUseItem
     public string AgentType { get; }
 
     public ObservableCollection<ConversationItem> Items { get; } = [];
-}
-
-public enum PermissionState
-{
-    Pending,
-    Allowed,
-    Denied,
-    Cancelled,
-}
-
-/// <summary>An inline permission prompt. Milestone 1 offers Allow and Deny; milestone 4 adds Always allow.</summary>
-public sealed partial class PermissionItem(PermissionRequest request) : ConversationItem
-{
-    public PermissionRequest Request { get; } = request;
-
-    public string Title { get; } = $"Allow {request.DisplayName ?? request.ToolName}?";
-
-    public string Detail { get; } = ToolUseItem.Summarize(request.ToolName, request.Input) is { Length: > 0 } summary ? summary : request.Description ?? "";
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsPending), nameof(Outcome))]
-    public partial PermissionState State { get; set; } = PermissionState.Pending;
-
-    public bool IsPending => State == PermissionState.Pending;
-
-    public string Outcome => State switch
-    {
-        PermissionState.Allowed => "Allowed",
-        PermissionState.Denied => "Denied",
-        PermissionState.Cancelled => "No longer needed",
-        _ => "",
-    };
-
-    /// <summary>Raised when the user answers, so the tab can update its "needs input" status.</summary>
-    public event EventHandler? Answered;
-
-    [RelayCommand]
-    private void Allow()
-    {
-        if (IsPending)
-        {
-            Request.Allow();
-            State = PermissionState.Allowed;
-            Answered?.Invoke(this, EventArgs.Empty);
-        }
-    }
-
-    [RelayCommand]
-    private void Deny()
-    {
-        if (IsPending)
-        {
-            Request.Deny("The user denied this action.");
-            State = PermissionState.Denied;
-            Answered?.Invoke(this, EventArgs.Empty);
-        }
-    }
 }
 
 public enum NoteKind

@@ -18,10 +18,14 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="LiveMarkdown.Avalonia" />
+    <PackageReference Include="TextMateSharp" />
+    <PackageReference Include="TextMateSharp.Grammars" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Claudette.Core\Claudette.Core.csproj" />
+    <ProjectReference Include="..\Claudette.Platform\Claudette.Platform.csproj" />
+    <ProjectReference Include="..\Claudette.Usage\Claudette.Usage.csproj" />
   </ItemGroup>
 
   <ItemGroup>

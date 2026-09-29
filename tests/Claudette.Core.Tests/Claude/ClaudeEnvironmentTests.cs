@@ -64,6 +64,16 @@ public class ClaudeEnvironmentTests
             args);
     }
 
+    [Fact]
+    public void Opening_a_copy_forks_the_resumed_session()
+    {
+        var args = ClaudeArguments.ForStreamingSession(new ClaudeLaunchOptions { WorkingDirectory = ".", Resume = "abc", ForkSession = true });
+        var without = ClaudeArguments.ForStreamingSession(new ClaudeLaunchOptions { WorkingDirectory = ".", ForkSession = true });
+
+        Assert.Equal(["--resume", "abc", "--fork-session"], args.SkipWhile(a => a != "--resume"));
+        Assert.DoesNotContain("--fork-session", without);
+    }
+
     private static IDictionary Source(params (string Key, string Value)[] entries) =>
         entries.ToDictionary(e => e.Key, e => e.Value);
 }

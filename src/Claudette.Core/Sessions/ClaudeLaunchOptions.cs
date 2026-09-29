@@ -14,6 +14,9 @@ public sealed record ClaudeLaunchOptions
     /// <summary>A session ID, or the path of a <c>.jsonl</c> transcript, to resume.</summary>
     public string? Resume { get; init; }
 
+    /// <summary>With <see cref="Resume"/>: continue as a new session (a copy) instead of the original (DESIGN.md §9, "One machine at a time").</summary>
+    public bool ForkSession { get; init; }
+
     /// <summary>False adds <c>--no-session-persistence</c>, as the utility session does.</summary>
     public bool PersistSession { get; init; } = true;
 
@@ -61,6 +64,10 @@ public static class ClaudeArguments
         AddOption(args, "--effort", options.Effort);
         AddOption(args, "--permission-mode", options.PermissionMode);
         AddOption(args, "--resume", options.Resume);
+        if (options.ForkSession && options.Resume is not null)
+        {
+            args.Add("--fork-session");
+        }
         if (!options.PersistSession)
         {
             args.Add("--no-session-persistence");

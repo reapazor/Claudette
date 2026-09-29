@@ -24,4 +24,7 @@ public interface IClaudeTransport : IAsyncDisposable
 
     /// <summary>Ends the process immediately.</summary>
     void Terminate();
+
+    /// <summary>The operating system process id, for the process monitor (DESIGN.md §4). Null for fakes.</summary>
+    int? ProcessId => null;
 }

@@ -3,7 +3,10 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Styling;
 using Avalonia.VisualTree;
+using Claudette.App.Conversation;
+using Claudette.App.Diffs;
 using Claudette.App.ViewModels;
 
 namespace Claudette.App.Views;
@@ -16,7 +19,8 @@ public partial class TabView : UserControl
     public TabView()
     {
         InitializeComponent();
-        // Tunnel, so Enter is seen before the multi-line TextBox turns it into a new line.
+        // Tunnel, so these are seen before the multi-line TextBox turns Enter into a new line.
+        AddHandler(KeyDownEvent, OnPromptKeyDown, RoutingStrategies.Tunnel);
         Composer.AddHandler(KeyDownEvent, OnComposerKeyDown, RoutingStrategies.Tunnel);
         ConversationScroll.ScrollChanged += OnConversationScrollChanged;
     }
@@ -41,6 +45,26 @@ public partial class TabView : UserControl
             SuffixButton.Flyout?.ShowAt(SuffixButton);
             e.Handled = true;
         }
+    }
+
+    /// <summary>
+    /// Ctrl/Cmd+Enter answers "yes" to the waiting prompt and Ctrl/Cmd+Backspace "no" (DESIGN.md §7). Not while
+    /// typing in one of a prompt's own fields, and Backspace keeps deleting words in a field with text.
+    /// </summary>
+    private void OnPromptKeyDown(object? sender, KeyEventArgs e)
+    {
+        var command = this.GetPlatformSettings()?.HotkeyConfiguration.CommandModifiers ?? KeyModifiers.Control;
+        if (e.KeyModifiers != command || e.Key is not (Key.Enter or Key.Back) || ViewModel is not { WaitingPrompt: not null } tab)
+        {
+            return;
+        }
+        var focusedBox = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() as TextBox;
+        if (focusedBox is not null && !ReferenceEquals(focusedBox, Composer)
+            || e.Key == Key.Back && !string.IsNullOrEmpty(focusedBox?.Text))
+        {
+            return;
+        }
+        e.Handled = e.Key == Key.Enter ? tab.AcceptWaitingPrompt() : tab.DeclineWaitingPrompt();
     }
 
     private void OnComposerKeyDown(object? sender, KeyEventArgs e)
@@ -86,6 +110,93 @@ public partial class TabView : UserControl
     {
         var scroll = ConversationScroll;
         scroll.Offset = new Vector(scroll.Offset.X, Math.Max(0, scroll.Extent.Height - scroll.Viewport.Height));
+    }
+
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        base.OnDataContextChanged(e);
+        if (_tab is not null)
+        {
+            _tab.DiffRequested -= OnDiffRequested;
+            _tab.ScrollToRequested -= OnScrollToRequested;
+        }
+        _tab = ViewModel;
+        if (_tab is not null)
+        {
+            _tab.DiffRequested += OnDiffRequested;
+            _tab.ScrollToRequested += OnScrollToRequested;
+        }
+    }
+
+    private TabViewModel? _tab;
+
+    /// <summary>The built-in diff view, in its own window so it can stay open beside the conversation (DESIGN.md §8).</summary>
+    private void OnDiffRequested(DiffSource source)
+    {
+        var dark = ActualThemeVariant == ThemeVariant.Dark;
+        var window = new DiffWindow { DataContext = new DiffWindowViewModel(source, dark) };
+        if (TopLevel.GetTopLevel(this) is Window owner)
+        {
+            window.Show(owner);
+        }
+        else
+        {
+            window.Show();
+        }
+    }
+
+    /// <summary>Scrolls to a card, for example the Bash call that started a process.</summary>
+    private void OnScrollToRequested(ConversationItem item)
+    {
+        if (ConversationItems.ContainerFromItem(item) is { } container)
+        {
+            _stickToBottom = false;
+            if (item is ToolUseItem tool)
+            {
+                tool.IsExpanded = true;
+            }
+            container.BringIntoView();
+        }
+    }
+
+    /// <summary>Without a diff tool, selecting a file opens the built-in diff view; with one, double-click opens the tool (DESIGN.md §8).</summary>
+    private void OnChangedFileSelected(object? sender, SelectionChangedEventArgs e)
+    {
+        if (ChangedFilesList.SelectedItem is ChangedFileRow row && ViewModel is { HasDiffTool: false } tab)
+        {
+            tab.OpenFileDiffCommand.Execute(row);
+            // Clear it, so clicking the same file again opens it again.
+            ChangedFilesList.SelectedItem = null;
+        }
+    }
+
+    private void OnChangedFileDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (ChangedFileAt(e) is { } row && ViewModel is { HasDiffTool: true } tab)
+        {
+            tab.OpenFileInDiffToolCommand.Execute(row);
+        }
+    }
+
+    private void OnChangedFileKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && ChangedFilesList.SelectedItem is ChangedFileRow row && ViewModel is { } tab)
+        {
+            tab.OpenFileCommand.Execute(row);
+            e.Handled = true;
+        }
+    }
+
+    private static ChangedFileRow? ChangedFileAt(TappedEventArgs e) =>
+        (e.Source as Control)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as ChangedFileRow;
+
+    private void OnShowProcesses(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } tab)
+        {
+            tab.IsProcessesPage = true;
+            tab.IsSidePanelOpen = true;
+        }
     }
 
     /// <summary>Closes the dropdown a picked item lives in.</summary>

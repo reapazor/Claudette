@@ -5,6 +5,7 @@
              xmlns:core="using:Claudette.Core.Sessions"
              xmlns:settings="using:Claudette.Core.Settings"
              xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
+             xmlns:controls="using:Claudette.App.Controls"
              x:Class="Claudette.App.Views.TabView"
              x:DataType="vm:TabViewModel"
              FontSize="{DynamicResource ConversationFontSize}">
@@ -39,6 +40,23 @@
     </Style>
     <Style Selector="Border.chip.kept">
       <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
+    </Style>
+    <!-- Prompts waiting on the user (DESIGN.md §7); quieter once answered. -->
+    <Style Selector="Border.prompt">
+      <Setter Property="Padding" Value="12,10" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Margin" Value="0,2" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CautionBorderBrush}" />
+      <Setter Property="Background" Value="{DynamicResource CautionBackgroundBrush}" />
+    </Style>
+    <Style Selector="Border.prompt.question">
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
+      <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
+    </Style>
+    <Style Selector="Border.prompt.answered">
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+      <Setter Property="Background" Value="Transparent" />
     </Style>
   </UserControl.Styles>
 
@@ -127,20 +145,7 @@
           </Border>
           <Border Classes="codeblock" Padding="0" IsVisible="{Binding HasDiff}">
             <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Auto">
-              <ItemsControl ItemsSource="{Binding Diff.Lines}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate DataType="conv:DiffLine">
-                    <Border Classes="diffline" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.hunk="{Binding IsHunk}" Padding="6,0">
-                      <Grid ColumnDefinitions="36,36,14,*">
-                        <TextBlock Classes="mono muted small" Text="{Binding OldNumberText}" HorizontalAlignment="Right" Margin="0,0,6,0" />
-                        <TextBlock Grid.Column="1" Classes="mono muted small" Text="{Binding NewNumberText}" HorizontalAlignment="Right" Margin="0,0,6,0" />
-                        <TextBlock Grid.Column="2" Classes="mono" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Text="{Binding Marker}" />
-                        <SelectableTextBlock Grid.Column="3" Classes="mono" Text="{Binding Text}" />
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <ItemsControl ItemsSource="{Binding Diff.Lines}" />
             </ScrollViewer>
           </Border>
           <Border Classes="codeblock" IsVisible="{Binding HasOutput}">
@@ -152,17 +157,154 @@
       </StackPanel>
     </DataTemplate>
 
+    <DataTemplate DataType="conv:DiffLine">
+      <Border Classes="diffline" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.hunk="{Binding IsHunk}" Padding="6,0">
+        <Grid ColumnDefinitions="36,36,14,*">
+          <TextBlock Classes="mono muted small" Text="{Binding OldNumberText}" HorizontalAlignment="Right" Margin="0,0,6,0" />
+          <TextBlock Grid.Column="1" Classes="mono muted small" Text="{Binding NewNumberText}" HorizontalAlignment="Right" Margin="0,0,6,0" />
+          <TextBlock Grid.Column="2" Classes="mono" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Text="{Binding Marker}" />
+          <SelectableTextBlock Grid.Column="3" Classes="mono" Text="{Binding Text}" />
+        </Grid>
+      </Border>
+    </DataTemplate>
+
+    <!-- Permission prompt (DESIGN.md §7) -->
     <DataTemplate DataType="conv:PermissionItem">
-      <Border Padding="12,10" CornerRadius="8" BorderThickness="1" Margin="0,2"
-              BorderBrush="{DynamicResource CautionBorderBrush}" Background="{DynamicResource CautionBackgroundBrush}">
+      <Border Classes="prompt" Classes.answered="{Binding !IsPending}">
         <StackPanel Spacing="8">
           <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
-          <SelectableTextBlock Classes="mono" Text="{Binding Detail}" TextWrapping="Wrap" />
-          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsPending}">
-            <Button Classes="accent" Content="Allow" Command="{Binding AllowCommand}" />
-            <Button Content="Deny" Command="{Binding DenyCommand}" />
+          <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+          <Border Classes="codeblock" IsVisible="{Binding HasCommand}">
+            <SelectableTextBlock Classes="mono" Text="{Binding Command, StringFormat='$ {0}'}" TextWrapping="Wrap" />
+          </Border>
+          <SelectableTextBlock Classes="mono" Text="{Binding Detail}" TextWrapping="Wrap" IsVisible="{Binding HasDetail}" />
+          <Border Classes="codeblock" Padding="0" IsVisible="{Binding HasDiff}">
+            <ScrollViewer MaxHeight="240" HorizontalScrollBarVisibility="Auto">
+              <ItemsControl ItemsSource="{Binding Diff.Lines}" />
+            </ScrollViewer>
+          </Border>
+          <TextBlock Classes="muted small" Text="{Binding Reason}" TextWrapping="Wrap" IsVisible="{Binding HasReason}" />
+
+          <WrapPanel ItemSpacing="8" LineSpacing="6" IsVisible="{Binding IsPending}">
+            <Button Classes="accent" Content="Allow" Command="{Binding AllowCommand}" ToolTip.Tip="Ctrl/Cmd+Enter" />
+            <SplitButton Content="Always allow…" Command="{Binding StartAlwaysAllowCommand}" IsVisible="{Binding CanAlwaysAllow}"
+                         ToolTip.Tip="Save an allow rule to this folder's .claude/settings.local.json">
+              <SplitButton.Flyout>
+                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                  <MenuItem Header="Allow for this session only" Command="{Binding AllowForSessionCommand}" />
+                </MenuFlyout>
+              </SplitButton.Flyout>
+            </SplitButton>
+            <Button Content="{Binding ModeAction}" Command="{Binding AllowWithModeCommand}" IsVisible="{Binding HasModeAction}" />
+            <Button Content="Deny" Command="{Binding DenyCommand}" ToolTip.Tip="Ctrl/Cmd+Backspace" />
+            <Button Classes="flat" Content="Deny with a message…" Command="{Binding StartDenyWithMessageCommand}" VerticalAlignment="Center" />
+          </WrapPanel>
+
+          <!-- Always allow: the exact rule, editable before it's saved -->
+          <StackPanel Spacing="6" IsVisible="{Binding IsEditingRule}">
+            <TextBlock Classes="small" Text="Always allow calls that match this rule:" />
+            <TextBox Classes="mono" Text="{Binding RuleText}" AutomationProperties.Name="Rule" />
+            <TextBlock Classes="small error" Text="{Binding RuleError}" TextWrapping="Wrap" IsVisible="{Binding HasRuleError}" />
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       Text="Claude Code saves it to .claude/settings.local.json in this folder (your personal, uncommitted settings), so terminal sessions here use it too." />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="accent" Content="Save rule and allow" Command="{Binding SaveRuleCommand}" />
+              <Button Content="Allow for this session only" Command="{Binding AllowForSessionCommand}" />
+              <Button Classes="flat" Content="Cancel" Command="{Binding CancelAlwaysAllowCommand}" VerticalAlignment="Center" />
+            </StackPanel>
           </StackPanel>
-          <TextBlock Classes="muted" Text="{Binding Outcome}" IsVisible="{Binding !IsPending}" />
+
+          <!-- Deny with a message -->
+          <StackPanel Spacing="6" IsVisible="{Binding IsWritingDenyMessage}">
+            <TextBox Text="{Binding DenyMessage}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="44"
+                     PlaceholderText="Tell Claude what to do instead (optional)" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="accent" Content="Deny" Command="{Binding SendDenyMessageCommand}" />
+              <Button Classes="flat" Content="Cancel" Command="{Binding CancelDenyWithMessageCommand}" VerticalAlignment="Center" />
+            </StackPanel>
+          </StackPanel>
+
+          <TextBlock Classes="muted small" Text="{Binding Outcome}" TextWrapping="Wrap" IsVisible="{Binding HasOutcome}" />
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+
+    <!-- Clarifying questions (AskUserQuestion) -->
+    <DataTemplate DataType="conv:QuestionItem">
+      <Border Classes="prompt question" Classes.answered="{Binding !IsPending}">
+        <StackPanel Spacing="10">
+          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+          <ItemsControl ItemsSource="{Binding Questions}" IsEnabled="{Binding IsPending}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="14" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="conv:QuestionEntry">
+                <StackPanel Spacing="4">
+                  <TextBlock Classes="muted small" FontWeight="SemiBold" Text="{Binding Header}" IsVisible="{Binding HasHeader}" />
+                  <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                  <TextBlock Classes="muted small" Text="{Binding Hint}" />
+                  <ItemsControl ItemsSource="{Binding Options}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="conv:QuestionOption">
+                        <Panel>
+                          <RadioButton GroupName="{Binding Group}" IsChecked="{Binding IsSelected}"
+                                       IsVisible="{Binding !$parent[ItemsControl].((conv:QuestionEntry)DataContext).MultiSelect}">
+                            <StackPanel>
+                              <TextBlock Text="{Binding Label}" />
+                              <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+                            </StackPanel>
+                          </RadioButton>
+                          <CheckBox IsChecked="{Binding IsSelected}"
+                                    IsVisible="{Binding $parent[ItemsControl].((conv:QuestionEntry)DataContext).MultiSelect}">
+                            <StackPanel>
+                              <TextBlock Text="{Binding Label}" />
+                              <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+                            </StackPanel>
+                          </CheckBox>
+                        </Panel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBox Text="{Binding OtherText}" PlaceholderText="Other: type your own answer" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsPending}">
+            <Button Classes="accent" Content="Send answers" Command="{Binding SubmitCommand}" ToolTip.Tip="Ctrl/Cmd+Enter" />
+            <Button Content="Dismiss" Command="{Binding DismissCommand}" ToolTip.Tip="Ctrl/Cmd+Backspace" />
+          </StackPanel>
+          <TextBlock Classes="muted small" Text="{Binding Outcome}" TextWrapping="Wrap" IsVisible="{Binding HasOutcome}" />
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+
+    <!-- A plan to approve (ExitPlanMode) -->
+    <DataTemplate DataType="conv:PlanItem">
+      <Border Classes="prompt question" Classes.answered="{Binding !IsPending}">
+        <StackPanel Spacing="10">
+          <TextBlock Text="Claude's plan" FontWeight="SemiBold" />
+          <md:MarkdownRenderer MarkdownBuilder="{Binding Plan}" IsVisible="{Binding HasPlan}"
+                               LinkCommand="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenLinkCommand}" />
+          <TextBlock Classes="muted" Text="Claude has finished planning and is ready to start making changes." TextWrapping="Wrap" IsVisible="{Binding !HasPlan}" />
+          <WrapPanel ItemSpacing="8" LineSpacing="6" IsVisible="{Binding IsPending}">
+            <Button Classes="accent" Content="Approve, accept edits" Command="{Binding ApproveAcceptingEditsCommand}"
+                    ToolTip.Tip="Start working, and edit files without asking" />
+            <Button Content="Approve, ask before edits" Command="{Binding ApproveAskingForEditsCommand}" ToolTip.Tip="Ctrl/Cmd+Enter" />
+            <Button Content="Keep planning…" Command="{Binding StartFeedbackCommand}" />
+          </WrapPanel>
+          <StackPanel Spacing="6" IsVisible="{Binding IsWritingFeedback}">
+            <TextBox Text="{Binding Feedback}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="44"
+                     PlaceholderText="What should change in the plan? (optional)" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="accent" Content="Keep planning" Command="{Binding KeepPlanningCommand}" />
+              <Button Classes="flat" Content="Cancel" Command="{Binding CancelFeedbackCommand}" VerticalAlignment="Center" />
+            </StackPanel>
+          </StackPanel>
+          <TextBlock Classes="muted small" Text="{Binding Outcome}" TextWrapping="Wrap" IsVisible="{Binding HasOutcome}" />
         </StackPanel>
       </Border>
     </DataTemplate>
@@ -177,7 +319,110 @@
     </DataTemplate>
   </UserControl.DataTemplates>
 
-  <Grid RowDefinitions="*,Auto">
+  <Grid RowDefinitions="*,Auto" ColumnDefinitions="*,Auto">
+
+    <!-- Side panel (DESIGN.md §3): changed files and, when the monitor is on, processes -->
+    <Border Grid.Column="1" Grid.RowSpan="2" Width="340" IsVisible="{Binding IsSidePanelOpen}"
+            BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1,0,0,0" Background="{DynamicResource SubtleBrush}">
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*,Auto" Margin="8,6">
+          <Button Classes="flat" Command="{Binding ShowFilesPageCommand}">
+            <TextBlock Text="Changed files" FontWeight="{Binding IsFilesPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
+          </Button>
+          <Button Grid.Column="1" Classes="flat" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding IsProcessMonitorOn}">
+            <TextBlock Text="Processes" FontWeight="{Binding IsProcessesPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
+          </Button>
+          <Button Grid.Column="3" Classes="flat" Padding="6" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
+            <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
+          </Button>
+        </Grid>
+
+        <Panel>
+          <!-- Changed files (DESIGN.md §8) -->
+          <DockPanel IsVisible="{Binding IsFilesPage}">
+            <StackPanel DockPanel.Dock="Top" Margin="12,0,12,6" Spacing="4">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="muted small" Text="{Binding ChangedFilesSummary}" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Classes="flat" Command="{Binding RefreshChangedFilesCommand}">
+                  <TextBlock Classes="small" Text="Refresh" />
+                </Button>
+              </Grid>
+              <CheckBox IsChecked="{Binding ShowGitChanges}" IsVisible="{Binding IsGitRepository}"
+                        ToolTip.Tip="All changes in the repository, including ones made by commands or by you">
+                <TextBlock Classes="small" Text="Working tree vs HEAD" />
+              </CheckBox>
+            </StackPanel>
+            <ListBox x:Name="ChangedFilesList" ItemsSource="{Binding ChangedFiles}" Background="Transparent"
+                     SelectionChanged="OnChangedFileSelected" DoubleTapped="OnChangedFileDoubleTapped" KeyDown="OnChangedFileKeyDown">
+              <ListBox.ItemTemplate>
+                <DataTemplate DataType="vm:ChangedFileRow">
+                  <Grid ColumnDefinitions="18,*,Auto" ToolTip.Tip="{Binding StatusText}" Background="Transparent">
+                    <TextBlock Classes="mono" FontWeight="SemiBold" Text="{Binding Status}" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsDeleted}" />
+                    <StackPanel Grid.Column="1">
+                      <TextBlock Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Classes="muted small" Text="{Binding DisplayPath}" TextTrimming="PathSegmentEllipsis" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="2" Classes="mono small muted" Text="{Binding Stats}" VerticalAlignment="Top" Margin="6,2,0,0" />
+                    <Grid.ContextMenu>
+                      <ContextMenu>
+                        <MenuItem Header="Open diff" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenFileDiffCommand}" CommandParameter="{Binding}" />
+                        <MenuItem Header="Open in diff tool" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenFileInDiffToolCommand}" CommandParameter="{Binding}"
+                                  IsVisible="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).HasDiffTool}" />
+                        <MenuItem Header="Open in editor" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenFileInEditorCommand}" CommandParameter="{Binding}" />
+                        <MenuItem Header="Reveal in folder" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RevealFileCommand}" CommandParameter="{Binding}" />
+                        <MenuItem Header="Copy path" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyFilePathCommand}" CommandParameter="{Binding}" />
+                      </ContextMenu>
+                    </Grid.ContextMenu>
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
+
+          <!-- Processes (DESIGN.md §4, "Process monitor") -->
+          <DockPanel IsVisible="{Binding IsProcessesPage}">
+            <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="12,0,12,6" Text="{Binding ProcessSummaryText, TargetNullValue='Only Claude Code is running.'}" />
+            <ScrollViewer>
+              <ItemsControl ItemsSource="{Binding Processes}" Margin="8,0,8,8">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="vm:ProcessRow">
+                    <Border Padding="4,3" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
+                      <StackPanel Margin="{Binding Indent, Converter={x:Static vm:Converters.LeftMargin}}" Spacing="1">
+                        <Grid ColumnDefinitions="*,Auto,Auto">
+                          <TextBlock TextTrimming="CharacterEllipsis">
+                            <Run Text="{Binding Name}" FontWeight="SemiBold" />
+                            <Run Classes="muted" Text="{Binding Pid}" FontSize="11" />
+                          </TextBlock>
+                          <TextBlock Grid.Column="1" Classes="mono small" Text="{Binding CpuText}" Margin="8,0,0,0" MinWidth="44" TextAlignment="Right" />
+                          <TextBlock Grid.Column="2" Classes="mono small muted" Text="{Binding MemoryText}" Margin="8,0,0,0" MinWidth="56" TextAlignment="Right" />
+                        </Grid>
+                        <TextBlock Classes="muted small">
+                          <Run Text="{Binding RunningText}" />
+                          <Run Text="{Binding IsDetached, Converter={x:Static vm:Converters.DetachedText}}" />
+                        </TextBlock>
+                        <TextBlock Classes="mono muted small" Text="{Binding CommandLine}" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasCommandLine}" />
+                        <Button Classes="flat" Padding="0" IsVisible="{Binding HasTool}" HorizontalAlignment="Left"
+                                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ShowProcessToolCommand}" CommandParameter="{Binding}">
+                          <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding ToolText}" TextTrimming="CharacterEllipsis" />
+                        </Button>
+                      </StackPanel>
+                      <Border.ContextMenu>
+                        <ContextMenu>
+                          <MenuItem Header="Stop…" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).StopProcessCommand}" CommandParameter="{Binding}" IsEnabled="{Binding !IsRoot}" />
+                          <MenuItem Header="Copy command line" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyCommandLineCommand}" CommandParameter="{Binding}" />
+                          <MenuItem Header="Reveal executable" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RevealExecutableCommand}" CommandParameter="{Binding}" />
+                          <MenuItem Header="Show in conversation" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ShowProcessToolCommand}" CommandParameter="{Binding}" IsEnabled="{Binding HasTool}" />
+                        </ContextMenu>
+                      </Border.ContextMenu>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </DockPanel>
+        </Panel>
+      </DockPanel>
+    </Border>
 
     <!-- Conversation -->
     <Grid Grid.Row="0">
@@ -203,7 +448,7 @@
         </Border>
 
         <ScrollViewer x:Name="ConversationScroll" HorizontalScrollBarVisibility="Disabled">
-          <ItemsControl ItemsSource="{Binding Items}" Margin="24,16,24,24" MaxWidth="900">
+          <ItemsControl x:Name="ConversationItems" ItemsSource="{Binding Items}" Margin="24,16,24,24" MaxWidth="900">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
                 <StackPanel Spacing="8" />
@@ -225,6 +470,21 @@
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
               <Button Content="Cancel" Command="{Binding CancelModelSwitchCommand}" />
               <Button Classes="accent" Content="Switch model" Command="{Binding ConfirmModelSwitchCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Border>
+
+      <!-- Bypass permissions confirmation (DESIGN.md §7) -->
+      <Border Classes="overlay" IsVisible="{Binding IsConfirmingBypass}">
+        <Border Classes="dialog" MaxWidth="460" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <StackPanel Spacing="14">
+            <TextBlock Text="Bypass permissions?" FontWeight="SemiBold" FontSize="16" />
+            <TextBlock TextWrapping="Wrap"
+                       Text="For the rest of this session, Claude will run commands and change files without asking. Claude Code's own deny and ask rules still apply. Only do this in a folder where mistakes are easy to undo." />
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+              <Button Content="Cancel" Command="{Binding CancelBypassCommand}" />
+              <Button Classes="accent" Content="Bypass permissions" Command="{Binding ConfirmBypassCommand}" />
             </StackPanel>
           </StackPanel>
         </Border>
@@ -270,7 +530,16 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
 
-      <Border Classes="composer">
+      <!-- Taken over by another machine (DESIGN.md §9) -->
+      <Border Classes="codeblock" IsVisible="{Binding IsReadOnly}">
+        <TextBlock Classes="warning" TextWrapping="Wrap" Text="{Binding ReadOnlyText}" />
+      </Border>
+
+      <!-- Bypass mode warning -->
+      <TextBlock Classes="small error" Margin="4,0" TextWrapping="Wrap" IsVisible="{Binding IsBypassMode}"
+                 Text="Bypass permissions: Claude won't ask before running commands or changing files in this session." />
+
+      <Border Classes="composer" Classes.bypass="{Binding IsBypassMode}">
         <Grid RowDefinitions="Auto,Auto">
           <TextBox x:Name="Composer" Text="{Binding ComposerText}" AcceptsReturn="True" TextWrapping="Wrap"
                    MinHeight="40" MaxHeight="240" Padding="2,6"
@@ -341,14 +610,58 @@
                 </Button.Flyout>
               </Button>
 
-              <TextBlock Classes="muted small" VerticalAlignment="Center" Margin="6,0" Text="{Binding PermissionMode, StringFormat='Mode: {0}'}"
-                         IsVisible="{Binding PermissionMode, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <!-- Permission mode (DESIGN.md §7) -->
+              <Button Classes="flat" ToolTip.Tip="Permission mode for this session">
+                <TextBlock Classes="muted small" Classes.error="{Binding IsBypassMode}" Text="{Binding PermissionModeName, StringFormat='{}{0} ▾'}" />
+                <Button.Flyout>
+                  <Flyout Placement="TopEdgeAlignedLeft">
+                    <ItemsControl ItemsSource="{Binding PermissionModeChoices}" MinWidth="280">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:PermissionModeChoice">
+                          <Button Classes="flat row" Click="OnFlyoutItemPicked"
+                                  Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChooseModeCommand}" CommandParameter="{Binding}">
+                            <StackPanel>
+                              <TextBlock Text="{Binding Label}" Classes.error="{Binding IsBypass}" />
+                              <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" MaxWidth="320" />
+                            </StackPanel>
+                          </Button>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </Flyout>
+                </Button.Flyout>
+              </Button>
             </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
-              <TextBlock Classes="muted small" Classes.warning="{Binding IsContextHigh}" VerticalAlignment="Center" Margin="4,0"
-                         Text="{Binding ContextText}" ToolTip.Tip="{Binding ContextDetail}"
-                         IsVisible="{Binding ContextText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <!-- Processes summary (DESIGN.md §4) -->
+              <Button Classes="flat" IsVisible="{Binding ShowProcessSummary}"
+                      ToolTip.Tip="Processes this tab started" Click="OnShowProcesses">
+                <TextBlock Classes="muted small" Text="{Binding ProcessSummaryText}" />
+              </Button>
+
+              <!-- Changed files (DESIGN.md §8) -->
+              <Button Classes="flat" ToolTip.Tip="Changed files" Command="{Binding ToggleSidePanelCommand}">
+                <TextBlock Classes="muted small" Text="{Binding ChangedFiles.Count, StringFormat='Files ({0})'}" />
+              </Button>
+
+              <!-- Context window (DESIGN.md §6, "Per-tab context") -->
+              <Button Classes="flat" ToolTip.Tip="{Binding ContextDetail}"
+                      IsVisible="{Binding ContextText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                <TextBlock Classes="muted small" Classes.warning="{Binding IsContextHigh}" Text="{Binding ContextText}" />
+                <Button.Flyout>
+                  <Flyout Placement="TopEdgeAlignedRight">
+                    <StackPanel Spacing="8" MaxWidth="360">
+                      <TextBlock FontWeight="SemiBold" Text="{Binding ContextText}" />
+                      <TextBlock Classes="muted small" Text="{Binding ContextDetail}" TextWrapping="Wrap" />
+                      <TextBlock Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding IsContextHigh}"
+                                 Text="Nearly full. Claude Code will compact the conversation soon on its own." />
+                      <Button Content="Compact now" Click="OnFlyoutItemPicked" Command="{Binding CompactCommand}"
+                              ToolTip.Tip="Summarize the conversation so far to free up context, like /compact" />
+                    </StackPanel>
+                  </Flyout>
+                </Button.Flyout>
+              </Button>
 
               <Button Classes="flat" ToolTip.Tip="Tokens used by this tab">
                 <TextBlock Classes="muted small" Text="{Binding TokensShort}" />
@@ -379,6 +692,12 @@
                         </ItemsControl.ItemTemplate>
                       </ItemsControl>
                       <TextBlock Classes="muted small" Text="{Binding TokenSummary}" TextWrapping="Wrap" MaxWidth="420" />
+                      <TextBlock Classes="small" Text="{Binding TokenWindowText}" IsVisible="{Binding TokenWindowText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                      <StackPanel Spacing="2" IsVisible="{Binding TurnPoints.Count}">
+                        <TextBlock Classes="muted small" Text="Tokens per turn" />
+                        <controls:UsageChart Height="48" Points="{Binding TurnPoints}" Maximum="{Binding TurnChartMaximum}"
+                                             LineBrush="{DynamicResource MeterBrush}" />
+                      </StackPanel>
                     </StackPanel>
                   </Flyout>
                 </Button.Flyout>
