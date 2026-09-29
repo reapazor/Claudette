@@ -31,6 +31,29 @@ public class SingleInstanceTests
     }
 
     [Fact]
+    public async Task An_instance_that_stops_listening_lets_another_take_over_and_can_listen_again()
+    {
+        var scope = Path.Combine(Path.GetTempPath(), $"claudette-restart-{Guid.NewGuid():N}");
+        using var first = new SingleInstance(scope);
+        var received = new TaskCompletionSource<IReadOnlyList<string>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        first.ArgumentsReceived += args => received.TrySetResult(args);
+        first.Listen();
+        Assert.True(await HandOffAsync(new SingleInstance(scope), ["--folder", "/work/one"]));
+        await received.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        // Restarting into a new build (DESIGN.md §9): the new build finds nobody listening.
+        first.StopListening();
+        using var newBuild = new SingleInstance(scope);
+        Assert.False(await newBuild.TryHandOffAsync([], TestContext.Current.CancellationToken));
+
+        // It didn't start after all: the old build takes launches again.
+        received = new TaskCompletionSource<IReadOnlyList<string>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        first.Listen();
+        Assert.True(await HandOffAsync(new SingleInstance(scope), ["--folder", "/work/two"]));
+        Assert.Equal(["--folder", "/work/two"], await received.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public void Pipe_names_are_short_and_stable()
     {
         var name = SingleInstance.PipeName("/home/me/.local/share/claudette");

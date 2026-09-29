@@ -8,6 +8,7 @@ using Claudette.App.Services;
 using Claudette.App.ViewModels;
 using Claudette.App.Views;
 using Claudette.Core;
+using Claudette.Core.Development;
 using Claudette.Core.Processes;
 using Claudette.Core.Settings;
 using Claudette.Platform.Notifications;
@@ -48,7 +49,9 @@ public partial class App : Application
                 Notifier.CreateBadgeForCurrentOS(() => window.TryGetPlatformHandle()?.Handle ?? 0, BadgeIcon.Render));
             ApplyAppearance();
             _services.SettingsChanged += (_, _) => ApplyAppearance();
-            _mainViewModel = new MainWindowViewModel(_services, LaunchArguments.Folder(desktop.Args ?? []));
+            var args = desktop.Args ?? [];
+            _mainViewModel = new MainWindowViewModel(_services, LaunchArguments.Folder(args));
+            var restoreNonce = UseDevelopmentBuild(window, args);
             window.DataContext = _mainViewModel;
             var main = _mainViewModel;
             if (Program.Instance is { } instance)
@@ -58,10 +61,67 @@ public partial class App : Application
             window.Closing += OnMainWindowClosing;
             desktop.MainWindow = window;
             _chrome = new PlatformChrome(this, window, _mainViewModel, _services, CreateJumpList());
-            _ = _mainViewModel.StartAsync();
+            var opened = new TaskCompletionSource();
+            window.Opened += (_, _) => opened.TrySetResult();
+            var started = _mainViewModel.StartAsync();
+            if (restoreNonce is not null)
+            {
+                _ = SignalRestartedAsync(started, opened.Task, _services.Paths.RestartReadyFile, restoreNonce);
+            }
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    // ---- Source builds (DESIGN.md §9, "Working on Claudette") ---------------------------------------------------
+
+    /// <summary>
+    /// For a source build: offer its new builds, and when this build was restarted into, take over the earlier build's
+    /// tabs and window placement. Returns the restart's nonce then, or null.
+    /// </summary>
+    private string? UseDevelopmentBuild(MainWindow window, IReadOnlyList<string> args)
+    {
+        if (_services is null || _mainViewModel is null || DevelopmentLaunch.Current(args) is not { } build)
+        {
+            return null;
+        }
+        var main = _mainViewModel;
+        var instance = Program.Instance;
+        main.UseDevelopmentBuild(build, instance is null ? null : instance.StopListening, instance is null ? null : instance.Listen);
+        main.GetWindowPlacement = () => new WindowPlacement(window.Position.X, window.Position.Y, window.Width, window.Height,
+            window.WindowState == WindowState.Maximized);
+        main.ExitRequested += window.Close;
+        if (LaunchArguments.RestoreNonce(args) is not { } nonce)
+        {
+            return null;
+        }
+        if (RestartSnapshot.Load(_services.Paths.RestartFile, nonce, _services.Time.GetUtcNow()) is { } snapshot)
+        {
+            main.RestoreOnStart(snapshot);
+            if (snapshot.Window is { } placement)
+            {
+                window.WindowStartupLocation = WindowStartupLocation.Manual;
+                window.Position = new PixelPoint(placement.X, placement.Y);
+                window.Width = placement.Width;
+                window.Height = placement.Height;
+                if (placement.IsMaximized)
+                {
+                    window.WindowState = WindowState.Maximized;
+                }
+            }
+        }
+        return nonce;
+    }
+
+    /// <summary>
+    /// Tells the build that restarted into this one that it's up, so it closes: once the window is open, the startup
+    /// checks are done and the page they led to has rendered. Until then that build can still take its tabs back.
+    /// </summary>
+    private static async Task SignalRestartedAsync(Task started, Task opened, string readyFile, string nonce)
+    {
+        await Task.WhenAll(started, opened);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        RestartHandshake.SignalReady(readyFile, nonce);
     }
 
     /// <summary>Recent folders in the taskbar jump list, on Windows (DESIGN.md §4).</summary>

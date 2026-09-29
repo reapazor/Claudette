@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Claudette.App.Services;
+using Claudette.Core.Development;
 using Claudette.Core.Git;
 using Claudette.Core.Library;
 using Claudette.Core.Settings;
@@ -93,7 +94,14 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     internal void OnRunningVersionsChanged() => RunningVersionsChanged?.Invoke();
 
     /// <summary>A tab's status changed: the Dock/taskbar badge counts tabs needing input (DESIGN.md §10).</summary>
-    internal void OnTabStatusChanged() => _services.Notifications.SetTabsNeedingInput(AllTabs.Count(t => t.NeedsInput));
+    internal void OnTabStatusChanged()
+    {
+        _services.Notifications.SetTabsNeedingInput(AllTabs.Count(t => t.NeedsInput));
+        TabStatusChanged?.Invoke();
+    }
+
+    /// <summary>Raised when a tab's status changes, for restarting into a new build once no tab is working.</summary>
+    public event Action? TabStatusChanged;
 
     /// <summary>Selects a tab by id, for a clicked notification. False when it has closed since.</summary>
     public bool SelectTab(string tabId)
@@ -158,17 +166,32 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     /// Brings back saved tabs (DESIGN.md §9, "Restore on launch"): pinned tabs always, the others only when
     /// <see cref="SessionSettings.RestoreUnpinnedTabs"/> is on. Restored tabs start their process when selected.
     /// </summary>
-    public void Restore(string? initialFolder)
+    /// <param name="snapshot">
+    /// After a restart into a new build (DESIGN.md §9, "Working on Claudette"): every tab the build had open, with what
+    /// was typed in each, and the tabs that were running start again straight away.
+    /// </param>
+    public void Restore(string? initialFolder, RestartSnapshot? snapshot = null)
     {
         var state = _services.State;
         var restoreUnpinned = _services.Settings.Sessions.RestoreUnpinnedTabs;
-        state.Tabs = state.Tabs.Where(t => t.IsPinned || restoreUnpinned).ToList();
+        state.Tabs = snapshot?.Tabs ?? state.Tabs.Where(t => t.IsPinned || restoreUnpinned).ToList();
         foreach (var tabState in state.Tabs)
         {
             AddTab(new TabViewModel(_services, this, tabState, isRestored: true));
         }
-        SelectedTab = AllTabs.FirstOrDefault(t => t.Id == state.SelectedTabId) ?? AllTabs.FirstOrDefault();
+        foreach (var tab in AllTabs)
+        {
+            if (snapshot?.Drafts.GetValueOrDefault(tab.Id) is { } draft)
+            {
+                tab.RestoreDraft(draft);
+            }
+        }
+        SelectedTab = AllTabs.FirstOrDefault(t => t.Id == (snapshot?.SelectedTabId ?? state.SelectedTabId)) ?? AllTabs.FirstOrDefault();
         SaveTabs();
+        foreach (var tab in AllTabs.Where(t => snapshot?.RunningTabIds.Contains(t.Id) == true))
+        {
+            _ = tab.EnsureStartedAsync();
+        }
         // Library retention and settings sync, at launch (DESIGN.md §9, §14).
         var keep = state.Tabs.Select(t => t.SessionId).OfType<string>().ToHashSet();
         _ = Task.Run(() => _services.Library.Prune(keep));
@@ -657,6 +680,41 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             }
         }
         SaveTabs();
+    }
+
+    // ---- Restarting into a new build (DESIGN.md §9, "Working on Claudette") -------------------------------------
+
+    /// <summary>The sidebar's entry for a new build of Claudette, when running from a source build.</summary>
+    [ObservableProperty]
+    public partial NewBuildViewModel? NewBuild { get; set; }
+
+    /// <summary>Whether a tab is starting, in a turn, or waiting on the user.</summary>
+    public bool AnyTabWorking => AllTabs.Any(t => t.IsWorking || t.Status == TabStatus.Starting);
+
+    /// <summary>Every open tab, what's typed in each, and which are running, for the build this one restarts into.</summary>
+    public RestartSnapshot CaptureForRestart() => new()
+    {
+        Tabs = AllTabs.Select(t => t.State).ToList(),
+        SelectedTabId = SelectedTab?.Id,
+        Drafts = AllTabs.Where(t => t.Draft is not null).ToDictionary(t => t.Id, t => t.Draft!),
+        RunningTabIds = AllTabs.Where(t => t.IsProcessRunning).Select(t => t.Id).ToList(),
+    };
+
+    /// <summary>
+    /// Stops every tab for a restart, as closing Claudette does, but keeps them in the saved state: the new build
+    /// brings them back, or this one does if the new build doesn't start.
+    /// </summary>
+    public async Task CloseTabsForRestartAsync()
+    {
+        var tabs = AllTabs.ToArray();
+        var selected = _services.State.SelectedTabId;
+        SelectedTab = null;
+        _services.State.SelectedTabId = selected;
+        Groups.Clear();
+        OpenTabs.Clear();
+        OnPropertyChanged(nameof(HasTabs));
+        await Task.WhenAll(tabs.Select(t => t.CloseAsync(killProcesses: true).AsTask()));
+        OnTabStatusChanged();
     }
 
     // ---- Sidebar (DESIGN.md §4, "Sidebar") ------------------------------------------------------------------

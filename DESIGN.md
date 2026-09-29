@@ -151,7 +151,7 @@ The tabs are listed in a sidebar on the left of the window, rather than a strip 
   - The model and effort, or instead what needs attention: *Needs your input*, or the error.
   - The close button shows on hover and on the selected tab. Hovering the row shows the tab info card; double-clicking renames it.
 - **Top:** **New tab**, which opens the picker ([Opening a tab](#opening-a-tab)), and the button that collapses the sidebar.
-- **Foot:** **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
+- **Foot:** **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
 - **Resizing.** Drag the sidebar's edge to make it wider or narrower (180 to 420 pixels; 248 by default). Double-click the edge for the default width. The width is remembered.
 - **Collapsing.** The collapse button, or `Ctrl/Cmd+B`, shrinks the sidebar to a rail:
   - The rail shows each group's color, then a square per tab with the first letter of its name and a small status icon. Hovering a square shows the tab info card.
@@ -603,6 +603,32 @@ Claude Code's credentials and settings are never copied.
 **Rejected alternative.** Pointing Claude Code's whole config folder at the cloud drive (`CLAUDE_CONFIG_DIR`) would also sync credentials and settings, and have several machines writing the same live files at once. The library copies only transcripts, only between turns.
 
 
+### Working on Claudette
+
+Claudette can host the Claude Code session that works on Claudette's own source. When it runs from a source build, its state survives the rebuilds that session makes: it restarts into each new build with every tab as it was.
+
+- **Source builds.** A Claudette whose program is in a `bin` folder below a checkout with `Claudette.slnx` is a source build, for example one started with `dotnet run --project src/Claudette.App`. Everything below applies only to source builds.
+- **Running from a copy.** A source build copies its build output to `builds` in the data folder and runs from there, so the build output itself is never in use. On Windows a running program's files are locked, so every rebuild would fail; elsewhere, replacing a running program's files can crash it.
+  - Only this platform's native libraries are copied, about 40 MB on Linux and macOS and 140 MB on Windows, rather than the 700 MB for every platform.
+  - Each build is copied once. The copy the running build came from is kept, since that build may still be closing; older copies are deleted.
+  - With a debugger attached, or with `CLAUDETTE_RUN_IN_PLACE=1`, a source build runs in place.
+- **Noticing a new build.** Claudette checks the build output every 2 seconds. A build counts once its files have stopped changing from one check to the next. A failed build writes nothing, so it's never offered.
+- **Offering the restart.** **New build ready** appears at the foot of the sidebar ([§4](#sidebar)). Its dialog says when the build was made, and offers:
+  - **Restart now.** A working tab is interrupted, and resumes its session after the restart.
+  - **Restart when idle**, while a tab is working: it waits until no tab is starting, working or waiting on the user.
+  - **Restart into new builds by itself when no tab is working**, remembered on this machine. With it on, a Claude Code session that rebuilds Claudette sees the restart as soon as its turn ends.
+- **What's kept:**
+  - Every open tab, pinned or not, in order, with its session, name, overrides, kept suffixes and token stats.
+  - The message typed in each tab, with its one-off suffixes.
+  - The selected tab, and the window's position and size.
+  - Tabs whose Claude Code was running start again straight away and resume their sessions. The others start when selected, as on launch.
+  - Processes the tabs started are stopped, as when Claudette closes ([Process monitor](#process-monitor)).
+- **The handover:**
+  1. The running build copies the new one and writes a snapshot of the above to `restart.json` in the data folder. It saves its state, then stops every tab as closing does, and from then on writes no settings or state.
+  2. It stops taking later launches ([Other ways in](#opening-a-tab)), and starts the new build with `--source-build <build output> --restore <nonce>`.
+  3. The new build opens the snapshot's tabs instead of the saved ones and places its window there. Once its startup checks are done and its first page has drawn, it writes the nonce to `restart-ready` in the data folder, and the old build closes.
+- **If the new build doesn't start.** It may exit first, or not say it's up within 60 seconds, in which case it's stopped. Either way the old build takes its tabs back, and starts taking launches again. Its dialog shows why, with the last lines the new build wrote to its error output. The build stays offered, to try again once it's fixed, but isn't restarted into by itself again. A broken change never costs the session that's fixing it.
+
 ## 10. Notifications
 
 Native OS notifications (Windows toast, macOS User Notifications). Each type can be turned on or off in Settings:
@@ -753,6 +779,8 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 │  Diffs: line diff, changed   │                                  │  Jump list, one   │
 │   files, external diff tools │                                  │   instance        │
 │  Claude Code updates         │                                  └───────────────────┘
+│  Source builds: copies, new  │
+│   builds, restart snapshots  │
 │  Git: identity, working tree │
 │  Auth, install checks        │
 │  Settings, state, sync       │
@@ -763,7 +791,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
         └───────────────┘
 ```
 
-- **Claudette.Core** has no UI dependencies, so it can be unit tested and could be reused by another front end. External diff tools live here rather than in Platform: they only look for files and start processes through `IProcessLauncher`.
+- **Claudette.Core** has no UI dependencies, so it can be unit tested and could be reused by another front end. External diff tools live here rather than in Platform: they only look for files and start processes through `IProcessLauncher`. So does running a source build from a copy and restarting it into new builds ([§9](#working-on-claudette)), which is plain file copying and process starting on every OS.
 - **Claudette.Usage** holds the usage engine, with no UI: parsing, the SQLite history, the burn rate and projection, alerts and the polling schedule.
 - **Claudette.Platform** holds the OS-specific code: the process monitor, and notifications with the Dock and taskbar badge ([§10](#10-notifications)).
   - `ClaudeSession` owns one `claude` process. It turns the output stream into typed events (`AssistantDelta`, `ToolUse`, `ToolResult`, `PermissionRequest`, `TurnCompleted`, `TitleChanged`, `UsageUpdated`, `RateLimit`, `AuthRequired`, `Exited`…), and exposes commands such as `SendAsync`, `InterruptAsync`, `RespondToPermissionAsync`, `SetModelAsync`, `SetEffortAsync` and `SetPermissionModeAsync`.
@@ -1191,7 +1219,9 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
    - **Deferred:**
      - A macOS-style theme ([§2](#2-platform--tech-stack)). macOS uses the Fluent theme for now; this needs a design decision.
      - The replacement for the placeholder icon.
-8. **Later.** The features in [§18](#18-future-features), in an order decided after v1 ships.
+8. **Working on Claudette.** ✅ Built 2026-09-29. A source build runs from a copy of its build output, notices new builds, and restarts into them with every tab, draft and the window as they were, taking its tabs back if the new build doesn't start ([§9](#working-on-claudette)). Checked end to end on Linux under Xvfb: rebuilding while it ran, the automatic restart, and a broken build being refused.
+   - **Still to verify on Windows:** rebuilding while a copy runs, which is what the copy is for, and starting the new build from Explorer and from `dotnet run`.
+9. **Later.** The features in [§18](#18-future-features), in an order decided after v1 ships.
 
 ## 18. Future Features
 

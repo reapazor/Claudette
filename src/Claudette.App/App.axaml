@@ -198,6 +198,7 @@
       <StreamGeometry x:Key="IconChevronDown">M3,4.5 L6,7.5 L9,4.5</StreamGeometry>
       <StreamGeometry x:Key="IconChevronRight">M4.5,3 L7.5,6 L4.5,9</StreamGeometry>
       <StreamGeometry x:Key="IconUpdate">M6,10.5 L6,2 M2.5,5.5 L6,2 L9.5,5.5</StreamGeometry>
+      <StreamGeometry x:Key="IconRestart">M10.5,6 A4.5,4.5 0 1 1 9.18,2.82 M9.4,0.6 L9.18,2.82 L6.96,2.6</StreamGeometry>
 
       <!-- Claudette's color tokens, per theme. Views use only these, never Fluent's internal resource names. -->
       <ResourceDictionary.ThemeDictionaries>

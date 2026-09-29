@@ -1,5 +1,7 @@
 using Avalonia;
+using Claudette.App.Services;
 using Claudette.Core;
+using Claudette.Core.Processes;
 using Claudette.Platform;
 
 namespace Claudette.App;
@@ -18,9 +20,17 @@ internal sealed class Program
         {
             SetWindowsIdentity();
         }
-        // One Claudette per user and data folder: a second launch hands its arguments over and exits.
-        var instance = new SingleInstance(AppPaths.ForCurrentUser().DataDirectory);
-        if (instance.TryHandOffAsync(args).GetAwaiter().GetResult())
+        var paths = AppPaths.ForCurrentUser();
+        // One Claudette per user and data folder: a second launch hands its arguments over and exits. A build that
+        // Claudette restarted into takes over instead: the one that started it has stopped listening.
+        var instance = new SingleInstance(paths.DataDirectory);
+        if (LaunchArguments.RestoreNonce(args) is null && instance.TryHandOffAsync(args).GetAwaiter().GetResult())
+        {
+            instance.Dispose();
+            return;
+        }
+        // A source build runs from a copy of its build output, so it can be rebuilt while it runs (DESIGN.md §9).
+        if (DevelopmentLaunch.TryRunFromCopy(args, paths, new ProcessLauncher()))
         {
             instance.Dispose();
             return;

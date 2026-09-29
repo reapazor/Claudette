@@ -16,7 +16,7 @@ A .NET desktop app that wraps Claude Code in a native GUI: one tab per Claude Co
 - .NET 10, C# with nullable reference types on and warnings treated as errors. Package versions live in `Directory.Packages.props`.
 - Avalonia 12 with MVVM (CommunityToolkit.Mvvm). Markdown is rendered with LiveMarkdown.Avalonia.
 - Layout (§13):
-  - `src/Claudette.Core`: sessions, protocol, permission rules, sign-in, install checks, settings and state stores and settings sync, transcripts and History, the session library and leases, diffs and changed files, external diff tools, git (project identity, working tree), check-in timing. Later also updates.
+  - `src/Claudette.Core`: sessions, protocol, permission rules, sign-in, install checks, settings and state stores and settings sync, transcripts and History, the session library and leases, diffs and changed files, external diff tools, git (project identity, working tree), check-in timing, Claude Code updates, and source builds (copies to run from, noticing new builds, restart snapshots).
   - `src/Claudette.Usage`: plan usage parsing, the SQLite usage history, burn rate and projection, alerts, the polling schedule. No UI.
   - `src/Claudette.Platform`: OS-specific code: the process monitor (Job Objects on Windows, `/proc`, `ps`), notifications and the Dock/taskbar badge (WinRT toasts, `UNUserNotificationCenter`, `notify-send`), the Windows jump list, and the single-instance pipe. No UI. Windows and macOS APIs are called through source-generated COM interop and the Objective-C runtime, so the project stays a plain `net10.0` library.
   - `src/Claudette.App`: the Avalonia UI.
@@ -99,6 +99,8 @@ dotnet run --project tools/Claudette.MockApi -- 8787    # in one terminal
 #                             CLAUDETTE_HOME=<a temp folder>   (keeps Claudette's settings and saved tabs out of your profile)
 dotnet run --project src/Claudette.App -- --folder <path>
 ```
+
+A source build (anything run from a `bin` folder in this checkout, including `dotnet run`) copies itself to `builds` in the data folder and runs from there, so you can rebuild while it runs. It offers to restart into each new build, keeping every tab and draft, and takes its tabs back if the new build doesn't start (§9, "Working on Claudette"). `dotnet run` returns once the copy has started. Set `CLAUDETTE_RUN_IN_PLACE=1`, or attach a debugger, to run in place instead.
 
 Stop the app by closing its window, not by killing the process: closing interrupts running turns and stops each tab's `claude` and everything it started. A killed app leaves them running; the Job Objects deliberately don't kill on close, so a user can keep a tab's processes (§4).
 

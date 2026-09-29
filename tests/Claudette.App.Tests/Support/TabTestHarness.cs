@@ -274,12 +274,13 @@ internal sealed class TabTestHarness : IAsyncDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"claudette-tabtest-{Guid.NewGuid():N}");
 
     /// <param name="updater">Claude Code's installation, for update tests; when given, update checks are set up too.</param>
-    public TabTestHarness(Action<AppSettings>? configure = null, FakeClaudeUpdater? updater = null)
+    /// <param name="launcher">Starts processes other than Claude Code, which the scripted sessions stand in for.</param>
+    public TabTestHarness(Action<AppSettings>? configure = null, FakeClaudeUpdater? updater = null, IProcessLauncher? launcher = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "work"));
         Directory.CreateDirectory(ProjectsDirectory);
         Trees = new FakeProcessTreeTracker(Time);
-        Services = new AppServices(AppPaths.Under(_root), new ProcessLauncher(), Time, Platform, new InlineDispatcher(), processTrees: Trees, notifier: Notifier);
+        Services = new AppServices(AppPaths.Under(_root), launcher ?? new ProcessLauncher(), Time, Platform, new InlineDispatcher(), processTrees: Trees, notifier: Notifier);
         Services.Notifications.UseBadge(Notifier);
         configure?.Invoke(Services.Settings);
         if (updater is not null)

@@ -44,7 +44,8 @@
     <Style Selector="Button.side.update Path.icon">
       <Setter Property="Stroke" Value="{DynamicResource AccentStatusBrush}" />
     </Style>
-    <Style Selector="Button.side.update TextBlock">
+    <!-- Only the badge's own label: its flyout's text is inside the button too. -->
+    <Style Selector="Button.side.update TextBlock.badge">
       <Setter Property="Foreground" Value="{DynamicResource AccentStatusBrush}" />
     </Style>
     <Style Selector="Border#SidebarEdge:pointerover">
@@ -265,7 +266,7 @@
                     AutomationProperties.Name="Claude Code update">
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <Path Classes="icon" Data="{StaticResource IconUpdate}" />
-                <TextBlock Text="{Binding BadgeText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                <TextBlock Classes="badge" Text="{Binding BadgeText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                            IsVisible="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).IsSidebarExpanded, FallbackValue=False}" />
               </StackPanel>
                 <Button.Flyout>
@@ -301,6 +302,40 @@
                     </StackPanel>
                   </Flyout>
                 </Button.Flyout>
+            </Button>
+            <!-- A new build of Claudette itself, when it runs from a source build (DESIGN.md §9, "Working on Claudette") -->
+            <Button x:Name="NewBuildBadge" Classes="flat side update" DataContext="{Binding NewBuild}" x:DataType="vm:NewBuildViewModel"
+                    IsVisible="{Binding HasBadge, FallbackValue=False}" ToolTip.Tip="{Binding BadgeText}" ToolTip.Placement="Right"
+                    AutomationProperties.Name="New build of Claudette">
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Path Classes="icon" Data="{StaticResource IconRestart}" />
+                <TextBlock Classes="badge" Text="{Binding BadgeText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           IsVisible="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).IsSidebarExpanded, FallbackValue=False}" />
+              </StackPanel>
+              <Button.Flyout>
+                <Flyout Placement="RightEdgeAlignedBottom">
+                  <StackPanel Spacing="10" Width="420" Margin="4">
+                    <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding DetailText}" TextWrapping="Wrap" />
+                    <TextBlock Classes="muted small" Text="{Binding RunningText}" TextWrapping="Wrap" />
+                    <TextBlock Classes="warning" Text="{Binding WorkingText}" TextWrapping="Wrap"
+                               IsVisible="{Binding WorkingText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <Border Background="{DynamicResource CautionBackgroundBrush}" BorderBrush="{DynamicResource CautionBorderBrush}" BorderThickness="1"
+                            CornerRadius="6" Padding="8,6" MaxHeight="220" IsVisible="{Binding ErrorText, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <ScrollViewer>
+                        <SelectableTextBlock Text="{Binding ErrorText}" TextWrapping="Wrap" FontSize="12" />
+                      </ScrollViewer>
+                    </Border>
+                    <WrapPanel ItemSpacing="8" LineSpacing="8">
+                      <Button Classes="accent" Content="Restart now" Command="{Binding RestartNowCommand}" IsVisible="{Binding CanRestart}" />
+                      <Button Content="Restart when idle" Command="{Binding RestartWhenIdleCommand}" IsVisible="{Binding CanRestartWhenIdle}" />
+                      <Button Content="Don't restart" Command="{Binding CancelWaitingCommand}" IsVisible="{Binding IsWaitingForIdle}" />
+                    </WrapPanel>
+                    <CheckBox IsChecked="{Binding RestartAutomatically}" Content="Restart into new builds by itself when no tab is working" />
+                    <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsRestarting}" />
+                  </StackPanel>
+                </Flyout>
+              </Button.Flyout>
             </Button>
             <Button Classes="flat side" Command="{Binding OpenSettingsCommand}" ToolTip.Tip="{Binding Tips.Settings}" ToolTip.Placement="Right" AutomationProperties.Name="Settings">
               <StackPanel Orientation="Horizontal" Spacing="10">

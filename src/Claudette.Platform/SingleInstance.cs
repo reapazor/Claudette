@@ -18,7 +18,8 @@ public sealed class SingleInstance : IDisposable
 
     private readonly string _pipeName;
     private readonly ILogger _logger;
-    private readonly CancellationTokenSource _stop = new();
+    private readonly Lock _lock = new();
+    private CancellationTokenSource? _stop;
     private Task? _listening;
 
     /// <param name="scope">
@@ -57,19 +58,57 @@ public sealed class SingleInstance : IDisposable
     }
 
     /// <summary>Starts taking arguments from later launches.</summary>
-    public void Listen() => _listening ??= Task.Run(ListenAsync);
-
-    private async Task ListenAsync()
+    public void Listen()
     {
-        while (!_stop.IsCancellationRequested)
+        lock (_lock)
+        {
+            if (_listening is not null)
+            {
+                return;
+            }
+            _stop = new CancellationTokenSource();
+            var token = _stop.Token;
+            _listening = Task.Run(() => ListenAsync(token));
+        }
+    }
+
+    /// <summary>
+    /// Stops taking later launches, so another Claudette can: the new build Claudette restarts into (DESIGN.md §9).
+    /// <see cref="Listen"/> starts again.
+    /// </summary>
+    public void StopListening()
+    {
+        Task? listening;
+        CancellationTokenSource? stop;
+        lock (_lock)
+        {
+            stop = _stop;
+            stop?.Cancel();
+            listening = _listening;
+            _stop = null;
+            _listening = null;
+        }
+        try
+        {
+            listening?.Wait(TimeSpan.FromSeconds(1));
+        }
+        catch (AggregateException)
+        {
+        }
+        stop?.Dispose();
+    }
+
+    private async Task ListenAsync(CancellationToken stop)
+    {
+        while (!stop.IsCancellationRequested)
         {
             try
             {
                 await using var server = new NamedPipeServerStream(_pipeName, PipeDirection.In, NamedPipeServerStream.MaxAllowedServerInstances,
                     PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-                await server.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
+                await server.WaitForConnectionAsync(stop).ConfigureAwait(false);
                 using var reader = new StreamReader(server, Encoding.UTF8);
-                if (await reader.ReadLineAsync(_stop.Token).ConfigureAwait(false) is { } line
+                if (await reader.ReadLineAsync(stop).ConfigureAwait(false) is { } line
                     && JsonSerializer.Deserialize<string[]>(line) is { } args)
                 {
                     ArgumentsReceived?.Invoke(args);
@@ -82,7 +121,7 @@ public sealed class SingleInstance : IDisposable
             catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
             {
                 _logger.LogDebug(ex, "A later launch's arguments couldn't be read.");
-                await Task.Delay(100).ConfigureAwait(false);
+                await Task.Delay(100, CancellationToken.None).ConfigureAwait(false);
             }
         }
     }
@@ -97,16 +136,5 @@ public sealed class SingleInstance : IDisposable
         return $"claudette-{Convert.ToHexString(hash, 0, 8).ToLowerInvariant()}";
     }
 
-    public void Dispose()
-    {
-        _stop.Cancel();
-        try
-        {
-            _listening?.Wait(TimeSpan.FromSeconds(1));
-        }
-        catch (AggregateException)
-        {
-        }
-        _stop.Dispose();
-    }
+    public void Dispose() => StopListening();
 }

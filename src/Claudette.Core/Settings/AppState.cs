@@ -46,6 +46,12 @@ public sealed class AppState
     /// because WinGet can't replace a running <c>claude</c> (DESIGN.md §12).
     /// </summary>
     public bool UpdateClaudeOnNextLaunch { get; set; }
+
+    /// <summary>
+    /// For a source build of Claudette: restart into a new build by itself once no tab is working, instead of asking
+    /// (DESIGN.md §9, "Working on Claudette").
+    /// </summary>
+    public bool RestartOnNewBuild { get; set; }
 }
 
 /// <summary>What's saved for one tab (DESIGN.md §9, "Restore on launch").</summary>

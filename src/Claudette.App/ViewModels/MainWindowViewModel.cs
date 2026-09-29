@@ -1,5 +1,6 @@
 using Claudette.App.Services;
 using Claudette.Core.Auth;
+using Claudette.Core.Development;
 using Claudette.Core.Installation;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -8,7 +9,7 @@ namespace Claudette.App.ViewModels;
 /// <summary>
 /// Runs the startup checks (Claude Code installed, then signed in) and shows the matching page (DESIGN.md §2, §11).
 /// </summary>
-public sealed partial class MainWindowViewModel(AppServices services, string? initialFolder = null) : ViewModelBase, IAsyncDisposable
+public sealed partial class MainWindowViewModel(AppServices services, string? initialFolder = null) : ViewModelBase, IAsyncDisposable, IRestartHost
 {
     private ShellViewModel? _shell;
 
@@ -26,7 +27,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     /// <summary>True once plan usage has arrived. API-key accounts have no plan limits, so the header stays plain.</summary>
     public bool HasUsage => Usage is { HasData: true };
 
-    /// <summary>The header's "Claude Code … is ready" badge and Settings' update section (DESIGN.md §12).</summary>
+    /// <summary>The sidebar's "Claude Code … is ready" badge and Settings' update section (DESIGN.md §12).</summary>
     [ObservableProperty]
     public partial ClaudeUpdateViewModel? Updates { get; set; }
 
@@ -134,11 +135,23 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         if (_shell is null)
         {
             _shell = new ShellViewModel(services, ShowSignIn);
+            _shell.TabStatusChanged += () => _tabsChanged?.Invoke();
             OnPropertyChanged(nameof(Shell));
             CurrentPage = _shell;
-            _shell.Restore(initialFolder);
+            if (_restore is { } snapshot)
+            {
+                // Restarted into this build: the tabs the last one had (DESIGN.md §9, "Working on Claudette").
+                _restore = null;
+                _shell.Restore(null, snapshot);
+                RestartSnapshot.Delete(services.Paths.RestartFile);
+            }
+            else
+            {
+                _shell.Restore(initialFolder);
+            }
             StartUsage();
             StartUpdateChecks(_shell);
+            StartRestarts(_shell);
         }
         else
         {
@@ -248,11 +261,90 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         _ => subscriptionType,
     };
 
+    // ---- Restarting into a new build (DESIGN.md §9, "Working on Claudette") -----------------------------------
+
+    private DevelopmentBuild? _development;
+    private Action? _stopListening;
+    private Action? _resumeListening;
+    private RestartSnapshot? _restore;
+    private Action? _tabsChanged;
+
+    /// <summary>Watches for new builds and restarts into them, when running from a source build.</summary>
+    public RestartService? Restarts { get; private set; }
+
+    /// <summary>Set by the window: where it is and how big, for the build this one restarts into.</summary>
+    public Func<WindowPlacement?>? GetWindowPlacement { get; set; }
+
+    /// <summary>Raised when the new build is up and this one should close.</summary>
+    public event Action? ExitRequested;
+
+    /// <summary>This is a source build: offer its new builds once the tabs are up.</summary>
+    /// <param name="stopListening">Stops taking later launches, so the new build can.</param>
+    /// <param name="resumeListening">Takes them again if the new build doesn't start.</param>
+    public void UseDevelopmentBuild(DevelopmentBuild build, Action? stopListening = null, Action? resumeListening = null)
+    {
+        _development = build;
+        _stopListening = stopListening;
+        _resumeListening = resumeListening;
+    }
+
+    /// <summary>The tabs to open instead of the saved ones: this build was restarted into from an earlier one.</summary>
+    public void RestoreOnStart(RestartSnapshot snapshot) => _restore = snapshot;
+
+    private void StartRestarts(ShellViewModel shell)
+    {
+        if (_development is not { } build)
+        {
+            return;
+        }
+        Restarts = new RestartService(services, build, this, _stopListening, _resumeListening);
+        shell.NewBuild = new NewBuildViewModel(Restarts);
+        _ = Task.Run(() => new BuildCopies(services.Paths.BuildCopiesDirectory).CleanUp(build.RunningDirectory));
+        Restarts.Start();
+    }
+
+    bool IRestartHost.AnyTabWorking => _shell?.AnyTabWorking == true;
+
+    event Action? IRestartHost.TabsChanged
+    {
+        add => _tabsChanged += value;
+        remove => _tabsChanged -= value;
+    }
+
+    RestartSnapshot IRestartHost.Capture()
+    {
+        var snapshot = _shell?.CaptureForRestart() ?? new RestartSnapshot();
+        snapshot.Window = GetWindowPlacement?.Invoke();
+        return snapshot;
+    }
+
+    async Task IRestartHost.CloseTabsAsync()
+    {
+        CurrentPage = new BusyViewModel("Restarting into the new build…");
+        if (_shell is not null)
+        {
+            await _shell.CloseTabsForRestartAsync();
+        }
+    }
+
+    void IRestartHost.Recover(RestartSnapshot snapshot)
+    {
+        if (_shell is not null)
+        {
+            _shell.Restore(null, snapshot);
+            CurrentPage = _shell;
+        }
+    }
+
+    void IRestartHost.Exit() => ExitRequested?.Invoke();
+
     public async ValueTask DisposeAsync()
     {
         services.Notifications.Activated -= OnNotificationActivated;
         Usage?.Dispose();
         Updates?.Dispose();
+        _shell?.NewBuild?.Dispose();
+        Restarts?.Dispose();
         if (_shell is not null)
         {
             await _shell.DisposeAsync();

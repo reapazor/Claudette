@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Claudette.App.Conversation;
 using Claudette.App.Services;
+using Claudette.Core.Development;
 using Claudette.Core.Git;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
@@ -658,6 +659,26 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _conversation.ExpandThinking = _services.Settings.Appearance.ExpandThinking;
         UpdateSampler();
     }
+
+    // ---- Restarting into a new build (DESIGN.md §9, "Working on Claudette") -------------------------------
+
+    /// <summary>The message typed but not sent, with its one-off quick suffixes, or null when there's none.</summary>
+    public TabDraft? Draft => ComposerText.Length == 0 && Chips.All(c => c.IsKept)
+        ? null
+        : new TabDraft(ComposerText, Chips.Where(c => !c.IsKept).Select(c => c.Suffix.Id).ToList());
+
+    /// <summary>Puts back a draft from the build that restarted into this one.</summary>
+    public void RestoreDraft(TabDraft draft)
+    {
+        ComposerText = draft.Text;
+        foreach (var id in draft.SuffixIds)
+        {
+            AddSuffix(_services.Settings.QuickSuffixes.FirstOrDefault(s => s.Id == id));
+        }
+    }
+
+    /// <summary>Whether this tab's Claude Code is running.</summary>
+    public bool IsProcessRunning => _session is not null;
 
     private void SaveKeptSuffixes()
     {
