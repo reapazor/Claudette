@@ -85,7 +85,7 @@ The files are in `packaging/`, and `.github/workflows/package.yml` builds them.
 1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. See [§6](#6-token-burn-awareness).
 2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder. **New tab** is at its top; **History**, the Claude Code update badge and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
 3. **Conversation.** The selected tab's conversation. See [§5](#5-conversation-view).
-4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), and optionally its running processes ([§4](#process-monitor)).
+4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), and optionally its running processes ([§4](#process-monitor)).
 5. **Composer.** Where you type to the selected tab, plus the Stop button and per-tab controls.
 
 ### Visual style
@@ -119,6 +119,7 @@ The visual reference is Claude Code's own Visual Studio Code extension:
   - Model and effort.
   - Session start time, tokens used and context %.
   - Later features add rows here, for example the Perforce changelist ([§18](#perforce-changelist-in-the-tab-title)).
+  - **Agents**, while the tab has subagents: how many are running or waiting on you, or how they ended ([§18](#agent-map)).
   - The same card opens from an **ⓘ** button in the composer bar, for the selected tab.
 - **Token stats per tab.** Each tab keeps a running count of the tokens it has used:
   - Input, output, cache write and cache read tokens, split by model when the session used more than one.
@@ -202,7 +203,7 @@ Using the picker:
 An optional view of the processes each tab has started, such as test runs, dev servers, builds and MCP servers, with their CPU and memory use. It's off by default and turned on in Settings → Processes. One tab can turn it on or off for itself in its **Tab settings…** ([§14](#per-tab-overrides)). Each tab shows its own processes on the Processes page of its side panel.
 
 - **Summary.** When it's on, the composer bar shows a compact summary for the tab, for example `3 procs · 42% CPU · 1.1 GB`, except while the side panel is open. The count leaves out `claude` itself. The tab itself gets a small activity icon while any child process is using noticeable CPU (5% or more).
-- **Processes panel.** A second page of the side panel, next to Changed files. It shows a tree of the tab's processes, starting from its `claude` process, with these columns:
+- **Processes panel.** A page of the side panel, next to Changed files and Agents. It shows a tree of the tab's processes, starting from its `claude` process, with these columns:
   - Name and PID.
   - CPU %, following the platform's convention: on Windows, 100% means all cores, as in Task Manager; on macOS, 100% means one core, as in Activity Monitor.
   - Memory (working set / resident size).
@@ -241,7 +242,7 @@ The conversation is drawn from Claude Code's structured output stream, not from 
 | Tool call | Compact card: tool icon, name and a one-line summary (file path, command, search pattern). Expand to see full input and output. |
 | Edit / Write | Card shows `+added −removed`; expand for an inline diff, or open it in the diff view. |
 | Bash | Shows the command; output is collapsed and uses a monospace font. |
-| Subagent (Task) | Nested, collapsible group holding that agent's tool calls. |
+| Subagent (Task) | Nested, collapsible group holding that agent's text and tool calls, with its result line (its report). A background subagent's group stays running until it finishes. The agent map shows every subagent as a tree ([§18](#agent-map)). |
 | To-do list | Pinned checklist at the top of the conversation while it exists. |
 | Permission prompt | Inline card with buttons. See [§7](#7-permission-prompts). |
 | Errors / API retries | Inline warning row. |
@@ -438,6 +439,7 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
   - Before saving, the card shows the exact rule, and the user can edit it to make it broader or narrower.
 - When Claude Code suggests a mode switch instead of a rule (for a file edit it suggests `acceptEdits` for the session), the card offers **Allow all edits this session** in place of **Always allow**.
 - When Claude Code marks a request `suppressAlwaysAllowRule` (the rule would grant more than this request), **Always allow** isn't offered.
+- A prompt from inside a subagent names it (*"Asked by the Explore subagent: Find the auth code"*), and the agent map highlights that subagent ([§18](#agent-map)).
 - A tab with a waiting prompt gets the "Needs input" status. If Claudette isn't focused or the tab isn't selected, it also sends an OS notification ([§10](#10-notifications)).
 - Keyboard: `Ctrl/Cmd+Enter` allows, `Ctrl/Cmd+Backspace` denies the oldest waiting prompt in the tab.
   - Not while typing in one of the prompt's own fields, and `Ctrl/Cmd+Backspace` still deletes a word in a field with text.
@@ -851,7 +853,7 @@ The `system/init` message that follows gives `session_id`, `model`, `permissionM
 | Need | How | Documented |
 |---|---|---|
 | Send a message, with images | A `user` message as one JSON line on stdin. See "Messages sent while Claude is working" below. | Yes |
-| Receive output | JSON lines on stdout: `system/init`, `system/status`, `assistant`, `user` (tool results, with `tool_use_result`), `stream_event` (partial text), `result`, `rate_limit_event`, `auth_status`, `permission_denied`, `api_retry`, `conversation_reset`, `task_started` / `task_notification`, `thinking_tokens` | Yes |
+| Receive output | JSON lines on stdout: `system/init`, `system/status`, `assistant`, `user` (tool results, with `tool_use_result`), `stream_event` (partial text), `result`, `rate_limit_event`, `auth_status`, `permission_denied`, `api_retry`, `conversation_reset`, `task_started` / `task_progress` / `task_updated` / `task_notification`, `tool_progress`, `thinking_tokens` | Yes |
 | Stop the current turn | `interrupt`. The reply lists `still_queued` messages; the turn ends with a `result` of `error_during_execution` / `aborted_streaming`. SIGINT is a fallback. Never SIGTERM: it leaves the turn unfinished with no result. | Yes |
 | Permission prompts | Incoming `can_use_tool`; reply allow, allow with `updatedPermissions`, or deny with a message ([§7](#7-permission-prompts)) | Behavior yes, wire format no |
 | Change model | `set_model` with `model`. Applied in place, even mid-turn, and the conversation is kept. Claude Code also emits a `user` message containing `<local-command-stdout>Set model to …</local-command-stdout>`, which Claudette shows as a small system note. | Yes |
@@ -859,6 +861,7 @@ The `system/init` message that follows gives `session_id`, `model`, `permissionM
 | Change permission mode | `set_permission_mode` with `mode`; also reported as a `system/status` message | Yes |
 | Context window usage | `get_context_usage`. Claude Code calls the API's token-counting endpoint for this, which costs nothing. | Yes |
 | Stop a background task | `stop_task` with `task_id` | Yes |
+| Stop one subagent | `stop_task` with the subagent's task id, in the foreground too ([§18](#agent-map)) | **No** (documented for background tasks) |
 | Plan usage limits | `get_usage` ([§6](#data-source)) | **No** (marked experimental) |
 | Sign-in | `claude_authenticate`, `claude_oauth_wait_for_completion`, `claude_oauth_callback` ([§11](#signing-in)) | **No** |
 | Session title | `generate_session_title`, `rename_session` (below) | **No** |
@@ -998,7 +1001,7 @@ These apply from milestone 1:
 - Stored under `tests/fixtures/protocol/<claude-code-version>/`.
 - Scenarios covered:
   - A simple reply, streaming text and thinking.
-  - Tool calls and subagents.
+  - Tool calls and subagents (`07-subagents`: parallel, nested, and a permission prompt from inside one).
   - A permission prompt that is allowed, and one that is denied.
   - An interrupt.
   - `rate_limit_event` and an authentication failure.
@@ -1052,8 +1055,8 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 | Piece | Location |
 |---|---|
 | Fake transport and replay transport | `tests/Claudette.Core.Tests/Support/` |
-| Protocol fixtures | `tests/Claudette.Core.Tests/Fixtures/protocol/2.1.284/` (recorded in the spikes, with paths and personal details removed) |
-| `fake-claude` | `tools/Claudette.FakeClaude/`. Scripted by the prompt (`ASK_PERMISSION`, `SLOW`, `CRASH`) and by environment variables, rather than scenario files. |
+| Protocol fixtures | `tests/Claudette.Core.Tests/Fixtures/protocol/2.1.284/` (recorded in the spikes, and `07-subagents` against the .NET mock, with paths and personal details removed) |
+| `fake-claude` | `tools/Claudette.FakeClaude/`. Scripted by the prompt (`ASK_PERMISSION`, `SLOW`, `CRASH`, `SUBAGENTS`) and by environment variables, rather than scenario files. |
 | Mock Messages API | `tools/Claudette.MockApi/`. Runs in-process in tests, or on its own with `dotnet run`. |
 | Tests against `fake-claude` and the real CLI | `tests/Claudette.IntegrationTests/`. The real-CLI tests are tagged `RealCli`. |
 | View model tests | `tests/Claudette.App.Tests/`. `Support/TabTestHarness.cs` gives a tab a scripted Claude Code connection, a fake clock, a temporary data folder and a fake process tracker. |
@@ -1061,6 +1064,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 | Process monitor tests | `tests/Claudette.Platform.Tests/`. Some start real process trees on the current OS; the Linux ones skip elsewhere. |
 | History, library, leases, settings sync, diffs, git | `tests/Claudette.Core.Tests/{History,Library,Settings,Diffs,Git}`. Git tests use the real `git` in a temporary repo and skip without it. |
 | Real-CLI checks of questions and plans | `RealCliTests`, with the mock's `ASK_QUESTION` and `EXIT_PLAN` scripts |
+| Real-CLI checks of subagents and stopping one | `RealCliTests`, with the mock's `SUBAGENTS` and `LONG_AGENT` scripts; the `07-subagents` fixture was recorded from `SUBAGENTS` |
 
 ## 16. Tracking Claude Code Changes
 
@@ -1288,31 +1292,49 @@ When Claude is working in a specific Perforce changelist, Claudette shows its nu
 
 ### Agent map
 
+✅ Built 2026-09-29.
+
 A live view of what a tab's subagents are doing. When Claude fans work out to several subagents, possibly nested, the conversation shows each one as a collapsed group ([§5](#5-conversation-view)). That's fine for one agent at a time, but hard to follow when several run in parallel.
 
-- **What it shows.** A map of the tab's agents: the main agent at the root, and each subagent as a node under the agent that started it, with nesting kept.
-- **Each node** shows:
-  - The agent type (for example `Explore` or `general-purpose`) and its task description.
-  - Its status: running, waiting on a permission prompt, done or failed.
-  - What it's doing right now: its latest tool call (for example `Grep "auth" in src/`) or a line of its text.
-  - Running time, tool calls so far and tokens used, where Claude Code reports them.
-- **The prompt each subagent was given.** Selecting a node shows the full instructions the parent agent sent it: the `prompt` input of its `Agent` tool call, rendered as Markdown, with **Copy**. It also shows what the subagent returned, the tool result its parent received, once it finishes. This is often the quickest way to see why a subagent did what it did.
-- **Look and feel.** Follow how Claude Code's VS Code extension presents subagents ([§3](#visual-style)), and check it again when this feature is designed: compact rows, the task description up front, and the prompt and activity one click away rather than always expanded.
-- **Where it lives.** A page of the side panel next to Changed files and Processes, and optionally a larger view of its own. The tab's info card gets a row such as "3 agents running".
+- **What it shows.** A tree list of the tab's agents: the main agent at the root, and each subagent as a node under the agent that started it, with nesting kept. Nodes start expanded and can be collapsed.
+- **Each row** has two compact lines, following the VS Code extension's compact rows ([§3](#visual-style)):
+  - A status mark, the task description, and the running time at the right.
+  - The agent type (for example `Explore` or `general-purpose`), then what it's doing right now: its latest tool call, summarized the way the conversation's tool rows are (for example `Grep auth in src/`), or the first line of its latest text. Once it has finished: the first line of its report, or how it ended.
+  - Statuses: running (a pulsing dot), waiting on a permission prompt (`!`, and the row is highlighted like the prompt card), done (a green dot), failed (`✕`), stopped (`■`). A background subagent reads "Running in the background".
+- **Details.** Selecting a node shows, below the tree:
+  - Its status, and its type, model, running time, tool calls and tokens.
+  - **The prompt it was given**: the `prompt` input of its `Agent` call, rendered as Markdown, with **Copy**.
+  - **What it returned**: the report its parent received, as Markdown with **Copy**, once it has finished.
+  - **Show in conversation** (**Go to the prompt** while it waits) and **Stop subagent…**. The same actions, and **Copy prompt** / **Copy result**, are on the row's right-click menu.
+  - The prompt and result are one click away rather than always expanded, as in the VS Code extension.
+- **Where it lives.**
+  - The **Agents** page of the side panel, between Changed files and Processes. The page button shows a busy dot while a subagent runs, and the page's header sums the tree up, for example *"2 agents running (1 waiting on you); 2 done"*.
+  - **A window of its own**, from the button at the top of the page: the tree beside the details, for wide fan-outs. One per tab; it closes with the tab.
+  - An **Agents** row in the tab info card ([§4](#4-tabs--sessions)): for example *"3 agents running"*, *"3 agents running (1 waiting on you)"* or *"4 agents: 3 done, 1 stopped"*. No row while a tab has no subagents.
+  - The main agent's row shows whether a turn is running, and its latest tool call.
 - **Interaction.**
-  - Clicking a node scrolls the conversation to that subagent's group and expands it.
-  - A node waiting on a permission prompt is highlighted, and clicking it goes to the prompt.
-  - Stopping one subagent, if Claude Code offers a way to (for example `stop_task` for background agents), with the whole-turn Stop as the fallback.
-- **Data source.** Everything needed is already in the stream:
-  - Subagent traffic is tagged with `parent_tool_use_id`, which gives the tree, including nesting.
-  - The `Agent` tool call's input gives the type and description, and its result marks the end.
-  - `--forward-subagent-text` includes the subagents' own text and thinking.
-  - `task_started` / `task_notification` and `tool_progress` messages give background tasks and progress.
-  - The map is a different view of what the conversation builder already routes into subagent groups, so the two stay consistent.
-- **Restored tabs.** A transcript replay shows the finished tree, with no live status.
-- **Open questions:**
-  - A tree list is simpler, but a graph layout reads better for wide fan-outs; which one?
-  - Does it need to show agent teams (teammates), which Claude Code reports differently from subagents?
+  - Clicking a node (or Enter) scrolls the conversation to that subagent's group and expands it, along with any groups it's nested in.
+  - A node waiting on a permission prompt is highlighted, and clicking it goes to the prompt instead. The prompt card itself names the subagent asking, for example *"Asked by the Explore subagent: Find the auth code"* ([§7](#7-permission-prompts)).
+  - **Stop subagent…** stops that subagent, and any subagents it started, after a confirmation. It goes through `stop_task` with the subagent's task id, so Claude is told it was stopped and the rest of the turn carries on. A subagent Claude Code hasn't given a task id offers **Stop turn…** instead, the whole-turn Stop.
+- **Running time** comes from the app's clock and ticks every second while an agent runs. When a subagent finishes, the duration Claude Code reports replaces it.
+- **Tokens** are the numbers Claude Code reports: from `task_progress` while it runs, then from its result or task notification. They're the subagent's latest request (roughly its context), not a running total, and the details' tooltip says so.
+- **Restored tabs.** A transcript replay shows the finished tree, with no live status, running clock or Stop.
+  - Claude Code keeps each subagent's own transcript in `<session-id>/subagents/agent-<id>.jsonl`, with a `.meta.json` naming the `Agent` call that started it (`toolUseId`). Claudette merges them into the replay in time order, so restored subagent groups get their tool calls back and nested subagents their place in the tree. The session library already copies that folder ([§9](#session-library-sync-across-machines)).
+  - A background subagent's result is read from the `<task-notification>` entry Claude Code recorded for the model. That entry isn't shown as something the user typed, in the tab or in History.
+  - A subagent with no recorded result reads *"Didn't finish"*.
+- **Decisions.**
+  - **A tree list, not a graph layout.** Compact indented rows fit the side panel and read like the rest of the app. The window gives wide fan-outs more room.
+  - **Agent teams (teammates) aren't covered.** Claude Code only spawns teammates in interactive sessions: in `-p` mode, as Claudette runs it, "a subagent that Claude names runs as an ordinary subagent even with agent teams enabled" (the agent teams docs), and it shows in the map like any other. Revisit if Claudette ever runs sessions that can have teammates.
+- **How it works.** Confirmed against Claude Code 2.1.284 with the mock Messages API, and recorded as the `07-subagents` protocol fixture:
+  - Subagent traffic carries `parent_tool_use_id`, the `Agent` call that started it, at every depth, plus `subagent_type` and `task_description`. With `--forward-subagent-text` that includes their text; the subagent's prompt also arrives as a `user` message inside it. Partial `stream_event`s are for the main agent only.
+  - `task_started` (`task_type: "local_agent"`) follows each `Agent` call, with `task_id`, `tool_use_id`, `subagent_type`, `is_backgrounded`, `spawn_depth` and the `prompt`. Then come `task_progress` while it works (`usage.total_tokens`, `usage.tool_uses`, `last_tool_name`, and a one-line `description`), and `task_updated` and `task_notification` (`completed`, `failed` or `stopped`, with `summary` and `usage`) when it ends. This is true of foreground subagents too, not only background ones.
+  - A permission request from inside a subagent carries `agent_id`, the subagent's task id, and arrives just before the tool call it's for.
+  - A top-level foreground subagent's result has `tool_use_result` with `status: "completed"`, `content` (its report), `totalTokens`, `totalToolUseCount`, `totalDurationMs`, `agentType` and `resolvedModel`. Its tool result text wraps the report in a "[Subagent hand-back]" frame with an `agentId` and `<usage>` trailer. A nested subagent's result has only that text, so Claudette reads the report out of the frame, and falls back to the subagent's last text.
+  - In `-p` mode, a subagent Claude doesn't explicitly run in the foreground runs in the background: its `Agent` call returns at once with `status: "async_launched"`, and it ends with a `task_notification`, which starts a new turn. Its group in the conversation stays running until then.
+  - `stop_task` with a subagent's task id stops it, in the foreground or the background, along with the subagents it started: `task_updated` (`killed`), `task_notification` (`stopped`), and its `Agent` call returns an error marked `tool_result_meta: [{ non_execution_kind: "interrupted" }]`. The turn carries on. The Agent SDK documents `stopTask` for background tasks only, so this is marked undocumented in `compat/surface.yaml`, with the whole-turn Stop as the fallback. An interrupt stops running subagents the same way.
+  - `tool_progress` for a foreground subagent: a heartbeat every 30 seconds (`heartbeat: true`), and `subagent_retry` while it waits out an API error, which its row shows as *"Retrying after a rate limit (attempt 2 of 10)…"*.
+  - `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`, user configuration that passes through to `claude` ([§13](#integration-with-claude-code)), limits nesting (three layers by default), so on some machines the tree is shallower.
+- **Tests.** `AgentMapTests` (the view model, including the recorded fixture replayed through a tab), `ReplayTests`, `TranscriptReaderTests`, `FakeClaudeTests` (`fake-claude`'s `SUBAGENTS` prompt, and stopping a subagent while it waits on a prompt) and `RealCliTests` (the mock's `SUBAGENTS` and `LONG_AGENT` scripts against the real CLI).
 
 ## 19. Open Questions
 
