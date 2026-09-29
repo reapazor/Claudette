@@ -16,7 +16,14 @@ public sealed record DiffToolOption(string Kind, string? PresetId, string Label)
 }
 
 /// <summary>A setting found by the Settings search box (DESIGN.md §14).</summary>
-public sealed record SettingsSearchResult(string Category, string Label);
+public sealed record SettingsSearchResult(string Category, string Label)
+{
+    /// <summary>The sidebar group the category is in, for the tab's project pages: "NightOwl".</summary>
+    public string? Group { get; init; }
+
+    /// <summary>Where the setting is, as the results list says: "Appearance", or "NightOwl → Links".</summary>
+    public string Where => Group is null ? Category : $"{Group} → {Category}";
+}
 
 /// <summary>A Style choice in Settings → Appearance (DESIGN.md §3, "Visual style").</summary>
 public sealed record StyleOption(AppStyle Style, string Label)
@@ -118,9 +125,8 @@ public sealed partial class QuickSuffixEditor(QuickSuffix suffix, Action changed
 }
 
 /// <summary>
-/// The Settings window (DESIGN.md §14). Changes apply immediately; there's no Save button. Categories for later
-/// milestones (usage, diff tool, notifications, processes, keyboard, Perforce) arrive with those milestones.
-/// Dispose it when the window closes.
+/// The Settings window (DESIGN.md §14). Changes apply immediately; there's no Save button. Below the categories, the
+/// selected tab's project has its own pages (<see cref="Project"/>). Dispose it when the window closes.
 /// </summary>
 public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 {
@@ -130,9 +136,14 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private readonly AppServices _services;
     private readonly AppSettings _settings;
 
-    public SettingsViewModel(AppServices services, string? accountText, ClaudeUpdateViewModel? updates = null)
+    /// <param name="opening">
+    /// Where the window opens, and the project pages of the tab that was selected (DESIGN.md §14). Without it, it opens
+    /// at General, with no project pages.
+    /// </param>
+    public SettingsViewModel(AppServices services, string? accountText, ClaudeUpdateViewModel? updates = null, SettingsOpening? opening = null)
     {
         _services = services;
+        Project = opening?.Project;
         _settings = services.Settings;
         AccountText = accountText ?? "Not signed in";
         Updates = updates;
@@ -146,18 +157,33 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         }
         LoadFavorites();
         SelectedCategory = AllCategories[0];
+        if (opening?.Category is { } category && (AllCategories.Contains(category) || Project is not null && ProjectPages.Contains(category)))
+        {
+            SelectedCategory = category;
+        }
+        if (opening?.StartNewAction == true)
+        {
+            Project?.StartNewAction();
+        }
         FillPerforceLogin();
         // Signing in from this window can make the Claude app available, or not (DESIGN.md §18).
         _services.RemoteControl.AvailabilityChanged += OnRemoteControlAvailabilityChanged;
     }
 
-    public void Dispose() => _services.RemoteControl.AvailabilityChanged -= OnRemoteControlAvailabilityChanged;
+    public void Dispose()
+    {
+        _services.RemoteControl.AvailabilityChanged -= OnRemoteControlAvailabilityChanged;
+        Project?.Dispose();
+    }
 
     public IReadOnlyList<string> Categories => AllCategories;
 
     // ---- Search (DESIGN.md §14: "A search box filters settings by name") -------------------------------------------
 
-    /// <summary>The settings by category, as their labels read in the window. Keep in step with SettingsWindow.axaml.</summary>
+    /// <summary>
+    /// The settings by category, as their labels read in the window. Keep in step with SettingsWindow.axaml. The tab's
+    /// project pages add their own (<see cref="ProjectSearchEntries"/>).
+    /// </summary>
     private static readonly IReadOnlyList<SettingsSearchResult> SearchIndex =
     [
         new("General", "Confirm before closing a tab where Claude is working"),
@@ -258,8 +284,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         {
             return;
         }
-        foreach (var result in SearchIndex.Where(r => words.All(w =>
-            r.Label.Contains(w, StringComparison.OrdinalIgnoreCase) || r.Category.Contains(w, StringComparison.OrdinalIgnoreCase))))
+        foreach (var result in SearchIndex.Concat(ProjectSearchEntries()).Where(r => words.All(w =>
+            r.Label.Contains(w, StringComparison.OrdinalIgnoreCase) || r.Category.Contains(w, StringComparison.OrdinalIgnoreCase)
+            || r.Group?.Contains(w, StringComparison.OrdinalIgnoreCase) == true)))
         {
             SearchResults.Add(result);
         }

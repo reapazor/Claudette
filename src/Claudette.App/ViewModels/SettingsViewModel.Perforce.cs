@@ -63,8 +63,6 @@ public sealed partial class SettingsViewModel
 
     public bool IsPerforce => SelectedCategory == "Perforce";
 
-    partial void OnSelectedCategoryChanged(string value) => OnPropertyChanged(nameof(IsPerforce));
-
     public bool PerforceEnabled
     {
         get => Perforce.Enabled;

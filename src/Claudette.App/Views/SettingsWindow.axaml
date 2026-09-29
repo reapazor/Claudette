@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Claudette.App.ViewModels"
         xmlns:installation="using:Claudette.Core.Installation"
+        xmlns:views="using:Claudette.App.Views"
         x:Class="Claudette.App.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Title="Settings"
@@ -37,15 +38,27 @@
           </Button>
         </StackPanel>
         <Panel>
-          <ListBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}" Background="Transparent" Margin="6"
-                   IsVisible="{Binding !IsSearching}" />
+          <ScrollViewer x:Name="SidebarList" IsVisible="{Binding !IsSearching}">
+            <StackPanel>
+              <ListBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedMainCategory}" Background="Transparent" Margin="6,6,6,0"
+                       ScrollViewer.VerticalScrollBarVisibility="Disabled" AutomationProperties.Name="Categories" />
+              <!-- DESIGN.md §14, "The project's pages": the selected tab's project, below a divider; hidden with no tab open -->
+              <StackPanel x:Name="ProjectGroup" IsVisible="{Binding HasProject}">
+                <Border Height="1" Background="{DynamicResource DividerBrush}" Margin="12,6,12,4" />
+                <TextBlock Classes="muted small" Text="{Binding Project.Heading, FallbackValue=''}" ToolTip.Tip="{Binding Project.Folder, FallbackValue=''}"
+                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="18,4,12,0" />
+                <ListBox ItemsSource="{x:Static vm:SettingsViewModel.ProjectPages}" SelectedItem="{Binding SelectedProjectPage}" Background="Transparent" Margin="6,2,6,6"
+                         ScrollViewer.VerticalScrollBarVisibility="Disabled" AutomationProperties.Name="Project pages" />
+              </StackPanel>
+            </StackPanel>
+          </ScrollViewer>
           <ListBox ItemsSource="{Binding SearchResults}" SelectedItem="{Binding SelectedSearchResult}" Background="Transparent" Margin="6"
                    IsVisible="{Binding IsSearching}">
             <ListBox.ItemTemplate>
               <DataTemplate DataType="vm:SettingsSearchResult">
                 <StackPanel>
                   <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
-                  <TextBlock Classes="muted small" Text="{Binding Category}" />
+                  <TextBlock Classes="muted small" Text="{Binding Where}" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
               </DataTemplate>
             </ListBox.ItemTemplate>
@@ -695,7 +708,139 @@
             <Button Content="Refresh" Command="{Binding RefreshDiagnosticsCommand}" />
           </StackPanel>
         </StackPanel>
+
+        <!-- The tab's project: Links (DESIGN.md §14, "The project's pages"; §18, "Links"). Saved as each change is made. -->
+        <Panel IsVisible="{Binding IsLinksPage}">
+          <StackPanel x:Name="LinksPage" Spacing="12" DataContext="{Binding Project}" x:DataType="vm:ProjectSettingsViewModel">
+            <TextBlock Classes="section" Text="Links" />
+            <TextBlock Classes="muted small" Text="{Binding ForTabText, FallbackValue=''}" TextWrapping="Wrap" Margin="0,-10,0,0" />
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       Text="Web links for this project, in the sidebar above History and in the project's menus; a click opens one in the browser. Shared links are in claudette.json, committed with the project; yours alone are in claudette.local.json. Changes are saved as you make them, and saving rewrites the file, so comments in it are dropped." />
+            <ItemsControl ItemsSource="{Binding LinkFileErrors}" IsVisible="{Binding HasLinkFileErrors}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <TextBlock Classes="small error" Text="{Binding}" TextWrapping="Wrap" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Classes="muted small" Text="No links yet." IsVisible="{Binding !HasLinks}" />
+            <ListBox ItemsSource="{Binding Links}" SelectedItem="{Binding SelectedLink}" MaxHeight="300"
+                     IsVisible="{Binding HasLinks}" AutomationProperties.Name="Links">
+              <ListBox.ItemTemplate>
+                <DataTemplate DataType="vm:ProjectLinkRow">
+                  <StackPanel Spacing="1">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                      <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding FileText}" VerticalAlignment="Center" />
+                    </Grid>
+                    <TextBlock Classes="muted small mono" Text="{Binding Url}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Url}" IsVisible="{Binding CanEdit}" />
+                    <TextBlock Classes="small warning" Text="{Binding Warning}" TextWrapping="Wrap" IsVisible="{Binding HasWarning}" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <WrapPanel ItemSpacing="6" LineSpacing="6">
+              <Button Content="Add…" Command="{Binding AddLinkCommand}" />
+              <Button Content="Edit…" Command="{Binding EditLinkCommand}" />
+              <Button Content="Remove" Command="{Binding RemoveLinkCommand}" />
+              <Button Content="Move up" Command="{Binding MoveLinkUpCommand}" />
+              <Button Content="Move down" Command="{Binding MoveLinkDownCommand}" />
+            </WrapPanel>
+            <TextBlock Classes="small error" Text="{Binding LinksError}" TextWrapping="Wrap" IsVisible="{Binding HasLinksError}" />
+          </StackPanel>
+        </Panel>
+
+        <!-- The tab's project: Actions, the editor that was in Tab settings… (DESIGN.md §18, "Custom actions") -->
+        <Panel IsVisible="{Binding IsActionsPage}">
+          <StackPanel x:Name="ActionsPage" Spacing="12" DataContext="{Binding Project}" x:DataType="vm:ProjectSettingsViewModel">
+            <TextBlock Classes="section" Text="Actions" />
+            <TextBlock Classes="muted small" Text="{Binding ForTabText, FallbackValue=''}" TextWrapping="Wrap" Margin="0,-10,0,0" />
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       Text="Commands of your own for this folder, in the project chip's menu, the tab's menu and on the Project page. Changes are saved as you make them." />
+            <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectActionFiles}" SelectedItem="{Binding SelectedProjectActionFile}"
+                      AutomationProperties.Name="Project actions file" />
+            <TextBlock Classes="muted small" Text="{Binding ProjectActionsNote}" TextWrapping="Wrap" Margin="0,-4,0,0" />
+            <TextBlock Classes="small error" Text="{Binding ProjectActionFileError}" TextWrapping="Wrap" IsVisible="{Binding !CanEditProjectActionFile}" />
+            <ListBox ItemsSource="{Binding ProjectActions}" SelectedItem="{Binding SelectedProjectAction}" MaxHeight="300"
+                     IsVisible="{Binding ProjectActions.Count}" AutomationProperties.Name="Project actions">
+              <ListBox.ItemTemplate>
+                <DataTemplate DataType="vm:CustomActionRow">
+                  <StackPanel>
+                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Classes="muted small mono" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <WrapPanel ItemSpacing="6" LineSpacing="6">
+              <Button Content="Add…" Command="{Binding AddProjectActionCommand}" />
+              <Button Content="Edit…" Command="{Binding EditProjectActionCommand}" />
+              <Button Content="Remove" Command="{Binding RemoveProjectActionCommand}" />
+              <Button Content="Move up" Command="{Binding MoveProjectActionUpCommand}" />
+              <Button Content="Move down" Command="{Binding MoveProjectActionDownCommand}" />
+              <Button Content="Open file" Command="{Binding OpenProjectActionFileCommand}" ToolTip.Tip="Open the file in your editor, for anything this page doesn't cover" />
+            </WrapPanel>
+            <TextBlock Classes="small error" Text="{Binding ActionsError}" TextWrapping="Wrap" IsVisible="{Binding HasActionsError}" />
+          </StackPanel>
+        </Panel>
+
+        <!-- The tab's project: Tools, this machine's choices for it, as the project menus make them (DESIGN.md §18) -->
+        <Panel IsVisible="{Binding IsToolsPage}">
+          <StackPanel x:Name="ToolsPage" Spacing="12" DataContext="{Binding Project}" x:DataType="vm:ProjectSettingsViewModel">
+            <TextBlock Classes="section" Text="Tools" />
+            <TextBlock Classes="muted small" Text="{Binding ForTabText, FallbackValue=''}" TextWrapping="Wrap" Margin="0,-10,0,0" />
+            <TextBlock Text="No Unreal, Unity or Godot project in this folder." TextWrapping="Wrap" IsVisible="{Binding !HasToolsProject}" />
+            <StackPanel Spacing="12" IsVisible="{Binding HasToolsProject}">
+              <StackPanel Spacing="2">
+                <TextBlock Text="{Binding ToolsTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Classes="muted small" Text="{Binding ToolsKeyText}" TextWrapping="Wrap" />
+              </StackPanel>
+              <Grid ColumnDefinitions="220,*" IsVisible="{Binding HasSeveralProjects}">
+                <TextBlock Classes="label" Text="Project in this folder" />
+                <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectChoices}" SelectedItem="{Binding SelectedProjectChoice}"
+                          AutomationProperties.Name="Project in this folder" />
+              </Grid>
+              <Grid ColumnDefinitions="220,*" IsVisible="{Binding HasToolsChoice}">
+                <TextBlock Classes="label" Text="{Binding ToolsChoiceLabel}" />
+                <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToolsChoiceOptions}" SelectedItem="{Binding SelectedToolsChoice}"
+                          AutomationProperties.Name="{Binding ToolsChoiceLabel}" />
+              </Grid>
+              <StackPanel Spacing="6" IsVisible="{Binding HasToolsFix}">
+                <TextBlock Text="{Binding ToolsFixName}" FontWeight="SemiBold" Margin="0,4,0,0" />
+                <SelectableTextBlock Text="{Binding ToolsFixCurrent}" TextWrapping="Wrap" />
+                <TextBlock Classes="muted small" Text="{Binding ToolsFixSource}" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Content="Choose…" Command="{Binding ChooseToolsFixCommand}" ToolTip.Tip="{Binding ToolsFixTitle}" />
+                  <Button Content="Clear" Command="{Binding ClearToolsFixCommand}" ToolTip.Tip="Forget the choice, so Claudette looks for it again" />
+                </StackPanel>
+                <TextBlock Classes="small error" Text="{Binding ToolsFixError}" TextWrapping="Wrap" IsVisible="{Binding HasToolsFixError}" />
+              </StackPanel>
+            </StackPanel>
+            <StackPanel Spacing="2">
+              <TextBlock Classes="muted small" TextWrapping="Wrap"
+                         Text="The defaults for every project, and the Godot executable when a project hasn't got its own, are in Settings → Project tools." />
+              <Button Classes="flat" Padding="0" HorizontalAlignment="Left"
+                      Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).ShowProjectToolsDefaultsCommand}">
+                <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="Open Settings → Project tools" TextDecorations="Underline" />
+              </Button>
+            </StackPanel>
+          </StackPanel>
+        </Panel>
       </StackPanel>
     </ScrollViewer>
+
+    <!-- The project pages' small dialogs: a link, or an action (DESIGN.md §18) -->
+    <Border Grid.ColumnSpan="2" Classes="overlay" IsVisible="{Binding Project.HasEditor, FallbackValue=False}">
+      <ContentControl Content="{Binding Project.Editor, FallbackValue={x:Null}}" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <ContentControl.DataTemplates>
+          <DataTemplate DataType="vm:ProjectActionEditorViewModel">
+            <views:ProjectActionEditorView />
+          </DataTemplate>
+          <DataTemplate DataType="vm:ProjectLinkEditorViewModel">
+            <views:ProjectLinkEditorView />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+    </Border>
   </Grid>
 </Window>

@@ -97,6 +97,14 @@ public sealed partial class TabViewModel
     private string? _projectNoteSent;
     private string _projectSettingsSeen = "";
 
+    // Reads of the project files and detections, numbered as they start. One that finishes after a later one was shown
+    // is dropped, so saves in quick succession (Settings' Links and Actions pages) never leave the tab showing an
+    // older file, and a detection from before a choice never undoes it.
+    private long _projectFileReads;
+    private long _projectFileShown;
+    private long _projectDetections;
+    private long _projectDetectionShown;
+
     /// <summary>The project detected for the tab's folder, or null.</summary>
     [ObservableProperty]
     public partial ProjectInfo? Project { get; private set; }
@@ -186,6 +194,8 @@ public sealed partial class TabViewModel
     public async Task RefreshProjectAsync()
     {
         _projectSettingsSeen = ProjectSettingsKey();
+        var detectionNumber = Interlocked.Increment(ref _projectDetections);
+        var fileNumber = Interlocked.Increment(ref _projectFileReads);
         var tools = _services.ProjectTools;
         ProjectDetection detection;
         ProjectFileContents file;
@@ -203,9 +213,17 @@ public sealed partial class TabViewModel
         }
         await OnUiThreadAsync(() =>
         {
-            _projectDetection = detection;
-            UseProjectFile(file);
-            Project = detection.Project;
+            if (fileNumber > _projectFileShown)
+            {
+                _projectFileShown = fileNumber;
+                UseProjectFile(file);
+            }
+            if (detectionNumber > _projectDetectionShown)
+            {
+                _projectDetectionShown = detectionNumber;
+                _projectDetection = detection;
+                Project = detection.Project;
+            }
             ProjectToolsChanged();
         }).ConfigureAwait(false);
     }
@@ -219,6 +237,7 @@ public sealed partial class TabViewModel
     /// </summary>
     public async Task RefreshProjectFileAsync()
     {
+        var fileNumber = Interlocked.Increment(ref _projectFileReads);
         ProjectFileContents file;
         try
         {
@@ -230,8 +249,12 @@ public sealed partial class TabViewModel
         }
         await OnUiThreadAsync(() =>
         {
-            UseProjectFile(file);
-            ProjectToolsChanged();
+            if (fileNumber > _projectFileShown)
+            {
+                _projectFileShown = fileNumber;
+                UseProjectFile(file);
+                ProjectToolsChanged();
+            }
         }).ConfigureAwait(false);
     }
 
@@ -469,30 +492,17 @@ public sealed partial class TabViewModel
     // ---- Custom actions (DESIGN.md §18, "Custom actions") --------------------------------------------------------
 
     /// <summary>
-    /// <b>Add an action…</b>: the small dialog, which asks which file it goes in, then the action joins the end of
-    /// that file's <c>actions</c>.
+    /// <b>Add an action…</b>: Settings opens on this tab's Actions page (DESIGN.md §14) with a new action started. Its
+    /// dialog asks which file the action goes in, then it joins the end of that file's <c>actions</c>.
     /// </summary>
     [RelayCommand]
-    private void AddProjectAction() => _shell.EditProjectAction(Folder, null, (saved, scope) =>
-    {
-        try
-        {
-            var entries = ProjectFile.ReadEntries(Folder, scope, _services.ProjectTools.OS).Select(e => e.Raw).ToList();
-            ProjectFile.WriteActions(Folder, scope, [.. entries, ProjectFile.ToJson(saved)]);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
-        {
-            _conversation.AddNote($"Couldn't save the action: {ex.Message}", NoteKind.Error);
-            return;
-        }
-        _shell.OnProjectActionsChanged(Folder);
-    }, askForFile: true);
+    private Task AddProjectAction() => _shell.OpenProjectSettingsAsync(this, SettingsViewModel.ActionsPage, startNewAction: true);
 
     /// <summary>A folder's project files changed through the in-app editor, here or in another tab in the same folder.</summary>
     internal void ReloadCustomActions() => _ = RefreshProjectFileAsync();
 
-    /// <summary>A note in the conversation, for Tab settings… when it can't save an action.</summary>
-    internal void AddProjectNote(string text) => _conversation.AddNote(text, NoteKind.Error);
+    /// <summary>Every project detection found for the folder, nearest first, for Settings' Tools page.</summary>
+    internal IReadOnlyList<ProjectCandidate> ProjectCandidates => _projectDetection.Candidates;
 
     // ---- Running actions -------------------------------------------------------------------------------------------
 

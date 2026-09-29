@@ -21,6 +21,16 @@ public sealed record ProjectFileContents(IReadOnlyList<CustomProjectAction> Acti
 /// <param name="ForThisOS">Its <c>os</c> includes this machine's.</param>
 public sealed record ProjectFileEntry(JsonNode? Raw, CustomProjectAction? Action, string? Problem, bool ForThisOS);
 
+/// <summary>One entry of a file's <c>links</c>, as the Links page of Settings sees it (DESIGN.md §18, "Links").</summary>
+/// <param name="Raw">The entry as it is in the file. Saving keeps its other fields.</param>
+/// <param name="Link">What it reads as; null when it can't be read.</param>
+/// <param name="Problem">Why it can't be read.</param>
+public sealed record ProjectFileLinkEntry(JsonNode? Raw, ProjectLink? Link, string? Problem)
+{
+    /// <summary>The name as written: empty when the entry has none, and the sidebar shows its address instead.</summary>
+    public string GivenName => LenientJson.String(Raw, "name")?.Trim() ?? "";
+}
+
 /// <summary>
 /// <c>claudette.json</c> and <c>claudette.local.json</c> in a tab's folder (DESIGN.md §18, "claudette.json"): the
 /// folder's own actions and links. The shared file is committed with the project; the local one is the user's.
@@ -94,30 +104,58 @@ public static class ProjectFile
             }
         }
         var links = new List<ProjectLink>();
-        var i = 0;
-        foreach (var node in Entries(root, "links", file, problems))
+        foreach (var entry in Entries(root, "links", file, problems).Select((node, index) => ReadLink(node, index, scope)))
         {
-            var where = $"links[{i++}]";
-            if (node is not JsonObject link)
+            if (entry.Link is { } link)
             {
-                problems.Add($"{file}: {where} isn't an object, so it was skipped.");
-                continue;
+                links.Add(link);
             }
-            var url = LenientJson.String(link, "url")?.Trim();
-            if (string.IsNullOrEmpty(url))
+            else
             {
-                problems.Add($"{file}: {where} has no url, so it was skipped.");
-                continue;
+                problems.Add($"{file}: {entry.Problem}");
             }
-            var name = LenientJson.String(link, "name")?.Trim();
-            links.Add(new ProjectLink(string.IsNullOrEmpty(name) ? url : name, url, scope));
         }
         return new ProjectFileContents(actions, links, problems);
     }
 
     /// <summary>Every entry of one file's <c>actions</c>, for the editor, including ones for other OSes and ones it can't read.</summary>
     /// <exception cref="InvalidOperationException">The file exists but isn't JSON: it can't be edited here without losing it.</exception>
-    public static IReadOnlyList<ProjectFileEntry> ReadEntries(string folder, ProjectFileScope scope, ToolOS os)
+    public static IReadOnlyList<ProjectFileEntry> ReadEntries(string folder, ProjectFileScope scope, ToolOS os) =>
+        ReadRoot(folder, scope) is { } root
+            ? Entries(root, "actions", FileName(scope), []).Select((node, index) => ReadAction(node, index, scope, os)).ToArray()
+            : [];
+
+    /// <summary>Every entry of one file's <c>links</c>, for Settings' Links page, including ones it can't read.</summary>
+    /// <exception cref="InvalidOperationException">The file exists but isn't JSON: it can't be edited here without losing it.</exception>
+    public static IReadOnlyList<ProjectFileLinkEntry> ReadLinkEntries(string folder, ProjectFileScope scope) =>
+        ReadRoot(folder, scope) is { } root
+            ? Entries(root, "links", FileName(scope), []).Select((node, index) => ReadLink(node, index, scope)).ToArray()
+            : [];
+
+    /// <summary>
+    /// Replaces one file's <c>actions</c> with <paramref name="entries"/>, keeping its other keys, and writes it
+    /// indented. Comments in the file are lost: JSON can't keep them. Creates the file when there's none.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The file exists but isn't JSON.</exception>
+    public static void WriteActions(string folder, ProjectFileScope scope, IEnumerable<JsonNode?> entries) => WriteList(folder, scope, "actions", entries);
+
+    /// <summary>
+    /// Replaces one file's <c>links</c> with <paramref name="entries"/>, keeping its other keys (its actions among them),
+    /// and writes it indented, as <see cref="WriteActions"/> does. Creates the file when there's none.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The file exists but isn't JSON.</exception>
+    public static void WriteLinks(string folder, ProjectFileScope scope, IEnumerable<JsonNode?> entries) => WriteList(folder, scope, "links", entries);
+
+    private static void WriteList(string folder, ProjectFileScope scope, string key, IEnumerable<JsonNode?> entries)
+    {
+        var root = ReadRoot(folder, scope) ?? [];
+        root[key] = new JsonArray([.. entries.Select(e => e?.DeepClone())]);
+        File.WriteAllText(PathFor(folder, scope), root.ToJsonString(WriteOptions) + Environment.NewLine);
+    }
+
+    /// <summary>One file's root object, to edit; null when there's no file.</summary>
+    /// <exception cref="InvalidOperationException">The file can't be read, or isn't JSON.</exception>
+    private static JsonObject? ReadRoot(string folder, ProjectFileScope scope)
     {
         var text = ReadText(PathFor(folder, scope), out var error);
         if (error is not null)
@@ -126,39 +164,13 @@ public static class ProjectFile
         }
         if (text is null)
         {
-            return [];
+            return null;
         }
         if (!TryParseRoot(text, out var root, out var parseError))
         {
             throw new InvalidOperationException($"{FileName(scope)} isn't valid JSON ({parseError}), so Claudette won't rewrite it. Fix it by hand first.");
         }
-        return Entries(root, "actions", FileName(scope), []).Select((node, index) => ReadAction(node, index, scope, os)).ToArray();
-    }
-
-    /// <summary>
-    /// Replaces one file's <c>actions</c> with <paramref name="entries"/>, keeping its other keys, and writes it
-    /// indented. Comments in the file are lost: JSON can't keep them. Creates the file when there's none.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">The file exists but isn't JSON.</exception>
-    public static void WriteActions(string folder, ProjectFileScope scope, IEnumerable<JsonNode?> entries)
-    {
-        var path = PathFor(folder, scope);
-        var text = ReadText(path, out var error);
-        if (error is not null)
-        {
-            throw new InvalidOperationException($"{FileName(scope)} couldn't be read: {error}");
-        }
-        JsonObject root = [];
-        if (text is not null)
-        {
-            if (!TryParseRoot(text, out var existing, out var parseError))
-            {
-                throw new InvalidOperationException($"{FileName(scope)} isn't valid JSON ({parseError}), so Claudette won't rewrite it. Fix it by hand first.");
-            }
-            root = existing;
-        }
-        root["actions"] = new JsonArray([.. entries.Select(e => e?.DeepClone())]);
-        File.WriteAllText(path, root.ToJsonString(WriteOptions) + Environment.NewLine);
+        return root;
     }
 
     /// <summary>An action as an entry of <c>actions</c>: <paramref name="raw"/>'s other fields kept, its own written over them.</summary>
@@ -176,6 +188,25 @@ public static class ProjectFile
             json["folder"] = action.WorkingFolder.Trim();
         }
         json["mode"] = action.Mode == CustomActionMode.LaunchAndForget ? "launch" : "output";
+        return json;
+    }
+
+    /// <summary>
+    /// A link as an entry of <c>links</c>: <paramref name="raw"/>'s other fields kept, its name and address written over
+    /// them. An empty name is left out, and the sidebar shows the address instead.
+    /// </summary>
+    public static JsonObject LinkToJson(string? name, string url, JsonNode? raw = null)
+    {
+        var json = raw is JsonObject existing ? (JsonObject)existing.DeepClone() : [];
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            json.Remove("name");
+        }
+        else
+        {
+            json["name"] = name.Trim();
+        }
+        json["url"] = url.Trim();
         return json;
     }
 
@@ -245,6 +276,22 @@ public static class ProjectFile
             Os = osList,
         };
         return new ProjectFileEntry(node, action, null, forThisOS);
+    }
+
+    private static ProjectFileLinkEntry ReadLink(JsonNode? node, int index, ProjectFileScope scope)
+    {
+        var where = $"links[{index}]";
+        if (node is not JsonObject entry)
+        {
+            return new ProjectFileLinkEntry(node, null, $"{where} isn't an object, so it was skipped.");
+        }
+        var url = LenientJson.String(entry, "url")?.Trim();
+        if (string.IsNullOrEmpty(url))
+        {
+            return new ProjectFileLinkEntry(node, null, $"{where} has no url, so it was skipped.");
+        }
+        var name = LenientJson.String(entry, "name")?.Trim();
+        return new ProjectFileLinkEntry(node, new ProjectLink(string.IsNullOrEmpty(name) ? url : name, url, scope), null);
     }
 
     private static IEnumerable<JsonNode?> Entries(JsonObject root, string name, string file, List<string> problems)

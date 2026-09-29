@@ -46,31 +46,13 @@
       <TextBlock Classes="small warning" TextWrapping="Wrap" Margin="28,-8,0,0" Text="{Binding RemoteControlUnavailableText}"
                  IsVisible="{Binding HasRemoteControlUnavailableText}" />
 
-      <!-- The folder's custom project actions, in its claudette.json files (DESIGN.md §18, "Custom actions"); saved with Apply -->
+      <!-- The folder's custom project actions moved to Settings, on the tab's Actions page (DESIGN.md §14, §18) -->
       <TextBlock Text="Project actions" FontWeight="SemiBold" Margin="0,4,0,0" />
-      <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectActionFiles}" SelectedItem="{Binding SelectedProjectActionFile}"
-                AutomationProperties.Name="Project actions file" />
-      <TextBlock Classes="muted small" Text="{Binding ProjectActionsNote}" TextWrapping="Wrap" Margin="0,-4,0,0" />
-      <TextBlock Classes="small error" Text="{Binding ProjectActionFileError}" TextWrapping="Wrap" IsVisible="{Binding !CanEditProjectActionFile}" />
-      <ListBox ItemsSource="{Binding ProjectActions}" SelectedItem="{Binding SelectedProjectAction}" MaxHeight="130"
-               IsVisible="{Binding ProjectActions.Count}" AutomationProperties.Name="Project actions">
-        <ListBox.ItemTemplate>
-          <DataTemplate DataType="vm:CustomActionRow">
-            <StackPanel>
-              <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-              <TextBlock Classes="muted small mono" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" />
-            </StackPanel>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
-      <WrapPanel ItemSpacing="6" LineSpacing="6">
-        <Button Content="Add…" Command="{Binding AddProjectActionCommand}" />
-        <Button Content="Edit…" Command="{Binding EditProjectActionCommand}" />
-        <Button Content="Remove" Command="{Binding RemoveProjectActionCommand}" />
-        <Button Content="Move up" Command="{Binding MoveProjectActionUpCommand}" />
-        <Button Content="Move down" Command="{Binding MoveProjectActionDownCommand}" />
-        <Button Content="Open file" Command="{Binding OpenProjectActionFileCommand}" ToolTip.Tip="Open the file in your editor, for links and anything else" />
-      </WrapPanel>
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,-4,0,0">
+        <TextBlock Classes="muted small" Text="{Binding ProjectActionsText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Content="Open" Command="{Binding OpenProjectActionsCommand}"
+                ToolTip.Tip="Open Settings on this folder's actions, from its claudette.json files" />
+      </Grid>
 
       <Grid ColumnDefinitions="*,Auto">
         <Button Content="Use defaults" Command="{Binding UseDefaultsCommand}" />

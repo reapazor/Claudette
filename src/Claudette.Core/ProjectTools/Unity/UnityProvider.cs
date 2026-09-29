@@ -152,7 +152,11 @@ public sealed class UnityProvider : IProjectToolProvider
                 [new(nameof(UnityCodeOptimization.Release), "Release"), new(nameof(UnityCodeOptimization.Debug), "Debug")],
                 optimization.ToString()),
             Fix = new ProjectFix(UnityEditors.EditorKey, editor is null ? "Choose Unity editor…" : "Choose another Unity editor…",
-                $"Choose the Unity {version} editor for {project.Name}", PickFolder: false, picked => UnityEditors.Validate(picked, os)),
+                $"Choose the Unity {version} editor for {project.Name}", PickFolder: false, picked => UnityEditors.Validate(picked, os))
+            {
+                Name = "Unity editor",
+                Current = editor,
+            },
             Problem = problem,
             SystemPromptNote = context.Settings.TellClaudeAboutUnity ? SystemPromptNote(project, editor, os) : null,
         };

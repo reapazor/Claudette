@@ -175,9 +175,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     public bool HasTabSettings => TabSettings is not null;
 
-    /// <summary>Set by the view: opens the Settings window.</summary>
-    /// <remarks>The argument is the category to open at, or null for the first.</remarks>
-    public Func<string?, Task>? ShowSettingsWindow { get; set; }
+    /// <summary>Set by the view: opens the Settings window where <see cref="SettingsOpening"/> says, and returns when it closes.</summary>
+    public Func<SettingsOpening, Task>? ShowSettingsWindow { get; set; }
 
     /// <summary>
     /// Brings back saved tabs (DESIGN.md §9, "Restore on launch"): pinned tabs always, the others only when
@@ -883,35 +882,41 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     // ---- Settings -------------------------------------------------------------------------------------------
 
     [RelayCommand]
-    private Task OpenSettingsAsync() => ShowSettingsWindow?.Invoke(null) ?? Task.CompletedTask;
+    private Task OpenSettingsAsync() => ShowSettingsAsync(null, SelectedTab);
 
     /// <summary>Opens Settings at a category, for example Quick suffixes from the suffix menu's <b>Edit suffixes…</b>.</summary>
-    internal Task OpenSettingsAtAsync(string category) => ShowSettingsWindow?.Invoke(category) ?? Task.CompletedTask;
+    internal Task OpenSettingsAtAsync(string category) => ShowSettingsAsync(category, SelectedTab);
+
+    /// <summary>
+    /// Opens Settings at one of <paramref name="tab"/>'s project pages (DESIGN.md §14, "The project's pages"): Actions for
+    /// <b>Add an action…</b>, with a new action started. The Settings window follows the selected tab, so the tab is
+    /// selected first when it isn't.
+    /// </summary>
+    internal Task OpenProjectSettingsAsync(TabViewModel tab, string page, bool startNewAction = false)
+    {
+        if (!ReferenceEquals(SelectedTab, tab) && AllTabs.Contains(tab))
+        {
+            SelectedTab = tab;
+        }
+        return ShowSettingsAsync(page, tab, startNewAction);
+    }
+
+    /// <summary>The window gets the project pages of the tab selected as it opens; with no tab, there are none.</summary>
+    private Task ShowSettingsAsync(string? category, TabViewModel? tab, bool startNewAction = false) =>
+        ShowSettingsWindow is { } show
+            ? show(new SettingsOpening(category, tab is null ? null : new ProjectSettingsViewModel(_services, tab, this), startNewAction))
+            : Task.CompletedTask;
 
     [RelayCommand]
     private void OpenTabSettings(TabViewModel? tab)
     {
         if (tab is not null)
         {
-            TabSettings = new TabSettingsViewModel(_services, tab, () => TabSettings = null, this) { EditAction = EditProjectAction };
+            TabSettings = new TabSettingsViewModel(_services, tab, () => TabSettings = null, this);
         }
     }
 
     // ---- Project tools (DESIGN.md §18) ------------------------------------------------------------------------
-
-    /// <summary>The small dialog for a custom project action, while it's open.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasActionEditor))]
-    public partial ProjectActionEditorViewModel? ActionEditor { get; set; }
-
-    public bool HasActionEditor => ActionEditor is not null;
-
-    /// <summary>
-    /// Opens the custom action dialog: a new action when <paramref name="existing"/> is null. With
-    /// <paramref name="askForFile"/>, it asks which of the folder's project files the action goes in.
-    /// </summary>
-    internal void EditProjectAction(string folder, Core.ProjectTools.CustomProjectAction? existing, Action<Core.ProjectTools.CustomProjectAction, Core.ProjectTools.ProjectFileScope> save, bool askForFile = false) =>
-        ActionEditor = new ProjectActionEditorViewModel(folder, existing, save, () => ActionEditor = null) { AsksForFile = askForFile };
 
     /// <summary>A folder's project files changed: every tab in that folder reads them again.</summary>
     internal void OnProjectActionsChanged(string folder)
