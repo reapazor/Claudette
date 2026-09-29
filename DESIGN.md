@@ -31,6 +31,7 @@ Claudette does not replace Claude Code. It runs the real `claude` CLI as a child
 | Diffs | Claudette's own line diff and diff view, highlighted with TextMateSharp | The TextMate grammars and themes LiveMarkdown already ships for code blocks. AvaloniaEdit was the plan, but a read-only diff doesn't need an editor. |
 | Usage history | SQLite (Microsoft.Data.Sqlite) | [§6](#usage-history) |
 | Dependency | Claude Code CLI | Must already be installed. Claudette finds `claude` on `PATH` (on macOS and Linux, the login shell's `PATH`, [§13](#login-shell-environment)) or at a path set in Settings, checks its version on launch against a minimum supported version, and shows a setup screen if it is missing or too old. Sign-in is handled inside Claudette (see [§11](#11-sign-in)). |
+| Service status | Claude's public status page, status.claude.com | Read for the header's status dot and the incident banner: its Statuspage summary, with no sign-in. Settings → General turns it off. [§18](#service-status). |
 | Packaging | Windows: MSIX. macOS: signed, notarized `.app` in a `.dmg`. | [Below](#packaging-and-signing). |
 
 ### Packaging and signing
@@ -133,8 +134,8 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
 └──────────────────┴─────────────────────────────────────────────────────────┘
 ```
 
-1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. A chevron at its right draws it taller, with charts ([Detailed header](#detailed-header)). See [§6](#6-token-burn-awareness).
-2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder. **New tab** is at its top; the selected tab's **Links** ([§18](#project-tools)), **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
+1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. A chevron at its right draws it taller, with charts ([Detailed header](#detailed-header)). See [§6](#6-token-burn-awareness). At its right, before the account name, a dot shows Claude's service status, and while Claude has an incident a banner runs across the top under it ([§18](#service-status)).
+2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder, and under a tab's row, the runs of its project actions ([§18](#project-tools)). **New tab** is at its top; the selected tab's project and **Links** ([§18](#project-tools)), **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
 3. **Conversation.** The selected tab's conversation. See [§5](#5-conversation-view).
 4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), its project's tools and their output when it has any ([§18](#project-tools)), and optionally its running processes ([§4](#process-monitor)).
 5. **Composer.** Where you type to the selected tab, plus the Stop button and per-tab controls.
@@ -187,8 +188,9 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
   - The full folder path and git branch.
   - Model and effort.
   - When the session started (for a resumed session, its transcript's first entry; saved with the tab), tokens used and context %.
-  - Later features add rows here: the Perforce login and changelist ([§18](#perforce-ticket-handling)), and the **Project** the tab's folder holds and whether Claude was told about it ([§18](#project-tools)), for example.
+  - Later features add rows here: the Perforce login and changelist ([§18](#perforce-ticket-handling)), the **Project** the tab's folder holds and whether Claude was told about it ([§18](#project-tools)), and the **Claude app** connection: connected at the session's address, connecting, or why not ([§18](#remote-control-the-claude-app)), for example.
   - **Agents**, while the tab has subagents: how many are running or waiting on you, or how they ended ([§18](#agent-map)).
+  - **Running tasks**, while Claude Code has work going in the background: one line each, such as *Shell command: Start the dev server*, up to four and then *and 2 more* ([§5](#running-tasks)).
   - The same card opens from an **ⓘ** button in the composer bar, for the selected tab.
 - **Token stats per tab.** Each tab keeps a running count of the tokens it has used:
   - Input, output, cache write and cache read tokens, split by model when the session used more than one.
@@ -211,6 +213,7 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
   - Closing a pinned tab asks *"This tab is pinned. Close and unpin it?"*
   - Unpinned tabs aren't restored unless **Also restore unpinned tabs** is on in Settings. See [§9](#restore-on-launch) for what's restored.
 - **Syncing.** **Sync to other machines** in the tab's right-click menu (a check item), or in its **Tab settings…**, turns copying the tab's session to the session library on or off ([§9](#session-library-sync-across-machines)). It's off for a new tab unless Settings → Sessions says otherwise. A tab that syncs shows a small sync icon in its row.
+- **The Claude app.** **Connect to the Claude app** in the tab's right-click menu (a check item), or in its **Tab settings…**, connects the tab to the Claude app with Remote Control whenever its session runs ([§18](#remote-control-the-claude-app)). It's off for a new tab unless Settings → Claude Code says otherwise. A connected tab shows a small phone icon in its row, and **Open in the Claude app** in its menu.
 - Keyboard: `Ctrl/Cmd+T` new tab, `Ctrl/Cmd+W` close, `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle, `Ctrl/Cmd+1…9` jump to a tab, `Ctrl/Cmd+B` collapse or expand the sidebar.
 
 ### Sidebar
@@ -218,21 +221,27 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
 The tabs are listed in a sidebar on the left of the window, rather than a strip across the top, so long session names, a status line and many tabs all fit.
 
 - **A tab's row** has two lines:
-  - The status icon, a pin icon if pinned, a sync icon if it syncs to the session library (muted, with the tip *"Synced to the session library"*), a gear while a process it started is busy ([Process monitor](#process-monitor)), and the name, cut short with an ellipsis if it doesn't fit. With **Show changelist on tabs** on, a `CL 12345` badge sits at the end of the line ([§18](#perforce-changelist-in-the-tab-title)).
+  - The status icon, a pin icon if pinned, a sync icon if it syncs to the session library (muted, with the tip *"Synced to the session library"*), a phone icon while it's connected to the Claude app (*"Connected to the Claude app"*, dimmed while it connects or reconnects; [§18](#remote-control-the-claude-app)), a gear while a process it started is busy ([Process monitor](#process-monitor)), a small count of its running tasks once its turn is over (*"2 tasks still running"*, [§5](#running-tasks)), and the name, cut short with an ellipsis if it doesn't fit. With **Show changelist on tabs** on, a `CL 12345` badge sits at the end of the line ([§18](#perforce-changelist-in-the-tab-title)).
   - The model and effort, or instead what needs attention: *Needs your input*, the error, or *Possibly stuck* when check-ins get no reply ([§5](#check-ins-on-long-turns)).
   - **Context ring.** A small ring at the end of the row, level with the second line and under the close button, fills up with the tab's context window ([§6](#per-tab-context)).
     - It's muted, amber when the context indicator warns (near auto-compact), and red from 95%.
     - Its tip is the composer bar's context text and detail, for example *"Context 75% (150,000 of 200,000 tokens · auto-compacts at 160,000)"*.
     - It's hidden until the tab has context data, so a tab that hasn't started has none. **Show context on tab rows** (Settings → Appearance, on by default) turns it off. The rail doesn't show it.
   - The close button shows on hover and on the selected tab. Hovering the row shows the tab info card; double-clicking renames it.
-- **A tab's menu** (right-click, in the full sidebar and the rail): Rename, Reset name, Pin, **Sync to other machines**, **Tab settings…**, the project's actions in a submenu named after the project (or **Add an action…** for a folder with none yet, [§18](#project-tools)), **Move up** and **Move down**, and Close.
+- **Project runs.** Each time one of the tab's project actions runs as a job, such as a build, it gets a small entry under the tab's row, indented to the tab's name, newest last ([§18](#project-tools)):
+  - A glyph for how it's going: the busy dot while it runs, ✓ when it succeeded, ✕ in the error color when it failed, and a muted ■ when it was stopped.
+  - Its name, and under it how long it has been running (*Running · 1m 05s*), or how it ended and when (*Failed · exit code 6 · 14:32*, in the error color). Hovering it shows its status line, when it started and how long it took.
+  - Clicking it selects the tab and opens the side panel's Project page on its log. The entry whose log the page shows is picked out.
+  - An entry never closes on its own, whatever the result. A finished one has a close button (×) that takes the entry and its log away. While it runs, a **Stop** button (■) is in that place instead, and ends the job as the Project page's Stop does; so a click on × never stops a build.
+  - Closing the tab takes its entries away. They aren't saved, so they're gone when Claudette quits or restarts.
+- **A tab's menu** (right-click, in the full sidebar and the rail): Rename, Reset name, Pin, **Sync to other machines**, **Connect to the Claude app** (disabled, with the reason as its tip, when the account can't use it) and **Open in the Claude app** while it's connected ([§18](#remote-control-the-claude-app)), **Tab settings…**, the project's actions in a submenu named after the project (or **Add an action…** for a folder with none yet, [§18](#project-tools)), **Move up** and **Move down**, and Close.
 - **Top:** **New tab**, which opens the picker ([Opening a tab](#opening-a-tab)), and the button that collapses the sidebar.
-- **Foot:** the selected tab's **Links**, from its folder's `claudette.json`, when it has any ([§18](#project-tools)), **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), the Claudette update badge when there's a new release ([§2](#updating-claudette)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
+- **Foot:** the selected tab's project, a row that opens its menu of actions, when the tab has project tools, then its **Links**, from its folder's `claudette.json`, when it has any ([§18](#project-tools)), **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), the Claudette update badge when there's a new release ([§2](#updating-claudette)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
 - **Resizing.** Drag the sidebar's edge to make it wider or narrower (180 to 420 pixels; 248 by default). Double-click the edge for the default width. The width is remembered.
 - **Collapsing.** The collapse button, or `Ctrl/Cmd+B`, shrinks the sidebar to a rail:
-  - The rail shows each group's color, then a square per tab with the first letter of its name and a small status icon. Hovering a square shows the tab info card.
+  - The rail shows each group's color, then a square per tab with the first letter of its name and a small status icon. Hovering a square shows the tab info card. It doesn't list project runs.
   - A collapsed group shows only its color and its most urgent status.
-  - New tab, Links, History, the update badge and Settings stay as icons.
+  - New tab, the project, Links, History, the update badge and Settings stay as icons.
   - Whether the sidebar is collapsed is remembered.
 - **Narrow windows.** Below 900 pixels wide the sidebar collapses to the rail by itself, and expands again when the window is widened. Expanding it by hand in a narrow window lasts until the window is widened, when the remembered choice applies again; neither changes that choice.
 
@@ -347,7 +356,8 @@ Scrolling follows new output unless the user has scrolled up; a "Jump to latest"
 - You can type and send while Claude is working; the message is queued and delivered to the session.
 - `/` opens slash-command autocomplete (built-in plus the project's custom commands), and `@` file autocomplete for the tab's working folder. See [Autocomplete](#autocomplete).
 - Drag and drop, paste, or pick with the attach button images and files to attach them. See [Attachments](#attachments).
-- Per-tab controls in the bar above the composer: working folder (read-only), model, effort level, permission mode, the project chip when the tab has project tools (`◆ NightOwl · UE 5.4 ▾`, [§18](#project-tools)), context window usage %, tokens used.
+- Per-tab controls in the bar above the composer: working folder (read-only), model, effort level, permission mode, the **Agents** button while the tab has subagents ([§18](#agent-map)), the **running tasks** chip while Claude Code has work going in the background (*"● 2 running tasks"*, [below](#running-tasks)), context window usage %, tokens used.
+- **The bar keeps Send in view.** The choices (model, effort, permission mode) are at its left, and the counts (processes, Agents, running tasks, Files, context, tokens) with **Send** at its right. When they don't all fit on one line, as in a narrow window, the right-hand group moves to a second line under the choices, still at the right, rather than being pushed out of sight (`ControlBarPanel`).
 
 ### Working line
 
@@ -373,6 +383,33 @@ While Claude works, a line above the composer says so, the way Claude Code's ter
   - It's read as the tab's session starts, so a change shows from the next session.
 - **Turning it off.** **Show fun words while Claude works** (Settings → Appearance, on by default). Off, the line says *"✻ Working…"* with a still glyph, and still shows the time, tokens and Stop shortcut.
 - Claude Code's spinner tips (`spinnerTipsEnabled`, `spinnerTipsOverride`) aren't shown.
+
+### Running tasks
+
+Claude Code keeps some work going after a turn ends, and its own UIs count it (*"1 running task"*). So does Claudette.
+
+- **What counts.** What Claude Code reports with `system/task_started` and runs in the background:
+  - a shell command run with `run_in_background`, or moved there later;
+  - a background subagent (a foreground one is part of the turn, and only on the Agents page, [§18](#agent-map));
+  - a Monitor watch;
+  - a remote agent or a workflow, and a kind Claudette doesn't know yet.
+  - Not a foreground command or subagent, and not Claude Code's own work (`ambient: true`), which the Agent SDK says to leave out of activity indicators.
+- **How it's read.**
+  - `task_started` gives the task's id, its tool call (`tool_use_id`), `task_type`, `description` and `is_backgrounded`.
+  - `local_bash` covers both commands and Monitor watches, so the tool call's name tells them apart. A Monitor always counts. Without `is_backgrounded`, the call's own `run_in_background` decides.
+  - A `task_updated` patch with `is_backgrounded: true` moves a foreground task to the background, and a new `description` renames it.
+  - A subagent follows its node on the agent map, so the two agree: one whose `Agent` call returns `async_launched` counts from then on, and one the map sees end has ended.
+  - A task runs until a `task_updated` or `task_notification` with `completed`, `failed`, `stopped` or `killed`. Other statuses (`pending`, `running`, or ones Claude Code adds later) leave it running.
+  - When the tab's `claude` exits or is restarted, its tasks go with it and the count clears. `/clear` keeps them, without their cards.
+  - Claude Code also sends `background_tasks_changed` with the whole live set. Claudette doesn't use it yet: the Agent SDK says not to pair it with the per-task messages, and nothing recorded shows it from 2.1.284.
+- **The chip.** In the composer bar, next to **Agents**: a pulsing dot and *"1 running task"* or *"3 running tasks"*. It's hidden at none. Clicking it lists the tasks, oldest first:
+  - an icon for the kind (a prompt for a command, a pulse for a Monitor, the agents icon for a subagent or workflow, a cloud for a remote agent);
+  - the description, else the command, else the subagent type, with the kind under it (*Shell command*, *Monitor*, *Subagent*, *Remote agent*, *Workflow*, *Task*);
+  - how long it's been running, from the app's clock, ticking every second while the list is open;
+  - **Stop**, after a confirmation, through `stop_task` as the process monitor and the agent map stop tasks. A subagent's Stop is the agent map's own. The task stays listed until Claude Code says it ended.
+  - Clicking a task scrolls to the card of the call that started it and opens it, expanding the subagent groups it's in. Its tooltip has the command in full.
+- **Elsewhere.** The tab's row counts them once the turn is over ([§4](#sidebar)), and the info card lists them ([§4](#4-tabs--sessions)). The process monitor's **Stop** finds a process's task through the same record ([§4](#process-monitor)).
+- **Code and tests.** `Conversation/RunningTasks.cs`, kept by `ConversationBuilder` beside the agent map; `TabViewModel.Tasks.cs`. `RunningTasksTests` (the view model) and `RunningTasksUiTests` (the chip, its list, and the row's count in both styles and densities).
 
 ### Autocomplete
 
@@ -632,6 +669,7 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 - When Claude Code suggests a mode switch instead of a rule (for a file edit it suggests `acceptEdits` for the session), the card offers **Allow all edits this session** in place of **Always allow**.
 - When Claude Code marks a request `suppressAlwaysAllowRule` (the rule would grant more than this request), **Always allow** isn't offered.
 - A prompt from inside a subagent names it (*"Asked by the Explore subagent: Find the auth code"*), and the agent map highlights that subagent ([§18](#agent-map)).
+- A prompt answered in the Claude app, on a tab connected with Remote Control, is withdrawn by Claude Code; its card closes and reads *"Answered in the Claude app"* ([§18](#remote-control-the-claude-app)).
 - A tab with a waiting prompt gets the "Needs input" status. If Claudette isn't focused or the tab isn't selected, it also sends an OS notification ([§10](#10-notifications)).
 - Keyboard: `Ctrl/Cmd+Enter` allows, `Ctrl/Cmd+Backspace` denies the oldest waiting prompt in the tab.
   - Not while typing in one of the prompt's own fields, and `Ctrl/Cmd+Backspace` still deletes a word in a field with text.
@@ -853,18 +891,20 @@ Native OS notifications (Windows toast, macOS User Notifications). Each type can
 
 Clicking a notification brings Claudette to the front and goes to the relevant tab or screen. Notifications are skipped when Claudette is focused and that tab is already selected. The Dock (macOS) and taskbar (Windows) show a badge with the number of tabs needing input.
 
+**Pushes to the phone.** Every `claude` Claudette starts gets `CLAUDE_CLIENT_PRESENCE_FILE`, naming `presence` in the data folder. The file exists only while Claudette's window is in front, so Claude Code's Remote Control pushes reach the phone only while you're away from Claudette ([§18](#remote-control-the-claude-app)).
+
 - **What each one says.** Tab notifications carry the tab's name as their title:
   - **Finished:** the first line of Claude's reply. Only a turn that ends normally counts; one you stopped, or that ended with an error, doesn't.
   - **Needs input:** what's waiting, such as *"Allow this command? npm test"*, *"Claude has a question: Which database?"* or *"Claude has a plan for you to review."* Perforce uses it too ([§18](#perforce-ticket-handling)): *"Perforce needs your password to log in as matt @ ssl:perforce:1666."*, or *"Perforce needs you to log in: run p4 login in a terminal, or log in with P4V."*
   - **Errors:** *"Claude Code stopped unexpectedly (exit code 3)."*, or why it couldn't start.
-  - **Project actions:** *"Build editor failed (exit code 6)."* Only while Claudette isn't in front, whichever tab is selected, since the chip already shows the job; a job the user stopped doesn't notify.
+  - **Project actions:** *"Build editor failed (exit code 6)."* Only while Claudette isn't in front, whichever tab is selected, since the sidebar already shows the job; a job the user stopped doesn't notify.
   - **Check-ins:** Settings → Check-ins → **Notify me when a check-in is sent** (off by default), which Tab settings can override ([§5](#check-ins-on-long-turns)).
 - **Skipping.** App-wide notifications (usage alerts, sign-in, updates) are skipped while Claudette is focused, because the header, the sign-in banner or the sign-in screen already shows them. Usage alerts also keep their line under the header.
 - **One per subject.** A newer notification replaces an older one of the same kind for the same tab. A tab's notifications are taken away once you look at it; a waiting-prompt notification also goes once the prompt is answered. An update is announced once per version; the version last announced is saved with this machine's state, so a restart doesn't announce it again.
 - **Clicking.**
   - A tab notification selects the tab, expanding its group if it's collapsed.
   - A usage alert opens the Usage panel, an update opens the update dialog, and the sign-in notification opens the sign-in dialog ([§11](#signing-in)).
-  - A project action's notification selects its tab and opens its Project page.
+  - A project action's notification selects its tab and opens its Project page on the log of the run it's about.
 - **Badge.** Settings → Notifications → **Show the number of tabs needing input on the Dock or taskbar icon**. On Windows it's an overlay icon on the taskbar button, drawn by Claudette.
 - **How each OS does it** (the code is in `Claudette.Platform/Notifications`):
   - **Windows:** WinRT toasts (`ToastNotificationManager`), called through source-generated COM interop so the app stays a plain `net10.0` build. A click raises the toast's `Activated` event in the running Claudette. An MSIX install has package identity. Run unpackaged, Claudette sets its AppUserModelID (`reapazor.Claudette`) and registers it under `HKCU\Software\Classes\AppUserModelId`, as the Windows App SDK does. The badge uses `ITaskbarList3::SetOverlayIcon`.
@@ -1013,6 +1053,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 │  Git: identity, working tree │                                  │   environment     │
 │  Auth, install checks        │                                  └───────────────────┘
 │  Perforce: tickets, CLs      │
+│  Claude's service status     │
 │  Settings, state, sync       │
 └───────────────┬──────────────┘
                 │ stdin/stdout (JSON lines)
@@ -1023,7 +1064,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 
 - **Claudette.Core** has no UI dependencies, so it can be unit tested and could be reused by another front end. External diff tools live here rather than in Platform: they only look for files and start processes through `IProcessLauncher`. So does running a source build from a copy and restarting it into new builds ([§9](#working-on-claudette)), which is plain file copying and process starting on every OS.
 - **Claudette.Usage** holds the usage engine, with no UI: parsing, the SQLite history, the burn rate and projection, alerts and the polling schedule.
-- **Claudette.Platform** holds the OS-specific code: the process monitor, notifications with the Dock and taskbar badge ([§10](#10-notifications)), the OS credential store for a stored Perforce password ([§18](#perforce-ticket-handling)), the installers for Claudette's own updates: the MSIX update through `PackageManager` on Windows, and swapping `Claudette.app` on macOS ([§2](#updating-claudette)), and reading the login shell's environment ([below](#login-shell-environment)). Their interfaces, `ICredentialStore`, `IAppInstaller` and `ILoginShell`, are in Core, with the release feed, the downloader and `UserEnvironment`.
+- **Claudette.Platform** holds the OS-specific code: the process monitor, notifications with the Dock and taskbar badge ([§10](#10-notifications)), the OS credential store for a stored Perforce password ([§18](#perforce-ticket-handling)), the installers for Claudette's own updates: the MSIX update through `PackageManager` on Windows, and swapping `Claudette.app` on macOS ([§2](#updating-claudette)), reading the login shell's environment ([below](#login-shell-environment)), and keeping the computer awake while tabs are connected to the Claude app ([§18](#remote-control-the-claude-app)). Their interfaces, `ICredentialStore`, `IAppInstaller`, `ILoginShell` and `ISleepBlocker`, are in Core, with the release feed, the downloader and `UserEnvironment`.
   - `ClaudeSession` owns one `claude` process. It turns the output stream into typed events (`AssistantDelta`, `ToolUse`, `ToolResult`, `PermissionRequest`, `TurnCompleted`, `TitleChanged`, `UsageUpdated`, `RateLimit`, `AuthRequired`, `Exited`…), and exposes commands such as `SendAsync`, `InterruptAsync`, `RespondToPermissionAsync`, `SetModelAsync`, `SetEffortAsync` and `SetPermissionModeAsync`.
 - **Threading.** Each session reads its process on a background task. Events go to the UI thread through a channel, and streaming text is batched so the UI isn't updated for every token.
 - **Resilience.** If a process exits unexpectedly, the tab shows an error with a **Restart** button that resumes the same session ID.
@@ -1092,6 +1133,7 @@ The `system/init` message that follows gives `session_id`, `model`, `permissionM
 | Plan usage limits | `get_usage` ([§6](#data-source)) | **No** (marked experimental) |
 | Sign-in | `claude_authenticate`, `claude_oauth_wait_for_completion`, `claude_oauth_callback` ([§11](#signing-in)) | **No** |
 | Session title | `generate_session_title`, `rename_session` (below) | **No** |
+| Remote Control | `remote_control` with `enabled` and `name`; `system/bridge_state` reports the connection, and `system/worker_shutting_down` its end ([§18](#remote-control-the-claude-app)) | **No** (`worker_shutting_down` yes) |
 | Resume | `--resume <session-id>`, or `--resume <path to a .jsonl>` ([§9](#session-library-sync-across-machines)) | Yes |
 | Feature detection | The `capabilities` array on `system/init`. Check this instead of comparing version numbers. | Yes |
 
@@ -1184,9 +1226,9 @@ An app started from the Dock, Finder or a desktop launcher gets a minimal enviro
 
 A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where it is also **Settings…** in the app menu. It follows each platform's conventions:
 
-- A sidebar lists the categories.
+- A sidebar lists the categories. Below them, after a divider, the selected tab's project has a group of its own ([below](#the-projects-pages)).
 - Changes apply immediately; there is no Save button.
-- Each category has **Reset to defaults**. In Sessions it leaves the library folder and settings sync as they are, since changing either moves where sessions and settings live; in New tabs it leaves favorite and recent folders, which are this machine's data rather than settings.
+- Each category has **Reset to defaults**. In Sessions it leaves the library folder and settings sync as they are, since changing either moves where sessions and settings live; in New tabs it leaves favorite and recent folders, which are this machine's data rather than settings. No **Reset to defaults** touches a project's files or its remembered choices, and the project's pages have none.
 - A search box filters settings by name.
 - The foot of the sidebar shows Claudette's version and **Report an issue** ([Version](#version)).
 
@@ -1194,10 +1236,10 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 
 | Category | Settings |
 |---|---|
-| General | Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. Claudette's version and updates: check for updates automatically (on by default), include pre-releases (off), **Check now**, and the update's actions. See [Updating Claudette](#updating-claudette). |
+| General | Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. Show Claude's service status (on by default): the header's dot and the incident banner ([§18](#service-status)). Claudette's version and updates: check for updates automatically (on by default), include pre-releases (off), **Check now**, and the update's actions. See [Updating Claudette](#updating-claudette). |
 | Sessions | Also restore unpinned tabs on launch (off by default; pinned tabs are always restored). Session library folder (with **Browse…** and **Move library…**, which copies existing sessions to the new folder). Sync new tabs to the session library (off by default; each tab can be switched with **Sync to other machines** in its menu). Name for this machine, as shown in History. How long to keep sessions in the library. Sync Claudette's settings through the library (off by default). See [§9](#session-library-sync-across-machines) and [Settings sync](#settings-sync-optional). |
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
-| Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. Use my login shell's environment (macOS and Linux only, on by default; [§13](#login-shell-environment)). |
+| Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. Use my login shell's environment (macOS and Linux only, on by default; [§13](#login-shell-environment)). **Claude app (Remote Control)**: Connect new tabs to the Claude app (off by default; each tab has its own switch), with what it does, the privacy note and how to get pushes on the phone, and Keep this computer awake while tabs are connected (on by default). Disabled, with the reason, when the account can't use it ([§18](#remote-control-the-claude-app)). |
 | New tabs | Default model, effort level and permission mode. The model and effort lists are what Claude Code offered in its last `initialize` reply on this machine (the models and each one's effort levels, kept with the machine's state), with a built-in list only until a session has started; Tab settings… lists them the same way. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (**Add folder…**, **Move up**, **Move down**, **Remove**), in the order the new tab picker shows them. See [Opening a tab](#opening-a-tab). |
 | Appearance | Theme: follow system, light or dark. Style: Standard (the default) or Claude, the Claude apps' look ([Visual style](#visual-style)). Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. Show fun words while Claude works, and show what Claude is doing while it works (both on by default; [Working line](#working-line)). **Detailed usage header** (off by default): the same switch as the header's chevron, kept on this machine rather than synced ([Detailed header](#detailed-header)). Show context on tab rows (on by default; [§4](#sidebar)). **Density**: Comfortable (the default) or Compact, which tightens the conversation's spacing, message and card padding and tool rows, the sidebar's rows, and the composer's padding. It applies at once and syncs with the other Appearance settings. |
 | Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
@@ -1222,7 +1264,17 @@ Settings → Keyboard lists every shortcut Claudette handles, with its default f
 - **Quick suffixes** each get their own optional shortcut in Settings → Quick suffixes ([§5](#quick-suffixes)), checked for conflicts the same way.
 - Tooltips and the composer's placeholder show the current shortcuts.
 
-**Search.** The box above the categories filters settings by name: it lists matching settings with their category, and picking one opens that category.
+**Search.** The box above the categories filters settings by name: it lists matching settings with their category, and picking one opens that category. It finds the project's pages too, named with their group ("NightOwl → Links"), by what's on them ("web links", "add an action", "engine", "editor configuration") or by the project's name.
+
+### The project's pages
+
+Below the categories, a divider and a group headed by the selected tab's project: its name when a provider found one ("NightOwl"), otherwise the folder's name, with the folder's path in a tooltip. It has three pages, **Links**, **Actions** and **Tools**, and resolves [issue #9](https://github.com/reapazor/Claudette/issues/9) (adding web links from Settings).
+
+- **Which tab.** The Settings window follows the tab that was selected when it opened (the window is modal, so that can't change while it's open), and each page says so in a small line at the top: "For the tab in D:\Games\NightOwl". With no tab open, the group is hidden. **Add an action…** from another tab's menu, or **Open** in its **Tab settings…**, selects that tab first.
+- **Saving.** Like the rest of Settings, a change is saved as it's made: each add, edit, removal or move rewrites the file it belongs to, and every tab in the folder reads its files again, so the sidebar's Links, the project's menu and the tab menu follow at once. Each page says that saving rewrites the file, so comments in it are dropped. A file that isn't valid JSON is never rewritten: the page shows its reason and the dialogs refuse to save to it. When a save fails, the page says why and goes back to what the files hold.
+- **Links.** The links of both files in the order the sidebar shows them, `claudette.json`'s first, each with its name, its address and its file: "Shared (claudette.json)" or "Just me (claudette.local.json)". A link the sidebar won't open is listed with why, and one that can't be read with its reason (it can only be removed). **Add…**, **Edit…**, **Remove**, **Move up** and **Move down**; a link moves within its own file. The dialog has the name (empty shows the address), the address, and for a new link which file it goes in, just the user's by default. The address is checked as the sidebar opens links: only `https`, `http` and `mailto`, a full address, and only the placeholders, which a one-line hint explains: `{branch}`, `{changelist}` and `{folderName}` are filled in from the tab ([§18](#project-tools)).
+- **Actions.** The actions editor that was in **Tab settings…**: a choice of the two files, and the chosen file's actions with **Add…**, **Edit…**, **Remove**, **Move up**, **Move down** and **Open file**. The one change is that each edit saves as it's made (see **Saving**), where Tab settings waited for Apply. **Add an action…** in the project's menu and the tab's menu opens Settings on this page with a new action started, its dialog asking which file it goes in. **Tab settings…** keeps a line, "Project actions are in Settings → NightOwl → Actions", with **Open**.
+- **Tools.** This machine's choices for the tab's project, the same ones the project menus make, and only those its provider has: the project, when the folder has several; the per-project choice (Unreal's editor configuration, Development or DebugGame; Unity's code optimization, Release or Debug); and what's picked with **Choose…** (Unreal's engine folder, the Unity editor, the Godot executable), with what's in use now, whether it was chosen or found, and **Clear** to forget the pick and find it again. It shows the project file or folder they're remembered by. Without a project it says "No Unreal, Unity or Godot project in this folder"; either way it links to Settings → Project tools for the defaults every project starts with.
 
 ### Version
 
@@ -1235,9 +1287,9 @@ The foot of the Settings sidebar shows which Claudette this is, on every page: "
 
 ### Per-tab overrides
 
-Some settings can be changed for a single tab from the tab's right-click menu, under **Tab settings…**: model, effort level, permission mode, the process monitor ([§4](#process-monitor)), and the check-in settings. **Tab settings…** also edits the folder's custom project actions in its `claudette.json` files ([§18](#project-tools)); they belong to the folder, not the tab, and **Use defaults** leaves them alone. A tab with overrides shows a small dot next to its settings entry, and **Use defaults** clears them. Overrides are saved with the tab.
+Some settings can be changed for a single tab from the tab's right-click menu, under **Tab settings…**: model, effort level, permission mode, the process monitor ([§4](#process-monitor)), and the check-in settings. The folder's custom project actions belong to the folder, not the tab, so they're edited in Settings, on the tab's **Actions** page ([above](#the-projects-pages)); **Tab settings…** says so and has **Open**. A tab with overrides shows a small dot next to its settings entry, and **Use defaults** clears them. Overrides are saved with the tab.
 
-**Tab settings…** also has **Sync to other machines** ([§9](#session-library-sync-across-machines)), the same switch as the tab menu's. It isn't an override: the new-tab setting only applies when a tab opens, **Use defaults** leaves it as it is, and it doesn't count toward the dot.
+**Tab settings…** also has **Sync to other machines** ([§9](#session-library-sync-across-machines)) and **Connect to the Claude app** ([§18](#remote-control-the-claude-app)), the same switches as the tab menu's. Neither is an override: the new-tab settings only apply when a tab opens, **Use defaults** leaves them as they are, and they don't count toward the dot.
 
 ### Storage
 
@@ -1250,7 +1302,7 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 **Sync settings through the session library** (Settings → Sessions, off by default) keeps Claudette's settings the same on every machine that uses the same library folder ([§9](#session-library-sync-across-machines)).
 
 - **What syncs:** appearance, new-tab defaults, usage thresholds, check-ins, quick suffixes, notifications, keyboard shortcuts and process monitor options.
-- **What stays on each machine:** the path to `claude`, the login shell setting, this machine's name, the library folder itself, the diff tool and Settings → Project tools (program paths and installed IDEs differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, the sidebar's and the usage header's collapsed or detailed state, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
+- **What stays on each machine:** the path to `claude`, the login shell setting, the Claude app settings, this machine's name, the library folder itself, the diff tool and Settings → Project tools (program paths and installed IDEs differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, the sidebar's and the usage header's collapsed or detailed state, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
 - The synced settings are stored as one file in the library. Each setting keeps the time it was last changed, and the newest change wins, so edits on two machines don't overwrite each other wholesale.
 - The first time sync is turned on and the library already has settings from another machine, Claudette asks: **Use synced settings** or **Replace them with this machine's**.
 - Turning sync off keeps the current values on this machine and stops syncing.
@@ -1272,7 +1324,7 @@ These apply from milestone 1:
 
 - `ClaudeSession` talks to Claude Code only through `IClaudeTransport`, never directly to a process, so tests can swap in a fake.
 - Processes are started through `IProcessLauncher`, so tests can check the exact command line and environment, and fake the process.
-- All time-based code (burn rate, check-ins, leases, usage retention, update checks, sampling) uses .NET's `TimeProvider`. Tests move the clock forward with `FakeTimeProvider` instead of waiting.
+- All time-based code (burn rate, check-ins, leases, usage retention, update checks, service status checks, sampling) uses .NET's `TimeProvider`. Tests move the clock forward with `FakeTimeProvider` instead of waiting.
 - File locations (app data, the session library, Claude Code's config folder) are injected, so tests use temporary folders.
 
 ### Test layers
@@ -1368,6 +1420,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 | Perforce | A pretend `p4` (`tests/Claudette.Core.Tests/Support/FakeP4.cs`, also compiled into the App tests), `Perforce*Tests` in the Core and App tests, and a shell-script `p4` for a real pipe in `PerforceIntegrationTests`. Credential stores: `CredentialStoreTests`. |
 | Real-CLI checks of subagents and stopping one | `RealCliTests`, with the mock's `SUBAGENTS` and `LONG_AGENT` scripts; the `12-subagents` fixture was recorded from `SUBAGENTS` |
 | Login shell environment | `LoginShellTests` in `tests/Claudette.Platform.Tests/LoginShell/`: reading the output, the terminal rule, timeouts and failures with a fake launcher and `FakeTimeProvider`, and real bash, dash, zsh and fish (each where installed) with a made-up `HOME`, never the user's rc files. `UserEnvironmentTests` in Core (the merge, waiting, and the callers) and `LoginShellSettingsTests` in the App tests. |
+| Service status | `ServiceStatusTests` in the Core tests (the summary, levels and names, dismissals, which API errors count, the feed) and the App tests (the schedule with `FakeTimeProvider`, the banner, the setting), and `ServiceStatusUiTests`. The status page is `FakeHttpHandler` with a real summary from an incident, trimmed, in `tests/Claudette.Core.Tests/Fixtures/status/`. |
 
 ## 16. Tracking Claude Code Changes
 
@@ -1435,7 +1488,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
 - A line that fails to parse never ends a session. It's logged, and Claudette moves on.
 - With protocol logging on, a skipped message appears in the conversation as a collapsed *"Unsupported message from Claude Code"* row that shows the raw JSON.
 - Features are detected with the `capabilities` list from `system/init`, not by comparing version numbers.
-- Settings → Advanced has a **Diagnostics** page. It shows the Claude Code version, counts of unknown messages and fields seen, and whether the login shell's environment was used ([§13](#login-shell-environment)), and has **Copy diagnostics** for bug reports.
+- Settings → Advanced has a **Diagnostics** page. It shows the Claude Code version, counts of unknown messages and fields seen, whether the login shell's environment was used ([§13](#login-shell-environment)), and whether the computer is being kept awake for tabs connected to the Claude app, or why not ([§18](#remote-control-the-claude-app)), and has **Copy diagnostics** for bug reports.
 
 ### Handling a report
 
@@ -1564,18 +1617,40 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
       - **Density** in Settings → Appearance: Comfortable or Compact ([§14](#categories)).
     - **Still to verify:** installing an update on a real Windows and Mac, which needs signed packages from a published release; the login shell's environment in a Claudette started from the Dock on macOS and from a desktop launcher on Linux.
 13. **Project tools.** ✅ Built 2026-09-29 ([§18](#project-tools)).
-    - **Unreal Engine:** finding the project (in the folder, below and above it) and its engine (a parent folder, `LauncherInstalled.dat`, the registry, `Install.ini`, a chosen folder), Launch editor with Development or DebugGame per project, Generate project files, Build editor, Build and launch, Open solution with a chosen IDE, Open latest log, Clean intermediates and Kill all Unreal editors.
+    - **Unreal Engine:** finding the project (in the folder, below and above it) and its engine (a parent folder, `LauncherInstalled.dat`, the registry, `Install.ini`, a chosen folder), Launch editor with Development or DebugGame per project, Generate project files, Build editor, Build and launch, Open solution with a chosen IDE (Open in Rider, with the `.uproject`, for Rider), Open latest log, Clean intermediates and Kill all Unreal editors.
     - **Unity:** the editor for the project's version from Unity Hub's folders and lists, Open in Unity with Release or Debug code optimization, EditMode tests with their counts, regenerating the C# solution, the solution and logs, Clean Library, Kill all Unity editors, and the lock file rules.
     - **Godot:** finding the executable (a pick, Settings, the `PATH`, `Godot.app`, Scoop and WinGet) and checking for the .NET build, Open in Godot, Run project, Build C#, Open solution, Clean `.godot` or `.import`, and Kill all Godot editors.
-    - **The chip** in the composer bar, the project's submenu in the tab menu, the **Project** page with the job's output and Stop, the notification, and `Ctrl/Cmd+Shift+E`.
+    - **The chip** in the composer bar (since moved to the sidebar's foot, milestone 15), the project's submenu in the tab menu, the **Project** page with the job's output and Stop, the notification, and `Ctrl/Cmd+Shift+E`.
+    - **Runs in the sidebar:** each job gets an entry under its tab's row with its own log, which stays until it's closed, with Stop while it runs.
     - **claudette.json** and **claudette.local.json:** a folder's own actions (shared ones run on a click, without a confirmation) and links, the links in the sidebar, and the in-app editor.
     - **Settings → Project tools**, and the notes to Claude about Unreal, Unity and Godot projects.
     - **Still to verify:** everything on machines with Unreal, Unity and Godot installed, on Windows, macOS and Linux (see [§18](#project-tools)).
-14. **Later.** New features go in [§18](#18-future-features) first.
+14. **Remote Control.** ✅ Built 2026-09-29 ([§18](#remote-control-the-claude-app)).
+    - **The switch:** **Connect to the Claude app** per tab, in its menu and **Tab settings…**, saved with the tab so it reconnects after restarts; **Connect new tabs to the Claude app** in Settings → Claude Code; disabled with the reason for an account that can't use it.
+    - **Connecting:** the `remote_control` control request, as SDK hosts send it, right after the session starts and before any prompt, or when the running turn ends; `enabled: false` to disconnect, with a restart on the same session when that fails; the hidden `/remote-control` command as the fallback for a Claude Code without the request.
+    - **What the tab shows:** the connection from the answer, `bridge_state` and `worker_shutting_down`; a note with the session's link, a phone icon on the row, the info card's **Claude app** row, and **Open in the Claude app**; prompts answered in the app read *"Answered in the Claude app"*.
+    - **Around it:** `CLAUDE_CLIENT_PRESENCE_FILE` for every `claude`, present while Claudette is in front; keeping the computer awake while a tab is connected (Windows, macOS, Linux); the Diagnostics line.
+    - **Still to verify** (needs a claude.ai subscription, a phone and the Claude app; nothing here has connected for real):
+      - A real connection: the answer's `session_url` and `connect_url`, the `bridge_state` sequence (ready, connected, reconnecting), and the session showing in the Claude app under the tab's name.
+      - The connected answer's exact content, and whether the session's title follows a later rename (`rename_session`) or an AI title.
+      - A permission prompt, question and plan answered on the phone closing their cards here.
+      - Push delivery to the phone, and the presence file holding pushes off while Claudette is in front.
+      - `enabled: false` disconnecting cleanly, and a restarted or restored tab reconnecting.
+      - Keeping the computer awake on real Windows, macOS and Linux machines (the Windows call and `caffeinate` only run in CI).
+15. **Running tasks, service status and project tools follow-ups.**
+    - **Service status ([§18](#service-status)).** ✅ Built 2026-09-29. Claude's status from status.claude.com, at launch, every 5 minutes and straight away when a tab's API requests fail on Anthropic's side: a dot before the account name (green, amber, red or grey) with each watched service (Claude Code, the Claude API, claude.ai) in its tooltip, and a banner across the top while an incident concerns them, with **Status page** and **Dismiss**, remembered on this machine. Settings → General → **Show Claude's service status**.
+      - **Still to verify:** a real incident seen live in the running app, and how the dot and banner look on real Windows, macOS and Linux desktops (so far rendered headlessly, both styles, light and dark).
+    - **Running tasks ([§5](#running-tasks)).** ✅ Built 2026-09-29. A chip in the composer bar counts the work Claude Code keeps going in the background (shell commands, background subagents, Monitor watches, remote agents), and lists each with its icon, running time, **Stop** and a link to its card; the tab's row counts them once the turn is over, and the info card lists them.
+      - **Still to verify** against a real Claude Code: the task messages for a backgrounded command, a Monitor watch (whether it sets `is_backgrounded`, and that its events don't end it), a command moved to the background by its timeout, a remote agent and a workflow; `ambient` tasks; and what `/clear` does to running tasks. Only foreground tasks have been recorded so far (the `03` and `12` fixtures).
+    - **Project settings ([§14](#the-projects-pages)).** ✅ Built 2026-09-29. Below Settings' categories, a group for the selected tab's project, named after it, with three pages: **Links**, to add, edit, remove and reorder the links of `claudette.json` and `claudette.local.json`, with the address checked as the sidebar opens links (resolves [issue #9](https://github.com/reapazor/Claudette/issues/9)); **Actions**, the actions editor moved from **Tab settings…**, which **Add an action…** now opens; and **Tools**, the project's remembered choices (Unreal's configuration and engine folder, Unity's editor and code optimization, the Godot executable). Found by the search box.
+      - **Still to verify:** how the group and pages look on real Windows, macOS and Linux desktops, in both styles and themes; so far they've only been rendered headlessly.
+    - **The project's menu moves to the sidebar.** The project chip left the composer's bar, which had grown crowded, for a row at the sidebar's foot above Links ([§18](#project-tools)). ✅ Built 2026-09-29.
+    - **Open in Rider ([§18](#project-tools)).** With Rider chosen for solutions, an Unreal project opens in Rider by its `.uproject`, with no project files to generate; engines before 4.25.4 (Windows) or 4.26 keep Open solution ([issue #6](https://github.com/reapazor/Claudette/issues/6)). ✅ Built 2026-09-29.
+16. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features
 
-Features beyond v1. All four below are built (milestones 10, 11 and 13); new ones go here first, each with a fuller design before it's built.
+Features beyond v1. All six below are built (milestones 10, 11, 13, 14 and 15); new ones go here first, each with a fuller design before it's built.
 
 ### Perforce ticket handling
 
@@ -1711,7 +1786,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
 
 **Where the actions are.**
 
-- **The project chip** in the composer bar ([§5](#composer)), for example `◆ NightOwl · UE 5.4 ▾`. It shows only when the tab has project tools: a detected project, or custom actions. With custom actions and no project it reads `◆ Actions ▾`. While a job runs, it shows a busy dot and the job's name instead (`● Build editor… ▾`). Its menu has:
+- **The project's row** at the sidebar's foot, above Links ([§4](#sidebar)), for the selected tab: a cube icon and the project's name and version, for example `NightOwl · UE 5.4 ›`. It shows only when the tab has project tools: a detected project, or custom actions. With custom actions and no project it reads `Actions`. While a job runs, a busy dot replaces the icon and the job's name replaces the project's (`● Build editor… ›`). In the rail it's the icon alone. A click opens its menu beside the sidebar. (It was a chip in the composer bar at first; it moved here to leave the composer's bar to the conversation's own controls.) Its menu has:
   - a header: the project's name and kind, the engine's version and kind, and the engine's folder, or what's wrong ("The engine for EngineAssociation "5.9" wasn't found on this machine");
   - entries of `claudette.json` that were skipped, and why;
   - **Projects in this folder**, when there are several, as radio items; the pick is remembered per tab folder on this machine;
@@ -1725,8 +1800,13 @@ A tab can do things for the project in its folder: launch the editor, generate p
 - **The Project page** of the side panel ([§3](#3-main-window)), beside Changed files, Agents and Processes. Its button shows a busy dot while a job runs. It shows:
   - the project's details: its file, the engine's version, folder and kind, the editor target and the configuration;
   - a button per action;
-  - the running or last job: its status (running, succeeded, failed with its exit code, stopped), **Stop**, which ends the job's whole process tree, and **Copy**;
-  - the job's output, monospace and scrollable, following the newest line. It keeps the last 5,000 lines and says how many were dropped.
+  - the selected run (see **Runs**, below): its status (running, succeeded, failed with its exit code, stopped), **Stop**, which ends the job's whole process tree, and **Copy**;
+  - its output, monospace and scrollable, following the newest line. Each run keeps its last 5,000 lines and says how many were dropped.
+- **Runs.** Each job is a run: a build, generating project files, a custom action with output, Clean's deletion, or one that couldn't start, whose log says why. Launch and Open actions start a program that runs on its own, with no output, so they don't make one.
+  - **In the sidebar**, each run is an entry under its tab's row, newest last ([§4](#sidebar)): its state, its name, and how long it has run or how it ended. Clicking one selects the tab and opens the Project page on its log.
+  - **Entries stay** until the user closes them, whatever the result: × on a finished one takes it and its log away. A running one has **Stop** in the × button's place, so a stray click never ends a build.
+  - **Which log the page shows:** a run that starts shows itself; clicking an entry shows that one; closing the one showing shows the newest left. With no runs, the page has only the project's details and actions.
+  - Closing the tab takes its runs away. They aren't saved: they're gone when Claudette quits or restarts.
 - **The keyboard.** **Run the project's main action**, `Ctrl/Cmd+Shift+E` by default and rebindable ([§14](#keyboard-shortcuts)): Launch editor for Unreal, Open in Unity, Open in Godot, else the folder's first custom action.
 
 **How it's built.** `Claudette.Core/ProjectTools`:
@@ -1734,11 +1814,11 @@ A tab can do things for the project in its folder: launch the editor, generate p
 - An `IProjectToolProvider` finds its kind of project for a folder and describes it as a `ProjectInfo`: kind, name, root, details, actions, a per-project choice, a fix (**Choose engine folder…**) and the note for Claude.
 - A `ProjectAction` has an id, a label, a description and one of four kinds:
   - **Launch**: a program that outlives Claudette, such as the editor. It starts detached, and nothing of it is tracked.
-  - **Run**: a long job. Its output goes to the Project page, **Stop** ends it, and its end is notified. One job runs at a time per tab; the other jobs are disabled until it ends.
+  - **Run**: a long job. It gets an entry in the sidebar with its own log, shown on the Project page; **Stop** ends it, and its end is notified. One job runs at a time per tab; the other jobs are disabled until it ends.
   - **Open**: a file or folder, opened with the OS's app, or for a solution with the IDE chosen in Settings.
   - **Destructive**: confirmed first, such as deleting folders.
 - Every command is built by a pure function that takes the OS, so all three OSes' commands are tested on any machine.
-- **Detection** runs off the UI thread when a tab opens and before its session starts, when its folder changes, when the chip menu opens, and on **Refresh**. It's cheap: a bounded walk and a few small files.
+- **Detection** runs off the UI thread when a tab opens and before its session starts, when its folder changes, when the project's menu opens, and on **Refresh**. It's cheap: a bounded walk and a few small files.
   - The tab's folder, its subfolders two levels down (for `Game/NightOwl/NightOwl.uproject`), and its parent folders up to the repository's root: a folder with `.git` (a folder, or a worktree's file), `.p4config` or the file `P4CONFIG` names, or six levels up (for a tab opened on `Source/`).
   - It never looks into `Intermediate`, `Saved`, `DerivedDataCache`, `Binaries`, `Content`, `Plugins`, `Source`, `Config`, `Engine`, `Templates`, `Library`, `Temp`, `obj`, `bin`, `node_modules`, hidden folders or links, and at most 2,000 folders.
   - Several projects are listed nearest first: the folder, then its subfolders, then its parents.
@@ -1761,7 +1841,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - **A version such as `5.4`:** a launcher install. On Windows, `%ProgramData%\Epic\UnrealEngineLauncher\LauncherInstalled.dat` (JSON: an `InstallationList` of `AppName` `UE_5.4` and `InstallLocation`), then the registry, `HKLM\SOFTWARE\EpicGames\Unreal Engine\5.4`, value `InstalledDirectory`, in the 64-bit and then the 32-bit view. On macOS, `~/Library/Application Support/Epic/UnrealEngineLauncher/LauncherInstalled.dat`. Linux has no launcher.
   - **Anything else, usually a GUID:** a build registered by UnrealVersionSelector. On Windows, `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds`, where each value's name is a build's id and its data the engine's folder. On Linux, `~/.config/Epic/UnrealEngine/Install.ini`, and on macOS `~/Library/Application Support/Epic/UnrealEngine/Install.ini`: the `[Installations]` section's `{GUID}=path` lines. GUIDs are compared with and without braces, ignoring case.
   - The registry is read in `Claudette.Platform` (`WindowsUnrealEngineRegistry`), behind `IUnrealEngineRegistry`.
-  - **The version** is `Build.version`'s `MajorVersion`, `MinorVersion` and `PatchVersion` (and `BranchName`), shown as "Unreal Engine 5.4.2". The chip shows `UE 5.4`, from the association when the engine isn't found.
+  - **The version** is `Build.version`'s `MajorVersion`, `MinorVersion` and `PatchVersion` (and `BranchName`), shown as "Unreal Engine 5.4.2". The project's row shows `UE 5.4`, from the association when the engine isn't found.
   - **Its kind:** "launcher install", "source build", "installed build" (one with `Engine/Build/InstalledBuild.txt` that isn't the launcher's), "engine in a parent folder", or "chosen by you".
   - **Unreal Engine 4** calls its editor `UE4Editor`; the build scripts are the same.
   - **Not found:** the menu says so, the engine's actions are disabled ("The engine wasn't found: choose its folder in this menu"), and **Choose engine folder…** is offered.
@@ -1771,15 +1851,18 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - **Build editor**, a job: `Build.bat <EditorTarget> Win64 <Development|DebugGame> -Project="<uproject>" -WaitMutex`, with `Build.sh` and `Mac` or `Linux` elsewhere. A project without code builds `UnrealEditor` with a source build.
   - **Build and launch**: Build editor, then Launch editor if the build succeeded.
   - **Open solution**: `<Name>.sln` for Visual Studio, `<Name> (Mac).xcworkspace` or `<Name>.xcworkspace` for Xcode (a folder, which macOS opens as a document), `<Name>.code-workspace` for VS Code, in the project's folder. Disabled with "Generate project files first" when it's missing. It opens with the OS's app, or the IDE chosen in Settings:
-    - Rider: `rider64.exe` on the `PATH`, the Toolbox's `rider.cmd`, or the newest `%ProgramFiles%\JetBrains\JetBrains Rider*\bin\rider64.exe` on Windows; `open -a Rider` on macOS; `rider` or the Toolbox's script on Linux. Rider opens the `.sln`, or can open the `.uproject` itself.
+    - Rider: `rider64.exe` on the `PATH`, the Toolbox's `rider.cmd`, or the newest `%ProgramFiles%\JetBrains\JetBrains Rider*\bin\rider64.exe` on Windows; `open -a Rider` on macOS; `rider` or the Toolbox's script on Linux. For Unreal, Rider opens the `.uproject` instead: see **Open in Rider**, below.
     - Visual Studio: the newest `%ProgramFiles%\Microsoft Visual Studio\*\*\Common7\IDE\devenv.exe` on Windows; `open -a "Visual Studio"` on macOS.
     - VS Code: `Code.exe` in `%LOCALAPPDATA%\Programs` or `%ProgramFiles%`, else `code.cmd` on the `PATH`, on Windows; `open -a "Visual Studio Code"` on macOS; `code` on Linux.
     - Another program, given the solution's path.
+  - **Open in Rider**, in place of Open solution when Settings → Project tools → Open solutions with is Rider ([GitHub issue #6](https://github.com/reapazor/Claudette/issues/6)): Rider is given the `.uproject`, on every OS. Rider has its own Unreal project model: it reads the `.uproject`, runs UnrealBuildTool's Rider generator itself (JSON files under `Intermediate/ProjectFiles/.Rider`) and builds through UnrealBuildTool, so there are no project files to generate first, and none to regenerate when source files or modules are added. It's always enabled, and **Generate project files**' tip says Rider doesn't need them. There's no separate entry for the `.sln`: the engine programs and mobile targets that Rider's `.uproject` model doesn't cover yet open from Rider's own **File → Open**.
+    - Rider reads a `.uproject` from Unreal Engine 4.25.4 on Windows and 4.26 on macOS and Linux. With an older engine, the action stays **Open solution**, as above. An engine whose version isn't known is taken to be new enough.
+    - When Rider can't be found or started, the `.uproject` isn't handed to the OS's app, which would start the Unreal editor instead: a note says Rider wasn't found and points at **Another program…** in Settings → Project tools. (On macOS, `open -a Rider` finds Rider wherever it is.)
     - When the IDE isn't found, the OS's app opens it and a note says so.
   - **Open latest log**: `Saved/Logs/<Name>.log`, disabled when there's none yet.
   - **Clean intermediates…**, destructive. It deletes `Binaries` and `Intermediate` in the project, and in each plugin under `Plugins/` (a folder with a `.uplugin`, however deeply nested). Nothing else: not `Saved`, `DerivedDataCache`, `Content` or `Config`.
     - The confirmation lists the folders and their total size. It warns when an editor seems to have the project open: an `UnrealEditor`, `UnrealEditor-Cmd`, `UE4Editor` or `UE4Editor-Cmd` process whose command line names the `.uproject`. Where command lines can't be read, it doesn't guess.
-    - The folders are deleted off the UI thread, as a job with its lines on the Project page. Read-only files are made writable first, and links inside are removed without following them.
+    - The folders are deleted off the UI thread, as a job with its own entry and log, like a build's. Read-only files are made writable first, and links inside are removed without following them.
   - **Kill all Unreal editors…**, destructive. It ends every running Unreal editor, not just this project's, and each one's process tree, which takes ShaderCompileWorker and the like with it.
     - The editors are `UnrealEditor`, `UnrealEditor-Cmd`, `UE4Editor` and `UE4Editor-Cmd` (`.exe` on Windows; on macOS, the executable inside `UnrealEditor.app`).
     - The confirmation says how many are running and lists each with its PID and, when its command line shows it, its project: "End 2 Unreal editors?", "• UnrealEditor (PID 501): NightOwl".
@@ -1798,13 +1881,13 @@ A tab can do things for the project in its folder: launch the editor, generate p
 **Unity.**
 
 - **Finding the project.** A folder with `ProjectSettings/ProjectVersion.txt` and `Assets/`, found as above. Its name is the folder's (the C# solution is named after it); `productName` and `companyName` from `ProjectSettings/ProjectSettings.asset` are shown and name the player log's folder.
-- **The version** is `m_EditorVersion` (`2022.3.20f1`), with the changeset from `m_EditorVersionWithRevision` when it's there. The chip shows `Unity 2022.3`.
+- **The version** is `m_EditorVersion` (`2022.3.20f1`), with the changeset from `m_EditorVersionWithRevision` when it's there. The project's row shows `Unity 2022.3`.
 - **Finding the editor** for that exact version (`UnityEditors`). Only an editor that exists counts.
   - A pick remembered for the project, from **Choose Unity editor…**: the executable, or a version's folder or `Unity.app` that holds it.
   - Unity Hub's default folder: `C:\Program Files\Unity\Hub\Editor\<version>\Editor\Unity.exe`, `/Applications/Unity/Hub/Editor/<version>/Unity.app/Contents/MacOS/Unity`, `~/Unity/Hub/Editor/<version>/Editor/Unity`.
   - Hub's custom install folder, `secondaryInstallPath.json` (a JSON string) in Hub's config folder: `%APPDATA%\UnityHub`, `~/Library/Application Support/UnityHub` or `~/.config/UnityHub`.
   - Editors added to Hub by hand: `editors-v2.json` (`{ "data": [ { "version", "location" } ] }`) or the older `editors.json` (`{ "<version>": { "version", "location" } }`) in the same folder, read tolerantly; a location can be a string or a list.
-  - When the version isn't installed, the chip menu's header says so and offers **Choose Unity editor…**.
+  - When the version isn't installed, the project menu's header says so and offers **Choose Unity editor…**.
 - **Whether Unity has the project open.** `Temp/UnityLockfile` exists and a `Unity` process's command line names the project. A lock left by a crashed editor doesn't count. Where processes can't be listed, or a Unity process's command line can't be read, the lock file alone counts, since Unity refuses a locked project anyway.
 - **Actions.**
   - **Open in Unity** (the main action), detached: `Unity -projectPath "<path>"`. The per-project radio **Code optimization: Release / Debug** (its default from Settings, Release) adds `-debugCodeOptimization` for Debug, and the label says "Open in Unity (Debug)". While the project is open it reads **Unity has this project open**, disabled.
@@ -1840,7 +1923,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
   4. on macOS, `/Applications/Godot.app` or `/Applications/Godot_mono.app`;
   5. on Windows, Scoop's shims (`~\scoop\shims\godot.exe`, `godot-mono.exe`), WinGet's `Links\godot.exe`, and the newest `Godot*.exe` in WinGet's `GodotEngine.GodotEngine*` package folder, not the console one.
   - **Detect** in Settings runs 3–5 and fills in the path.
-  - A C# project needs the .NET ("mono") build of Godot: one whose name has `mono` in it, or with a `GodotSharp` folder beside it (in `Contents/Resources` on macOS). When the Godot found isn't one, the chip menu's header says so.
+  - A C# project needs the .NET ("mono") build of Godot: one whose name has `mono` in it, or with a `GodotSharp` folder beside it (in `Contents/Resources` on macOS). When the Godot found isn't one, the project menu's header says so.
 - **Actions.**
   - **Open in Godot** (the main action), detached: `godot --editor --path "<folder>"`.
   - **Run project**, detached: `godot --path "<folder>"`.
@@ -1861,7 +1944,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
 
 - `claudette.json` is shared: committed with the project.
 - `claudette.local.json` is personal, and belongs in `.gitignore`. It has the same shape, and its entries come after the shared file's.
-- Both are read tolerantly, like everything else Claudette reads: comments and trailing commas are fine, unknown fields are ignored, and a bad entry is skipped with a reason, which the chip menu and the Project page show ("claudette.json: actions[2] has no command, so it was skipped."). A file that isn't JSON is skipped whole, with the parser's reason. A missing file means nothing.
+- Both are read tolerantly, like everything else Claudette reads: comments and trailing commas are fine, unknown fields are ignored, and a bad entry is skipped with a reason, which the project's menu and the Project page show ("claudette.json: actions[2] has no command, so it was skipped."). A file that isn't JSON is skipped whole, with the parser's reason. A missing file means nothing.
 
 ```json
 {
@@ -1879,16 +1962,17 @@ A tab can do things for the project in its folder: launch the editor, generate p
 - **Actions.**
   - `name` and `command` are required.
   - `folder` is relative to the tab's folder; the tab's folder by default.
-  - `mode` is `output` (the default: output on the Project page, **Stop**, and the notification) or `launch` (started and left alone).
+  - `mode` is `output` (the default: a run in the sidebar with its log on the Project page, **Stop**, and the notification) or `launch` (started and left alone).
   - `os` is optional: `windows`, `macos` or `linux`. An action whose `os` leaves out this machine isn't shown.
   - Commands run through the user's shell: `cmd.exe /d /s /c "<command>"` on Windows, `$SHELL -c` (or `/bin/sh -c`) elsewhere. Otherwise they run like built-in actions.
   - An action's id is its file and position, such as `shared:0`, which Stop and the notification use.
-  - They're listed in the chip menu after the project's actions, under a separator.
-- **Picking up edits.** The files are read again when the tab is selected, when Claudette comes to the front, when a turn ends (Claude may have edited them), when the chip menu opens, and after the in-app editor saves. Claudette doesn't watch them with the file system: a watcher per tab runs into the OS's limits (128 inotify instances per user on many Linux machines) and doesn't work on some network drives, and these moments cover when an edit can matter.
+  - They're listed in the project's menu after the project's actions, under a separator.
+- **Picking up edits.** The files are read again when the tab is selected, when Claudette comes to the front, when a turn ends (Claude may have edited them), when the project's menu opens, and after the in-app editor saves. Reads are numbered as they start, and one that finishes after a later one has been shown is dropped, so quick saves in a row never leave a tab showing an older file (and a detection from before a choice never undoes it). Claudette doesn't watch them with the file system: a watcher per tab runs into the OS's limits (128 inotify instances per user on many Linux machines) and doesn't work on some network drives, and these moments cover when an edit can matter.
 - **The in-app editor.**
-  - **Add an action…** opens a small dialog: name, command, working folder, **Run with output** or **Launch and forget**, and which file it goes in, **Just me (claudette.local.json)** (the default) or **Shared with the project (claudette.json)**.
-  - **Tab settings…** has a **Project actions** section: a choice of the two files, and the chosen file's actions with **Add…**, **Edit…**, **Remove**, **Move up**, **Move down** and **Open file**. Entries for other OSes are listed, marked "only on …", and entries that can't be read are listed with their reason and can only be removed. Nothing is written until **Apply**.
-  - Saving reads the file as JSON, replaces only `actions`, keeps every other key and each entry's other fields (such as `os`), and writes it indented. The dialog says so: saving rewrites the file, so comments in it are dropped. A file that isn't valid JSON is never overwritten; the editor says to fix it by hand first.
+  - It's in Settings, on the tab's **Actions** page ([§14](#the-projects-pages)); it was in **Tab settings…** until milestone 15, which now points there.
+  - **Add an action…** opens Settings on that page with a small dialog: name, command, working folder, **Run with output** or **Launch and forget**, and which file it goes in, **Just me (claudette.local.json)** (the default) or **Shared with the project (claudette.json)**.
+  - The page has a choice of the two files, and the chosen file's actions with **Add…**, **Edit…**, **Remove**, **Move up**, **Move down** and **Open file**. Entries for other OSes are listed, marked "only on …", and entries that can't be read are listed with their reason and can only be removed. Like the rest of Settings, each change is saved as it's made.
+  - Saving reads the file as JSON, replaces only `actions`, keeps every other key and each entry's other fields (such as `os`), and writes it indented. The page says so: saving rewrites the file, so comments in it are dropped. A file that isn't valid JSON is never overwritten; the editor says to fix it by hand first.
 - **No confirmation.** Actions from `claudette.json` run on a click, exactly like those from `claudette.local.json`: the user chose not to be asked first, although a project from someone else can put any command behind a friendly name. Nothing in either file runs on its own: only an explicit click runs an action, and hovering one shows its whole command first.
   - `claudette.local.json` is the user's own file, so its actions run without asking.
   - Nothing from these files runs except on an explicit click or the main action's shortcut: no automatic runs and no hooks.
@@ -1900,12 +1984,13 @@ A tab can do things for the project in its folder: launch the editor, generate p
 - **Allowed schemes.** Only `https`, `http` and `mailto`. Anything else (`file:`, `javascript:`, an app's own scheme) is shown disabled with the reason, and never opened. So is an address that isn't absolute.
 - **Placeholders**, filled from the selected tab and URL-escaped: `{branch}` (the git branch), `{changelist}` (the Perforce changelist Claude is working in, [§18](#perforce-changelist-in-the-tab-title)) and `{folderName}`. A link whose placeholder can't be filled right now is disabled and says why ("No git branch").
 - **Updates.** Links follow the selected tab, and are read again as its files are.
+- **Editing.** Settings has a **Links** page for the selected tab ([§14](#the-projects-pages)): add, edit, remove and reorder the links of either file, with the address checked by the rules above. Saving reads the file as JSON, replaces only `links`, keeps every other key (the actions among them) and each entry's other fields, and never rewrites a file that isn't valid JSON, as the actions editor does. A link saved without a name has none in the file, and the sidebar shows its address.
 
-**Notifications.** When a job finishes or fails and Claudette isn't in front, a notification says so: *"Build editor failed (exit code 6)."* A stopped job doesn't notify. Clicking it selects the tab and opens its Project page. Settings → Notifications → **A project action finishes**, on by default ([§10](#10-notifications)).
+**Notifications.** When a job finishes or fails and Claudette isn't in front, a notification says so: *"Build editor failed (exit code 6)."* A stopped job doesn't notify. Clicking it selects the tab and opens its Project page on that run's log. Settings → Notifications → **A project action finishes**, on by default ([§10](#10-notifications)).
 
 **Settings → Project tools** ([§14](#14-settings)), kept on each machine like the diff tool:
 
-- Default editor configuration for Unreal: Development (the default) or DebugGame. A project's own choice in the chip menu wins.
+- Default editor configuration for Unreal: Development (the default) or DebugGame. A project's own choice in the project's menu wins.
 - Project files for: Visual Studio, VS Code or Xcode. The default is Visual Studio on Windows, Xcode on macOS and VS Code on Linux.
 - Open solutions with: the OS's default app, Rider, Visual Studio, VS Code, or another program (with **Browse…**).
 - Tell Claude about Unreal projects: on by default.
@@ -1913,7 +1998,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
 - Godot: the executable's path, empty to find it, with **Browse…** and **Detect**. Tell Claude about Godot projects: on by default.
 - **Reset to defaults**, and search entries for each.
 
-**Testing.** No test runs a real engine: engines are a few files in temporary folders, the registry and running processes are fakes, and every process is a fake launcher's. `ProjectDiscoveryTests`, `UnrealEngineTests`, `UnrealCommandTests`, `CommandLineTests`, `UnrealProviderTests`, `UnityProviderTests`, `GodotProviderTests`, `ProjectJobTests` and `ProjectFileTests` in Core; `SystemProcessesTests` in Platform; `ProjectToolsTests` for the tab; and `ProjectToolsUiTests` for the rendered chip, its menu, the tab menu's submenu and the Links section.
+**Testing.** No test runs a real engine: engines are a few files in temporary folders, the registry and running processes are fakes, and every process is a fake launcher's. `ProjectDiscoveryTests`, `UnrealEngineTests`, `UnrealCommandTests`, `CommandLineTests`, `UnrealProviderTests`, `UnityProviderTests`, `GodotProviderTests`, `ProjectJobTests` and `ProjectFileTests` in Core; `SystemProcessesTests` in Platform; `ProjectToolsTests` and `ProjectRunsTests` for the tab; `ProjectSettingsTests` for Settings' project pages; and `ProjectToolsUiTests` and `ProjectSettingsUiTests` for the rendered chip, its menu, the tab menu's submenu, the Links section, the runs in the sidebar, and the project group and Links page in Settings.
 
 > **Still to verify on a machine with Unreal installed:**
 > - Launching the editor and building from a launcher install and a source build on Windows, macOS and Linux, including DebugGame and `-debug`.
@@ -1922,6 +2007,104 @@ A tab can do things for the project in its folder: launch the editor, generate p
 > - That Stop ends UnrealBuildTool and its compilers, and the process monitor lists them.
 > - Opening a `.xcworkspace` and each IDE for real.
 > - The editor-open warning, and Kill all Unreal editors, with real editors on each OS (on macOS, reading their command lines through `ps`).
+
+### Remote Control (the Claude app)
+
+✅ Built 2026-09-29.
+
+A tab can be used from the Claude app on a phone, or at claude.ai/code, while Claudette keeps running it on this computer: at home on the desk, say, with the phone on the couch. Claude Code's [Remote Control](https://code.claude.com/docs/en/remote-control) does the work. The tab's `claude` connects out to claude.ai over HTTPS (no inbound ports), and the app shows the conversation, sends messages and answers prompts, while every tool keeps running here. The phone can get a push when a tab needs an answer.
+
+- **Why per tab.** Claude Code gives each `claude` process one remote session, and Claudette runs one process per tab, so each tab is its own session in the app. While a tab is connected, its transcript is stored on Anthropic's servers, so connecting is a choice each tab makes; it's off unless the user turns it on.
+- **The switch.**
+  - **Connect to the Claude app** in the tab's menu (a check item) and in **Tab settings…** ([§4](#4-tabs--sessions)). It's `TabState.RemoteControl`, saved with the tab and in restart snapshots, so a connected tab reconnects by itself whenever its session starts: restored, resumed, or restarted after a sign-in or into a new build. It's the tab's own state like **Sync to other machines**, not an override, so **Use defaults** leaves it.
+  - Turning it on connects straight away, or when the running turn ends; a tab that isn't running connects when it starts. Turning it off disconnects the same way.
+- **Settings → Claude Code → Claude app (Remote Control)**, kept on this machine and not synced, like the rest of the category:
+  - **Connect new tabs to the Claude app** (off by default) sets the switch for tabs opened afterwards (the picker, History, `--folder`), like **Sync new tabs**. Turning it on or off never changes open tabs.
+  - What it does, the privacy note, and that it needs a claude.ai subscription sign-in.
+  - How to get pushes: turn on **Push when actions required** (`inputNeededNotifEnabled`), and if you like **Push when Claude decides** (`agentPushNotifEnabled`), in Claude Code's `/config`, with a link to the docs' [mobile push notifications](https://code.claude.com/docs/en/remote-control#mobile-push-notifications). Claudette doesn't edit `~/.claude/settings.json` for them.
+  - **Keep this computer awake while tabs are connected** (on by default; see "Keeping the computer awake" below).
+- **An account that can't use it.** From `claude auth status` and the environment Claudette gives `claude`: signed in with an API key or an API key helper, through a cloud provider (`authMethod` `third_party`, or an `apiProvider` other than `firstParty`), or with `ANTHROPIC_BASE_URL` pointing somewhere other than `api.anthropic.com`. The setting and every tab's switch are disabled then, with the reason, and a tab whose switch is on says why and doesn't ask; it can still be turned off. Claude Code checks everything else itself when a tab connects (the plan, an organization's policy, feature flags), and the tab shows its reason.
+
+**How a tab connects.** Confirmed against Claude Code 2.1.284 with the mock Messages API; a real connection hasn't been made yet (below).
+
+- **The request.** As SDK hosts such as the VS Code extension do, Claudette sends the `remote_control` control request right after `initialize`, before any prompt goes out: `{"subtype":"remote_control","enabled":true,"name":"<the tab's name>"}`. The name becomes the session's title in the app.
+  - Claude Code runs its eligibility checks, registers the session with claude.ai and answers with `session_url`, `connect_url`, `environment_id`, `bridge_session_id` and `bridge_epoch`. Claudette uses `session_url` (else `connect_url`) and ignores the rest.
+  - When it can't connect, the answer is an error with Claude Code's reason. Against the mock that's *"Remote Control is only available when using Claude via api.anthropic.com. ANTHROPIC_BASE_URL is set…"*.
+  - `{"subtype":"remote_control","enabled":false}` disconnects, and the session carries on here. If that fails, Claudette restarts the tab's `claude` on the same session (the conversation carries on) with the switch off, so it doesn't connect again.
+- **Why not `/remote-control`.** The docs have VS Code users type `/remote-control`, but the extension sends the request above. Sent as a message in `-p` mode, 2.1.284 answers the command locally with *"/remote-control isn't available in this environment."*, whatever the account: the reply's `local_command_outcome.kind` is `unavailable_headless`, "an interactive-panel command this session cannot open". The `--remote-control` flag is accepted and does nothing visible in `-p` mode.
+- **Undocumented, so there's a fallback.** A Claude Code that rejects the request as unsupported (*"Unsupported control request subtype: remote_control"*) gets `/remote-control <the tab's name>` instead, as a message of its own, sent only while Claude isn't working so the next turn to end is its answer. It isn't shown as something the user sent, and its reply is shown as a note rather than a reply, read tolerantly: a claude.ai/code address means connected; *isn't available*, *requires*, *disabled* and the like mean not available, with the reply as the reason; anything else counts as connected, with the reply as the note. With 2.1.284 the fallback only says why the tab isn't connected.
+- **What Claude Code reports afterwards.**
+  - `system/bridge_state` (undocumented), with `state` and `detail`: `ready` and `connected` bring a dropped connection back; `reconnecting` keeps the tab connected, with its icon dimmed; `failed` disconnects it, with the reason; `policy_disabled` makes it not available. A state Claudette doesn't know changes nothing.
+  - `system/worker_shutting_down` (documented): a connected tab is disconnected, with its reason (`host_exit`, `remote_control_disabled`…). One that arrives while the tab isn't connected is ignored, since a resumed session can replay old ones.
+  - The process exiting disconnects the tab.
+
+**States.** Not connected, Connecting, Connected (with the session's address, when Claude Code gave it) and Not available (with Claude Code's reason). What the tab shows:
+
+- A note in the conversation: *"Connected to the Claude app."* with the session's address as a link, or *"Couldn't connect to the Claude app: <reason>"*, *"Disconnected from the Claude app."* and so on.
+- A phone icon on the tab's row while it's connected, dimmed while it connects or reconnects, with the tip *"Connected to the Claude app"* ([§4](#sidebar)).
+- A **Claude app** row on the tab info card: *"Connected: <address>"*, *"Connecting…"*, *"Connects when Claude finishes this turn"*, *"Connects when the tab starts"*, or why it isn't connected.
+- **Open in the Claude app** in the tab's menu while it's connected with an address. It opens the session at claude.ai/code in the browser; on a phone, the same link opens the app.
+- **Renaming.** A rename still goes to Claude Code as `rename_session` when **Also rename the session in Claude Code** is on ([§13](#integration-with-claude-code)). The docs say the remote title follows `/rename`, but also that a name given when connecting comes first, and the tab gives one; which wins hasn't been seen yet.
+
+**Prompts answered on the phone.** When the app answers a permission prompt, question or plan, Claude Code 2.1.284 withdraws Claudette's copy with a `control_cancel_request` for its `can_use_tool` request (from its source: the app's answer is injected as if Claudette had answered). The card closes, and reads *"Answered in the Claude app"* while the tab is connected and Claudette didn't stop the turn or a subagent itself; otherwise *"No longer needed"*, as before. It isn't an error: the tab's *Needs input* status and notification go. Permission prompts and questions have no deadline; `dialogExpiry` only governs other dialogs Claude Code forwards.
+
+**Pushes and the presence file.** Claude Code pushes to the phone when the user turned that on in `/config` (above). It skips pushes while the file named by `CLAUDE_CLIENT_PRESENCE_FILE` exists, so every `claude` Claudette starts (tabs, the utility session, `auth`, `--version`, `update`) gets it, naming `presence` in the data folder (`AppPaths.PresenceFile`). Claudette creates the file while its main window is active and deletes it when the window isn't, at exit, and at launch (one left by a Claudette that didn't close cleanly). So the phone buzzes only when you're away from Claudette. Claudette's own OS notifications ([§10](#10-notifications)) are unchanged.
+
+**Keeping the computer awake.** A sleeping computer can't be reached from the phone, so while at least one tab is connected and **Keep this computer awake while tabs are connected** is on, Claudette holds off system sleep. The display can still sleep. It lets go when no tab is connected, when the setting is turned off, and at exit. `ISleepBlocker` in Core; the implementations are in `Claudette.Platform/Power`:
+
+- **Windows:** `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` on a thread of its own that lives until Claudette closes, since the state belongs to the thread that set it; `ES_CONTINUOUS` alone clears it.
+- **macOS:** `caffeinate -i -w <Claudette's pid>` through `IProcessLauncher`, ended to let go. `-w` ends it with Claudette, even one that crashed.
+- **Linux:** `systemd-inhibit --what=sleep --who=Claudette --why="Tabs are connected to the Claude app" --mode=block sleep infinity`, ended to let go. Without `systemd-inhibit`, nothing is kept awake. A helper that stops by itself (logind refusing, say) no longer blocks anything. A Claudette that's killed rather than closed leaves it running, as it does the tabs' processes ([§4](#process-monitor)).
+- Diagnostics (Settings → Advanced) says how many tabs are connected and whether the computer is being kept awake, or why not.
+
+**Requirements.** From the docs: a claude.ai subscription (Pro, Max, Team or Enterprise; on Team and Enterprise an Owner turns Remote Control on), signed in through claude.ai with a full-scope login. Not an API key, `ANTHROPIC_AUTH_TOKEN`, a long-lived token from `claude setup-token`, Bedrock, Google Cloud or Foundry, a custom `ANTHROPIC_BASE_URL`, or `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`. Claudette checks what it can know beforehand, and Claude Code's own answer covers the rest.
+
+**Privacy.** While a tab is connected, its transcript (messages, replies and tool activity) is stored on Anthropic's servers, under the same data usage policy. Execution and files stay on this computer. That's why the switch is per tab and off by default, and the setting says so.
+
+**Code.** `Claudette.Core/RemoteControl` (the request and its replies, eligibility, the presence file, `ISleepBlocker`), `ClaudeSession.EnableRemoteControlAsync` and `DisableRemoteControlAsync`, `Services/RemoteControlService.cs` (eligibility, the presence file and keeping awake, shared by the tabs), and `TabViewModel.RemoteControl.cs`.
+
+**Tests.** `RemoteControlProtocolTests` in Core (the wire format, replies, states and eligibility); `SleepBlockerTests` in Platform (fakes, the process mechanics with a harmless `sleep`, and the Windows call and `caffeinate` on their own OS); `RemoteControlTests` for the tab with the scripted transport (the switch, connecting before any prompt, the fallback, `bridge_state`, `worker_shutting_down`, the restart, restoring, eligibility, prompts answered in the app, the presence file and keeping awake); `RemoteControlUiTests` for the rendered menu, row icon, Tab settings and Settings block; and the RealCli tests: the real `claude` answering `remote_control` with its eligibility check and `/remote-control` with *"isn't available"* (`RealCliTests`), and a tab whose switch is turned on ending *Not available* with the reason (`RemoteControlRealCliTests`). No test connects for real.
+
+> **Not yet tried for real** (needs a claude.ai subscription, a phone and the Claude app): a real connection and what its answer and `bridge_state` messages hold; the session's title in the app, and whether it follows renames; prompts answered on the phone closing their cards here; pushes arriving, and the presence file holding them off; disconnecting with `enabled: false`; a restarted or restored tab reconnecting to a new session in the app; and keeping real Windows, macOS and Linux machines awake. A later version could pass `bridge_session_id` back as `reattach_session_id` so a restarted tab keeps its session in the app.
+
+### Service status
+
+✅ Built 2026-09-29.
+
+When Claude itself has trouble, tabs fail in ways that look like Claudette's fault or the user's: retries, overloaded errors, a sign-in that won't finish. Claudette reads Claude's public status page and says so: a dot in the header, and a banner across the top while an incident concerns what Claudette uses.
+
+- **The source.** `https://status.claude.com/api/v2/summary.json`, the page's Atlassian Statuspage v2 summary (status.claude.ai redirects there). A plain `GET` with Claudette's User-Agent (`Claudette/<version>`) through `AppServices.Http`, the client the update check uses ([§2](#updating-claudette)). No sign-in, and nothing else is sent. The fields it reads, tolerantly (unknown fields are ignored, and unknown values read as unknown):
+  - `status.indicator`: `none`, `minor`, `major` or `critical` (or `maintenance`).
+  - `components[]`: `id`, `name` and `status`: `operational`, `degraded_performance`, `partial_outage`, `major_outage` or `under_maintenance`.
+  - `incidents[]`, the unresolved ones: `id`, `name`, `status` (`investigating`, `identified`, `monitoring`, `resolved`, `postmortem`), `impact`, `shortlink`, `updated_at`, and `components` when it names them.
+  - `scheduled_maintenances[]`: `id`, `name`, `status` (`scheduled`, `in_progress`, `verifying`, `completed`), `shortlink`, `scheduled_for`, `scheduled_until` and `components`.
+  - A failed request, an error status, or an answer that isn't a JSON object is *Status unknown*, never an error dialog.
+- **What's watched.** What Claudette relies on: **Claude Code**, the **Claude API** (Claude Code's model calls) and **claude.ai** (sign-in, and [Remote Control](#remote-control-the-claude-app)). Components are matched by name, tolerantly, ignoring case and surrounding spaces: "Claude Code"; a name containing "Claude API" or "api.anthropic.com" (today "Claude API (api.anthropic.com)"); and "claude.ai". Others, such as the Console, Cowork and Claude for Government, don't count.
+- **One level**, for the dot:
+  - The worst of the watched services: *operational*; *degraded* (`degraded_performance`); *outage* (`partial_outage` or `major_outage`: a partial outage is an outage for whoever it hits); *maintenance* (`under_maintenance`).
+  - An open incident that concerns a watched service makes it at least degraded, and maintenance in progress at least maintenance.
+  - When none of the watched services is listed (renamed, say), the page's own indicator decides: `none` is operational, `minor` degraded, `major` and `critical` an outage. Anything else is unknown.
+- **Which incidents.** Unresolved ones that name a watched component (by name or id), or name no components at all, newest update first. Maintenance counts while it's under way (`in_progress`, `verifying`) on a watched service or names none; scheduled maintenance isn't shown until it starts.
+- **When it checks.**
+  - At launch, before Claude Code is found or signed in (an incident can be why those fail), then every 5 minutes, on `TimeProvider` timers.
+  - Straight away when a tab's request fails on Anthropic's side, at most once a minute: `system/api_retry` with a 5xx `error_status` (529 is an overload) or an `overloaded` or `server_error` category, the same in a subagent's `subagent_retry`, or a turn that ended with a 5xx `api_error_status`. Within a minute of the last check, the next one is brought forward to a minute after it. A rate limit (429), a sign-in problem or a bad request is the user's own, and doesn't count.
+  - A failed check backs off: 5 minutes, then 10, 20, and 30 from then on. Meanwhile the dot says *Status unknown*. The first good answer goes back to every 5 minutes.
+- **The dot**, at the header's right, before the account name: green when operational, amber when degraded or under maintenance, red for an outage, and grey when unknown or not checked yet.
+  - Its tooltip: the level, each watched service and its status, the latest incident's name and status, any maintenance under way, and "as of HH:mm" (the check's time); after a failed check, why it failed.
+  - Clicking it opens status.claude.com. Its accessible name says the level.
+- **The banner**, across the top under the header, while a watched service isn't operational or an open incident concerns one:
+  - *"Claude is having problems: Elevated errors on claude.ai, Claude Code, Claude Cowork and the Claude API (investigating)"*: the latest incident and where it's at, with "and 1 more incident" when there are others. Without an incident, the services that aren't well: *"claude.ai (partial outage)"*.
+  - It uses the caution colors, like the usage alert. Maintenance alone gets a quieter banner in the subtle surface colors: *"Claude maintenance in progress: <its name>"*.
+  - **Status page** opens the incident's (or maintenance's) short link, else status.claude.com.
+  - **Dismiss** hides it until a different incident or maintenance arrives, or the level gets worse. What was dismissed (the ids and the level) is kept with this machine's state (`AppState.DismissedServiceStatus`) and forgotten once everything is operational with nothing open.
+  - It goes by itself when everything is operational again; the dot stays, green. A failed check hides it too, since the status is then unknown.
+- **The setting.** Settings → General → **Show Claude's service status**, on by default. It's kept on this machine (General doesn't sync). Off hides the dot and banner and stops the checks; on checks straight away.
+- **Both styles.** Only existing tokens: `OkTextBrush`, `MeterWarningBrush`, `MeterCriticalBrush` and `MutedTextBrush` for the dot; `CautionBackgroundBrush` and `CautionBorderBrush` for the banner (warm tints of the accent in the Claude style); `SubtleBrush` and `DividerBrush` for the maintenance banner.
+- **Not Claude Code's surface.** The status page isn't part of Claude Code, so it isn't in `compat/surface.yaml`; its address and fields are recorded here. The Claude Code fields the tabs read for it (`error_status`, `error_category` and `api_error_status`) are.
+
+**Code.** `Claudette.Core/Status`: `StatusSummary` (the parser), `StatusFeed` (the request), `ServiceStatusReport` (the watched services, the level, the incidents, and `ServiceStatusDismissal`) and `ApiTrouble` (which session events are worth a check). In the app, `Services/ServiceStatusService.cs` (the schedule, the backoff and dismissing), started by `MainWindowViewModel` at launch and told about API errors by `TabViewModel`, and `ViewModels/ServiceStatusViewModel.cs` (the dot and the banner).
+
+**Tests.** `ServiceStatusTests` in Core: the real summary from an incident on 2026-09-29 (trimmed, in `Fixtures/status/`), all operational, maintenance, unknown values and malformed answers, levels and name matching, which incidents count, dismissals, which API errors count, and the request against `FakeHttpHandler`. `ServiceStatusTests` in the App tests, with `FakeTimeProvider`: the check at launch, every 5 minutes, the backoff up to 30, checks on API errors at most once a minute (and from a tab's `api_retry`), the banner shown, dismissed, back for a new incident or a worse level, gone on recovery, maintenance, and the setting. `ServiceStatusUiTests`: the dot's place and tooltip, the banner rendered, **Dismiss**, and the colors in both styles, light and dark. Nothing reaches the network.
 
 ## 19. Open Questions
 

@@ -16,6 +16,7 @@ using Claudette.Core.Settings;
 using Claudette.Platform.Credentials;
 using Claudette.Platform.LoginShell;
 using Claudette.Platform.Notifications;
+using Claudette.Platform.Power;
 using Claudette.Platform.Processes;
 using Claudette.Platform.ProjectTools;
 using Claudette.Platform.Shell;
@@ -64,7 +65,8 @@ public partial class App : Application
                 appInstaller: AppInstallers.CreateForCurrentOS(launcher, TimeProvider.System, paths.UpdatesDirectory, NullLogger.Instance),
                 loginShell: LoginShellReader.CreateForCurrentOS(launcher, TimeProvider.System),
                 systemProcesses: new SystemProcesses(launcher, TimeProvider.System),
-                unrealRegistry: UnrealEngineRegistries.CreateForCurrentOS());
+                unrealRegistry: UnrealEngineRegistries.CreateForCurrentOS(),
+                sleepBlocker: SleepBlockers.CreateForCurrentOS(launcher));
             // In the background, so the window isn't held up; the first claude start waits for it (DESIGN.md §13).
             _services.UserEnvironment.Start();
             var services = _services;

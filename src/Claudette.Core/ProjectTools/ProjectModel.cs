@@ -36,6 +36,13 @@ public sealed record ProjectAction(string Id, string Label, ProjectActionKind Ki
     /// <summary>Open with the IDE chosen in Settings → Project tools → Open solutions with, rather than the OS's app.</summary>
     public bool OpenWithIde { get; init; }
 
+    /// <summary>
+    /// What to say, instead of opening the path with the OS's app, when <see cref="OpenWithIde"/> can't find or start
+    /// the IDE; null falls back to the OS's app. <b>Open in Rider</b> sets it: the OS's app for a <c>.uproject</c> starts
+    /// the Unreal editor, which isn't what was asked for.
+    /// </summary>
+    public string? WithoutIde { get; init; }
+
     /// <summary>What a <see cref="ProjectActionKind.Destructive"/> action does, once confirmed.</summary>
     public DestructiveWork? Destructive { get; init; }
 
@@ -101,7 +108,14 @@ public sealed record ProjectChoice(string Key, string Label, IReadOnlyList<Proje
 /// <summary>What to pick when something the project needs wasn't found, such as <b>Choose engine folder…</b>.</summary>
 /// <param name="PickFolder">A folder rather than a file.</param>
 /// <param name="Validate">Checks the pick: returns the path to remember, or null and the reason it can't be used.</param>
-public sealed record ProjectFix(string Key, string Label, string Title, bool PickFolder, Func<string, (string? Path, string? Error)> Validate);
+public sealed record ProjectFix(string Key, string Label, string Title, bool PickFolder, Func<string, (string? Path, string? Error)> Validate)
+{
+    /// <summary>What's picked, for Settings' Tools page: "Engine folder", "Unity editor", "Godot executable".</summary>
+    public string Name { get; init; } = "";
+
+    /// <summary>The folder or program in use now, chosen or found; null when none was found.</summary>
+    public string? Current { get; init; }
+}
 
 /// <summary>A project found for a tab's folder, before it's read.</summary>
 /// <param name="Path">The project's file (a <c>.uproject</c>) or folder: its identity for what's remembered about it.</param>

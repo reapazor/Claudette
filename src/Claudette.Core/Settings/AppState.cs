@@ -1,5 +1,6 @@
 using Claudette.Core.Development;
 using Claudette.Core.Sessions;
+using Claudette.Core.Status;
 
 namespace Claudette.Core.Settings;
 
@@ -86,6 +87,12 @@ public sealed class AppState
 
     /// <summary>The sidebar's Links section is collapsed (DESIGN.md §18, "Links").</summary>
     public bool LinksCollapsed { get; set; }
+
+    /// <summary>
+    /// The service status banner the user dismissed: hidden until a different incident arrives or things get worse
+    /// (DESIGN.md §18, "Service status"). Forgotten once everything is back to operational.
+    /// </summary>
+    public ServiceStatusDismissal? DismissedServiceStatus { get; set; }
 }
 
 /// <summary>What's saved for one tab (DESIGN.md §9, "Restore on launch").</summary>
@@ -111,6 +118,13 @@ public sealed class TabState
     /// tabs, and sessions opened from the library keep syncing. Not a per-tab override: it's the tab's own state.
     /// </summary>
     public bool SyncToLibrary { get; set; }
+
+    /// <summary>
+    /// Connect this tab to the Claude app with Remote Control whenever its session runs, so it reconnects by itself after
+    /// a restart (DESIGN.md §18, "Remote Control"). Off unless the tab opted in: new tabs take Settings → Claude Code →
+    /// Connect new tabs to the Claude app. The tab's own state, like <see cref="SyncToLibrary"/>, not an override.
+    /// </summary>
+    public bool RemoteControl { get; set; }
 
     public TabOverrides Overrides { get; set; } = new();
 

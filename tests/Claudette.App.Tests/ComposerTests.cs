@@ -471,6 +471,7 @@ public partial class ComposerTests
     [InlineData("TodoWrite", "IconToolTodo")]
     [InlineData("mcp__github__create_issue", "IconToolMcp")]
     [InlineData("Skill", "IconToolSkill")]
+    [InlineData("Monitor", "IconToolMonitor")]
     [InlineData("SomethingNew", "IconToolDefault")]
     public void Each_tool_has_an_icon(string tool, string key) =>
         Assert.Equal(key, new ToolUseItem("t1", tool, []).IconKey);
@@ -480,9 +481,11 @@ public partial class ComposerTests
     {
         var app = File.ReadAllText(Path.Combine(RepoRoot(), "src", "Claudette.App", "App.axaml"));
         var defined = GeometryKey().Matches(app).Select(m => m.Groups[1].Value).ToHashSet();
-        var tools = new[] { "Read", "Edit", "Write", "Bash", "Grep", "Glob", "WebFetch", "WebSearch", "Agent", "TodoWrite", "mcp__x__y", "Skill", "AskUserQuestion", "ExitPlanMode", "Other" };
+        var tools = new[] { "Read", "Edit", "Write", "Bash", "Grep", "Glob", "WebFetch", "WebSearch", "Agent", "TodoWrite", "mcp__x__y", "Skill", "AskUserQuestion", "ExitPlanMode", "Monitor", "Other" };
+        // The running tasks list's icons too (DESIGN.md §5, "Running tasks").
+        var tasks = Enum.GetValues<TaskKind>().Select(RunningTask.IconFor);
 
-        Assert.All(tools.Select(ToolIcons.KeyFor).Append("IconToolFolder").Append("IconAttach"), key => Assert.Contains(key, defined));
+        Assert.All(tools.Select(ToolIcons.KeyFor).Concat(tasks).Append("IconToolFolder").Append("IconAttach"), key => Assert.Contains(key, defined));
     }
 
     [Fact]

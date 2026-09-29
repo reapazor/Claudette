@@ -65,6 +65,34 @@
       <Setter Property="FontSize" Value="18" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
+    <!-- Claude's service status (DESIGN.md §18, "Service status"): grey until it's known, then green, amber for
+         degraded or maintenance, and red for an outage. -->
+    <Style Selector="Ellipse.statusdot">
+      <Setter Property="Width" Value="9" />
+      <Setter Property="Height" Value="9" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Fill" Value="{DynamicResource MutedTextBrush}" />
+    </Style>
+    <Style Selector="Ellipse.statusdot.operational">
+      <Setter Property="Fill" Value="{DynamicResource OkTextBrush}" />
+    </Style>
+    <Style Selector="Ellipse.statusdot.degraded">
+      <Setter Property="Fill" Value="{DynamicResource MeterWarningBrush}" />
+    </Style>
+    <Style Selector="Ellipse.statusdot.outage">
+      <Setter Property="Fill" Value="{DynamicResource MeterCriticalBrush}" />
+    </Style>
+    <!-- Its banner: a caution while Claude has problems, and quieter while maintenance is all there is. -->
+    <Style Selector="Border.statusbanner">
+      <Setter Property="Background" Value="{DynamicResource CautionBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CautionBorderBrush}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="Padding" Value="16,6" />
+    </Style>
+    <Style Selector="Border.statusbanner.info">
+      <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+    </Style>
   </Window.Styles>
 
   <Grid>
@@ -136,6 +164,14 @@
                 <Path Data="{StaticResource IconChevronUp}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Stretch="Uniform"
                       Width="11" Height="6" IsVisible="{Binding Usage.IsDetailed, FallbackValue=False}" />
               </Panel>
+            </Button>
+            <!-- Claude's service status (DESIGN.md §18, "Service status"): each watched service in the tooltip, and a
+                 click opens status.claude.com -->
+            <Button Name="ServiceStatusDot" Classes="header" Padding="8" VerticalAlignment="Center" IsVisible="{Binding ServiceStatus.IsVisible}"
+                    Command="{Binding ServiceStatus.OpenStatusPageCommand}"
+                    ToolTip.Tip="{Binding ServiceStatus.Tooltip}" AutomationProperties.Name="{Binding ServiceStatus.AccessibleName}">
+              <Ellipse Classes="statusdot" Classes.operational="{Binding ServiceStatus.IsOperational}"
+                       Classes.degraded="{Binding ServiceStatus.IsDegraded}" Classes.outage="{Binding ServiceStatus.IsOutage}" />
             </Button>
             <!-- The account menu (DESIGN.md §11): the email and plan from claude auth status, and Sign out -->
             <Button Classes="header" IsVisible="{Binding Account.Status, Converter={x:Static ObjectConverters.IsNotNull}}"
@@ -248,6 +284,19 @@
               </StackPanel>
             </Grid>
           </Button>
+        </Grid>
+      </Border>
+
+      <!-- Claude has an incident, or maintenance (DESIGN.md §18, "Service status"), until dismissed or over -->
+      <Border Name="ServiceStatusBanner" DockPanel.Dock="Top" Classes="statusbanner" Classes.info="{Binding ServiceStatus.IsInfoBanner}"
+              IsVisible="{Binding ServiceStatus.ShowBanner}">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
+          <TextBlock TextWrapping="Wrap" VerticalAlignment="Center">
+            <Run FontWeight="SemiBold" Text="{Binding ServiceStatus.BannerTitle}" />
+            <Run Text="{Binding ServiceStatus.BannerText}" />
+          </TextBlock>
+          <Button Grid.Column="1" Classes="flat" Content="Status page" Command="{Binding ServiceStatus.OpenBannerLinkCommand}" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Classes="flat" Content="Dismiss" Command="{Binding ServiceStatus.DismissBannerCommand}" VerticalAlignment="Center" />
         </Grid>
       </Border>
 

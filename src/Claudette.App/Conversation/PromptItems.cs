@@ -53,12 +53,18 @@ public abstract partial class PromptItem(PermissionRequest request) : Conversati
     /// <summary>Ctrl/Cmd+Backspace: the "no" for this prompt.</summary>
     public abstract bool TryDeclineFromKeyboard();
 
-    /// <summary>Claude Code withdrew the request, or the session ended.</summary>
-    public void Cancel()
+    /// <summary>What a prompt Claude Code withdrew says, unless it knows more.</summary>
+    public const string WithdrawnOutcome = "No longer needed";
+
+    /// <summary>
+    /// Claude Code withdrew the request, or the session ended. <paramref name="outcome"/> says why when it's known, such
+    /// as "Answered in the Claude app" (DESIGN.md §18, "Remote Control").
+    /// </summary>
+    public void Cancel(string? outcome = null)
     {
         if (IsPending)
         {
-            Outcome = "No longer needed";
+            Outcome = outcome ?? WithdrawnOutcome;
             State = PermissionState.Cancelled;
         }
     }

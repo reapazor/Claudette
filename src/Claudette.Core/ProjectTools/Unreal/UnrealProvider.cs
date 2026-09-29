@@ -63,9 +63,12 @@ public sealed class UnrealProvider : IProjectToolProvider
         var scriptMissing = engine is not null && !File.Exists(UnrealCommands.BuildScript(engine.Root, os))
             ? $"The engine has no {Path.GetFileName(UnrealCommands.BuildScript(engine.Root, os))}."
             : null;
+        // Rider reads the .uproject itself, keeping its own project model, so it needs no project files (issue #6).
+        var rider = context.Settings.OpenSolutionsWith == SolutionOpener.Rider && RiderReadsUProject(engine?.Version, os);
         actions.Add(new ProjectAction("generate-project-files", "Generate project files", ProjectActionKind.Run)
         {
-            Description = $"Generates the {FormatName(format)} project files, as the .uproject's menu does.",
+            Description = $"Generates the {FormatName(format)} project files, as the .uproject's menu does."
+                + (rider ? " Rider doesn't need them: Open in Rider reads the .uproject itself." : ""),
             Process = engine is null ? null : UnrealCommands.GenerateProjectFiles(engine.Root, project.Path, format, os),
             DisabledReason = noEngine ?? scriptMissing ?? (project.HasCode ? null : "The project has no C++ code, so there are no project files to generate."),
         });
@@ -89,14 +92,30 @@ public sealed class UnrealProvider : IProjectToolProvider
             DisabledReason = cantBuild ?? (launch is null ? noEngine : null),
         });
 
-        var solution = UnrealCommands.SolutionCandidates(project.Root, project.Name, format, os).FirstOrDefault(p => File.Exists(p) || Directory.Exists(p));
-        actions.Add(new ProjectAction("open-solution", "Open solution", ProjectActionKind.Open)
+        if (rider)
         {
-            Description = solution is null ? null : $"Opens {Path.GetFileName(solution)}.",
-            OpenPath = solution,
-            OpenWithIde = true,
-            DisabledReason = solution is null ? "Generate project files first" : null,
-        });
+            // Rider's own Unreal project model: nothing to generate first, on any OS. The .sln, for the engine programs and
+            // mobile targets Rider's .uproject model doesn't cover yet, is in Rider's own File → Open.
+            actions.Add(new ProjectAction("open-solution", "Open in Rider", ProjectActionKind.Open)
+            {
+                Description = $"Opens {Path.GetFileName(project.Path)} in Rider, which reads the project itself: no project files to generate.",
+                OpenPath = project.Path,
+                OpenWithIde = true,
+                WithoutIde = "Rider wasn't found, so the project wasn't opened: the OS's app would start the Unreal editor instead. "
+                    + "If Rider is installed somewhere Claudette doesn't look, choose it with Another program… in Settings → Project tools.",
+            });
+        }
+        else
+        {
+            var solution = UnrealCommands.SolutionCandidates(project.Root, project.Name, format, os).FirstOrDefault(p => File.Exists(p) || Directory.Exists(p));
+            actions.Add(new ProjectAction("open-solution", "Open solution", ProjectActionKind.Open)
+            {
+                Description = solution is null ? null : $"Opens {Path.GetFileName(solution)}.",
+                OpenPath = solution,
+                OpenWithIde = true,
+                DisabledReason = solution is null ? "Generate project files first" : null,
+            });
+        }
 
         var log = UnrealCommands.LogPath(project.Root, project.Name, os);
         actions.Add(new ProjectAction("open-log", "Open latest log", ProjectActionKind.Open)
@@ -150,7 +169,11 @@ public sealed class UnrealProvider : IProjectToolProvider
                 [new(nameof(UnrealConfiguration.Development), "Development"), new(nameof(UnrealConfiguration.DebugGame), "DebugGame")],
                 configuration.ToString()),
             Fix = new ProjectFix(UnrealEngineLocator.EngineKey, engine is null ? "Choose engine folder…" : "Choose another engine folder…",
-                $"Choose the Unreal Engine folder for {project.Name}", PickFolder: true, ValidateEngineFolder),
+                $"Choose the Unreal Engine folder for {project.Name}", PickFolder: true, ValidateEngineFolder)
+            {
+                Name = "Engine folder",
+                Current = engine?.Root,
+            },
             Problem = problem,
             SystemPromptNote = context.Settings.TellClaudeAboutUnreal ? SystemPromptNote(project, engine, version, configuration, format, os) : null,
         };
@@ -165,6 +188,16 @@ public sealed class UnrealProvider : IProjectToolProvider
         UnrealEngineLocator.Engine(folder, UnrealEngineKind.Chosen) is { } engine
             ? (engine.Root, null)
             : (null, $"{folder} isn't an Unreal Engine folder: it has no Engine/Build/Build.version.");
+
+    /// <summary>
+    /// Whether Rider can open the engine's projects by their <c>.uproject</c>, without project files: Unreal Engine
+    /// 4.25.4 or later on Windows, 4.26 or later on macOS and Linux. An engine whose version isn't known is taken to be
+    /// new enough; an older one opens the generated solution instead.
+    /// </summary>
+    public static bool RiderReadsUProject(UnrealBuildVersion? version, ToolOS os) =>
+        version is null || (os == ToolOS.Windows
+            ? (version.Major, version.Minor, version.Patch).CompareTo((4, 25, 4)) >= 0
+            : (version.Major, version.Minor).CompareTo((4, 26)) >= 0);
 
     public static string FormatName(ProjectFileFormat format) => format switch
     {

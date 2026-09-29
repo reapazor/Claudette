@@ -19,6 +19,9 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     /// <summary>The account menu, the sign-in banner and its dialog, and signing out (DESIGN.md §11).</summary>
     public AccountViewModel Account { get; } = new(services);
 
+    /// <summary>Claude's service status: the header's dot and the banner (DESIGN.md §18, "Service status").</summary>
+    public ServiceStatusViewModel ServiceStatus { get; } = new(services);
+
     /// <summary>The signed-in email and plan, or null when signed out.</summary>
     public string? AccountText => Account.IsSignedIn ? Account.Summary : null;
 
@@ -48,6 +51,8 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     public Task StartAsync()
     {
         services.Notifications.Activated += OnNotificationActivated;
+        // From launch, before Claude Code is found or signed in: an incident can be why those fail.
+        services.ServiceStatus.Start();
         Account.CheckSignIn = CheckSignInAsync;
         // Signed out from the account menu or Settings: the tabs wait for the next sign-in (DESIGN.md §11), and the
         // utility session starts again when next needed, without the old account.
@@ -307,10 +312,10 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
                 }
                 break;
             case NotificationKind.ProjectAction:
-                // The tab's Project page, with the job's output (DESIGN.md §18, "Project tools").
+                // The tab's Project page, with the log of the run that finished (DESIGN.md §18, "Project tools").
                 if (target.TabId is { } jobTab && CurrentPage == _shell && _shell?.SelectTab(jobTab) == true)
                 {
-                    _shell.SelectedTab?.OpenProjectPageCommand.Execute(null);
+                    _shell.SelectedTab?.OpenNotifiedProjectRun();
                 }
                 break;
             default:
@@ -430,6 +435,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     public async ValueTask DisposeAsync()
     {
         services.Notifications.Activated -= OnNotificationActivated;
+        ServiceStatus.Dispose();
         Usage?.Dispose();
         Updates?.Dispose();
         _shell?.NewBuild?.Dispose();

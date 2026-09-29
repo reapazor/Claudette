@@ -7,6 +7,7 @@ using Claudette.Core.Processes;
 using Claudette.Core.ProjectTools;
 using Claudette.Core.ProjectTools.Unreal;
 using Claudette.Core.Protocol;
+using Claudette.Core.RemoteControl;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
 using Claudette.Core.Updates;
@@ -42,7 +43,9 @@ public sealed class AppServices : IAsyncDisposable
     /// <param name="notifier">Shows OS notifications (DESIGN.md §10). Null shows none.</param>
     /// <param name="credentials">The OS credential store, for stored Perforce passwords (DESIGN.md §18). Null has none.</param>
     /// <param name="appInstaller">Installs Claudette's own updates (DESIGN.md §2, "Updating Claudette"). Null can't.</param>
-    /// <param name="httpHandler">Sends Claudette's own web requests: the update check and download. Tests pass a fake.</param>
+    /// <param name="httpHandler">
+    /// Sends Claudette's own web requests: the update check and download, and Claude's service status. Tests pass a fake.
+    /// </param>
     /// <param name="appVersion">This Claudette's version; by default, the one it was built with.</param>
     /// <param name="loginShell">
     /// Reads the login shell's environment for the user's processes (DESIGN.md §13, "Login shell environment"). Null
@@ -51,6 +54,10 @@ public sealed class AppServices : IAsyncDisposable
     /// <param name="systemProcesses">Every running process by name, for project tools (DESIGN.md §18). Null can't tell.</param>
     /// <param name="unrealRegistry">Unreal's Windows registry entries. Null has none.</param>
     /// <param name="projectToolPaths">Where other programs keep their files; by default the current user's folders.</param>
+    /// <param name="sleepBlocker">
+    /// Keeps the computer awake while tabs are connected to the Claude app (DESIGN.md §18, "Remote Control"). Null
+    /// keeps nothing awake: tests.
+    /// </param>
     public AppServices(
         AppPaths paths,
         IProcessLauncher launcher,
@@ -67,7 +74,8 @@ public sealed class AppServices : IAsyncDisposable
         ILoginShell? loginShell = null,
         ISystemProcesses? systemProcesses = null,
         IUnrealEngineRegistry? unrealRegistry = null,
-        ProjectToolPaths? projectToolPaths = null)
+        ProjectToolPaths? projectToolPaths = null,
+        ISleepBlocker? sleepBlocker = null)
     {
         AppInstaller = appInstaller ?? new NoAppInstaller();
         AppVersion = appVersion ?? BuiltVersion();
@@ -88,7 +96,8 @@ public sealed class AppServices : IAsyncDisposable
         Settings = _settingsStore.Load();
         State = _stateStore.Load();
         UserEnvironment = new UserEnvironment(loginShell, () => Settings.ClaudeCode.UseLoginShellEnvironment, Loggers.CreateLogger("LoginShell"));
-        Locator = new ClaudeLocator(launcher, timeProvider, UserEnvironment);
+        RemoteControl = new RemoteControlService(this, sleepBlocker ?? new NoSleepBlocker());
+        Locator = new ClaudeLocator(launcher, timeProvider, UserEnvironment, RemoteControl.ClaudeVariables);
         Git = new GitWorkingTree(launcher, timeProvider, environment: UserEnvironment);
         Library = new LibraryService(this);
         ProtocolLog.DeleteOld(paths.ProtocolLogDirectory, timeProvider.GetUtcNow());
@@ -96,7 +105,9 @@ public sealed class AppServices : IAsyncDisposable
         Tips = new ShortcutTips(Settings);
         Perforce = new PerforceService(this, credentials ?? new UnavailableCredentialStore());
         ProjectTools = new ProjectToolsService(this, systemProcesses, unrealRegistry ?? NoUnrealEngineRegistry.Instance, projectToolPaths ?? ProjectToolPaths.ForCurrentUser());
-        UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time, UserEnvironment.Probe, userEnvironment: UserEnvironment);
+        ServiceStatus = new ServiceStatusService(this);
+        UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time, UserEnvironment.Probe,
+            environmentOverrides: RemoteControl.ClaudeVariables, userEnvironment: UserEnvironment);
         SettingsChanged += (_, _) =>
         {
             // Turning Use my login shell's environment on reads it now, if this run hasn't yet.
@@ -104,6 +115,8 @@ public sealed class AppServices : IAsyncDisposable
             Library.OnSettingsChanged();
             ClaudeUpdates?.OnSettingsChanged();
             Notifications.OnSettingsChanged();
+            RemoteControl.OnSettingsChanged();
+            ServiceStatus.OnSettingsChanged();
             Tips.Refresh();
         };
     }
@@ -117,7 +130,10 @@ public sealed class AppServices : IAsyncDisposable
     /// <summary>Installs a downloaded release over this Claudette, when the way it was installed allows (DESIGN.md §2).</summary>
     public IAppInstaller AppInstaller { get; }
 
-    /// <summary>For Claudette's own requests to GitHub. Everything Claude-related goes through Claude Code instead.</summary>
+    /// <summary>
+    /// For Claudette's own requests: GitHub's releases, and Claude's public status page. Everything else Claude-related
+    /// goes through Claude Code.
+    /// </summary>
     public HttpClient Http { get; }
 
     /// <summary>What Claudette's web requests call themselves.</summary>
@@ -156,6 +172,18 @@ public sealed class AppServices : IAsyncDisposable
 
     /// <summary>Project tools: detecting a tab's project and running its actions (DESIGN.md §18).</summary>
     public ProjectToolsService ProjectTools { get; }
+
+    /// <summary>
+    /// Remote Control, the Claude app's connection to the tabs (DESIGN.md §18): whether the account can use it, the
+    /// presence file every <c>claude</c> is told about, and keeping the computer awake while tabs are connected.
+    /// </summary>
+    public RemoteControlService RemoteControl { get; }
+
+    /// <summary>
+    /// Claude's service status from status.claude.com (DESIGN.md §18, "Service status"): the header's dot and the banner.
+    /// The window starts it at launch; tabs report API errors to it.
+    /// </summary>
+    public ServiceStatusService ServiceStatus { get; }
 
     /// <summary>Makes the updater for a <c>claude</c> path (DESIGN.md §12). Tests replace it.</summary>
     internal Func<string, IClaudeUpdater> UpdaterFactory { get; set; }
@@ -260,7 +288,7 @@ public sealed class AppServices : IAsyncDisposable
     {
         Install = install;
         Sessions = new ClaudeSessionFactory(install.Path, _launcher, Time, Loggers, Diagnostics, UserEnvironment);
-        Auth = new ClaudeAuth(install.Path, _launcher, Time, userEnvironment: UserEnvironment);
+        Auth = new ClaudeAuth(install.Path, _launcher, Time, environment: RemoteControl.ClaudeVariables, userEnvironment: UserEnvironment);
         ClaudeUpdates = new ClaudeUpdateService(this, CreateUpdater(install.Path), install.Version);
     }
 
@@ -360,7 +388,7 @@ public sealed class AppServices : IAsyncDisposable
                 await _utility.DisposeAsync().ConfigureAwait(false);
             }
             var factory = Sessions ?? throw new InvalidOperationException("Claude Code hasn't been found yet.");
-            _utility = await UtilitySession.StartAsync(factory, Paths.UtilityDirectory, cancellationToken, ProtocolLogPath("utility")).ConfigureAwait(false);
+            _utility = await UtilitySession.StartAsync(factory, Paths.UtilityDirectory, cancellationToken, ProtocolLogPath("utility"), RemoteControl.ClaudeVariables).ConfigureAwait(false);
             return _utility;
         }
         finally
@@ -394,6 +422,8 @@ public sealed class AppServices : IAsyncDisposable
     {
         Library.Dispose();
         Notifications.Dispose();
+        RemoteControl.Dispose();
+        ServiceStatus.Dispose();
         if (ClaudeUpdates is not null)
         {
             await ClaudeUpdates.DisposeAsync();

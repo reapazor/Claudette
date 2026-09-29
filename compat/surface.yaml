@@ -269,9 +269,28 @@ items:
   - id: "api_retry"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.Core/Status/ApiTrouble.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: none yet
+    test: ServiceStatusTests
+  # A retry or a failed turn on Anthropic's side checks Claude's status page straight away (DESIGN.md §18, "Service status").
+  - id: "error_status"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Status/ApiTrouble.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ServiceStatusTests
+  - id: "error_category"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.Core/Status/ApiTrouble.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ServiceStatusTests
+  - id: "api_error_status"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Status/ApiTrouble.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ServiceStatusTests
   - id: "parent_tool_use_id"
     kind: field
     status: documented
@@ -900,15 +919,15 @@ items:
   - id: "task_started"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/ViewModels/TabViewModel.Processes.cs, src/Claudette.App/Conversation/AgentMap.cs
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs, src/Claudette.App/Conversation/AgentMap.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: SidePanelTests, AgentMapTests
+    test: SidePanelTests, AgentMapTests, RunningTasksTests
   - id: "stop_task"
     kind: control
     status: documented
     usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: SidePanelTests
+    test: SidePanelTests, RunningTasksTests
   # --- Agent map (DESIGN.md §18) ------------------------------------------------------------------------
   - id: "tool_progress"
     kind: message
@@ -919,9 +938,9 @@ items:
   - id: "subagent_retry"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs, src/Claudette.Core/Status/ApiTrouble.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: MessageParserTests
+    test: MessageParserTests, ServiceStatusTests
   - id: "heartbeat"
     kind: field
     status: documented
@@ -949,15 +968,15 @@ items:
   - id: "task_notification"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs, src/Claudette.App/Conversation/RunningTasks.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: AgentMapTests
+    test: AgentMapTests, RunningTasksTests
   - id: "task_updated"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs, src/Claudette.App/Conversation/RunningTasks.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: AgentMapTests
+    test: AgentMapTests, RunningTasksTests
   - id: 'task_type: "local_agent"'
     kind: field
     status: documented
@@ -967,9 +986,9 @@ items:
   - id: "is_backgrounded"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentNode.cs
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs, src/Claudette.App/Conversation/RunningTasks.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: AgentMapTests
+    test: AgentMapTests, RunningTasksTests
   - id: "agent_id"
     kind: field
     status: undocumented
@@ -986,9 +1005,9 @@ items:
   - id: "run_in_background"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentNode.cs
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs, src/Claudette.App/Conversation/RunningTasks.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: AgentMapTests
+    test: AgentMapTests, RunningTasksTests
   - id: 'status: "async_launched"'
     kind: field
     status: documented
@@ -1051,6 +1070,51 @@ items:
     docs: https://code.claude.com/docs/en/sub-agents
     test: RealCliTests
     fallback: User configuration, passed through to claude. The real-CLI test sets it so nesting is on whatever the machine's environment says.
+
+  # --- Running tasks (DESIGN.md §5, "Running tasks") ----------------------------------------------------
+  - id: 'task_type: "local_bash"'
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RunningTasksTests
+  - id: 'task_type: "remote_agent"'
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RunningTasksTests
+  - id: 'taskType: "local_workflow"'
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RunningTasksTests
+    fallback: Documented on the Workflow tool's output as the type of the task it registers; read as task_started's task_type. Any other type still counts as a running task, with the default icon.
+  - id: "Monitor"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs, src/Claudette.App/Conversation/ToolIcons.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RunningTasksTests, ComposerTests
+  - id: "ambient"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs, src/Claudette.Core/Protocol/ProtocolDiagnostics.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RunningTasksTests
+  - id: 'status: "killed"'
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs, src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RunningTasksTests, AgentMapTests
+  - id: "patch"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/RunningTasks.cs, src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RunningTasksTests, AgentMapTests
 
   # --- Claude Code updates (DESIGN.md §12) --------------------------------------------------------------
   - id: "claude doctor"
@@ -1242,3 +1306,100 @@ items:
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: HookCallbackTests
     fallback: Sent when the turn is interrupted or the hook times out. Without it, a hook callback that's still waiting finishes and its answer is ignored.
+
+  # --- Remote Control: the Claude app (DESIGN.md §18) ---------------------------------------------------
+  - id: "remote_control"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    docs: https://code.claude.com/docs/en/remote-control
+    test: RemoteControlProtocolTests, RemoteControlTests, RealCliTests, RemoteControlRealCliTests
+    fallback: "{subtype: remote_control, enabled: true, name} connects the session as SDK hosts (the VS Code extension) do, and {enabled: false} disconnects it; the wire names are from Claude Code 2.1.284's own handler, not the docs or the Agent SDK types. Claude Code runs its eligibility checks first and answers with the reason as an error (against the mock: \"Remote Control is only available when using Claude via api.anthropic.com…\"), which the tab shows. If it's rejected as unsupported, the tab sends the /remote-control command instead. If enabled: false fails, the tab's claude is restarted on the same session and doesn't connect again. Either way nothing else in the tab breaks."
+  - id: "session_url"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs
+    test: RemoteControlProtocolTests, RemoteControlTests
+    fallback: The success answer to remote_control, the session at claude.ai/code that the note links to and Open in the Claude app opens. Without it connect_url is used; without either the tab reads Connected with no link.
+  - id: "connect_url"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs
+    test: RemoteControlProtocolTests
+    fallback: See session_url; used only when that's missing.
+  - id: "bridge_session_id"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs
+    test: RemoteControlProtocolTests
+    fallback: In the success answer to remote_control, with environment_id and bridge_epoch. Not used; a later version could pass it back as reattach_session_id so a restarted tab keeps its session in the Claude app.
+  - id: "bridge_epoch"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs
+    test: RemoteControlProtocolTests
+    fallback: Not used; see bridge_session_id.
+  - id: "Unsupported control request subtype"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs
+    test: RemoteControlProtocolTests, RemoteControlTests
+    fallback: How 2.1.284 rejects a control request it doesn't know, which sends a tab to the /remote-control fallback. If the wording changes, a rejected remote_control shows as the tab's reason for not connecting instead.
+  - id: "bridge_state"
+    kind: message
+    status: undocumented
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    test: RemoteControlProtocolTests, RemoteControlTests, RealCliTests
+    fallback: "system/bridge_state with state (ready, connected, reconnecting, failed, policy_disabled), detail and failure_kind: the connection's progress after remote_control. A state Claudette doesn't know is Unknown and changes nothing. Without the message the tab keeps what the answer to remote_control said until the session ends."
+  - id: "worker_shutting_down"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RemoteControlProtocolTests, RemoteControlTests
+    fallback: A connected tab reads Not connected, with the reason. One arriving while the tab isn't connected (replayed from a resumed session) is ignored.
+  - id: "/remote-control"
+    kind: command
+    status: undocumented
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    docs: https://code.claude.com/docs/en/remote-control
+    test: RemoteControlProtocolTests, RemoteControlTests, RealCliTests
+    fallback: "Documented for the terminal, the Desktop app and the VS Code extension's prompt box; sent by an SDK host as a message it's undocumented. Only the fallback for a Claude Code that rejects remote_control, sent while Claude isn't working and hidden from the conversation, with its reply shown as a note. In -p mode 2.1.284 always answers it locally with \"/remote-control isn't available in this environment.\", so the fallback only says why the tab isn't connected; the tab stays unconnected and nothing else breaks."
+  - id: "isn't available in this environment"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs
+    test: RemoteControlProtocolTests, RealCliTests
+    fallback: "The reply to /remote-control in -p mode (2.1.284), an assistant message from the model <synthetic> and a result with num_turns 0. Replies are read tolerantly: a claude.ai/code address means connected; isn't available, requires, disabled and similar mean unavailable, with the reply as the reason; anything else counts as connected, with the reply as the note."
+  - id: "unavailable_headless"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    test: RemoteControlProtocolTests, RealCliTests
+    fallback: "local_command_outcome.kind on a local command's reply (marked internal in Claude Code's schema): the command can't run in a headless session. unknown, failed and restart_required mean it didn't run either. Without the field the reply's words decide."
+  - id: "control_cancel_request for can_use_tool answered in the Claude app"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    test: RemoteControlTests
+    fallback: When a connected device answers a permission prompt, question or plan, 2.1.284 withdraws the host's copy with control_cancel_request (from its injectControlResponse). The card closes and reads "Answered in the Claude app" while the tab is connected and Claudette didn't stop the turn. Without it the card stays open until the turn moves on, as for any withdrawn request.
+  - id: "CLAUDE_CLIENT_PRESENCE_FILE"
+    kind: env
+    status: documented
+    usedIn: src/Claudette.Core/RemoteControl/PresenceFile.cs, src/Claudette.App/Services/RemoteControlService.cs
+    docs: https://code.claude.com/docs/en/env-vars
+    test: RemoteControlProtocolTests, RemoteControlTests
+  - id: "inputNeededNotifEnabled"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Views/SettingsWindow.axaml
+    docs: https://code.claude.com/docs/en/settings-reference
+    test: RemoteControlUiTests
+    fallback: Claudette only names it ("Push when actions required" in /config) and links to the docs; it never writes Claude Code's settings.
+  - id: "agentPushNotifEnabled"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Views/SettingsWindow.axaml
+    docs: https://code.claude.com/docs/en/settings-reference
+    test: RemoteControlUiTests
+    fallback: See inputNeededNotifEnabled ("Push when Claude decides"; the docs page the link opens describes both).

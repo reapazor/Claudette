@@ -42,6 +42,8 @@ public sealed partial class SettingsViewModel
         OnPropertyChanged(nameof(CheckForUpdates));
         OnPropertyChanged(nameof(ClaudePath));
         OnPropertyChanged(nameof(UseLoginShellEnvironment));
+        OnPropertyChanged(nameof(ConnectNewTabsToClaudeApp));
+        OnPropertyChanged(nameof(KeepAwakeWhileConnected));
     }
 
     /// <summary>New tabs → <b>Reset to defaults</b>. Favorites and recent folders are this machine's data, not settings.</summary>

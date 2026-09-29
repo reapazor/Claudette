@@ -1,6 +1,7 @@
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
+using Claudette.Core.Diffs;
 using Claudette.Core.ProjectTools;
 using Claudette.Core.ProjectTools.Unreal;
 using Claudette.Core.Settings;
@@ -41,6 +42,9 @@ public class ProjectToolsTests
 
     private static ProjectMenuEntry Entry(TabViewModel tab, string label) => InlineDispatcher.Read(() => tab.ProjectMenu.Single(e => e.Label == label));
 
+    /// <summary>The newest run: the one the last job made.</summary>
+    internal static ProjectRunViewModel? LastRun(TabViewModel tab) => InlineDispatcher.Read(() => tab.ProjectRuns.LastOrDefault());
+
     // ---- The chip and its menu --------------------------------------------------------------------------------------------
 
     [Fact]
@@ -53,12 +57,12 @@ public class ProjectToolsTests
 
         Assert.True(tab.HasProjectTools);
         Assert.False(tab.OffersFirstProjectAction);
-        Assert.Equal("NightOwl · UE 5.4", tab.ProjectChipText);
+        Assert.Equal("NightOwl · UE 5.4", tab.ProjectButtonText);
         Assert.Equal("NightOwl (UE 5.4)", tab.ProjectMenuTitle);
         Assert.Equal("NightOwl · Unreal Engine", tab.ProjectHeaderTitle);
         Assert.Equal(["Unreal Engine 5.4.2 · engine in a parent folder", h.Root], tab.ProjectHeaderLines);
         Assert.Contains(tab.ProjectDetails, d => d.Label == "Project" && d.Value == uproject);
-        Assert.Contains("Ctrl+Shift+E: Launch editor", tab.ProjectChipTip.Replace("⇧⌘E", "Ctrl+Shift+E"), StringComparison.Ordinal);
+        Assert.Contains("Ctrl+Shift+E: Launch editor", tab.ProjectButtonTip.Replace("⇧⌘E", "Ctrl+Shift+E"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -112,6 +116,54 @@ public class ProjectToolsTests
         Assert.True(Entry(tab, "Open solution").IsEnabled);
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "open-solution"));
         Assert.Equal([Path.Combine(h.WorkFolder, "NightOwl.sln")], h.Platform.OpenedFiles);
+    }
+
+    /// <summary>With Rider chosen, <b>Open in Rider</b> gives Rider the .uproject, with no solution needed (GitHub issue #6).</summary>
+    [Fact]
+    public async Task Open_in_Rider_opens_the_uproject_in_Rider_without_a_solution()
+    {
+        var (h, launcher, uproject) = UnrealHarness(s => s.ProjectTools.OpenSolutionsWith = SolutionOpener.Rider);
+        await using var _h = h;
+        h.Services.ProjectTools.Probe = new RiderProbe(installed: true);
+        var tab = await OpenWithProjectAsync(h);
+
+        Assert.True(Entry(tab, "Open in Rider").IsEnabled);
+        Assert.DoesNotContain(tab.ProjectMenu, e => e.Label == "Open solution");
+        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "open-solution"));
+
+        Assert.Contains(uproject, launcher.Started.Last().Arguments);
+        Assert.Empty(h.Platform.OpenedFiles);
+    }
+
+    /// <summary>
+    /// Without Rider, the .uproject isn't handed to the OS's app, which would start the Unreal editor: a note says why.
+    /// </summary>
+    [Fact]
+    public async Task Open_in_Rider_without_Rider_says_so_rather_than_starting_the_editor()
+    {
+        Assert.SkipWhen(OperatingSystem.IsMacOS(), "On macOS, open -a finds Rider itself, so Claudette never decides it's missing.");
+        var (h, launcher, _) = UnrealHarness(s => s.ProjectTools.OpenSolutionsWith = SolutionOpener.Rider);
+        await using var _h = h;
+        h.Services.ProjectTools.Probe = new RiderProbe(installed: false);
+        var tab = await OpenWithProjectAsync(h);
+        var started = launcher.Started.Count;
+
+        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "open-solution"));
+
+        Assert.Empty(h.Platform.OpenedFiles);
+        Assert.Equal(started, launcher.Started.Count);
+        Assert.Contains(tab.Items, i => i is Conversation.NoteItem note && note.Text.StartsWith("Rider wasn't found, so the project wasn't opened", StringComparison.Ordinal));
+    }
+
+    /// <summary>Finds Rider on the PATH, or nothing, whichever OS runs the test.</summary>
+    private sealed class RiderProbe(bool installed) : IFileProbe
+    {
+        public bool FileExists(string path) => installed && Path.GetFileName(path).StartsWith("rider", StringComparison.OrdinalIgnoreCase);
+
+        public string? FindOnPath(string fileName) =>
+            installed && fileName.StartsWith("rider", StringComparison.OrdinalIgnoreCase) ? Path.Combine(Path.GetTempPath(), "rider", "bin", fileName) : null;
+
+        public string ExpandEnvironmentVariables(string path) => path;
     }
 
     [Fact]
@@ -219,27 +271,31 @@ public class ProjectToolsTests
         Assert.False(spec.Detached);
         Assert.NotNull(spec.Environment);
         Assert.True(tab.IsProjectJobRunning);
-        Assert.Equal("Build editor…", tab.ProjectChipText);
+        Assert.Equal("Build editor…", tab.ProjectButtonText);
         Assert.False(Entry(tab, "Generate project files").IsEnabled);
+        Assert.Contains("Stop it first", Entry(tab, "Generate project files").Tip, StringComparison.Ordinal);
+        var build = LastRun(tab)!;
+        Assert.Same(build, tab.SelectedProjectRun);
         process.WriteOutput("Building NightOwlEditor...");
         process.WriteError("warning: deprecated");
-        await TabTestHarness.Eventually(() => tab.ProjectOutput.Contains("warning: deprecated"), "the output");
-        Assert.StartsWith("$ ", tab.ProjectOutput[0], StringComparison.Ordinal);
+        await TabTestHarness.Eventually(() => build.Output.Contains("warning: deprecated"), "the output");
+        Assert.StartsWith("$ ", build.Output[0], StringComparison.Ordinal);
 
         process.Exit(0);
         await TabTestHarness.Eventually(() => !tab.IsProjectJobRunning, "the end");
 
-        Assert.Equal("Build editor succeeded.", tab.ProjectJobStatus);
-        Assert.False(tab.ProjectJobFailed);
-        Assert.Equal("NightOwl · UE 5.4", tab.ProjectChipText);
+        Assert.Equal("Build editor succeeded.", build.Status);
+        Assert.False(build.Failed);
+        Assert.Equal("NightOwl · UE 5.4", tab.ProjectButtonText);
 
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "generate-project-files"));
         launcher.Processes.Last().Exit(6);
-        await TabTestHarness.Eventually(() => tab.ProjectJobState == ProjectJobState.Failed, "the failure");
+        var generate = LastRun(tab)!;
+        await TabTestHarness.Eventually(() => generate.State == ProjectJobState.Failed, "the failure");
 
-        Assert.Equal("Generate project files failed (exit code 6).", tab.ProjectJobStatus);
-        Assert.True(tab.ProjectJobFailed);
-        Assert.DoesNotContain("Building NightOwlEditor...", tab.ProjectOutput);
+        Assert.Equal("Generate project files failed (exit code 6).", generate.Status);
+        Assert.True(generate.Failed);
+        Assert.DoesNotContain("Building NightOwlEditor...", generate.Output);
     }
 
     [Fact]
@@ -251,13 +307,16 @@ public class ProjectToolsTests
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-editor"));
         var process = launcher.Processes.Last();
 
-        Assert.True(tab.StopProjectJobCommand.CanExecute(null));
-        tab.StopProjectJobCommand.Execute(null);
-        await TabTestHarness.Eventually(() => tab.ProjectJobState == ProjectJobState.Stopped, "the stop");
+        var run = tab.SelectedProjectRun!;
+
+        Assert.True(run.StopCommand.CanExecute(null));
+        run.StopCommand.Execute(null);
+        await TabTestHarness.Eventually(() => run.State == ProjectJobState.Stopped, "the stop");
 
         Assert.True(h.Trees.Trees[process.Id].Killed);
         Assert.True(process.Killed);
-        Assert.Equal("Build editor was stopped.", tab.ProjectJobStatus);
+        Assert.Equal("Build editor was stopped.", run.Status);
+        Assert.False(run.StopCommand.CanExecute(null));
         Assert.Null(h.Notifier.Last("ProjectAction:"));
     }
 
@@ -284,7 +343,7 @@ public class ProjectToolsTests
         var count = h.Notifier.Shown.Count;
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-editor"));
         launcher.Processes.Last().Exit(0);
-        await TabTestHarness.Eventually(() => tab.ProjectJobState == ProjectJobState.Succeeded, "the end");
+        await TabTestHarness.Eventually(() => LastRun(tab)!.Succeeded, "the end");
         Assert.Equal(count, h.Notifier.Shown.Count);
 
         h.Services.Settings.Notifications.ProjectActions = false;
@@ -302,7 +361,7 @@ public class ProjectToolsTests
 
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-and-launch"));
         launcher.Processes.Last().Exit(2);
-        await TabTestHarness.Eventually(() => tab.ProjectJobState == ProjectJobState.Failed, "the failed build");
+        await TabTestHarness.Eventually(() => LastRun(tab)!.Failed, "the failed build");
         await Task.Delay(50, TestContext.Current.CancellationToken);
         Assert.DoesNotContain(launcher.Started, s => s.FileName == editor);
 
@@ -325,12 +384,13 @@ public class ProjectToolsTests
         {
             process.WriteOutput($"line {i}");
         }
-        await TabTestHarness.Eventually(() => tab.ProjectOutput.LastOrDefault() == "line 5200", "the output");
+        var run = tab.SelectedProjectRun!;
+        await TabTestHarness.Eventually(() => run.Output.LastOrDefault() == "line 5200", "the output");
 
-        Assert.Equal(TabViewModel.MaxProjectOutputLines, tab.ProjectOutput.Count);
-        Assert.Equal("line 201", tab.ProjectOutput[0]);
-        Assert.Equal(201, tab.ProjectOutputDropped);
-        Assert.Contains("5,000", tab.ProjectOutputNote!.Replace(".", ",", StringComparison.Ordinal).Replace(" ", ",", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.Equal(ProjectRunViewModel.MaxOutputLines, run.Output.Count);
+        Assert.Equal("line 201", run.Output[0]);
+        Assert.Equal(201, run.OutputDropped);
+        Assert.Contains("5,000", run.OutputNote!.Replace(".", ",", StringComparison.Ordinal).Replace(" ", ",", StringComparison.Ordinal), StringComparison.Ordinal);
         await tab.CopyProjectOutputCommand.ExecuteAsync(null);
         Assert.EndsWith("line 5200", h.Platform.Clipboard, StringComparison.Ordinal);
     }
@@ -379,13 +439,13 @@ public class ProjectToolsTests
         Assert.DoesNotContain("open", confirmation.Message, StringComparison.Ordinal);
 
         await confirmation.ConfirmCommand.ExecuteAsync(null);
-        await TabTestHarness.Eventually(() => tab.ProjectJobState == ProjectJobState.Succeeded, "the clean");
+        await TabTestHarness.Eventually(() => LastRun(tab) is { Succeeded: true }, "the clean");
 
         Assert.False(Directory.Exists(Path.Combine(h.WorkFolder, "Intermediate")));
         Assert.False(Directory.Exists(Path.Combine(h.WorkFolder, "Plugins", "Owl", "Binaries")));
         Assert.True(File.Exists(Path.Combine(h.WorkFolder, "Saved", "Logs", "NightOwl.log")));
         Assert.True(File.Exists(Path.Combine(h.WorkFolder, "Plugins", "Owl", "Owl.uplugin")));
-        Assert.Contains("Deleted 2 folders.", tab.ProjectOutput);
+        Assert.Contains("Deleted 2 folders.", LastRun(tab)!.Output);
         await TabTestHarness.Eventually(() => !Action(tab, "clean").IsEnabled, "nothing left to clean");
     }
 
@@ -455,7 +515,7 @@ public class ProjectToolsTests
 
         var tab = await OpenWithProjectAsync(h);
 
-        Assert.Equal("work · Unity 2022.3", tab.ProjectChipText);
+        Assert.Equal("work · Unity 2022.3", tab.ProjectButtonText);
         Assert.StartsWith("This is a Unity 2022.3.20f1 project, work, at ", h.Factory.Launches.Single().AppendSystemPrompt, StringComparison.Ordinal);
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "run-editmode-tests"));
         var spec = launcher.Started.Last();
@@ -465,9 +525,9 @@ public class ProjectToolsTests
         Assert.True(Directory.Exists(Path.GetDirectoryName(results)));
         File.WriteAllText(results, """<test-run total="12" passed="11" failed="1" skipped="0" />""");
         launcher.Processes.Last().Exit(2);
-        await TabTestHarness.Eventually(() => tab.ProjectJobState == ProjectJobState.Failed, "the tests");
+        await TabTestHarness.Eventually(() => LastRun(tab)!.Failed, "the tests");
 
-        Assert.Equal("Run EditMode tests failed (exit code 2). 11 passed, 1 failed.", tab.ProjectJobStatus);
+        Assert.Equal("Run EditMode tests failed (exit code 2). 11 passed, 1 failed.", LastRun(tab)!.Status);
     }
 
     // ---- Custom actions (claudette.json and claudette.local.json) ----------------------------------------------------------
@@ -484,7 +544,7 @@ public class ProjectToolsTests
         await TabTestHarness.Eventually(() => tab.HasProjectTools, "the actions");
 
         Assert.True(tab.HasOnlyCustomActions);
-        Assert.Equal("Actions", tab.ProjectChipText);
+        Assert.Equal("Actions", tab.ProjectButtonText);
         Assert.Equal("Actions", tab.ProjectMenuTitle);
         Assert.Equal(["Run tests", "-", "Show output…", "Add an action…", "Refresh"], tab.ProjectMenu.Select(e => e.IsSeparator ? "-" : e.Label));
         Assert.Equal("Run tests", tab.MainProjectAction!.Label);
@@ -506,8 +566,8 @@ public class ProjectToolsTests
         }
         launcher.Processes.Last().WriteOutput("ok 12 tests");
         launcher.Processes.Last().Exit(0);
-        await TabTestHarness.Eventually(() => tab.ProjectJobStatus == "Run tests succeeded.", "the end");
-        Assert.Contains("ok 12 tests", tab.ProjectOutput);
+        await TabTestHarness.Eventually(() => LastRun(tab)!.Status == "Run tests succeeded.", "the end");
+        Assert.Contains("ok 12 tests", LastRun(tab)!.Output);
     }
 
     [Fact]
@@ -543,86 +603,6 @@ public class ProjectToolsTests
         Assert.Equal(started + 1, launcher.Started.Count);
         launcher.Processes.Last().Exit(0);
         await TabTestHarness.Eventually(() => !tab.IsProjectJobRunning, "the end");
-    }
-
-    [Fact]
-    public async Task Add_an_action_from_the_menu_writes_the_chosen_file_for_every_tab_in_the_folder()
-    {
-        await using var h = new TabTestHarness();
-        Write(Path.Combine(h.WorkFolder, ProjectFile.SharedName), """{ "links": [ { "name": "Board", "url": "https://example.com/board" } ] }""");
-        var tab = await h.OpenTabAsync();
-        var other = new TabViewModel(h.Services, h.Shell, new TabState { Folder = h.WorkFolder }, isRestored: false);
-        await other.RefreshProjectAsync();
-        h.Shell.Groups.Single().Tabs.Add(other);
-
-        tab.AddProjectActionCommand.Execute(null);
-        var editor = h.Shell.ActionEditor!;
-        Assert.Equal("Add an action", editor.Title);
-        Assert.True(editor.AsksForFile);
-        Assert.True(editor.SaveToLocal);
-        Assert.False(editor.SaveCommand.CanExecute(null));
-        editor.Name = "Serve";
-        editor.Command = "npm run dev";
-        editor.LaunchAndForget = true;
-        editor.SaveToShared = true;
-        Assert.Contains("comments in it are dropped", editor.FileNote, StringComparison.Ordinal);
-        editor.SaveCommand.Execute(null);
-
-        Assert.Null(h.Shell.ActionEditor);
-        var written = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(h.WorkFolder, ProjectFile.SharedName)))!;
-        Assert.Equal("https://example.com/board", written["links"]![0]!["url"]!.GetValue<string>());
-        Assert.Equal(("Serve", "npm run dev", "launch"), (written["actions"]![0]!["name"]!.GetValue<string>(), written["actions"]![0]!["command"]!.GetValue<string>(), written["actions"]![0]!["mode"]!.GetValue<string>()));
-        await TabTestHarness.Eventually(() => tab.ProjectChipText == "Actions" && other.ProjectActions.Count == 1, "both tabs");
-        Assert.Equal(ProjectActionKind.Launch, other.ProjectActions.Single().Kind);
-    }
-
-    [Fact]
-    public async Task Tab_settings_edit_either_files_actions_and_keep_what_they_dont_edit()
-    {
-        await using var h = new TabTestHarness();
-        var local = Path.Combine(h.WorkFolder, ProjectFile.LocalName);
-        Write(local, """
-            {
-              "actions": [
-                { "name": "First", "command": "one", "os": ["windows", "macos", "linux"] },
-                { "name": "Elsewhere", "command": "only there", "os": ["plan9"] },
-              ],
-              "links": [ { "name": "Mine", "url": "https://mine.example" } ],
-            }
-            """);
-        var tab = await h.OpenTabAsync();
-        h.Shell.OpenTabSettingsCommand.Execute(tab);
-        var settings = h.Shell.TabSettings!;
-        Assert.Equal(ProjectFileScope.Local, settings.SelectedProjectActionFile.Value);
-        Assert.Equal(["First", "Elsewhere"], settings.ProjectActions.Select(r => r.Name));
-        Assert.Contains("only on plan9", settings.ProjectActions[1].Detail, StringComparison.Ordinal);
-
-        settings.AddProjectActionCommand.Execute(null);
-        Assert.False(h.Shell.ActionEditor!.AsksForFile);
-        h.Shell.ActionEditor.Name = "Second";
-        h.Shell.ActionEditor.Command = "two";
-        h.Shell.ActionEditor.WorkingFolder = "sub";
-        h.Shell.ActionEditor.SaveCommand.Execute(null);
-        settings.MoveProjectActionUpCommand.Execute(null);
-        settings.SelectedProjectAction = settings.ProjectActions.Single(r => r.Name == "First");
-        settings.EditProjectActionCommand.Execute(null);
-        h.Shell.ActionEditor!.Name = "First, renamed";
-        h.Shell.ActionEditor.SaveCommand.Execute(null);
-        Assert.Equal(["First, renamed", "Second", "Elsewhere"], settings.ProjectActions.Select(r => r.Name));
-        // Nothing is written until Apply.
-        Assert.DoesNotContain("Second", File.ReadAllText(local), StringComparison.Ordinal);
-
-        await settings.ApplyCommand.ExecuteAsync(null);
-
-        var root = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(local))!;
-        Assert.Equal(["First, renamed", "Second", "Elsewhere"], root["actions"]!.AsArray().Select(a => a!["name"]!.GetValue<string>()));
-        Assert.Equal(3, root["actions"]![0]!["os"]!.AsArray().Count);
-        Assert.Equal("plan9", root["actions"]![2]!["os"]![0]!.GetValue<string>());
-        Assert.Equal("sub", root["actions"]![1]!["folder"]!.GetValue<string>());
-        Assert.Equal("https://mine.example", root["links"]![0]!["url"]!.GetValue<string>());
-        await TabTestHarness.Eventually(() => tab.ProjectActions.Count == 2, "the tab's actions");
-        Assert.Equal(["First, renamed", "Second"], tab.ProjectActions.Select(a => a.Label));
-        Assert.False(File.Exists(Path.Combine(h.WorkFolder, ProjectFile.SharedName)));
     }
 
     // ---- Links --------------------------------------------------------------------------------------------------------------

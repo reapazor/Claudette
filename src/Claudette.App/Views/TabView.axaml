@@ -229,6 +229,22 @@
       <Setter Property="Padding" Value="4,0" />
       <Setter Property="MinHeight" Value="0" />
     </Style>
+    <!-- The running tasks list (DESIGN.md §5, "Running tasks"), under the chip in the composer bar -->
+    <Style Selector="StackPanel.tasklist">
+      <Setter Property="Spacing" Value="2" />
+    </Style>
+    <Style Selector=".compact StackPanel.tasklist">
+      <Setter Property="Spacing" Value="0" />
+    </Style>
+    <Style Selector="Button.taskrow">
+      <Setter Property="Padding" Value="6,4" />
+    </Style>
+    <Style Selector=".compact Button.taskrow">
+      <Setter Property="Padding" Value="6,2" />
+    </Style>
+    <Style Selector=".claude Button.taskrow">
+      <Setter Property="CornerRadius" Value="8" />
+    </Style>
     <!-- The / and @ autocomplete (DESIGN.md §5, "Composer") -->
     <Style Selector="Button.completion.selected /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource SelectedRowBrush}" />
@@ -517,8 +533,15 @@
     </DataTemplate>
 
     <DataTemplate DataType="conv:NoteItem">
-      <SelectableTextBlock Classes="muted small" FontStyle="Italic" TextWrapping="Wrap" Text="{Binding Text}"
-                           Classes.error="{Binding IsError}" Classes.warning="{Binding IsWarning}" />
+      <StackPanel Spacing="2">
+        <SelectableTextBlock Classes="muted small" FontStyle="Italic" TextWrapping="Wrap" Text="{Binding Text}"
+                             Classes.error="{Binding IsError}" Classes.warning="{Binding IsWarning}" />
+        <!-- Such as the tab's session in the Claude app (DESIGN.md §18, "Remote Control") -->
+        <Button Classes="flat" Padding="0" HorizontalAlignment="Left" IsVisible="{Binding HasLink}" ToolTip.Tip="Open in your browser"
+                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenLinkCommand}" CommandParameter="{Binding Link}">
+          <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding Link}" TextWrapping="Wrap" TextDecorations="Underline" />
+        </Button>
+      </StackPanel>
     </DataTemplate>
 
     <!-- Skipped by Claudette, shown while protocol logging is on (DESIGN.md §16) -->
@@ -622,7 +645,8 @@
             <views:AgentDetails Grid.Row="3" IsVisible="{Binding HasAgents}" />
           </Grid>
 
-          <!-- Project (DESIGN.md §18, "Project tools"): the project's details, its actions, and the running or last job -->
+          <!-- Project (DESIGN.md §18, "Project tools"): the project's details, its actions, and the selected run's log: the
+               newest, or the one clicked in the sidebar -->
           <DockPanel x:Name="ProjectPage" IsVisible="{Binding IsProjectPage}">
             <StackPanel DockPanel.Dock="Top" Margin="12,0,12,6" Spacing="8">
               <TextBlock Text="{Binding ProjectHeaderTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
@@ -656,17 +680,18 @@
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" IsVisible="{Binding HasProjectJob}">
-                <TextBlock Classes="small" Classes.error="{Binding ProjectJobFailed}" Text="{Binding ProjectJobStatus}" TextWrapping="Wrap" VerticalAlignment="Center" />
-                <Button Grid.Column="1" Content="Stop" Command="{Binding StopProjectJobCommand}" IsVisible="{Binding IsProjectJobRunning}"
-                        ToolTip.Tip="Ends the job and every process it started" />
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" IsVisible="{Binding HasSelectedProjectRun}">
+                <TextBlock Classes="small" Classes.error="{Binding SelectedProjectRun.Failed, FallbackValue=False}" Text="{Binding SelectedProjectRun.Status, FallbackValue={x:Null}}"
+                           TextWrapping="Wrap" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Content="Stop" Command="{Binding SelectedProjectRun.StopCommand, FallbackValue={x:Null}}"
+                        IsVisible="{Binding SelectedProjectRun.IsRunning, FallbackValue=False}" ToolTip.Tip="Ends the job and every process it started" />
                 <Button Grid.Column="2" Content="Copy" Command="{Binding CopyProjectOutputCommand}" ToolTip.Tip="Copy the output" />
               </Grid>
-              <TextBlock Classes="muted small" Text="{Binding ProjectOutputNote}" TextWrapping="Wrap"
-                         IsVisible="{Binding ProjectOutputNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <TextBlock Classes="muted small" Text="{Binding SelectedProjectRun.OutputNote, FallbackValue={x:Null}}" TextWrapping="Wrap"
+                         IsVisible="{Binding SelectedProjectRun.OutputNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}, FallbackValue=False}" />
             </StackPanel>
-            <ListBox x:Name="ProjectOutputList" ItemsSource="{Binding ProjectOutput}" Background="Transparent" Margin="8,0,8,8"
-                     IsVisible="{Binding HasProjectJob}" AutomationProperties.Name="Output">
+            <ListBox x:Name="ProjectOutputList" ItemsSource="{Binding SelectedProjectRun.Output, FallbackValue={x:Null}}" Background="Transparent" Margin="8,0,8,8"
+                     IsVisible="{Binding HasSelectedProjectRun}" AutomationProperties.Name="Output">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="x:String">
                   <TextBlock Classes="mono small" Text="{Binding}" />
@@ -963,8 +988,9 @@
             </Border>
           </Popup>
 
-          <!-- Control bar -->
-          <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto">
+          <!-- Control bar: the chips on the left, and on the right the counts and Send, which move under the chips when
+               both don't fit on one line (DESIGN.md §5) -->
+          <controls:ControlBarPanel Grid.Row="2">
             <StackPanel Orientation="Horizontal" Spacing="2">
               <!-- Attach a file (DESIGN.md §5, "Attachments"); dropping and pasting work too -->
               <Button Classes="flat" Padding="6,4" ToolTip.Tip="Attach a file or image (or drop or paste one)" AutomationProperties.Name="Attach a file"
@@ -1060,60 +1086,9 @@
                   </Flyout>
                 </Button.Flyout>
               </Button>
-
-              <!-- Project tools (DESIGN.md §18): "◆ NightOwl · UE 5.4 ▾", or "◆ Actions ▾" for a folder's own actions -->
-              <Button x:Name="ProjectChip" Classes="flat" IsVisible="{Binding HasProjectTools}" ToolTip.Tip="{Binding ProjectChipTip}"
-                      AutomationProperties.Name="Project tools">
-                <StackPanel Orientation="Horizontal" Spacing="4">
-                  <TextBlock Classes="muted small" Text="◆" VerticalAlignment="Center" IsVisible="{Binding !IsProjectJobRunning}" />
-                  <TextBlock Classes="status busy" Text="●" FontSize="9" VerticalAlignment="Center" IsVisible="{Binding IsProjectJobRunning}" />
-                  <TextBlock Classes="muted small" Text="{Binding ProjectChipText, StringFormat='{}{0} ▾'}" MaxWidth="240" TextTrimming="CharacterEllipsis" />
-                </StackPanel>
-                <Button.Flyout>
-                  <Flyout Placement="TopEdgeAlignedLeft" Opened="OnProjectMenuOpened">
-                    <StackPanel x:Name="ProjectMenu" MinWidth="300" MaxWidth="440" Spacing="1">
-                      <TextBlock Text="{Binding ProjectHeaderTitle}" FontWeight="SemiBold" Margin="8,2,8,0" />
-                      <ItemsControl ItemsSource="{Binding ProjectHeaderLines}" Margin="8,0,8,2">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="x:String">
-                            <TextBlock Classes="muted small" Text="{Binding}" TextWrapping="Wrap" />
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                      <!-- Entries of claudette.json that were skipped, and why (DESIGN.md §18) -->
-                      <ItemsControl ItemsSource="{Binding ProjectFileProblems}" Margin="8,0,8,2" IsVisible="{Binding HasProjectFileProblems}">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="x:String">
-                            <TextBlock Classes="small warning" Text="{Binding}" TextWrapping="Wrap" />
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                      <Separator Margin="0,2" />
-                      <ItemsControl ItemsSource="{Binding ProjectMenu}">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate DataType="vm:ProjectMenuEntry">
-                            <Panel>
-                              <Separator Margin="0,3" IsVisible="{Binding IsSeparator}" />
-                              <TextBlock Classes="muted small" Text="{Binding Label}" Margin="8,4,8,1" IsVisible="{Binding IsHeader}" />
-                              <Button Classes="flat row" IsVisible="{Binding IsButton}" IsEnabled="{Binding IsEnabled}" HorizontalContentAlignment="Stretch"
-                                      ToolTip.Tip="{Binding Tip}" ToolTip.ShowOnDisabled="True" Click="OnFlyoutItemPicked"
-                                      Command="{Binding Command}" CommandParameter="{Binding Parameter}">
-                                <Grid ColumnDefinitions="16,*">
-                                  <TextBlock Classes="small" Text="{Binding Mark}" VerticalAlignment="Center" IsVisible="{Binding HasMark}" />
-                                  <TextBlock Grid.Column="1" Text="{Binding Label}" />
-                                </Grid>
-                              </Button>
-                            </Panel>
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                    </StackPanel>
-                  </Flyout>
-                </Button.Flyout>
-              </Button>
             </StackPanel>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+            <StackPanel Orientation="Horizontal" Spacing="2">
               <!-- Processes summary (DESIGN.md §4) -->
               <Button Classes="flat" IsVisible="{Binding ShowProcessSummary}"
                       ToolTip.Tip="Processes this tab started" Click="OnShowProcesses">
@@ -1124,6 +1099,46 @@
               <Button Classes="flat" IsVisible="{Binding HasAgents}" ToolTip.Tip="What this tab's subagents are doing"
                       Command="{Binding OpenAgentsPageCommand}">
                 <TextBlock Classes="muted small" Text="{Binding AgentsButtonText}" />
+              </Button>
+
+              <!-- Running tasks (DESIGN.md §5, "Running tasks"): what Claude Code keeps going in the background -->
+              <Button x:Name="TasksChip" Classes="flat" IsVisible="{Binding HasRunningTasks}" ToolTip.Tip="Work Claude Code keeps running in the background"
+                      AutomationProperties.Name="{Binding RunningTasksText}">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Classes="status busy" Text="●" FontSize="9" VerticalAlignment="Center" />
+                  <TextBlock Classes="muted small" Text="{Binding RunningTasksText}" />
+                </StackPanel>
+                <Button.Flyout>
+                  <Flyout Placement="TopEdgeAlignedRight" Opened="OnTaskListOpened" Closed="OnTaskListClosed">
+                    <StackPanel x:Name="TaskList" Classes="tasklist" MinWidth="320" MaxWidth="480">
+                      <TextBlock Text="{Binding RunningTasksText}" FontWeight="SemiBold" Margin="6,2,6,0" />
+                      <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="6,0,6,4"
+                                 Text="Claude Code keeps these going after the turn, and tells Claude when each one ends." />
+                      <ItemsControl ItemsSource="{Binding Tasks.Running}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="conv:RunningTask">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                              <Button Classes="flat row taskrow" ToolTip.Tip="{Binding Tooltip}" Click="OnFlyoutItemPicked"
+                                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ShowTaskCommand}" CommandParameter="{Binding}">
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                  <Path Classes="toolicon" Data="{Binding IconKey, Converter={x:Static conv:ToolIcons.Geometry}}" Margin="0,0,8,0" />
+                                  <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Classes="muted small" Text="{Binding KindText}" />
+                                  </StackPanel>
+                                  <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding RunningText}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                </Grid>
+                              </Button>
+                              <Button Grid.Column="1" Classes="flat" Content="Stop" VerticalAlignment="Center" Click="OnFlyoutItemPicked"
+                                      ToolTip.Tip="Stop it through Claude Code, which tells Claude it ended"
+                                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).StopTaskCommand}" CommandParameter="{Binding}" />
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Flyout>
+                </Button.Flyout>
               </Button>
 
               <!-- Changed files (DESIGN.md §8) -->
@@ -1197,7 +1212,7 @@
                       <ItemsControl ItemsSource="{Binding InfoRows}">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate DataType="vm:InfoRow">
-                            <Grid ColumnDefinitions="72,*" Margin="0,1">
+                            <Grid ColumnDefinitions="88,*" Margin="0,1">
                               <TextBlock Classes="muted small" Text="{Binding Label}" />
                               <SelectableTextBlock Grid.Column="1" Classes="small" Text="{Binding Value}" TextWrapping="Wrap" />
                             </Grid>
@@ -1232,7 +1247,7 @@
               </Button>
               <Button Classes="stop" Content="■" Margin="6,0,0,0" ToolTip.Tip="Stop (Esc)" AutomationProperties.Name="Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsWorking}" />
             </StackPanel>
-          </Grid>
+          </controls:ControlBarPanel>
         </Grid>
       </Border>
 

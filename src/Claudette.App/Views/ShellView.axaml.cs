@@ -205,6 +205,15 @@ public partial class ShellView : UserControl
 
     private ShellViewModel? ViewModel => DataContext as ShellViewModel;
 
+    /// <summary>
+    /// The project's menu opened: look at the project's files again, so what's enabled is current (a solution generated
+    /// from a terminal, say). The menu updates in place when that's done (DESIGN.md §18).
+    /// </summary>
+    private void OnProjectMenuOpened(object? sender, EventArgs e) => ViewModel?.SelectedTab?.RefreshProjectCommand.Execute(null);
+
+    /// <summary>An entry of the project's menu was picked: the menu closes, as a menu does.</summary>
+    private void OnProjectMenuItemPicked(object? sender, RoutedEventArgs e) => ProjectButton.Flyout?.Hide();
+
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
@@ -396,17 +405,15 @@ public partial class ShellView : UserControl
         }
     }
 
-    private async Task ShowSettingsAsync(string? category)
+    /// <summary>The Settings window, modal, where <paramref name="opening"/> says, with the selected tab's project pages.</summary>
+    private async Task ShowSettingsAsync(SettingsOpening opening)
     {
         if (this.FindAncestorOfType<Window>() is not { } owner || owner.DataContext is not MainWindowViewModel main)
         {
+            opening.Project?.Dispose();
             return;
         }
-        var settings = new SettingsViewModel(main.Services, main.AccountText, main.Updates) { Account = main.Account, AppUpdates = main.AppUpdate };
-        if (category is not null && SettingsViewModel.AllCategories.Contains(category))
-        {
-            settings.SelectedCategory = category;
-        }
+        var settings = new SettingsViewModel(main.Services, main.AccountText, main.Updates, opening) { Account = main.Account, AppUpdates = main.AppUpdate };
         var window = new SettingsWindow { DataContext = settings };
         await window.ShowDialog(owner);
     }

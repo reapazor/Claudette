@@ -1,0 +1,104 @@
+{
+  "page": {
+    "id": "tymt9n04zgry",
+    "name": "Claude",
+    "url": "https://status.claude.com",
+    "updated_at": "2026-09-29T14:41:08.294Z"
+  },
+  "components": [
+    {
+      "id": "rwppv331jlwc",
+      "name": "claude.ai",
+      "status": "partial_outage",
+      "position": 1,
+      "group": false
+    },
+    {
+      "id": "0qbwn08sd68x",
+      "name": "Claude Console (platform.claude.com)",
+      "status": "degraded_performance",
+      "position": 2,
+      "group": false
+    },
+    {
+      "id": "k8w3r06qmzrp",
+      "name": "Claude API (api.anthropic.com)",
+      "status": "degraded_performance",
+      "position": 3,
+      "group": false
+    },
+    {
+      "id": "yyzkbfz2thpt",
+      "name": "Claude Code",
+      "status": "partial_outage",
+      "position": 4,
+      "group": false
+    },
+    {
+      "id": "bpp5gb3hpjcl",
+      "name": "Claude Cowork",
+      "status": "partial_outage",
+      "position": 5,
+      "group": false
+    },
+    {
+      "id": "0scnb50nvy53",
+      "name": "Claude for Government",
+      "status": "operational",
+      "position": 6,
+      "group": false
+    }
+  ],
+  "incidents": [
+    {
+      "id": "4xvtc2gnq73l",
+      "name": "Elevated errors on claude.ai, Claude Code, Claude Cowork and the Claude API",
+      "status": "investigating",
+      "created_at": "2026-09-29T14:21:37.188Z",
+      "updated_at": "2026-09-29T14:41:08.276Z",
+      "resolved_at": null,
+      "impact": "major",
+      "shortlink": "https://stspg.io/br61xzj05pp5",
+      "incident_updates": [
+        {
+          "id": "n48jph444trw",
+          "status": "investigating",
+          "body": "We have applied a mitigation and error rates have dropped substantially. Some sign-in attempts, account actions and Claude Code and Cowork sessions are still failing. We are continuing to work on a full fix.",
+          "display_at": "2026-09-29T14:41:08.273Z"
+        }
+      ],
+      "components": [
+        {
+          "id": "rwppv331jlwc",
+          "name": "claude.ai",
+          "status": "partial_outage"
+        },
+        {
+          "id": "0qbwn08sd68x",
+          "name": "Claude Console (platform.claude.com)",
+          "status": "degraded_performance"
+        },
+        {
+          "id": "k8w3r06qmzrp",
+          "name": "Claude API (api.anthropic.com)",
+          "status": "degraded_performance"
+        },
+        {
+          "id": "yyzkbfz2thpt",
+          "name": "Claude Code",
+          "status": "partial_outage"
+        },
+        {
+          "id": "bpp5gb3hpjcl",
+          "name": "Claude Cowork",
+          "status": "partial_outage"
+        }
+      ]
+    }
+  ],
+  "scheduled_maintenances": [],
+  "status": {
+    "indicator": "minor",
+    "description": "Minor Service Outage"
+  }
+}

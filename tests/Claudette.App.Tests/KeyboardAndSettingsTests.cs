@@ -285,10 +285,11 @@ public class KeyboardAndSettingsTests
         second.Services.Settings.Sessions.LibraryFolder = library;
         second.Services.Settings.Sessions.SyncSettings = true;
         second.Services.Library.OnSettingsChanged();
-        await TabTestHarness.Eventually(() => second.Services.Settings.Appearance.Density == Density.Compact, "the synced density");
+        // Applied as it arrives, like a change made here. The sync stores the values on its own thread and then
+        // announces them, so wait for the shell to follow rather than for the stored value alone.
+        await TabTestHarness.Eventually(() => second.Shell.IsCompact, "the synced density, applied");
 
+        Assert.Equal(Density.Compact, second.Services.Settings.Appearance.Density);
         Assert.False(second.Services.Settings.Appearance.ShowContextOnTabs);
-        // Applied as it arrives, like a change made here.
-        Assert.True(second.Shell.IsCompact);
     }
 }

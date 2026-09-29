@@ -1,0 +1,10 @@
+﻿[button] (parts below)
+  "✕"
+  "Generate project files"
+  "Failed · exit code 6 · 12:00"
+  [button] Close
+[button] (parts below)
+  "●"
+  "Build editor"
+  "Running · 0s"
+  [button] Stop

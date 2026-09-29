@@ -32,6 +32,31 @@ public class SettingsWindowTests
         await Verify(UiText.Describe(page, (h.Root, "{root}"), (Environment.MachineName, "{machine}"))).UseParameters(category);
     }
 
+    /// <summary>
+    /// A setting's label beside its control is never cut off at the window's usual size: a long one wraps (GitHub issue
+    /// #7, "Refresh the panel every (seconds)").
+    /// </summary>
+    [AvaloniaFact]
+    public async Task No_settings_label_is_cut_off()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var settings = new SettingsViewModel(h.Services, null);
+        var window = new SettingsWindow { DataContext = settings };
+        window.Show();
+        var cut = new List<string>();
+        foreach (var category in SettingsViewModel.AllCategories)
+        {
+            settings.SelectedCategory = category;
+            UiText.Settle(window);
+            cut.AddRange(window.GetVisualDescendants().OfType<TextBlock>()
+                .Where(t => t.Classes.Contains("label") && t.IsEffectivelyVisible)
+                .Where(t => t.TextLayout.Width > t.Bounds.Width + 0.5)
+                .Select(t => $"{category}: {t.Text}"));
+        }
+
+        Assert.Empty(cut);
+    }
+
     [AvaloniaFact]
     public async Task The_sidebar_ends_with_the_version_and_Report_an_issue()
     {

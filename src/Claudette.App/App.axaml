@@ -217,6 +217,29 @@
       <Setter Property="BorderBrush" Value="{DynamicResource BypassBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
     </Style>
+    <!-- A tab's project runs, under its row (DESIGN.md §4, §18): small rows indented to the tab's name, the name over
+         how it's going or how it ended, with the entry whose log the Project page shows picked out. -->
+    <Style Selector="ItemsControl.runs">
+      <Setter Property="Margin" Value="20,0,0,1" />
+    </Style>
+    <Style Selector="Button.runrow">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Padding" Value="6,3,4,3" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector=".compact Button.runrow">
+      <Setter Property="Padding" Value="6,1,4,1" />
+    </Style>
+    <Style Selector="Button.runrow.showing /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SelectedRowBrush}" />
+    </Style>
+    <Style Selector="TextBlock.runglyph, TextBlock.runname">
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="TextBlock.rundetail">
+      <Setter Property="FontSize" Value="11" />
+    </Style>
 
     <!-- The working line above the composer (DESIGN.md §5, "Working line") -->
     <Style Selector="TextBlock.working-glyph">
@@ -281,6 +304,9 @@
     <Style Selector=".claude Button.tabrow">
       <Setter Property="CornerRadius" Value="10" />
     </Style>
+    <Style Selector=".claude Button.runrow">
+      <Setter Property="CornerRadius" Value="8" />
+    </Style>
     <Style Selector="Border.composer.bypass">
       <Setter Property="BorderBrush" Value="{DynamicResource BypassBorderBrush}" />
       <Setter Property="BorderThickness" Value="2" />
@@ -326,6 +352,8 @@
 
       <!-- Small vector icons, so they look the same on every platform. -->
       <StreamGeometry x:Key="IconClose">M2,2 L10,10 M10,2 L2,10</StreamGeometry>
+      <!-- A square, filled: Stop on a running project run in the sidebar (DESIGN.md §18). -->
+      <StreamGeometry x:Key="IconStop">M2,2 L10,2 L10,10 L2,10 Z</StreamGeometry>
       <!-- 14×14: the Claude style's round Send button (DESIGN.md §3). -->
       <StreamGeometry x:Key="IconSendArrow">M7,12 L7,2.5 M2.5,6.5 L7,2 L11.5,6.5</StreamGeometry>
       <StreamGeometry x:Key="IconPlus">M6,1 L6,11 M1,6 L11,6</StreamGeometry>
@@ -341,6 +369,8 @@
       <StreamGeometry x:Key="IconRestart">M10.5,6 A4.5,4.5 0 1 1 9.18,2.82 M9.4,0.6 L9.18,2.82 L6.96,2.6</StreamGeometry>
       <!-- Two arrows chasing round a circle: a tab that syncs to the session library (DESIGN.md §4, "Sidebar"). -->
       <StreamGeometry x:Key="IconSync">M1.5,6 A4.5,4.5 0 0 1 9.9,3.75 M7.83,3 L9.9,3.75 L10.28,1.58 M10.5,6 A4.5,4.5 0 0 1 2.1,8.25 M4.17,9 L2.1,8.25 L1.72,10.42</StreamGeometry>
+      <!-- A phone: a tab connected to the Claude app (DESIGN.md §18, "Remote Control"). 7×10. -->
+      <StreamGeometry x:Key="IconPhone">M1.5,0.5 L5.5,0.5 A1,1 0 0 1 6.5,1.5 L6.5,8.5 A1,1 0 0 1 5.5,9.5 L1.5,9.5 A1,1 0 0 1 0.5,8.5 L0.5,1.5 A1,1 0 0 1 1.5,0.5 Z M3,7.8 L4,7.8</StreamGeometry>
       <!-- Two sheets: Copy on a message (DESIGN.md §5, "Copy and times"). -->
       <StreamGeometry x:Key="IconCopy">M4,4 L10.5,4 L10.5,10.5 L4,10.5 Z M8,2.5 L8,1.5 L1.5,1.5 L1.5,8 L2.5,8</StreamGeometry>
       <!-- A line wrapping back under itself: Wrap on a code block. -->
@@ -352,6 +382,8 @@
       <StreamGeometry x:Key="IconToolWrite">M2.5,1 L7,1 L9.5,3.5 L9.5,11 L2.5,11 Z M7,1 L7,3.5 L9.5,3.5 M6,5.5 L6,9 M4.25,7.25 L7.75,7.25</StreamGeometry>
       <StreamGeometry x:Key="IconToolBash">M1.5,2.5 L5,6 L1.5,9.5 M6,10 L10.5,10</StreamGeometry>
       <StreamGeometry x:Key="IconToolSearch">M5,1.5 A3.5,3.5 0 1 1 5,8.5 A3.5,3.5 0 1 1 5,1.5 M7.5,7.5 L10.5,10.5</StreamGeometry>
+      <!-- A project (DESIGN.md §18, "Project tools"): a cube, for the sidebar's project row -->
+      <StreamGeometry x:Key="IconProject">M6,1 L10.5,3.5 L10.5,8.5 L6,11 L1.5,8.5 L1.5,3.5 Z M1.5,3.5 L6,6 L10.5,3.5 M6,6 L6,11</StreamGeometry>
       <StreamGeometry x:Key="IconToolFolder">M1,2.5 L4.5,2.5 L5.5,4 L11,4 L11,10 L1,10 Z</StreamGeometry>
       <StreamGeometry x:Key="IconToolWeb">M6,1 A5,5 0 1 1 6,11 A5,5 0 1 1 6,1 M1,6 L11,6 M6,1 C3.6,3.6 3.6,8.4 6,11 M6,1 C8.4,3.6 8.4,8.4 6,11</StreamGeometry>
       <StreamGeometry x:Key="IconToolWebSearch">M5,1.5 A3.5,3.5 0 1 1 5,8.5 A3.5,3.5 0 1 1 5,1.5 M1.5,5 L8.5,5 M5,1.5 C3.7,3 3.7,7 5,8.5 M5,1.5 C6.3,3 6.3,7 5,8.5 M7.5,7.5 L10.5,10.5</StreamGeometry>
@@ -361,6 +393,10 @@
       <StreamGeometry x:Key="IconToolSkill">M6,1 L7.2,4.8 L11,6 L7.2,7.2 L6,11 L4.8,7.2 L1,6 L4.8,4.8 Z</StreamGeometry>
       <StreamGeometry x:Key="IconToolQuestion">M6,1 A5,5 0 1 1 6,11 A5,5 0 1 1 6,1 M4.4,4.6 A1.6,1.6 0 1 1 6.6,6.1 C6.1,6.4 6,6.8 6,7.3 M6,8.7 L6,9.1</StreamGeometry>
       <StreamGeometry x:Key="IconToolPlan">M1.5,2.5 L10.5,2.5 M1.5,6 L10.5,6 M1.5,9.5 L7,9.5</StreamGeometry>
+      <!-- A pulse: a Monitor watch, on its card and in the running tasks list (DESIGN.md §5, "Running tasks"). -->
+      <StreamGeometry x:Key="IconToolMonitor">M1,6.5 L3.5,6.5 L5,2.5 L7,10 L8.5,6.5 L11,6.5</StreamGeometry>
+      <!-- A cloud: a remote agent in the running tasks list. -->
+      <StreamGeometry x:Key="IconToolRemote">M3,9.5 L9,9.5 A2.25,2.25 0 0 0 9.2,5 A3,3 0 0 0 3.4,4.6 A2.45,2.45 0 0 0 3,9.5 Z</StreamGeometry>
       <StreamGeometry x:Key="IconToolDefault">M6,1 L10.5,3.5 L10.5,8.5 L6,11 L1.5,8.5 L1.5,3.5 Z M1.5,3.5 L6,6 L10.5,3.5 M6,6 L6,11</StreamGeometry>
 
       <!-- Claudette's color tokens, per theme. Views use only these, never Fluent's internal resource names. -->

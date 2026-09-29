@@ -229,7 +229,10 @@ internal sealed class NoPlatform : IPlatformServices
 
     public Task<string?> PickFolderAsync(string title) => Task.FromResult(FolderToPick);
 
-    public Task<string?> PickFileAsync(string title) => Task.FromResult<string?>(null);
+    /// <summary>What the file picker returns: null is Cancel.</summary>
+    public string? FileToPick { get; set; }
+
+    public Task<string?> PickFileAsync(string title) => Task.FromResult(FileToPick);
 
     public Task OpenUrlAsync(string url)
     {
@@ -338,8 +341,10 @@ internal sealed class TabTestHarness : IAsyncDisposable
             Path.Combine(_root, "programdata"), Path.Combine(_root, "programfiles"), Path.Combine(_root, "applications"));
         Services = new AppServices(AppPaths.Under(_root), launcher ?? new ProcessLauncher(), Time, Platform, dispatcher ?? new InlineDispatcher(), processTrees: Trees, notifier: Notifier,
             appInstaller: appInstaller, httpHandler: http ?? new OfflineHandler(), appVersion: appVersion ?? TestVersion, loginShell: loginShell,
-            projectToolPaths: otherPrograms);
+            projectToolPaths: otherPrograms, sleepBlocker: SleepBlocker);
         Services.Notifications.UseBadge(Notifier);
+        // The machine running the tests doesn't decide whether the Claude app is available (its ANTHROPIC_BASE_URL, say).
+        Services.RemoteControl.EnvironmentVariable = _ => null;
         configure?.Invoke(Services.Settings);
         if (updater is not null)
         {
@@ -360,6 +365,9 @@ internal sealed class TabTestHarness : IAsyncDisposable
     public NoPlatform Platform { get; } = new();
 
     public FakeNotifier Notifier { get; } = new();
+
+    /// <summary>Stands in for keeping the computer awake while tabs are connected to the Claude app (DESIGN.md §18).</summary>
+    public FakeSleepBlocker SleepBlocker { get; } = new();
 
     /// <summary>Stands in for Claude Code's <c>projects</c> folder.</summary>
     public string ProjectsDirectory => Path.Combine(_root, "projects");

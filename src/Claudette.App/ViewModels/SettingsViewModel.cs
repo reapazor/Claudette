@@ -16,7 +16,14 @@ public sealed record DiffToolOption(string Kind, string? PresetId, string Label)
 }
 
 /// <summary>A setting found by the Settings search box (DESIGN.md §14).</summary>
-public sealed record SettingsSearchResult(string Category, string Label);
+public sealed record SettingsSearchResult(string Category, string Label)
+{
+    /// <summary>The sidebar group the category is in, for the tab's project pages: "NightOwl".</summary>
+    public string? Group { get; init; }
+
+    /// <summary>Where the setting is, as the results list says: "Appearance", or "NightOwl → Links".</summary>
+    public string Where => Group is null ? Category : $"{Group} → {Category}";
+}
 
 /// <summary>A Style choice in Settings → Appearance (DESIGN.md §3, "Visual style").</summary>
 public sealed record StyleOption(AppStyle Style, string Label)
@@ -118,10 +125,10 @@ public sealed partial class QuickSuffixEditor(QuickSuffix suffix, Action changed
 }
 
 /// <summary>
-/// The Settings window (DESIGN.md §14). Changes apply immediately; there's no Save button. Categories for later
-/// milestones (usage, diff tool, notifications, processes, keyboard, Perforce) arrive with those milestones.
+/// The Settings window (DESIGN.md §14). Changes apply immediately; there's no Save button. Below the categories, the
+/// selected tab's project has its own pages (<see cref="Project"/>). Dispose it when the window closes.
 /// </summary>
-public sealed partial class SettingsViewModel : ViewModelBase
+public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 {
     public static readonly IReadOnlyList<string> AllCategories =
         ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Project tools", "Notifications", "Keyboard", "Perforce", "Advanced"];
@@ -129,9 +136,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly AppServices _services;
     private readonly AppSettings _settings;
 
-    public SettingsViewModel(AppServices services, string? accountText, ClaudeUpdateViewModel? updates = null)
+    /// <param name="opening">
+    /// Where the window opens, and the project pages of the tab that was selected (DESIGN.md §14). Without it, it opens
+    /// at General, with no project pages.
+    /// </param>
+    public SettingsViewModel(AppServices services, string? accountText, ClaudeUpdateViewModel? updates = null, SettingsOpening? opening = null)
     {
         _services = services;
+        Project = opening?.Project;
         _settings = services.Settings;
         AccountText = accountText ?? "Not signed in";
         Updates = updates;
@@ -145,18 +157,38 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
         LoadFavorites();
         SelectedCategory = AllCategories[0];
+        if (opening?.Category is { } category && (AllCategories.Contains(category) || Project is not null && ProjectPages.Contains(category)))
+        {
+            SelectedCategory = category;
+        }
+        if (opening?.StartNewAction == true)
+        {
+            Project?.StartNewAction();
+        }
         FillPerforceLogin();
+        // Signing in from this window can make the Claude app available, or not (DESIGN.md §18).
+        _services.RemoteControl.AvailabilityChanged += OnRemoteControlAvailabilityChanged;
+    }
+
+    public void Dispose()
+    {
+        _services.RemoteControl.AvailabilityChanged -= OnRemoteControlAvailabilityChanged;
+        Project?.Dispose();
     }
 
     public IReadOnlyList<string> Categories => AllCategories;
 
     // ---- Search (DESIGN.md §14: "A search box filters settings by name") -------------------------------------------
 
-    /// <summary>The settings by category, as their labels read in the window. Keep in step with SettingsWindow.axaml.</summary>
+    /// <summary>
+    /// The settings by category, as their labels read in the window. Keep in step with SettingsWindow.axaml. The tab's
+    /// project pages add their own (<see cref="ProjectSearchEntries"/>).
+    /// </summary>
     private static readonly IReadOnlyList<SettingsSearchResult> SearchIndex =
     [
         new("General", "Confirm before closing a tab where Claude is working"),
         new("General", "Also rename the session in Claude Code when I rename a tab"),
+        new("General", "Show Claude's service status"),
         new("General", "Claudette version"),
         new("General", "Check for Claudette updates automatically"),
         new("General", "Include pre-releases"),
@@ -179,6 +211,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Claude Code", "Sign out"),
         new("Claude Code", "Path to claude"),
         .. LoginShellSearchEntries(),
+        new("Claude Code", "Connect new tabs to the Claude app (Remote Control)"),
+        new("Claude Code", "Push notifications on your phone"),
+        new("Claude Code", "Keep this computer awake while tabs are connected"),
         new("New tabs", "Default model"),
         new("New tabs", "Default effort"),
         new("New tabs", "Default permission mode"),
@@ -250,8 +285,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         {
             return;
         }
-        foreach (var result in SearchIndex.Where(r => words.All(w =>
-            r.Label.Contains(w, StringComparison.OrdinalIgnoreCase) || r.Category.Contains(w, StringComparison.OrdinalIgnoreCase))))
+        foreach (var result in SearchIndex.Concat(ProjectSearchEntries()).Where(r => words.All(w =>
+            r.Label.Contains(w, StringComparison.OrdinalIgnoreCase) || r.Category.Contains(w, StringComparison.OrdinalIgnoreCase)
+            || r.Group?.Contains(w, StringComparison.OrdinalIgnoreCase) == true)))
         {
             SearchResults.Add(result);
         }
@@ -318,6 +354,15 @@ public sealed partial class SettingsViewModel : ViewModelBase
         set => Set(value, v => _settings.General.RenameInClaudeCode = v);
     }
 
+    /// <summary>
+    /// The header's dot and the banner, from status.claude.com (DESIGN.md §18, "Service status"). Off stops the checks.
+    /// </summary>
+    public bool ShowServiceStatus
+    {
+        get => _settings.General.ShowServiceStatus;
+        set => Set(value, v => _settings.General.ShowServiceStatus = v);
+    }
+
     /// <summary>Check GitHub for new Claudette releases (DESIGN.md §2, "Updating Claudette").</summary>
     public bool CheckForAppUpdates
     {
@@ -348,6 +393,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         Save();
         OnPropertyChanged(nameof(ConfirmCloseWorkingTab));
         OnPropertyChanged(nameof(RenameInClaudeCode));
+        OnPropertyChanged(nameof(ShowServiceStatus));
         OnPropertyChanged(nameof(CheckForAppUpdates));
         OnPropertyChanged(nameof(IncludePrereleases));
     }
@@ -391,6 +437,46 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     private static IEnumerable<SettingsSearchResult> LoginShellSearchEntries() =>
         ShowLoginShellSetting ? [new("Claude Code", "Use my login shell's environment")] : [];
+
+    // ---- The Claude app (DESIGN.md §18, "Remote Control") --------------------------------------------------------
+
+    /// <summary>The docs' steps for pushes to the phone. Claudette doesn't change Claude Code's settings for them.</summary>
+    public const string PushNotificationsDocs = "https://code.claude.com/docs/en/remote-control#mobile-push-notifications";
+
+    /// <summary>
+    /// <b>Connect new tabs to the Claude app</b>: the switch new tabs start with, like <b>Sync new tabs</b>. Open tabs
+    /// keep theirs; each has <b>Connect to the Claude app</b> in its menu.
+    /// </summary>
+    public bool ConnectNewTabsToClaudeApp
+    {
+        get => _settings.ClaudeCode.ConnectNewTabsToClaudeApp;
+        set => Set(value, v => _settings.ClaudeCode.ConnectNewTabsToClaudeApp = v);
+    }
+
+    /// <summary><b>Keep this computer awake while tabs are connected</b>: system sleep only; the display can still sleep.</summary>
+    public bool KeepAwakeWhileConnected
+    {
+        get => _settings.ClaudeCode.KeepAwakeWhileConnected;
+        set => Set(value, v => _settings.ClaudeCode.KeepAwakeWhileConnected = v);
+    }
+
+    /// <summary>The account can use Remote Control. When it can't, the setting and the tabs' switches are disabled.</summary>
+    public bool CanUseRemoteControl => _services.RemoteControl.IsAvailable;
+
+    /// <summary>Why the account can't use Remote Control, from <c>claude auth status</c> and the environment.</summary>
+    public string? RemoteControlUnavailableText => _services.RemoteControl.UnavailableReason is { } reason ? $"Not available: {reason}" : null;
+
+    public bool HasRemoteControlUnavailableText => RemoteControlUnavailableText is not null;
+
+    [RelayCommand]
+    private Task OpenPushNotificationsDocsAsync() => _services.Platform.OpenUrlAsync(PushNotificationsDocs);
+
+    private void OnRemoteControlAvailabilityChanged()
+    {
+        OnPropertyChanged(nameof(CanUseRemoteControl));
+        OnPropertyChanged(nameof(RemoteControlUnavailableText));
+        OnPropertyChanged(nameof(HasRemoteControlUnavailableText));
+    }
 
     /// <summary>Null (empty) finds Claude Code automatically. Takes effect the next time Claudette starts.</summary>
     public string ClaudePath
@@ -1247,6 +1333,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>Whether the login shell's environment is used, which shell and how long it took, or why not. Never values.</summary>
     public string LoginShellText => _services.UserEnvironment.Describe();
 
+    /// <summary>Whether the computer is kept awake for tabs connected to the Claude app, or why not (DESIGN.md §18).</summary>
+    public string KeepAwakeText => _services.RemoteControl.DescribeKeepAwake();
+
     /// <summary>What Claude Code has sent this run that Claudette doesn't know, in words.</summary>
     public string DiagnosticsText => DiagnosticsReport(includeHeader: false);
 
@@ -1256,6 +1345,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         OnPropertyChanged(nameof(DiagnosticsText));
         OnPropertyChanged(nameof(InstalledVersionText));
         OnPropertyChanged(nameof(LoginShellText));
+        OnPropertyChanged(nameof(KeepAwakeText));
     }
 
     [RelayCommand]
@@ -1273,6 +1363,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
             lines.Add($"Claude Code: {InstalledVersionText}{(_services.Install is { } install ? $" at {install.Path}" : "")}");
             lines.Add($"Minimum supported Claude Code: {MinimumVersionText}");
             lines.Add($"Login shell environment: {LoginShellText}");
+            lines.Add($"Claude app (Remote Control): new tabs {(ConnectNewTabsToClaudeApp ? "connect" : "don't connect")}; "
+                + (RemoteControlUnavailableText ?? "available for this account") + ".");
+            lines.Add($"Keeping the computer awake: {KeepAwakeText}");
             lines.Add($"Protocol logging: {(LogProtocol ? "on" : "off")}");
             lines.Add("");
         }

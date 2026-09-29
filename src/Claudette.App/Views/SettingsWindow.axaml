@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Claudette.App.ViewModels"
         xmlns:installation="using:Claudette.Core.Installation"
+        xmlns:views="using:Claudette.App.Views"
         x:Class="Claudette.App.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Title="Settings"
@@ -13,8 +14,11 @@
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="Margin" Value="0,0,0,8" />
     </Style>
+    <!-- A setting's name beside its control: a long one wraps rather than being cut off, whatever the OS's font -->
     <Style Selector="TextBlock.label">
       <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,0,12,0" />
     </Style>
   </Window.Styles>
 
@@ -37,15 +41,27 @@
           </Button>
         </StackPanel>
         <Panel>
-          <ListBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}" Background="Transparent" Margin="6"
-                   IsVisible="{Binding !IsSearching}" />
+          <ScrollViewer x:Name="SidebarList" IsVisible="{Binding !IsSearching}">
+            <StackPanel>
+              <ListBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedMainCategory}" Background="Transparent" Margin="6,6,6,0"
+                       ScrollViewer.VerticalScrollBarVisibility="Disabled" AutomationProperties.Name="Categories" />
+              <!-- DESIGN.md §14, "The project's pages": the selected tab's project, below a divider; hidden with no tab open -->
+              <StackPanel x:Name="ProjectGroup" IsVisible="{Binding HasProject}">
+                <Border Height="1" Background="{DynamicResource DividerBrush}" Margin="12,6,12,4" />
+                <TextBlock Classes="muted small" Text="{Binding Project.Heading, FallbackValue=''}" ToolTip.Tip="{Binding Project.Folder, FallbackValue=''}"
+                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="18,4,12,0" />
+                <ListBox ItemsSource="{x:Static vm:SettingsViewModel.ProjectPages}" SelectedItem="{Binding SelectedProjectPage}" Background="Transparent" Margin="6,2,6,6"
+                         ScrollViewer.VerticalScrollBarVisibility="Disabled" AutomationProperties.Name="Project pages" />
+              </StackPanel>
+            </StackPanel>
+          </ScrollViewer>
           <ListBox ItemsSource="{Binding SearchResults}" SelectedItem="{Binding SelectedSearchResult}" Background="Transparent" Margin="6"
                    IsVisible="{Binding IsSearching}">
             <ListBox.ItemTemplate>
               <DataTemplate DataType="vm:SettingsSearchResult">
                 <StackPanel>
                   <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
-                  <TextBlock Classes="muted small" Text="{Binding Category}" />
+                  <TextBlock Classes="muted small" Text="{Binding Where}" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
               </DataTemplate>
             </ListBox.ItemTemplate>
@@ -71,6 +87,10 @@
           <CheckBox Content="Confirm before closing a tab where Claude is working" IsChecked="{Binding ConfirmCloseWorkingTab}" />
           <CheckBox Content="Also rename the session in Claude Code when I rename a tab" IsChecked="{Binding RenameInClaudeCode}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Then claude --resume &lt;name&gt; in a terminal finds the session by the same name." Margin="28,-8,0,0" />
+          <!-- Claude's service status (DESIGN.md §18, "Service status") -->
+          <CheckBox Content="Show Claude's service status" IsChecked="{Binding ShowServiceStatus}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="A dot in the header, and a banner while Claude Code, the Claude API or claude.ai has an incident. Read from status.claude.com every 5 minutes." />
 
           <!-- Claudette's own updates, from its GitHub releases (DESIGN.md §2, "Updating Claudette") -->
           <TextBlock Text="Claudette updates" FontWeight="SemiBold" Margin="0,8,0,0" />
@@ -176,6 +196,27 @@
               <ContentControl Content="{Binding SignIn}" IsVisible="{Binding HasSignIn}" HorizontalAlignment="Left" />
             </StackPanel>
           </Panel>
+
+          <!-- The Claude app, Remote Control (DESIGN.md §18): each tab has its own switch; this is what new tabs start with -->
+          <StackPanel x:Name="RemoteControlSettings" Spacing="12">
+            <TextBlock Text="Claude app (Remote Control)" FontWeight="SemiBold" Margin="0,8,0,0" />
+            <CheckBox Content="Connect new tabs to the Claude app" IsChecked="{Binding ConnectNewTabsToClaudeApp}" IsEnabled="{Binding CanUseRemoteControl}" />
+            <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                       Text="Continue a tab from the Claude app on your phone, or at claude.ai/code, while Claudette keeps running here. Each tab has Connect to the Claude app in its menu; this only sets it for tabs opened from now on. While a tab is connected, its transcript is stored on Anthropic's servers. Needs a claude.ai subscription sign-in." />
+            <TextBlock Classes="small warning" TextWrapping="Wrap" Margin="28,-8,0,0" Text="{Binding RemoteControlUnavailableText}"
+                       IsVisible="{Binding HasRemoteControlUnavailableText}" />
+            <StackPanel Spacing="2" Margin="28,-8,0,0">
+              <TextBlock Classes="muted small" TextWrapping="Wrap"
+                         Text="For a push notification on your phone when a tab needs an answer, turn on Push when actions required in Claude Code's /config; Push when Claude decides adds the ones Claude chooses to send. None arrive while Claudette is in front." />
+              <Button Classes="flat" Padding="0" HorizontalAlignment="Left" Command="{Binding OpenPushNotificationsDocsCommand}"
+                      ToolTip.Tip="{x:Static vm:SettingsViewModel.PushNotificationsDocs}">
+                <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="How to set up push notifications" TextDecorations="Underline" />
+              </Button>
+            </StackPanel>
+            <CheckBox Content="Keep this computer awake while tabs are connected" IsChecked="{Binding KeepAwakeWhileConnected}" />
+            <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                       Text="So the Claude app can still reach them. The screen can still turn off." />
+          </StackPanel>
           <!-- macOS and Linux only (DESIGN.md §13, "Login shell environment") -->
           <CheckBox Content="Use my login shell's environment" IsChecked="{Binding UseLoginShellEnvironment}"
                     IsVisible="{x:Static vm:SettingsViewModel.ShowLoginShellSetting}" />
@@ -193,7 +234,7 @@
         <!-- New tabs -->
         <StackPanel Spacing="12" IsVisible="{Binding IsNewTabs}">
           <TextBlock Classes="section" Text="New tabs" />
-          <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10">
+          <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10">
             <TextBlock Classes="label" Text="Default model" />
             <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ModelChoices}" SelectedItem="{Binding DefaultModel}" />
             <TextBlock Grid.Row="1" Classes="label" Text="Default effort" />
@@ -352,7 +393,7 @@
         <StackPanel Spacing="12" IsVisible="{Binding IsProjectTools}">
           <TextBlock Classes="section" Text="Project tools" />
           <TextBlock Classes="muted small" TextWrapping="Wrap"
-                     Text="When a tab's folder holds a project Claudette knows, such as an Unreal Engine project, the composer bar gets a project chip with its actions: launch the editor, generate project files, build. These settings stay on this machine." />
+                     Text="When a tab's folder holds a project Claudette knows, such as an Unreal Engine project, the sidebar gets a row for the project, above Links, with its actions: launch the editor, generate project files, build. These settings stay on this machine." />
           <TextBlock Text="Unreal Engine" FontWeight="SemiBold" />
           <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto" RowSpacing="10">
             <TextBlock Classes="label" Text="Default editor configuration" />
@@ -361,7 +402,7 @@
             <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectFileFormatChoices}" SelectedItem="{Binding SelectedProjectFileFormat}" />
           </Grid>
           <TextBlock Classes="muted small" TextWrapping="Wrap"
-                     Text="The configuration is the default for projects that haven't been given their own in the chip's menu. Rider opens the Visual Studio solution, or the .uproject itself." />
+                     Text="The configuration is the default for projects that haven't been given their own in the project's menu. Rider opens the .uproject itself, so it needs no project files (Unreal Engine 4.25.4 or later on Windows, 4.26 on macOS and Linux)." />
           <CheckBox Content="Tell Claude about Unreal projects" IsChecked="{Binding TellClaudeAboutUnreal}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                      Text="Adds a short note to the session: the engine version and folder, and the exact commands to build the editor and regenerate project files. Applies to tabs started after the change." />
@@ -405,7 +446,7 @@
           <TextBlock Classes="muted small" TextWrapping="Wrap"
                      Text="See the processes each tab has started (test runs, dev servers, builds, MCP servers) with their CPU and memory use. When a tab closes, the processes it started are stopped too." />
           <CheckBox Content="Show the process monitor" IsChecked="{Binding ShowProcessMonitor}" />
-          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto" IsEnabled="{Binding ShowProcessMonitor}">
+          <Grid ColumnDefinitions="260,*" RowDefinitions="Auto" IsEnabled="{Binding ShowProcessMonitor}">
             <TextBlock Classes="label" Text="Refresh the panel every (seconds)" />
             <NumericUpDown Grid.Column="1" Minimum="1" Maximum="60" Increment="1" FormatString="0" Value="{Binding ProcessRefreshSeconds}" />
           </Grid>
@@ -458,7 +499,7 @@
           <TextBlock Classes="muted small" TextWrapping="Wrap"
                      Text="During a long turn, Claudette can ask Claude how it's going, so a stuck tab doesn't burn usage unnoticed. Set a time to 0 to turn that trigger off." />
           <CheckBox Content="Check in on long turns" IsChecked="{Binding CheckInsEnabled}" />
-          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto" RowSpacing="10" IsEnabled="{Binding CheckInsEnabled}">
+          <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,Auto" RowSpacing="10" IsEnabled="{Binding CheckInsEnabled}">
             <TextBlock Classes="label" Text="After the turn has run (minutes)" />
             <NumericUpDown Grid.Column="1" Minimum="0" Maximum="600" Increment="1" FormatString="0" Value="{Binding CheckInRunTime}" />
             <TextBlock Grid.Row="1" Classes="label" Text="After no output for (minutes)" />
@@ -654,13 +695,15 @@
 
           <!-- DESIGN.md §16, "Staying tolerant at runtime" -->
           <TextBlock Classes="section" Text="Diagnostics" Margin="0,8,0,0" />
-          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
+          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
             <TextBlock Text="Claude Code" />
             <TextBlock Grid.Column="1" Text="{Binding InstalledVersionText}" />
             <TextBlock Grid.Row="1" Text="Minimum supported Claude Code version" TextWrapping="Wrap" />
             <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MinimumVersionText}" />
             <TextBlock Grid.Row="2" Text="Login shell environment" TextWrapping="Wrap" />
             <SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding LoginShellText}" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="3" Text="Keeping the computer awake" TextWrapping="Wrap" />
+            <SelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding KeepAwakeText}" TextWrapping="Wrap" />
           </Grid>
           <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6">
             <SelectableTextBlock Text="{Binding DiagnosticsText}" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
@@ -672,7 +715,139 @@
             <Button Content="Refresh" Command="{Binding RefreshDiagnosticsCommand}" />
           </StackPanel>
         </StackPanel>
+
+        <!-- The tab's project: Links (DESIGN.md §14, "The project's pages"; §18, "Links"). Saved as each change is made. -->
+        <Panel IsVisible="{Binding IsLinksPage}">
+          <StackPanel x:Name="LinksPage" Spacing="12" DataContext="{Binding Project}" x:DataType="vm:ProjectSettingsViewModel">
+            <TextBlock Classes="section" Text="Links" />
+            <TextBlock Classes="muted small" Text="{Binding ForTabText, FallbackValue=''}" TextWrapping="Wrap" Margin="0,-10,0,0" />
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       Text="Web links for this project, in the sidebar above History and in the project's menus; a click opens one in the browser. Shared links are in claudette.json, committed with the project; yours alone are in claudette.local.json. Changes are saved as you make them, and saving rewrites the file, so comments in it are dropped." />
+            <ItemsControl ItemsSource="{Binding LinkFileErrors}" IsVisible="{Binding HasLinkFileErrors}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <TextBlock Classes="small error" Text="{Binding}" TextWrapping="Wrap" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Classes="muted small" Text="No links yet." IsVisible="{Binding !HasLinks}" />
+            <ListBox ItemsSource="{Binding Links}" SelectedItem="{Binding SelectedLink}" MaxHeight="300"
+                     IsVisible="{Binding HasLinks}" AutomationProperties.Name="Links">
+              <ListBox.ItemTemplate>
+                <DataTemplate DataType="vm:ProjectLinkRow">
+                  <StackPanel Spacing="1">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                      <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding FileText}" VerticalAlignment="Center" />
+                    </Grid>
+                    <TextBlock Classes="muted small mono" Text="{Binding Url}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Url}" IsVisible="{Binding CanEdit}" />
+                    <TextBlock Classes="small warning" Text="{Binding Warning}" TextWrapping="Wrap" IsVisible="{Binding HasWarning}" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <WrapPanel ItemSpacing="6" LineSpacing="6">
+              <Button Content="Add…" Command="{Binding AddLinkCommand}" />
+              <Button Content="Edit…" Command="{Binding EditLinkCommand}" />
+              <Button Content="Remove" Command="{Binding RemoveLinkCommand}" />
+              <Button Content="Move up" Command="{Binding MoveLinkUpCommand}" />
+              <Button Content="Move down" Command="{Binding MoveLinkDownCommand}" />
+            </WrapPanel>
+            <TextBlock Classes="small error" Text="{Binding LinksError}" TextWrapping="Wrap" IsVisible="{Binding HasLinksError}" />
+          </StackPanel>
+        </Panel>
+
+        <!-- The tab's project: Actions, the editor that was in Tab settings… (DESIGN.md §18, "Custom actions") -->
+        <Panel IsVisible="{Binding IsActionsPage}">
+          <StackPanel x:Name="ActionsPage" Spacing="12" DataContext="{Binding Project}" x:DataType="vm:ProjectSettingsViewModel">
+            <TextBlock Classes="section" Text="Actions" />
+            <TextBlock Classes="muted small" Text="{Binding ForTabText, FallbackValue=''}" TextWrapping="Wrap" Margin="0,-10,0,0" />
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       Text="Commands of your own for this folder, in the project's menu in the sidebar, the tab's menu and on the Project page. Changes are saved as you make them." />
+            <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectActionFiles}" SelectedItem="{Binding SelectedProjectActionFile}"
+                      AutomationProperties.Name="Project actions file" />
+            <TextBlock Classes="muted small" Text="{Binding ProjectActionsNote}" TextWrapping="Wrap" Margin="0,-4,0,0" />
+            <TextBlock Classes="small error" Text="{Binding ProjectActionFileError}" TextWrapping="Wrap" IsVisible="{Binding !CanEditProjectActionFile}" />
+            <ListBox ItemsSource="{Binding ProjectActions}" SelectedItem="{Binding SelectedProjectAction}" MaxHeight="300"
+                     IsVisible="{Binding ProjectActions.Count}" AutomationProperties.Name="Project actions">
+              <ListBox.ItemTemplate>
+                <DataTemplate DataType="vm:CustomActionRow">
+                  <StackPanel>
+                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Classes="muted small mono" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <WrapPanel ItemSpacing="6" LineSpacing="6">
+              <Button Content="Add…" Command="{Binding AddProjectActionCommand}" />
+              <Button Content="Edit…" Command="{Binding EditProjectActionCommand}" />
+              <Button Content="Remove" Command="{Binding RemoveProjectActionCommand}" />
+              <Button Content="Move up" Command="{Binding MoveProjectActionUpCommand}" />
+              <Button Content="Move down" Command="{Binding MoveProjectActionDownCommand}" />
+              <Button Content="Open file" Command="{Binding OpenProjectActionFileCommand}" ToolTip.Tip="Open the file in your editor, for anything this page doesn't cover" />
+            </WrapPanel>
+            <TextBlock Classes="small error" Text="{Binding ActionsError}" TextWrapping="Wrap" IsVisible="{Binding HasActionsError}" />
+          </StackPanel>
+        </Panel>
+
+        <!-- The tab's project: Tools, this machine's choices for it, as the project menus make them (DESIGN.md §18) -->
+        <Panel IsVisible="{Binding IsToolsPage}">
+          <StackPanel x:Name="ToolsPage" Spacing="12" DataContext="{Binding Project}" x:DataType="vm:ProjectSettingsViewModel">
+            <TextBlock Classes="section" Text="Tools" />
+            <TextBlock Classes="muted small" Text="{Binding ForTabText, FallbackValue=''}" TextWrapping="Wrap" Margin="0,-10,0,0" />
+            <TextBlock Text="No Unreal, Unity or Godot project in this folder." TextWrapping="Wrap" IsVisible="{Binding !HasToolsProject}" />
+            <StackPanel Spacing="12" IsVisible="{Binding HasToolsProject}">
+              <StackPanel Spacing="2">
+                <TextBlock Text="{Binding ToolsTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Classes="muted small" Text="{Binding ToolsKeyText}" TextWrapping="Wrap" />
+              </StackPanel>
+              <Grid ColumnDefinitions="220,*" IsVisible="{Binding HasSeveralProjects}">
+                <TextBlock Classes="label" Text="Project in this folder" />
+                <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectChoices}" SelectedItem="{Binding SelectedProjectChoice}"
+                          AutomationProperties.Name="Project in this folder" />
+              </Grid>
+              <Grid ColumnDefinitions="220,*" IsVisible="{Binding HasToolsChoice}">
+                <TextBlock Classes="label" Text="{Binding ToolsChoiceLabel}" />
+                <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToolsChoiceOptions}" SelectedItem="{Binding SelectedToolsChoice}"
+                          AutomationProperties.Name="{Binding ToolsChoiceLabel}" />
+              </Grid>
+              <StackPanel Spacing="6" IsVisible="{Binding HasToolsFix}">
+                <TextBlock Text="{Binding ToolsFixName}" FontWeight="SemiBold" Margin="0,4,0,0" />
+                <SelectableTextBlock Text="{Binding ToolsFixCurrent}" TextWrapping="Wrap" />
+                <TextBlock Classes="muted small" Text="{Binding ToolsFixSource}" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Content="Choose…" Command="{Binding ChooseToolsFixCommand}" ToolTip.Tip="{Binding ToolsFixTitle}" />
+                  <Button Content="Clear" Command="{Binding ClearToolsFixCommand}" ToolTip.Tip="Forget the choice, so Claudette looks for it again" />
+                </StackPanel>
+                <TextBlock Classes="small error" Text="{Binding ToolsFixError}" TextWrapping="Wrap" IsVisible="{Binding HasToolsFixError}" />
+              </StackPanel>
+            </StackPanel>
+            <StackPanel Spacing="2">
+              <TextBlock Classes="muted small" TextWrapping="Wrap"
+                         Text="The defaults for every project, and the Godot executable when a project hasn't got its own, are in Settings → Project tools." />
+              <Button Classes="flat" Padding="0" HorizontalAlignment="Left"
+                      Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).ShowProjectToolsDefaultsCommand}">
+                <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="Open Settings → Project tools" TextDecorations="Underline" />
+              </Button>
+            </StackPanel>
+          </StackPanel>
+        </Panel>
       </StackPanel>
     </ScrollViewer>
+
+    <!-- The project pages' small dialogs: a link, or an action (DESIGN.md §18) -->
+    <Border Grid.ColumnSpan="2" Classes="overlay" IsVisible="{Binding Project.HasEditor, FallbackValue=False}">
+      <ContentControl Content="{Binding Project.Editor, FallbackValue={x:Null}}" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <ContentControl.DataTemplates>
+          <DataTemplate DataType="vm:ProjectActionEditorViewModel">
+            <views:ProjectActionEditorView />
+          </DataTemplate>
+          <DataTemplate DataType="vm:ProjectLinkEditorViewModel">
+            <views:ProjectLinkEditorView />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+    </Border>
   </Grid>
 </Window>

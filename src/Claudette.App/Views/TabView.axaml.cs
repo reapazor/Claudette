@@ -142,7 +142,10 @@ public partial class TabView : UserControl
             _tab.DiffRequested -= OnDiffRequested;
             _tab.ScrollToRequested -= OnScrollToRequested;
             _tab.AgentWindowRequested -= OnAgentWindowRequested;
-            _tab.ProjectOutput.CollectionChanged -= OnProjectOutputChanged;
+            _tab.PropertyChanged -= OnTabPropertyChanged;
+            // The list belonged to that tab.
+            TasksChip.Flyout?.Hide();
+            _tab.IsTaskListOpen = false;
         }
         _tab = ViewModel;
         if (_tab is not null)
@@ -150,11 +153,63 @@ public partial class TabView : UserControl
             _tab.DiffRequested += OnDiffRequested;
             _tab.ScrollToRequested += OnScrollToRequested;
             _tab.AgentWindowRequested += OnAgentWindowRequested;
-            _tab.ProjectOutput.CollectionChanged += OnProjectOutputChanged;
+            _tab.PropertyChanged += OnTabPropertyChanged;
         }
+        WatchProjectOutput();
     }
 
     private TabViewModel? _tab;
+
+    /// <summary>The output of the run the Project page shows, which it follows.</summary>
+    private System.Collections.ObjectModel.ObservableCollection<string>? _projectOutput;
+
+    /// <summary>
+    /// The Project page shows another run, or the last running task ended while its list was open: the list goes with
+    /// the chip.
+    /// </summary>
+    private void OnTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TabViewModel.SelectedProjectRun))
+        {
+            WatchProjectOutput();
+        }
+        else if (e.PropertyName == nameof(TabViewModel.HasRunningTasks) && _tab is { HasRunningTasks: false })
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => TasksChip.Flyout?.Hide());
+        }
+    }
+
+    /// <summary>The running tasks list is open, so its running times tick (DESIGN.md §5, "Running tasks").</summary>
+    private void OnTaskListOpened(object? sender, EventArgs e)
+    {
+        if (ViewModel is { } tab)
+        {
+            tab.IsTaskListOpen = true;
+        }
+    }
+
+    private void OnTaskListClosed(object? sender, EventArgs e)
+    {
+        if (ViewModel is { } tab)
+        {
+            tab.IsTaskListOpen = false;
+        }
+    }
+
+    /// <summary>Another run's log is showing: follow its lines instead, from its newest.</summary>
+    private void WatchProjectOutput()
+    {
+        if (_projectOutput is not null)
+        {
+            _projectOutput.CollectionChanged -= OnProjectOutputChanged;
+        }
+        _projectOutput = _tab?.SelectedProjectRun?.Output;
+        if (_projectOutput is not null)
+        {
+            _projectOutput.CollectionChanged += OnProjectOutputChanged;
+            ScrollProjectOutputToEnd();
+        }
+    }
 
     /// <summary>The built-in diff view, in its own window so it can stay open beside the conversation (DESIGN.md §8).</summary>
     private void OnDiffRequested(DiffSource source)
@@ -275,25 +330,28 @@ public partial class TabView : UserControl
         }
     }
 
-    /// <summary>
-    /// The project chip's menu opened: look at the project's files again, so what's enabled is current (a solution
-    /// generated from a terminal, say). The menu updates in place when that's done.
-    /// </summary>
-    private void OnProjectMenuOpened(object? sender, EventArgs e) => ViewModel?.RefreshProjectCommand.Execute(null);
-
     /// <summary>A project job's output follows its newest line, as a terminal does.</summary>
     private void OnProjectOutputChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
-        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && ProjectOutputList.IsEffectivelyVisible)
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
         {
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                if (ProjectOutputList.ItemCount > 0)
-                {
-                    ProjectOutputList.ScrollIntoView(ProjectOutputList.ItemCount - 1);
-                }
-            }, Avalonia.Threading.DispatcherPriority.Background);
+            ScrollProjectOutputToEnd();
         }
+    }
+
+    private void ScrollProjectOutputToEnd()
+    {
+        if (!ProjectOutputList.IsEffectivelyVisible)
+        {
+            return;
+        }
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (ProjectOutputList.ItemCount > 0)
+            {
+                ProjectOutputList.ScrollIntoView(ProjectOutputList.ItemCount - 1);
+            }
+        }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
     /// <summary>Closes the dropdown a picked item lives in.</summary>

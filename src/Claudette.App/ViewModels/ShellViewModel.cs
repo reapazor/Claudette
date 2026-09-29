@@ -54,6 +54,14 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
                 }
             };
         }
+        // Signing in with another account can make Remote Control available, or not (DESIGN.md §18).
+        _services.RemoteControl.AvailabilityChanged += () =>
+        {
+            foreach (var tab in AllTabs)
+            {
+                tab.OnRemoteControlAvailabilityChanged();
+            }
+        };
         _services.UsageHistoryCleared += (_, resetTabTotals) =>
         {
             if (resetTabTotals)
@@ -167,9 +175,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     public bool HasTabSettings => TabSettings is not null;
 
-    /// <summary>Set by the view: opens the Settings window.</summary>
-    /// <remarks>The argument is the category to open at, or null for the first.</remarks>
-    public Func<string?, Task>? ShowSettingsWindow { get; set; }
+    /// <summary>Set by the view: opens the Settings window where <see cref="SettingsOpening"/> says, and returns when it closes.</summary>
+    public Func<SettingsOpening, Task>? ShowSettingsWindow { get; set; }
 
     /// <summary>
     /// Brings back saved tabs (DESIGN.md §9, "Restore on launch"): pinned tabs always, the others only when
@@ -231,7 +238,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>
     /// Opens a new tab in <paramref name="folder"/> and selects it, which starts its session. Every way to a new tab
     /// comes here (the picker, a group's <c>+</c>, <c>--folder</c>, Open Recent, the jump list, a dropped folder), so
-    /// each starts syncing or not as Settings → Sessions says (DESIGN.md §9, "Session library").
+    /// each starts syncing or not as Settings → Sessions says (DESIGN.md §9, "Session library"), and connected to the
+    /// Claude app or not as Settings → Claude Code says (DESIGN.md §18, "Remote Control").
     /// </summary>
     public Task OpenFolderAsync(string folder)
     {
@@ -241,7 +249,12 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         var normalized = FolderHistory.Normalize(folder);
         FolderHistory.Touch(_services.State, normalized, _services.Time.GetUtcNow(), _services.Settings.NewTabs.RecentFolderLimit);
-        var state = new TabState { Folder = normalized, SyncToLibrary = _services.Settings.Sessions.SyncNewTabs };
+        var state = new TabState
+        {
+            Folder = normalized,
+            SyncToLibrary = _services.Settings.Sessions.SyncNewTabs,
+            RemoteControl = _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp,
+        };
         var tab = new TabViewModel(_services, this, state, isRestored: false);
         AddTab(tab);
         SelectedTab = tab;
@@ -375,7 +388,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         {
             _services.Library.Leases.Acquire(entry.SessionId, _services.Library.Library.GetSessionFolder(entry.SessionId));
         }
-        OpenSession(NewState(entry, folder, transcriptPath: null, fork));
+        OpenSession(NewState(entry, folder, transcriptPath: null, fork, _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp));
     }
 
     /// <summary>
@@ -436,7 +449,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         {
             library.Leases.Acquire(entry.SessionId, library.Library.GetSessionFolder(entry.SessionId));
         }
-        OpenSession(NewState(entry, folder, transcript, fork));
+        OpenSession(NewState(entry, folder, transcript, fork, _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp));
     }
 
     /// <summary>
@@ -472,7 +485,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         return picked;
     }
 
-    private static TabState NewState(HistoryEntry entry, string folder, string? transcriptPath, bool fork)
+    /// <param name="remoteControl">Settings → Claude Code → <b>Connect new tabs to the Claude app</b> (DESIGN.md §18).</param>
+    private static TabState NewState(HistoryEntry entry, string folder, string? transcriptPath, bool fork, bool remoteControl)
     {
         var record = entry.Record;
         var state = new TabState
@@ -486,6 +500,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             // A session someone synced keeps syncing wherever it's opened, a copy of one too; one that only ever lived
             // on this machine stays here (DESIGN.md §9, "Session library").
             SyncToLibrary = record is not null,
+            // A tab opened from History is a new tab here; the phone connection belongs to this machine, not the record.
+            RemoteControl = remoteControl,
         };
         if (record is not null)
         {
@@ -866,35 +882,41 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     // ---- Settings -------------------------------------------------------------------------------------------
 
     [RelayCommand]
-    private Task OpenSettingsAsync() => ShowSettingsWindow?.Invoke(null) ?? Task.CompletedTask;
+    private Task OpenSettingsAsync() => ShowSettingsAsync(null, SelectedTab);
 
     /// <summary>Opens Settings at a category, for example Quick suffixes from the suffix menu's <b>Edit suffixes…</b>.</summary>
-    internal Task OpenSettingsAtAsync(string category) => ShowSettingsWindow?.Invoke(category) ?? Task.CompletedTask;
+    internal Task OpenSettingsAtAsync(string category) => ShowSettingsAsync(category, SelectedTab);
+
+    /// <summary>
+    /// Opens Settings at one of <paramref name="tab"/>'s project pages (DESIGN.md §14, "The project's pages"): Actions for
+    /// <b>Add an action…</b>, with a new action started. The Settings window follows the selected tab, so the tab is
+    /// selected first when it isn't.
+    /// </summary>
+    internal Task OpenProjectSettingsAsync(TabViewModel tab, string page, bool startNewAction = false)
+    {
+        if (!ReferenceEquals(SelectedTab, tab) && AllTabs.Contains(tab))
+        {
+            SelectedTab = tab;
+        }
+        return ShowSettingsAsync(page, tab, startNewAction);
+    }
+
+    /// <summary>The window gets the project pages of the tab selected as it opens; with no tab, there are none.</summary>
+    private Task ShowSettingsAsync(string? category, TabViewModel? tab, bool startNewAction = false) =>
+        ShowSettingsWindow is { } show
+            ? show(new SettingsOpening(category, tab is null ? null : new ProjectSettingsViewModel(_services, tab, this), startNewAction))
+            : Task.CompletedTask;
 
     [RelayCommand]
     private void OpenTabSettings(TabViewModel? tab)
     {
         if (tab is not null)
         {
-            TabSettings = new TabSettingsViewModel(_services, tab, () => TabSettings = null, this) { EditAction = EditProjectAction };
+            TabSettings = new TabSettingsViewModel(_services, tab, () => TabSettings = null, this);
         }
     }
 
     // ---- Project tools (DESIGN.md §18) ------------------------------------------------------------------------
-
-    /// <summary>The small dialog for a custom project action, while it's open.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasActionEditor))]
-    public partial ProjectActionEditorViewModel? ActionEditor { get; set; }
-
-    public bool HasActionEditor => ActionEditor is not null;
-
-    /// <summary>
-    /// Opens the custom action dialog: a new action when <paramref name="existing"/> is null. With
-    /// <paramref name="askForFile"/>, it asks which of the folder's project files the action goes in.
-    /// </summary>
-    internal void EditProjectAction(string folder, Core.ProjectTools.CustomProjectAction? existing, Action<Core.ProjectTools.CustomProjectAction, Core.ProjectTools.ProjectFileScope> save, bool askForFile = false) =>
-        ActionEditor = new ProjectActionEditorViewModel(folder, existing, save, () => ActionEditor = null) { AsksForFile = askForFile };
 
     /// <summary>A folder's project files changed: every tab in that folder reads them again.</summary>
     internal void OnProjectActionsChanged(string folder)

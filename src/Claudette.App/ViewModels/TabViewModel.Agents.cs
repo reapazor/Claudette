@@ -115,6 +115,8 @@ public sealed partial class TabViewModel
                 "Stop subagent",
                 async () =>
                 {
+                    // A prompt of its that Claude Code withdraws now wasn't answered in the Claude app (DESIGN.md §18).
+                    _stoppedHere = true;
                     try
                     {
                         await session.StopTaskAsync(taskId);

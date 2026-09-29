@@ -1,5 +1,7 @@
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Media;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Claudette.App.Services;
@@ -10,11 +12,14 @@ using Claudette.Core.Settings;
 
 namespace Claudette.App.UiTests;
 
-/// <summary>Project tools rendered (DESIGN.md §18): the chip in the composer bar, its menu, and the tab menu's submenu.</summary>
+/// <summary>
+/// Project tools rendered (DESIGN.md §18): the chip in the composer bar, its menu, the tab menu's submenu, the Links
+/// section, and the runs under a tab's row in the sidebar.
+/// </summary>
 public class ProjectToolsUiTests
 {
     [AvaloniaFact]
-    public async Task A_tab_in_an_Unreal_project_shows_the_project_chip_and_its_menu_lists_the_actions()
+    public async Task A_tab_in_an_Unreal_project_shows_the_project_at_the_sidebars_foot_and_its_menu_lists_the_actions()
     {
         await using var h = new TabTestHarness(settings => settings.ProjectTools.ProjectFileFormat = ProjectFileFormat.VisualStudio, dispatcher: new AvaloniaUiDispatcher());
         UnrealFixture.Write(h.Root, h.WorkFolder);
@@ -22,13 +27,15 @@ public class ProjectToolsUiTests
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
         await UiText.SettleUntilAsync(window, () => tab.Project is not null, "the project");
 
-        var chip = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ProjectChip");
-        Assert.True(chip.IsEffectivelyVisible);
-        Assert.Equal("Project tools", AutomationProperties.GetName(chip));
-        Assert.Contains("\"NightOwl · UE 5.4 ▾\"", UiText.Describe(chip), StringComparison.Ordinal);
+        // The project's row sits at the sidebar's foot, for the selected tab; the composer's bar has no project chip.
+        var button = window.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Project tools");
+        Assert.Equal("ProjectButton", button.Name);
+        Assert.True(button.IsEffectivelyVisible);
+        Assert.Equal("[button] Project tools: NightOwl · UE 5.4", UiText.Describe(button).Trim());
+        Assert.Null(button.FindAncestorOfType<TabView>());
 
-        var flyout = Assert.IsType<Flyout>(chip.Flyout);
-        flyout.ShowAt(chip);
+        var flyout = Assert.IsType<Flyout>(button.Flyout);
+        flyout.ShowAt(button);
         UiText.Settle(window);
         var menu = Assert.IsAssignableFrom<Control>(flyout.Content);
         await UiText.SettleUntilAsync(window, () => menu.IsEffectivelyVisible, "the menu");
@@ -58,6 +65,64 @@ public class ProjectToolsUiTests
         contextMenu.Close();
 
         // Verify resumes off the UI thread, so it comes last.
+        await Verify(shown);
+    }
+
+    [AvaloniaFact]
+    public async Task A_tabs_runs_are_listed_under_its_row_with_Stop_while_running_and_close_once_done()
+    {
+        var launcher = new FakeLauncher();
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher(), launcher: launcher);
+        UnrealFixture.Write(h.Root, h.WorkFolder);
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        await UiText.SettleUntilAsync(window, () => tab.Project is not null, "the project");
+        var list = window.GetVisualDescendants().OfType<ItemsControl>().Single(c => c.Classes.Contains("runs"));
+        Assert.False(list.IsEffectivelyVisible);
+
+        // One that failed, then one that's running.
+        await tab.RunProjectActionCommand.ExecuteAsync(tab.ProjectActions.Single(a => a.Id == "generate-project-files"));
+        launcher.Processes.Last().WriteOutput("Generating...");
+        launcher.Processes.Last().Exit(6);
+        var failed = tab.ProjectRuns.Single();
+        await UiText.SettleUntilAsync(window, () => failed.Failed, "the failure");
+        await tab.RunProjectActionCommand.ExecuteAsync(tab.ProjectActions.Single(a => a.Id == "build-editor"));
+        var running = tab.ProjectRuns[^1];
+        UiText.Settle(window);
+
+        Assert.True(list.IsEffectivelyVisible);
+        var shown = UiText.Describe(list);
+        var rows = list.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("runrow")).ToList();
+        Assert.Equal([failed, running], rows.Select(r => r.DataContext));
+        // Stop takes the close button's place while a job runs, so a stray click never ends a build.
+        static Button Visible(Button row, string name) =>
+            row.GetVisualDescendants().OfType<Button>().Single(b => b.IsEffectivelyVisible && AutomationProperties.GetName(b) == name);
+        Assert.DoesNotContain(rows[1].GetVisualDescendants().OfType<Button>(), b => b.IsEffectivelyVisible && AutomationProperties.GetName(b) == "Close");
+        Assert.Equal("Stop: ends the job and every process it started", ToolTip.GetTip(Visible(rows[1], "Stop")));
+        Assert.Equal("Build editor is running…\nStarted 12:00.", ToolTip.GetTip(rows[1]));
+        // The detail, under the name, is muted, or in the error color for a failure.
+        TextBlock Detail(Button row) => row.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Classes.Contains("rundetail"));
+        Assert.True(Application.Current!.TryGetResource("MutedTextBrush", window.ActualThemeVariant, out var muted));
+        Assert.True(Application.Current.TryGetResource("ErrorTextBrush", window.ActualThemeVariant, out var error));
+        Assert.Equal(((ISolidColorBrush)muted!).Color, ((ISolidColorBrush)Detail(rows[1]).Foreground!).Color);
+        Assert.Equal(((ISolidColorBrush)error!).Color, ((ISolidColorBrush)Detail(rows[0]).Foreground!).Color);
+
+        // A click on an entry shows its log on the Project page.
+        rows[0].Command!.Execute(null);
+        UiText.Settle(window);
+        Assert.True(failed.IsShowing);
+        Assert.Contains("showing", rows[0].Classes);
+        var output = window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "ProjectOutputList");
+        Assert.True(output.IsEffectivelyVisible);
+        Assert.Same(failed.Output, output.ItemsSource);
+
+        // Stop, and the running one becomes a closable entry; closing takes the entry away.
+        Visible(rows[1], "Stop").Command!.Execute(null);
+        await UiText.SettleUntilAsync(window, () => running.IsStopped, "the stop");
+        Visible(rows[1], "Close").Command!.Execute(null);
+        UiText.Settle(window);
+        Assert.Equal([failed], list.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("runrow")).Select(r => r.DataContext));
+
         await Verify(shown);
     }
 
