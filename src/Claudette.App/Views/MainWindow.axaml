@@ -35,6 +35,14 @@
     <Style Selector="Button.header:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
     </Style>
+    <Style Selector="Button.update">
+      <Setter Property="Padding" Value="10,3" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
   </Window.Styles>
 
   <DockPanel>
@@ -92,8 +100,48 @@
           </Grid>
         </Button>
 
-        <TextBlock Grid.Column="1" Classes="muted" Text="{Binding AccountText}" Margin="12,0,6,0"
-                   IsVisible="{Binding AccountText, Converter={x:Static ObjectConverters.IsNotNull}}" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <!-- "Claude Code 2.1.290 is ready" (DESIGN.md §12, "Applying it"): small and non-blocking -->
+          <Button Classes="update" DataContext="{Binding Updates}" x:DataType="vm:ClaudeUpdateViewModel"
+                  IsVisible="{Binding HasBadge, FallbackValue=False}" Content="{Binding BadgeText}"
+                  ToolTip.Tip="What's new, and how to update" AutomationProperties.Name="Claude Code update">
+            <Button.Flyout>
+              <Flyout Placement="BottomEdgeAlignedRight">
+                <StackPanel Spacing="10" Width="420" Margin="4">
+                  <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding DetailText}" TextWrapping="Wrap" />
+                  <Button Classes="flat" Content="What's new in Claude Code" Command="{Binding OpenChangelogCommand}" HorizontalAlignment="Left" Padding="0,2" />
+                  <TextBlock Classes="muted small" Text="{Binding Note}" TextWrapping="Wrap" IsVisible="{Binding HasNote}" />
+                  <StackPanel Spacing="4" IsVisible="{Binding HasManualCommand}">
+                    <TextBlock Classes="small" Text="Run this in a terminal to update:" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                      <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6">
+                        <SelectableTextBlock Text="{Binding ManualCommand}" FontFamily="{StaticResource MonoFont}" TextWrapping="Wrap" />
+                      </Border>
+                      <Button Grid.Column="1" Content="Copy" Command="{Binding CopyManualCommandCommand}" VerticalAlignment="Center" />
+                    </Grid>
+                  </StackPanel>
+                  <WrapPanel ItemSpacing="8" LineSpacing="8">
+                    <Button Classes="accent" Content="Update now" Command="{Binding UpdateNowCommand}" IsVisible="{Binding CanUpdateNow}" />
+                    <Button Classes="accent" Content="Update on next launch" Command="{Binding UpdateOnNextLaunchCommand}"
+                            IsVisible="{Binding CanUpdateOnNextLaunch}" IsEnabled="{Binding !IsUpdateScheduled}" />
+                    <Button Content="Don't update on next launch" Command="{Binding CancelUpdateOnNextLaunchCommand}" IsVisible="{Binding IsUpdateScheduled}" />
+                    <Button Classes="flat" Content="Dismiss" Command="{Binding DismissCommand}" />
+                  </WrapPanel>
+                  <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
+                  <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6" MaxHeight="180" IsVisible="{Binding HasOutput}">
+                    <ScrollViewer>
+                      <SelectableTextBlock Text="{Binding Output}" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
+                    </ScrollViewer>
+                  </Border>
+                  <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" IsVisible="{Binding ResultText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </StackPanel>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+          <TextBlock Classes="muted" Text="{Binding AccountText}" Margin="4,0,6,0"
+                     IsVisible="{Binding AccountText, Converter={x:Static ObjectConverters.IsNotNull}}" VerticalAlignment="Center" />
+        </StackPanel>
       </Grid>
     </Border>
 

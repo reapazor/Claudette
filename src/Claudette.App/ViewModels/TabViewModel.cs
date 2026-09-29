@@ -234,6 +234,13 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 rows.Add(new InfoRow("Started", started.ToLocalTime().ToString("g")));
             }
             rows.Add(new InfoRow("Tokens", $"{TokensShort} · {State.Tokens.Turns} turns"));
+            if (RunningVersion is { } running)
+            {
+                // DESIGN.md §12: open tabs keep the version they started with.
+                rows.Add(_services.InstalledClaudeVersion is { } installed && installed > running
+                    ? new InfoRow("Claude Code", $"Running {running}; {installed} is installed. New tabs use {installed}.")
+                    : new InfoRow("Claude Code", running.ToString()));
+            }
             if (ContextDetail is { } context)
             {
                 rows.Add(new InfoRow("Context", $"{ContextText} ({context})"));
@@ -244,6 +251,22 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     }
 
     private DateTimeOffset? _sessionStartedAt;
+
+    /// <summary>The Claude Code version this tab's process runs, while it runs (DESIGN.md §12).</summary>
+    public Version? RunningVersion { get; private set; }
+
+    private void SetRunningVersion(Version? version)
+    {
+        if (version != RunningVersion)
+        {
+            RunningVersion = version;
+            OnPropertyChanged(nameof(InfoRows));
+            _shell.OnRunningVersionsChanged();
+        }
+    }
+
+    /// <summary>The installed Claude Code version changed: the info card may need its "is installed" note.</summary>
+    public void OnClaudeVersionsChanged() => OnPropertyChanged(nameof(InfoRows));
 
     [ObservableProperty]
     public partial bool IsSelected { get; set; }
@@ -753,6 +776,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             });
             _session = session;
             _sessionStartedAt = _services.Time.GetUtcNow();
+            // The installed version is what just started; system/init confirms it with the first turn.
+            SetRunningVersion(_services.InstalledClaudeVersion);
             if (fork)
             {
                 // The copy gets a new session id with its first turn; it no longer writes to the original.
@@ -915,6 +940,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     break;
                 case TurnStarted started:
                     State.SessionId = started.Init.SessionId;
+                    if (started.Init.ClaudeCodeVersion is { } reported && Version.TryParse(reported, out var version))
+                    {
+                        SetRunningVersion(version);
+                    }
                     _modelId = started.Init.Model ?? _modelId;
                     ModelName = ModelDisplayName(_modelId) ?? ModelName;
                     PermissionMode = started.Init.PermissionMode ?? PermissionMode;
@@ -972,6 +1001,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     break;
                 case SessionExited exited:
                     _session = null;
+                    SetRunningVersion(null);
                     _checkIns.TurnEnded();
                     _pendingPermissions = 0;
                     Status = exited.Exit.ExitCode == 0 ? TabStatus.Exited : TabStatus.Error;
@@ -1093,6 +1123,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     {
         var session = _session;
         _session = null;
+        SetRunningVersion(null);
         if (session is null)
         {
             await EndProcessTreeAsync(killProcesses);

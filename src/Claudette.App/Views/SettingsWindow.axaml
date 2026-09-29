@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Claudette.App.ViewModels"
+        xmlns:installation="using:Claudette.Core.Installation"
         x:Class="Claudette.App.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Title="Settings"
@@ -38,7 +39,58 @@
         <!-- Claude Code -->
         <StackPanel Spacing="12" IsVisible="{Binding IsClaudeCode}">
           <TextBlock Classes="section" Text="Claude Code" />
-          <TextBlock Text="{Binding InstalledText}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding InstalledText}" TextWrapping="Wrap" IsVisible="{Binding !HasUpdates}" />
+
+          <!-- Version, install method and updates, from claude doctor (DESIGN.md §12) -->
+          <Panel IsVisible="{Binding HasUpdates}">
+            <StackPanel Spacing="8" DataContext="{Binding Updates}" x:DataType="vm:ClaudeUpdateViewModel">
+              <TextBlock Text="{Binding VersionText, FallbackValue=''}" TextWrapping="Wrap" />
+              <TextBlock Classes="muted small" Text="{Binding AutoUpdateText}" TextWrapping="Wrap" IsVisible="{Binding AutoUpdateText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+              <TextBlock Classes="muted small" Text="{Binding LastAttemptText}" TextWrapping="Wrap" IsVisible="{Binding LastAttemptText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+              <TextBlock Classes="small" Text="claude doctor found:" IsVisible="{Binding HasWarnings}" Margin="0,4,0,0" />
+              <ItemsControl ItemsSource="{Binding Warnings}" IsVisible="{Binding HasWarnings}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="installation:DoctorWarning">
+                    <StackPanel Margin="0,2">
+                      <TextBlock Classes="small warning" Text="{Binding Issue}" TextWrapping="Wrap" />
+                      <SelectableTextBlock Classes="muted small" Text="{Binding Fix, StringFormat='Fix: {0}'}" TextWrapping="Wrap"
+                                           IsVisible="{Binding Fix, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Classes="muted small" Text="{Binding CheckStatusText}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding DetailText}" TextWrapping="Wrap" IsVisible="{Binding ReadyVersion, Converter={x:Static ObjectConverters.IsNotNull}}" />
+              <WrapPanel ItemSpacing="8" LineSpacing="8">
+                <Button Content="Check now" Command="{Binding CheckNowCommand}" />
+                <Button Classes="accent" Content="Update now" Command="{Binding UpdateNowCommand}" IsVisible="{Binding CanUpdateNow}" />
+                <Button Classes="accent" Content="Update on next launch" Command="{Binding UpdateOnNextLaunchCommand}"
+                        IsVisible="{Binding CanUpdateOnNextLaunch}" IsEnabled="{Binding !IsUpdateScheduled}" />
+                <Button Content="Don't update on next launch" Command="{Binding CancelUpdateOnNextLaunchCommand}" IsVisible="{Binding IsUpdateScheduled}" />
+                <Button Classes="flat" Content="What's new" Command="{Binding OpenChangelogCommand}" />
+              </WrapPanel>
+              <TextBlock Classes="muted small" Text="{Binding Note}" TextWrapping="Wrap" IsVisible="{Binding HasNote}" />
+              <StackPanel Spacing="4" IsVisible="{Binding HasManualCommand}">
+                <TextBlock Classes="small" Text="Run this in a terminal to update:" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                  <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6">
+                    <SelectableTextBlock Text="{Binding ManualCommand}" FontFamily="{StaticResource MonoFont}" TextWrapping="Wrap" />
+                  </Border>
+                  <Button Grid.Column="1" Content="Copy" Command="{Binding CopyManualCommandCommand}" VerticalAlignment="Center" />
+                </Grid>
+              </StackPanel>
+              <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
+              <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6" MaxHeight="180" IsVisible="{Binding HasOutput}">
+                <ScrollViewer>
+                  <SelectableTextBlock Text="{Binding Output}" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
+                </ScrollViewer>
+              </Border>
+              <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" IsVisible="{Binding ResultText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+            </StackPanel>
+          </Panel>
+          <CheckBox Content="Check for Claude Code updates automatically" IsChecked="{Binding CheckForUpdates}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="At launch and every few hours. Open tabs keep the version they started with; new tabs use the newest one installed." />
           <TextBlock Text="{Binding AccountText, StringFormat='Signed in as {0}'}" TextWrapping="Wrap" />
           <TextBlock Text="Path to claude" />
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">

@@ -35,6 +35,16 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
                 _ = tab.OnTakenOverAsync(machine);
             }
         };
+        if (_services.ClaudeUpdates is { } updates)
+        {
+            updates.Changed += () =>
+            {
+                foreach (var tab in AllTabs)
+                {
+                    tab.OnClaudeVersionsChanged();
+                }
+            };
+        }
         _services.UsageHistoryCleared += (_, resetTabTotals) =>
         {
             if (resetTabTotals)
@@ -58,6 +68,14 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     public ObservableCollection<TabViewModel> OpenTabs { get; } = [];
 
     public bool HasTabs => Groups.Count > 0;
+
+    /// <summary>The Claude Code version each running tab uses (DESIGN.md §12).</summary>
+    public IReadOnlyCollection<Version> RunningVersions => AllTabs.Select(t => t.RunningVersion).OfType<Version>().ToArray();
+
+    /// <summary>Raised when a tab starts or stops its process, or learns its Claude Code version.</summary>
+    public event Action? RunningVersionsChanged;
+
+    internal void OnRunningVersionsChanged() => RunningVersionsChanged?.Invoke();
 
     [ObservableProperty]
     public partial TabViewModel? SelectedTab { get; set; }

@@ -613,15 +613,34 @@ Claude Code keeps its own credentials. Claudette never reads or stores them; it 
 
 ## 12. Claude Code Updates
 
-How Claude Code updates depends on how it was installed. `claude doctor` is a read-only diagnostic that reports the install method, whether auto-updates are on, the release channel and the last update attempt. For example:
+How Claude Code updates depends on how it was installed. `claude doctor` is a read-only diagnostic that reports the install method, whether auto-updates are on, the release channel and the last update attempt. For example (2.1.284):
 
 ```
+Claude Code doctor
+
 Running: native (2.1.284)
+Commit: 2b8ce618c24d
+Platform: linux-x64
+Path: /home/me/.local/share/claude/versions/2.1.284
 Config install method: native
+Search: OK (/usr/bin/rg)
 Auto-updates: enabled
 Auto-update channel: latest
 Last update attempt: success → 2.1.284 (2026-09-28)
+
+1 warning found
+- Leftover npm global installation at /usr/local/bin/claude
+  Fix: Run: npm -g uninstall @anthropic-ai/claude-code
 ```
+
+What Claudette reads from it (the command is documented; the line format isn't, so every field is optional):
+
+- **`Running:`** gives the install type: `native`, `npm-global`, `npm-local`, `package-manager` or `development`. Anything else counts as unknown and is treated like native.
+- **`Package manager:`** appears only for package-manager installs: `homebrew`, `winget`, `deb`, `rpm`, `apk`, `pacman`, `mise` or `asdf` in 2.1.284. For those, `Auto-updates:` reads `Managed by package manager`.
+- **`Path:`** shows the Homebrew cask, as in `…/Caskroom/claude-code@latest/…`.
+- **`Auto-updates:`** is `enabled` or `disabled (<reason>)`. The reason is `set by env: DISABLE_AUTOUPDATER`, `set by env: DISABLE_UPDATES`, `config` or `development build`.
+- **Warnings** follow `N warnings found`, as `- <issue>` lines, each with an indented `Fix:`. Settings → Claude Code shows them, which covers the npm case below.
+- `doctor` reads the settings files of its working folder, so Claudette runs it (and the other update commands) in its own utility folder.
 
 | Install method | How Claude Code updates | What Claudette offers |
 |---|---|---|
@@ -633,21 +652,30 @@ Last update attempt: success → 2.1.284 (2026-09-28)
 
 ### Detecting an update
 
-- On launch and every few hours, Claudette runs `claude --version` and `claude doctor`.
-- Each tab knows which version it is running from its `system/init` message. If the installed version is newer, that tab is running an old version.
-- For Homebrew and WinGet, Claudette checks with the package manager (`brew outdated`, `winget upgrade`). There is no documented "check only" command for native installs, so Claudette relies on the auto-updater and reads the result from `claude doctor`.
-- If updates are turned off (`DISABLE_UPDATES`, or managed settings), Claudette shows the version but doesn't offer to update.
+- On launch and every 4 hours, Claudette runs `claude --version` and `claude doctor`. **Check for Claude Code updates automatically** in Settings → Claude Code turns this off, and **Check now** runs it by hand.
+- Each tab knows which version it is running: the installed version when its process started, confirmed by `claude_code_version` in its `system/init` message. If the installed version is newer, that tab is running an old version.
+- For Homebrew and WinGet, Claudette checks with the package manager:
+  - Homebrew: `brew outdated --cask --greedy --json=v2 <cask>`, which reads Homebrew's local index, so it knows what Homebrew last fetched.
+  - WinGet: `winget list --id Anthropic.ClaudeCode --exact --upgrade-available`. Not `winget upgrade --id …`, which would install the update.
+- There is no documented "check only" command for native installs, so Claudette relies on the auto-updater and notices the new version with `claude --version`.
+- If updates are turned off (`DISABLE_UPDATES`, set directly or through managed settings), Claudette shows the version but doesn't offer to update.
 
 ### Applying it
 
 - A small, non-blocking badge appears in the header: *"Claude Code 2.1.290 is ready"*. Clicking it shows the current and new version, a link to the Claude Code changelog, and the actions from the table above.
+  - It appears when the package manager has a newer version than the one installed, or when the installed version is newer than the one an open tab is running.
+  - **Dismiss** hides it until a newer version comes along. It also goes away once no open tab runs an older version.
+  - Settings → Claude Code shows the same details and actions, plus the install method, auto-update state, channel, last update attempt and `claude doctor`'s warnings.
 - **Open tabs are never restarted.** Each tab's `claude` process keeps running the version it started with until the tab is closed. Claudette doesn't restart tabs to apply an update, automatically or otherwise.
   - **New tabs** always start on the newly installed version.
   - **To move an open tab to the new version**, close it and open a new one, or reopen its session from History.
   - **Pinned tabs** pick up the new version the next time Claudette launches, because restored tabs start new processes.
 - A tab running an older version than the one installed shows a small note in its tooltip, for example *"Running Claude Code 2.1.284; 2.1.290 is installed. New tabs use 2.1.290."*
-- **Update now** shows the command's output in a small progress dialog and reports the new version when it succeeds.
+- **Update now** shows the command's output in a small progress dialog and reports the new version when it succeeds. `claude update` prints `Successfully updated from <old> to version <new>`, or `Claude Code is up to date (<version>)`; either way Claudette reads the new version with `claude --version` afterwards.
+- **WinGet.** Claudette's hidden utility session is a running `claude` too. **Update now** stops it first; it starts again when next needed. While any tab is running, **Update on next launch** replaces **Update now**. It's saved with this machine's state, and runs at the next start, before the utility session or any tab starts its process.
 - **Minimum version.** Claudette declares the lowest Claude Code version it supports. If the installed version is older, the setup screen asks you to update before any tab starts, with the same **Update now** action.
+
+> **Not yet tested on a real machine:** the Homebrew and WinGet checks and upgrades. Their commands and output parsing are covered by unit tests with recorded output; `claude update` and `claude doctor` are also covered with `fake-claude` and the real CLI.
 
 ## 13. Architecture
 

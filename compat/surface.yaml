@@ -710,3 +710,112 @@ items:
     usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: SidePanelTests
+  # --- Claude Code updates (DESIGN.md §12) --------------------------------------------------------------
+  - id: "claude doctor"
+    kind: command
+    status: documented
+    usedIn: src/Claudette.Core/Installation/ClaudeUpdater.cs
+    docs: https://code.claude.com/docs/en/setup
+    test: ClaudeUpdaterTests
+  - id: "Running:"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Installation/ClaudeDoctor.cs
+    docs: https://code.claude.com/docs/en/setup
+    test: ClaudeUpdateTests
+    fallback: "Read as `Running: <native|npm-global|npm-local|package-manager|development> (<version>)`. An unknown or missing install type falls back to `claude update`, which works out the install itself; the version always comes from `claude --version`."
+  - id: "Package manager:"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Installation/ClaudeDoctor.cs, src/Claudette.Core/Installation/ClaudeUpdatePlan.cs
+    docs: https://code.claude.com/docs/en/setup
+    test: ClaudeUpdateTests
+    fallback: "Values seen in 2.1.284: homebrew, winget, deb, rpm, apk, pacman, mise, asdf. Without it, a package-manager install gets no update action, only the version."
+  - id: "Path:"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Installation/ClaudeUpdatePlan.cs
+    docs: https://code.claude.com/docs/en/setup
+    test: ClaudeUpdateTests
+    fallback: Used to find the Homebrew cask (claude-code or claude-code@latest) from its Caskroom path. The resolved claude launcher is tried too, then the default cask claude-code.
+  - id: "Auto-updates:"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Installation/ClaudeDoctor.cs
+    docs: https://code.claude.com/docs/en/setup
+    test: ClaudeUpdateTests
+  - id: "set by env: DISABLE_UPDATES"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Installation/ClaudeDoctor.cs
+    docs: https://code.claude.com/docs/en/setup
+    test: ClaudeUpdaterTests
+    fallback: The docs show the DISABLE_AUTOUPDATER form of this line; DISABLE_UPDATES uses the same format in 2.1.284. If it changes, Update now is still offered and `claude update` refuses with its own message.
+  - id: "Auto-update channel:"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Installation/ClaudeDoctor.cs
+    docs: https://code.claude.com/docs/en/setup
+    test: ClaudeUpdateTests
+    fallback: Only shown in Settings; nothing depends on it.
+  - id: "Last update attempt:"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Installation/ClaudeDoctor.cs
+    docs: https://code.claude.com/docs/en/setup
+    test: ClaudeUpdateTests
+  - id: "Fix:"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Installation/ClaudeDoctor.cs
+    docs: https://code.claude.com/docs/en/setup
+    test: ClaudeUpdateTests
+    fallback: "Warnings are read after the `N warnings found` line as `- <issue>` and `  Fix: <fix>`. If the format changes, Settings shows no warnings; `claude doctor` in a terminal still does."
+  - id: "claude update"
+    kind: command
+    status: documented
+    usedIn: src/Claudette.Core/Installation/ClaudeUpdatePlan.cs, src/Claudette.Core/Installation/ClaudeUpdater.cs
+    docs: https://code.claude.com/docs/en/setup
+    test: ClaudeUpdaterTests
+  - id: "Successfully updated from"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Installation/ClaudeUpdatePlan.cs
+    docs: https://code.claude.com/docs/en/setup
+    test: ClaudeUpdateTests
+  - id: "DISABLE_UPDATES"
+    kind: env
+    status: documented
+    usedIn: src/Claudette.Core/Installation/ClaudeDoctor.cs
+    docs: https://code.claude.com/docs/en/env-vars
+    test: ClaudeUpdateTests
+  - id: "DISABLE_AUTOUPDATER"
+    kind: env
+    status: documented
+    usedIn: src/Claudette.Core/Installation/ClaudeDoctor.cs
+    docs: https://code.claude.com/docs/en/env-vars
+    test: ClaudeUpdateTests
+  - id: "claude-code@latest"
+    kind: behavior
+    status: documented
+    usedIn: src/Claudette.Core/Installation/ClaudeUpdatePlan.cs
+    docs: https://code.claude.com/docs/en/setup
+    test: ClaudeUpdateTests
+  - id: "winget upgrade Anthropic.ClaudeCode"
+    kind: command
+    status: documented
+    usedIn: src/Claudette.Core/Installation/ClaudeUpdatePlan.cs
+    docs: https://code.claude.com/docs/en/setup
+    test: ClaudeUpdateTests
+  - id: "apt upgrade claude-code"
+    kind: command
+    status: documented
+    usedIn: src/Claudette.Core/Installation/ClaudeUpdatePlan.cs
+    docs: https://code.claude.com/docs/en/setup
+    test: ClaudeUpdateTests
+  - id: "CHANGELOG.md"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.App/Services/ClaudeUpdateService.cs
+    test: ClaudeUpdateTests
+    fallback: The update dialog's "What's new" link. If the file moves in the anthropics/claude-code repository, point the link at the repository's releases page.

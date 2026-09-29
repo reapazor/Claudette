@@ -56,8 +56,24 @@ public sealed class AppServices : IAsyncDisposable
         State = _stateStore.Load();
         Git = new GitWorkingTree(launcher, timeProvider);
         Library = new LibraryService(this);
-        SettingsChanged += (_, _) => Library.OnSettingsChanged();
+        UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time);
+        SettingsChanged += (_, _) =>
+        {
+            Library.OnSettingsChanged();
+            ClaudeUpdates?.OnSettingsChanged();
+        };
     }
+
+    /// <summary>Makes the updater for a <c>claude</c> path (DESIGN.md §12). Tests replace it.</summary>
+    internal Func<string, IClaudeUpdater> UpdaterFactory { get; set; }
+
+    public IClaudeUpdater CreateUpdater(string claudePath) => UpdaterFactory(claudePath);
+
+    /// <summary>Claude Code update checks and <b>Update now</b>, once Claude Code has been found.</summary>
+    public ClaudeUpdateService? ClaudeUpdates { get; private set; }
+
+    /// <summary>The Claude Code version new tabs start with.</summary>
+    public Version? InstalledClaudeVersion => ClaudeUpdates?.InstalledVersion ?? Install?.Version;
 
     /// <summary>Runs git for "working tree vs HEAD" and the library's uncommitted-changes check (DESIGN.md §8, §9).</summary>
     public GitWorkingTree Git { get; }
@@ -140,6 +156,7 @@ public sealed class AppServices : IAsyncDisposable
         Install = install;
         Sessions = new ClaudeSessionFactory(install.Path, _launcher, Time, Loggers);
         Auth = new ClaudeAuth(install.Path, _launcher, Time);
+        ClaudeUpdates = new ClaudeUpdateService(this, CreateUpdater(install.Path), install.Version);
     }
 
     /// <summary>For tests: sessions come from <paramref name="factory"/> instead of a real <c>claude</c>.</summary>
@@ -190,9 +207,35 @@ public sealed class AppServices : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Stops the hidden utility session, for an update that can't replace a running <c>claude</c> (WinGet). It starts
+    /// again the next time it's needed.
+    /// </summary>
+    public async Task StopUtilitySessionAsync()
+    {
+        await _utilityLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_utility is not null)
+            {
+                await _utility.DisposeAsync().ConfigureAwait(false);
+                _utility = null;
+            }
+        }
+        finally
+        {
+            _utilityLock.Release();
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         Library.Dispose();
+        if (ClaudeUpdates is not null)
+        {
+            await ClaudeUpdates.DisposeAsync();
+            ClaudeUpdates = null;
+        }
         if (Usage is not null)
         {
             await Usage.DisposeAsync();

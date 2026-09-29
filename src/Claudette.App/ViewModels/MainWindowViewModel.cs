@@ -1,5 +1,6 @@
 using Claudette.App.Services;
 using Claudette.Core.Auth;
+using Claudette.Core.Installation;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Claudette.App.ViewModels;
@@ -25,6 +26,12 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     /// <summary>True once plan usage has arrived. API-key accounts have no plan limits, so the header stays plain.</summary>
     public bool HasUsage => Usage is { HasData: true };
 
+    /// <summary>The header's "Claude Code … is ready" badge and Settings' update section (DESIGN.md §12).</summary>
+    [ObservableProperty]
+    public partial ClaudeUpdateViewModel? Updates { get; set; }
+
+    private ClaudeUpdateResult? _launchUpdate;
+
     /// <summary>The main UI, once Claude Code is installed and signed in.</summary>
     public ShellViewModel? Shell => _shell;
 
@@ -36,9 +43,22 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     {
         CurrentPage = new BusyViewModel("Looking for Claude Code…");
         var result = await services.Locator.LocateAsync(path);
+        if (result.Install is { } found && services.State.UpdateClaudeOnNextLaunch)
+        {
+            // Update on next launch (DESIGN.md §12): before any tab or the utility session starts a claude process.
+            services.State.UpdateClaudeOnNextLaunch = false;
+            services.SaveState();
+            CurrentPage = new BusyViewModel("Updating Claude Code…");
+            _launchUpdate = await UpdateClaudeAsync(found.Path, null);
+            result = await services.Locator.LocateAsync(path);
+        }
         if (!result.IsUsable)
         {
-            CurrentPage = new SetupViewModel(result, services.Platform, CheckInstallAsync);
+            // Too old: the setup screen offers the same Update now as the header (DESIGN.md §12, "Minimum version").
+            var update = result is { Problem: Core.Installation.ClaudeInstallProblem.TooOld, Install: { } old }
+                ? output => UpdateClaudeAsync(old.Path, output)
+                : (Func<Action<string>, Task<ClaudeUpdateResult>>?)null;
+            CurrentPage = new SetupViewModel(result, services.Platform, CheckInstallAsync, update, () => CheckInstallAsync(path));
             return;
         }
         if (path is not null && path != services.Settings.ClaudeCode.ClaudePath)
@@ -48,7 +68,32 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
             services.SaveSettings();
         }
         services.UseInstall(result.Install!);
+        if (_launchUpdate is { } launchUpdate)
+        {
+            services.ClaudeUpdates!.RecordLaunchUpdate(launchUpdate);
+            _launchUpdate = null;
+        }
         await CheckSignInAsync();
+    }
+
+    /// <summary>Checks how <paramref name="claudePath"/> was installed, then runs its update command.</summary>
+    private async Task<ClaudeUpdateResult> UpdateClaudeAsync(string claudePath, Action<string>? onOutput)
+    {
+        try
+        {
+            var updater = services.CreateUpdater(claudePath);
+            var check = await Task.Run(() => updater.CheckAsync());
+            if (!check.Plan.CanRun)
+            {
+                return new ClaudeUpdateResult(false, check.InstalledVersion,
+                    check.Plan.ManualCommand is { } manual ? $"Run this to update Claude Code: {manual}" : check.Plan.Note ?? "Claudette can't update this installation.");
+            }
+            return await Task.Run(() => updater.UpdateAsync(check.Plan, onOutput is null ? null : line => services.Dispatcher.Post(() => onOutput(line))));
+        }
+        catch (Exception ex)
+        {
+            return new ClaudeUpdateResult(false, null, $"The update failed: {ex.Message}");
+        }
     }
 
     private async Task CheckSignInAsync()
@@ -88,6 +133,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
             CurrentPage = _shell;
             _shell.Restore(initialFolder);
             StartUsage();
+            StartUpdateChecks(_shell);
         }
         else
         {
@@ -121,6 +167,19 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         }
     }
 
+    /// <summary>Checks for Claude Code updates at launch and every few hours, and shows the header badge (DESIGN.md §12).</summary>
+    private void StartUpdateChecks(ShellViewModel shell)
+    {
+        if (services.ClaudeUpdates is not { } updates)
+        {
+            return;
+        }
+        var viewModel = new ClaudeUpdateViewModel(services, updates, () => shell.RunningVersions);
+        shell.RunningVersionsChanged += viewModel.Refresh;
+        Updates = viewModel;
+        updates.Start();
+    }
+
     /// <summary>A tab reported that Claude Code needs a sign-in.</summary>
     private void ShowSignIn()
     {
@@ -141,6 +200,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     public async ValueTask DisposeAsync()
     {
         Usage?.Dispose();
+        Updates?.Dispose();
         if (_shell is not null)
         {
             await _shell.DisposeAsync();

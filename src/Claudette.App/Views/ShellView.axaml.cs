@@ -167,7 +167,7 @@ public partial class ShellView : UserControl
         {
             return;
         }
-        var window = new SettingsWindow { DataContext = new SettingsViewModel(main.Services, main.AccountText) };
+        var window = new SettingsWindow { DataContext = new SettingsViewModel(main.Services, main.AccountText, main.Updates) };
         await window.ShowDialog(owner);
     }
 }

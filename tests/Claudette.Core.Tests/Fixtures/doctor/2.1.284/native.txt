@@ -1,0 +1,26 @@
+Claude Code doctor
+
+Running: native (2.1.284)
+Commit: 2b8ce618c24d
+Platform: linux-x64
+Path: /home/user/.local/share/claude/versions/2.1.284
+Config install method: not set
+Search: OK (/usr/bin/rg)
+Auto-updates: disabled (set by env: DISABLE_AUTOUPDATER)
+Auto-update channel: latest
+Last update attempt: none recorded
+Managed settings (remote): none configured for this organization
+Organization policy: Loaded from api.anthropic.com
+
+Remote Control
+Inside a cloud session — Remote Control is unavailable here. Use it from the local session instead.
+
+3 warnings found
+- Running native installation but config install method is 'not set'
+  Fix: Run claude install to update configuration
+- claude command at /home/user/.local/bin/claude missing or broken
+  Fix: Run claude install to repair the installation.
+- Leftover npm global installation at /usr/local/bin/claude
+  Fix: Run: npm -g uninstall @anthropic-ai/claude-code
+
+For a full setup checkup that can also fix issues, run /doctor in a Claude Code session.

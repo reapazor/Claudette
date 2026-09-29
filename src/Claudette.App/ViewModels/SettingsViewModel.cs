@@ -67,11 +67,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly AppServices _services;
     private readonly AppSettings _settings;
 
-    public SettingsViewModel(AppServices services, string? accountText)
+    public SettingsViewModel(AppServices services, string? accountText, ClaudeUpdateViewModel? updates = null)
     {
         _services = services;
         _settings = services.Settings;
         AccountText = accountText ?? "Not signed in";
+        Updates = updates;
         foreach (var suffix in _settings.QuickSuffixes)
         {
             Suffixes.Add(new QuickSuffixEditor(suffix, Save));
@@ -134,6 +135,17 @@ public sealed partial class SettingsViewModel : ViewModelBase
     // ---- Claude Code -----------------------------------------------------------------------------------------
 
     public string AccountText { get; }
+
+    /// <summary>Version, install method, update checks and <b>Update now</b> (DESIGN.md §12, §14). Null before Claude Code is found.</summary>
+    public ClaudeUpdateViewModel? Updates { get; }
+
+    public bool HasUpdates => Updates is not null;
+
+    public bool CheckForUpdates
+    {
+        get => _settings.ClaudeCode.CheckForUpdates;
+        set => Set(value, v => _settings.ClaudeCode.CheckForUpdates = v);
+    }
 
     public string InstalledText => _services.Install is { } install
         ? $"Claude Code {install.Version} at {install.Path}. Last tested with {ClaudeLocator.LastTestedVersion}{(install.Version > ClaudeLocator.LastTestedVersion ? " (this version is newer)" : "")}."

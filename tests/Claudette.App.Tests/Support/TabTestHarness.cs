@@ -172,15 +172,27 @@ internal sealed class InlineDispatcher : IUiDispatcher
 
 internal sealed class NoPlatform : IPlatformServices
 {
+    public List<string> OpenedUrls { get; } = [];
+
+    public string? Clipboard { get; private set; }
+
     public Task<string?> PickFolderAsync(string title) => Task.FromResult<string?>(null);
 
     public Task<string?> PickFileAsync(string title) => Task.FromResult<string?>(null);
 
-    public Task OpenUrlAsync(string url) => Task.CompletedTask;
+    public Task OpenUrlAsync(string url)
+    {
+        OpenedUrls.Add(url);
+        return Task.CompletedTask;
+    }
 
     public Task RevealFolderAsync(string path) => Task.CompletedTask;
 
-    public Task SetClipboardTextAsync(string text) => Task.CompletedTask;
+    public Task SetClipboardTextAsync(string text)
+    {
+        Clipboard = text;
+        return Task.CompletedTask;
+    }
 
     public Task OpenFileAsync(string path) => Task.CompletedTask;
 }
@@ -234,13 +246,19 @@ internal sealed class TabTestHarness : IAsyncDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"claudette-tabtest-{Guid.NewGuid():N}");
 
-    public TabTestHarness(Action<AppSettings>? configure = null)
+    /// <param name="updater">Claude Code's installation, for update tests; when given, update checks are set up too.</param>
+    public TabTestHarness(Action<AppSettings>? configure = null, FakeClaudeUpdater? updater = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "work"));
         Directory.CreateDirectory(ProjectsDirectory);
         Trees = new FakeProcessTreeTracker(Time);
-        Services = new AppServices(AppPaths.Under(_root), new ProcessLauncher(), Time, new NoPlatform(), new InlineDispatcher(), processTrees: Trees);
+        Services = new AppServices(AppPaths.Under(_root), new ProcessLauncher(), Time, Platform, new InlineDispatcher(), processTrees: Trees);
         configure?.Invoke(Services.Settings);
+        if (updater is not null)
+        {
+            Services.UpdaterFactory = _ => updater;
+            Services.UseInstall(new Core.Installation.ClaudeInstall("claude", updater.Installed));
+        }
         Services.ProjectsDirectory = ProjectsDirectory;
         Factory = new ScriptedSessionFactory(Transport, Time);
         Services.UseSessionFactory(Factory);
@@ -248,6 +266,8 @@ internal sealed class TabTestHarness : IAsyncDisposable
     }
 
     public FakeProcessTreeTracker Trees { get; }
+
+    public NoPlatform Platform { get; } = new();
 
     /// <summary>Stands in for Claude Code's <c>projects</c> folder.</summary>
     public string ProjectsDirectory => Path.Combine(_root, "projects");

@@ -122,6 +122,9 @@ public sealed class ClaudeCodeSettings
 {
     /// <summary>Null means find it automatically.</summary>
     public string? ClaudePath { get; set; }
+
+    /// <summary>Check for Claude Code updates at launch and every few hours (DESIGN.md §12).</summary>
+    public bool CheckForUpdates { get; set; } = true;
 }
 
 public sealed class NewTabSettings
