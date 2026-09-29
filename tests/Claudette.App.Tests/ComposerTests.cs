@@ -79,6 +79,19 @@ public partial class ComposerTests
     }
 
     [Fact]
+    public async Task A_command_typed_in_full_is_ready_to_send()
+    {
+        await using var h = WithCommands();
+        var tab = await h.OpenTabAsync();
+
+        // The view lets Enter send then, instead of completing the command again.
+        tab.Completions.Update("/compact", 8);
+        Assert.True(tab.Completions.IsTypedInFull);
+        tab.Completions.Update("/comp", 5);
+        Assert.False(tab.Completions.IsTypedInFull);
+    }
+
+    [Fact]
     public async Task Selection_wraps_around()
     {
         await using var h = WithCommands();

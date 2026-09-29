@@ -33,6 +33,13 @@ public partial class TabView
                 ViewModel?.Completions.Close();
             }
         };
+        // Switching tabs leaves no popup open to reappear when coming back.
+        TabViewModel? shown = null;
+        DataContextChanged += (_, _) =>
+        {
+            shown?.Completions.Close();
+            shown = ViewModel;
+        };
         Composer.PastingFromClipboard += OnComposerPasting;
         ComposerBox.AddHandler(DragDrop.DragEnterEvent, OnComposerDragOver, handledEventsToo: true);
         ComposerBox.AddHandler(DragDrop.DragOverEvent, OnComposerDragOver, handledEventsToo: true);
