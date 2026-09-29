@@ -342,6 +342,20 @@
           <CheckBox Content="Tell Claude about Unity projects" IsChecked="{Binding TellClaudeAboutUnity}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                      Text="The Unity version and editor, how to run the EditMode tests in batch mode, which folders are generated, and that .meta files move with their assets." />
+          <TextBlock Text="Godot" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <Grid ColumnDefinitions="220,*,Auto,Auto" ColumnSpacing="8">
+            <TextBlock Classes="label" Text="Godot executable" />
+            <TextBox Grid.Column="1" Classes="mono" Text="{Binding GodotPath}" PlaceholderText="Found automatically" />
+            <Button Grid.Column="2" Content="Browse…" Command="{Binding BrowseGodotCommand}" />
+            <Button Grid.Column="3" Content="Detect" Command="{Binding DetectGodotCommand}" ToolTip.Tip="Look on the PATH and where Godot's installers put it" />
+          </Grid>
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Text="{Binding GodotDetectResult}"
+                     IsVisible="{Binding GodotDetectResult, Converter={x:Static ObjectConverters.IsNotNull}}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Empty looks for godot, godot4, Godot or godot-mono on the PATH, then Godot.app on macOS, or WinGet's and Scoop's places on Windows. C# projects need the .NET build of Godot." />
+          <CheckBox Content="Tell Claude about Godot projects" IsChecked="{Binding TellClaudeAboutGodot}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="The Godot version, GDScript or C#, and how to check the project and build its C# without the editor." />
           <TextBlock Text="Solutions" FontWeight="SemiBold" Margin="0,8,0,0" />
           <Grid ColumnDefinitions="220,*" RowDefinitions="Auto">
             <TextBlock Classes="label" Text="Open solutions with" />

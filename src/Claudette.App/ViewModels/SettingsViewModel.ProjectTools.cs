@@ -1,5 +1,6 @@
 using Claudette.Core.ProjectTools;
 using Claudette.Core.Settings;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 namespace Claudette.App.ViewModels;
@@ -23,6 +24,8 @@ public sealed partial class SettingsViewModel
         new("Project tools", "Tell Claude about Unreal projects"),
         new("Project tools", "Unity: default code optimization"),
         new("Project tools", "Tell Claude about Unity projects"),
+        new("Project tools", "Godot executable"),
+        new("Project tools", "Tell Claude about Godot projects"),
     ];
 
     public IReadOnlyList<SettingChoice<UnrealConfiguration>> UnrealConfigurationChoices { get; } =
@@ -133,6 +136,48 @@ public sealed partial class SettingsViewModel
         set => Set(value, v => _settings.ProjectTools.TellClaudeAboutUnity = v);
     }
 
+    /// <summary>The Godot executable; empty finds it (DESIGN.md §18, "Godot").</summary>
+    public string GodotPath
+    {
+        get => _settings.ProjectTools.GodotPath ?? "";
+        set => Set(value, v => _settings.ProjectTools.GodotPath = string.IsNullOrWhiteSpace(v) ? null : v.Trim());
+    }
+
+    [RelayCommand]
+    private async Task BrowseGodotAsync()
+    {
+        if (await _services.Platform.PickFileAsync("Choose the Godot executable") is { } path)
+        {
+            GodotPath = path;
+            OnPropertyChanged(nameof(GodotPath));
+        }
+    }
+
+    /// <summary>What <b>Detect</b> found: where Godot usually is, ignoring the path set here.</summary>
+    [ObservableProperty]
+    public partial string? GodotDetectResult { get; set; }
+
+    [RelayCommand]
+    private async Task DetectGodotAsync()
+    {
+        var context = _services.ProjectTools.Context();
+        var found = await Task.Run(() => Core.ProjectTools.Godot.GodotExecutables.Detect(context));
+        if (found is null)
+        {
+            GodotDetectResult = "Godot wasn't found on the PATH or where its installers put it. Browse to it instead.";
+            return;
+        }
+        GodotPath = found;
+        OnPropertyChanged(nameof(GodotPath));
+        GodotDetectResult = $"Found {found}.";
+    }
+
+    public bool TellClaudeAboutGodot
+    {
+        get => _settings.ProjectTools.TellClaudeAboutGodot;
+        set => Set(value, v => _settings.ProjectTools.TellClaudeAboutGodot = v);
+    }
+
     /// <summary>Notifications → A project action finishes.</summary>
     public bool NotifyProjectActions
     {
@@ -153,5 +198,8 @@ public sealed partial class SettingsViewModel
         OnPropertyChanged(nameof(TellClaudeAboutUnreal));
         OnPropertyChanged(nameof(SelectedUnityOptimization));
         OnPropertyChanged(nameof(TellClaudeAboutUnity));
+        OnPropertyChanged(nameof(GodotPath));
+        OnPropertyChanged(nameof(TellClaudeAboutGodot));
+        GodotDetectResult = null;
     }
 }

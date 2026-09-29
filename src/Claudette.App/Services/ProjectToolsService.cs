@@ -12,7 +12,7 @@ namespace Claudette.App.Services;
 /// </summary>
 public sealed class ProjectToolsService(AppServices services, ISystemProcesses? processes, IUnrealEngineRegistry registry, ProjectToolPaths paths)
 {
-    public ProjectToolDetector Detector { get; } = new([new UnrealProvider(), new Core.ProjectTools.Unity.UnityProvider()]);
+    public ProjectToolDetector Detector { get; } = new([new UnrealProvider(), new Core.ProjectTools.Unity.UnityProvider(), new Core.ProjectTools.Godot.GodotProvider()]);
 
     /// <summary>Running processes by name; null when this machine can't tell.</summary>
     public ISystemProcesses? Processes { get; internal set; } = processes;

@@ -1109,7 +1109,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Quick suffixes | The list of suffixes: label, text and optional shortcut. Add, edit, reorder, delete. See [§5](#quick-suffixes). |
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
 | Diff tool | Built-in, a preset or a custom command, with **Test**. See [§8](#external-diff-tool). |
-| Project tools | Unreal's default editor configuration (Development or DebugGame). Project files for Visual Studio, VS Code or Xcode (the OS's own by default). Tell Claude about Unreal projects (on by default). Unity's default code optimization (Release or Debug), and Tell Claude about Unity projects (on by default). Open solutions with the OS's app, Rider, Visual Studio, VS Code or another program (**Browse…**). See [§18](#project-tools). |
+| Project tools | Unreal's default editor configuration (Development or DebugGame). Project files for Visual Studio, VS Code or Xcode (the OS's own by default). Tell Claude about Unreal projects (on by default). Unity's default code optimization (Release or Debug), and Tell Claude about Unity projects (on by default). The Godot executable (**Browse…**, **Detect**), and Tell Claude about Godot projects (on by default). Open solutions with the OS's app, Rider, Visual Studio, VS Code or another program (**Browse…**). See [§18](#project-tools). |
 | Notifications | On/off for each type in [§10](#10-notifications), including **A project action finishes**. Dock/taskbar badge on/off. |
 | Keyboard | List of shortcuts, each one rebindable ([below](#keyboard-shortcuts)). |
 | Perforce | Off by default. Keep Perforce logins fresh. Password source. Renew-before time. Tickets for all hosts. Show changelist on tabs. The stored password (**Save** / **Forget**). Per-folder server and user. See [§18](#perforce-ticket-handling). |
@@ -1451,10 +1451,11 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
 13. **Project tools.** ✅ Built 2026-09-29 ([§18](#project-tools)).
     - **Unreal Engine:** finding the project (in the folder, below and above it) and its engine (a parent folder, `LauncherInstalled.dat`, the registry, `Install.ini`, a chosen folder), Launch editor with Development or DebugGame per project, Generate project files, Build editor, Build and launch, Open solution with a chosen IDE, Open latest log, Clean intermediates and Kill all Unreal editors.
     - **Unity:** the editor for the project's version from Unity Hub's folders and lists, Open in Unity with Release or Debug code optimization, EditMode tests with their counts, regenerating the C# solution, the solution and logs, Clean Library, Kill all Unity editors, and the lock file rules.
+    - **Godot:** finding the executable (a pick, Settings, the `PATH`, `Godot.app`, Scoop and WinGet) and checking for the .NET build, Open in Godot, Run project, Build C#, Open solution, Clean `.godot` or `.import`, and Kill all Godot editors.
     - **The chip** in the composer bar, the project's submenu in the tab menu, the **Project** page with the job's output and Stop, the notification, and `Ctrl/Cmd+Shift+E`.
     - **claudette.json** and **claudette.local.json:** a folder's own actions (with trust for the shared file's commands) and links, the links in the sidebar, and the in-app editor.
-    - **Settings → Project tools**, and the notes to Claude about Unreal and Unity projects.
-    - **Still to verify:** everything on machines with Unreal and Unity installed, on Windows, macOS and Linux (see [§18](#project-tools)).
+    - **Settings → Project tools**, and the notes to Claude about Unreal, Unity and Godot projects.
+    - **Still to verify:** everything on machines with Unreal, Unity and Godot installed, on Windows, macOS and Linux (see [§18](#project-tools)).
 14. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features
@@ -1591,7 +1592,7 @@ A live view of what a tab's subagents are doing. When Claude fans work out to se
 
 ✅ Built 2026-09-29.
 
-A tab can do things for the project in its folder: launch the editor, generate project files, build, open the solution. Which things depends on the project. Claudette knows Unreal Engine and Unity projects; a folder can also have its own actions and links, in a `claudette.json` beside the project.
+A tab can do things for the project in its folder: launch the editor, generate project files, build, open the solution. Which things depends on the project. Claudette knows Unreal Engine, Unity and Godot projects; a folder can also have its own actions and links, in a `claudette.json` beside the project.
 
 **Where the actions are.**
 
@@ -1611,7 +1612,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - a button per action;
   - the running or last job: its status (running, succeeded, failed with its exit code, stopped), **Stop**, which ends the job's whole process tree, and **Copy**;
   - the job's output, monospace and scrollable, following the newest line. It keeps the last 5,000 lines and says how many were dropped.
-- **The keyboard.** **Run the project's main action**, `Ctrl/Cmd+Shift+E` by default and rebindable ([§14](#keyboard-shortcuts)): Launch editor for Unreal, else the folder's first custom action.
+- **The keyboard.** **Run the project's main action**, `Ctrl/Cmd+Shift+E` by default and rebindable ([§14](#keyboard-shortcuts)): Launch editor for Unreal, Open in Unity, Open in Godot, else the folder's first custom action.
 
 **How it's built.** `Claudette.Core/ProjectTools`:
 
@@ -1628,7 +1629,8 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - Several projects are listed nearest first: the folder, then its subfolders, then its parents.
 - **Jobs** start through `IProcessLauncher` with `TrackProcessTree`, so they show in the process monitor ([§4](#process-monitor)) and **Stop** ends everything they started (UnrealBuildTool starts children). Closing the tab stops a running job with the tab's other processes, unless they're kept.
 - **Environment.** Jobs and launches get Claudette's environment, less Claude Code's session variables ([§13](#integration-with-claude-code)), so a command that runs `claude` behaves as it would in a terminal. `ProjectToolEnvironment` is the one place this is built, ready to switch to the login shell's environment on macOS and Linux.
-- **Remembered on this machine**, in `state.json`: the project a folder uses when it has several, each project's configuration and chosen engine folder (keyed by its `.uproject`), and which folders' shared actions are trusted. None of it syncs.
+- **Remembered on this machine**, in `state.json`: the project a folder uses when it has several, each project's choices (Unreal's configuration and engine folder, keyed by its `.uproject`; Unity's code optimization and editor; Godot's executable), and which folders' shared actions are trusted. None of it syncs.
+- **The note to Claude.** Each provider has its own note, added through `--append-system-prompt` when Settings says so, before Perforce's note when both apply.
 
 **Unreal Engine.**
 
@@ -1709,6 +1711,37 @@ A tab can do things for the project in its folder: launch the editor, generate p
 
 > **Still to verify with Unity installed:** each Hub layout and file as Hub writes them; the lock file with a real editor; regenerating the solution with each IDE package in batch mode (the methods are the packages' public entry points, but running them with `-executeMethod` hasn't been tried); the results file of `-runTests`; and the logs' places on each OS.
 
+**Godot.**
+
+- **Finding the project.** A folder with `project.godot`, found as above. It's a Godot `ConfigFile`, read line by line and tolerantly:
+  - `config_version`: 5 is Godot 4, 4 is Godot 3.
+  - `config/name` under `[application]`, else the folder's name.
+  - `config/features`, such as `PackedStringArray("4.3", "C#", "Forward Plus")` (`PoolStringArray` in Godot 3): its first version is the project's (`Godot 4.3`), else `config_version` gives `Godot 4` or `Godot 3`.
+  - It's a C# project when its features have `C#`, it has a `[dotnet]` or `[mono]` section, or its folder has a `.sln` or `.csproj`.
+- **Finding Godot** (`GodotExecutables`). There's no standard install, so in order:
+  1. a pick remembered for the project, from **Choose Godot executable…**;
+  2. the path in Settings → Project tools;
+  3. `godot`, `godot4`, `Godot` or `godot-mono` on the `PATH`;
+  4. on macOS, `/Applications/Godot.app` or `/Applications/Godot_mono.app`;
+  5. on Windows, Scoop's shims (`~\scoop\shims\godot.exe`, `godot-mono.exe`), WinGet's `Links\godot.exe`, and the newest `Godot*.exe` in WinGet's `GodotEngine.GodotEngine*` package folder, not the console one.
+  - **Detect** in Settings runs 3–5 and fills in the path.
+  - A C# project needs the .NET ("mono") build of Godot: one whose name has `mono` in it, or with a `GodotSharp` folder beside it (in `Contents/Resources` on macOS). When the Godot found isn't one, the chip menu's header says so.
+- **Actions.**
+  - **Open in Godot** (the main action), detached: `godot --editor --path "<folder>"`.
+  - **Run project**, detached: `godot --path "<folder>"`.
+  - **Build C#**, a job, for C# projects: `dotnet build "<Name>.sln"`, or the `.csproj` when there's no `.sln`. Disabled until Godot has made them.
+  - **Open solution**, for C# projects: the `.sln`, disabled when missing.
+  - **Clean .godot…** (Godot 4) or **Clean .import…** (Godot 3), destructive: deletes that folder, with a confirmation that Godot reimports every asset next time.
+  - **Kill all Godot editors…**, destructive: every process whose name starts with `godot` (any build, such as `Godot_v4.3-stable_mono_win64`), with the project from its `--path`, never Claudette itself.
+- **Telling Claude.** With **Tell Claude about Godot projects** on (the default):
+  > This is a Godot 4.3 project (C#), Night Owl, at /g/owl.
+  > To check it without the editor, run: /opt/godot-mono --headless --path /g/owl --quit
+  > To check one script, run: /opt/godot-mono --headless --path /g/owl --check-only --script res://path/to/script.gd
+  > To build the C# code, run: dotnet build '/g/owl/Night Owl.sln'
+  > Don't open the editor unless asked.
+
+> **Still to verify with Godot installed:** each place Godot is looked for, the .NET build check, `--check-only` on Godot 3 and 4, and Kill all Godot editors with real editors.
+
 **claudette.json.** A folder's own actions and links are in two files in the tab's folder (only there; they aren't looked for elsewhere):
 
 - `claudette.json` is shared: committed with the project.
@@ -1764,9 +1797,10 @@ A tab can do things for the project in its folder: launch the editor, generate p
 - Open solutions with: the OS's default app, Rider, Visual Studio, VS Code, or another program (with **Browse…**).
 - Tell Claude about Unreal projects: on by default.
 - Unity: the default code optimization, Release (the default) or Debug; a project's own choice wins. Tell Claude about Unity projects: on by default.
+- Godot: the executable's path, empty to find it, with **Browse…** and **Detect**. Tell Claude about Godot projects: on by default.
 - **Reset to defaults**, and search entries for each.
 
-**Testing.** No test runs a real engine: engines are a few files in temporary folders, the registry and running processes are fakes, and every process is a fake launcher's. `ProjectDiscoveryTests`, `UnrealEngineTests`, `UnrealCommandTests`, `CommandLineTests`, `UnrealProviderTests`, `UnityProviderTests`, `ProjectJobTests` and `ProjectFileTests` in Core; `SystemProcessesTests` in Platform; `ProjectToolsTests` for the tab; and `ProjectToolsUiTests` for the rendered chip, its menu, the tab menu's submenu and the Links section.
+**Testing.** No test runs a real engine: engines are a few files in temporary folders, the registry and running processes are fakes, and every process is a fake launcher's. `ProjectDiscoveryTests`, `UnrealEngineTests`, `UnrealCommandTests`, `CommandLineTests`, `UnrealProviderTests`, `UnityProviderTests`, `GodotProviderTests`, `ProjectJobTests` and `ProjectFileTests` in Core; `SystemProcessesTests` in Platform; `ProjectToolsTests` for the tab; and `ProjectToolsUiTests` for the rendered chip, its menu, the tab menu's submenu and the Links section.
 
 > **Still to verify on a machine with Unreal installed:**
 > - Launching the editor and building from a launcher install and a source build on Windows, macOS and Linux, including DebugGame and `-debug`.
