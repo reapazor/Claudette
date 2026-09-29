@@ -598,7 +598,7 @@
         <Border DockPanel.Dock="Top" Classes="pagetabs">
           <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
             <Button Classes="pagetab" Classes.selected="{Binding IsFilesPage}" Command="{Binding ShowFilesPageCommand}">
-              <TextBlock Text="Changed files" Classes.muted="{Binding !IsFilesPage}" />
+              <TextBlock Text="Changed Files" Classes.muted="{Binding !IsFilesPage}" />
             </Button>
             <!-- Agents (DESIGN.md §18); a busy dot while a subagent runs -->
             <Button Grid.Column="1" Classes="pagetab" Classes.selected="{Binding IsAgentsPage}" Command="{Binding ShowAgentsPageCommand}" ToolTip.Tip="{Binding AgentsHeader}">
