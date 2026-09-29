@@ -217,13 +217,14 @@ public sealed partial class AgentNode : ObservableObject
     {
         get
         {
-            var parts = new List<string> { AgentType };
-            if (Model is { } model)
-            {
-                parts.Add(model);
-            }
+            var parts = new List<string>();
             if (!IsRoot)
             {
+                parts.Add(AgentType);
+                if (Model is { } model)
+                {
+                    parts.Add(_map.ModelName(model) ?? model);
+                }
                 if (RunningText is { Length: > 0 } running)
                 {
                     parts.Add(running);
@@ -615,9 +616,11 @@ public sealed class AgentMap
     // task_started for an Agent call the stream hasn't shown yet, by that call's id.
     private readonly Dictionary<string, SystemMessage> _earlyTasks = [];
 
-    public AgentMap(TimeProvider time)
+    /// <param name="modelName">Turns a model id into a display name, as the tab does.</param>
+    public AgentMap(TimeProvider time, Func<string?, string?>? modelName = null)
     {
         _time = time;
+        ModelName = modelName ?? (m => m);
         Root = new AgentNode(this, null, null);
         Roots = [Root];
     }
@@ -635,6 +638,8 @@ public sealed class AgentMap
     public bool IsReplaying { get; set; }
 
     internal DateTimeOffset Now => _time.GetUtcNow();
+
+    internal Func<string?, string?> ModelName { get; }
 
     public IEnumerable<AgentNode> Subagents => Root.DescendantsAndSelf().Skip(1);
 

@@ -153,7 +153,8 @@ public class AgentMapTests
         Assert.Equal(5, top.ToolCalls);
         Assert.Equal("3s", top.RunningText);
         Assert.Equal("claude-haiku-4-5", top.Model);
-        Assert.Equal("general-purpose · claude-haiku-4-5 · 3s · 5 tool calls · 4.3k tok", top.Meta);
+        // The model as the tab names it.
+        Assert.Equal("general-purpose · Haiku · 3s · 5 tool calls · 4.3k tok", top.Meta);
         var nested = tab.Agents.Find("a2")!;
         Assert.Equal(AgentStatus.Done, nested.Status);
         Assert.Equal("Nested done.\nSecond line.", nested.ResultText);

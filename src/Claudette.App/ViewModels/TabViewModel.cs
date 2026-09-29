@@ -75,7 +75,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _services = services;
         _shell = shell;
         State = state;
-        Agents = new AgentMap(services.Time);
+        Agents = new AgentMap(services.Time, ModelDisplayName);
         Agents.Changed += OnAgentsChanged;
         _conversation = new ConversationBuilder(Items, TodoList, ModelDisplayName) { ExpandThinking = services.Settings.Appearance.ExpandThinking, Agents = Agents };
         _checkIns = new CheckInMonitor(services.Time, () => CheckInSettings, SendCheckInFromTimer, stuck => _services.Dispatcher.Post(() => IsPossiblyStuck = stuck));
