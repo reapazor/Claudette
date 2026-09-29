@@ -114,7 +114,13 @@ public sealed partial class TabViewModel
         if (_sampler is null)
         {
             _sampler = new ProcessSampler(_tree!, _services.Time);
-            _sampler.Sampled += snapshots => _services.Dispatcher.Post(() => OnProcessesSampled(snapshots));
+            // A project action's job shows too (DESIGN.md §18, "Project tools"), under the tab's claude.
+            _sampler.Sampled += snapshots =>
+            {
+                var job = ProjectJobProcesses(_services.Settings.Processes.ShowCommandLines);
+                IReadOnlyList<ProcessSnapshot> all = job.Count == 0 ? snapshots : [.. snapshots, .. job];
+                _services.Dispatcher.Post(() => OnProcessesSampled(all));
+            };
         }
         var settings = _services.Settings.Processes;
         _sampler.Interval = IsProcessPanelVisible ? TimeSpan.FromSeconds(Math.Max(1, settings.RefreshSeconds)) : ProcessSampler.SummaryInterval;
@@ -252,9 +258,9 @@ public sealed partial class TabViewModel
                     {
                         await _session.StopTaskAsync(taskId);
                     }
-                    else if (_tree is not null)
+                    else if ((ProjectJobTreeHolding(row.Pid) ?? _tree) is { } tree)
                     {
-                        await _tree.StopAsync(row.Pid, TimeSpan.FromSeconds(3));
+                        await tree.StopAsync(row.Pid, TimeSpan.FromSeconds(3));
                     }
                 }
                 catch (Exception ex)
@@ -279,7 +285,7 @@ public sealed partial class TabViewModel
     {
         try
         {
-            return _tree?.Sample(includeCommandLines: false).Where(s => !s.IsRoot).ToArray() ?? [];
+            return [.. _tree?.Sample(includeCommandLines: false).Where(s => !s.IsRoot) ?? [], .. ProjectJobProcesses(includeCommandLines: false)];
         }
         catch (Exception)
         {

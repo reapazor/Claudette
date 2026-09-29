@@ -302,6 +302,13 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
                     Account.ShowSignIn();
                 }
                 break;
+            case NotificationKind.ProjectAction:
+                // The tab's Project page, with the job's output (DESIGN.md §18, "Project tools").
+                if (target.TabId is { } jobTab && CurrentPage == _shell && _shell?.SelectTab(jobTab) == true)
+                {
+                    _shell.SelectedTab?.OpenProjectPageCommand.Execute(null);
+                }
+                break;
             default:
                 if (target.TabId is { } tabId && CurrentPage == _shell)
                 {

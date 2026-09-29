@@ -18,4 +18,12 @@ public sealed record ProcessStartSpec(string FileName, IReadOnlyList<string> Arg
     /// such as Claudette starting itself from a copy of its build (DESIGN.md §9). Its output channels are empty.
     /// </summary>
     public bool Detached { get; init; }
+
+    /// <summary>
+    /// The arguments as one command line, passed as they are instead of <see cref="Arguments"/>. Only for
+    /// <c>cmd.exe</c> on Windows, which doesn't read its command line by the usual quoting rules, so the arguments of a
+    /// <c>.bat</c> file have to be quoted for it by hand (<see cref="ProjectTools.CommandLines"/>). Null uses
+    /// <see cref="Arguments"/>, quoted by .NET.
+    /// </summary>
+    public string? CommandLine { get; init; }
 }

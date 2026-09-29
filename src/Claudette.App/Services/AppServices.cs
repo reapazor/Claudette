@@ -4,6 +4,8 @@ using Claudette.Core.Credentials;
 using Claudette.Core.Git;
 using Claudette.Core.Installation;
 using Claudette.Core.Processes;
+using Claudette.Core.ProjectTools;
+using Claudette.Core.ProjectTools.Unreal;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
@@ -42,6 +44,9 @@ public sealed class AppServices : IAsyncDisposable
     /// <param name="appInstaller">Installs Claudette's own updates (DESIGN.md §2, "Updating Claudette"). Null can't.</param>
     /// <param name="httpHandler">Sends Claudette's own web requests: the update check and download. Tests pass a fake.</param>
     /// <param name="appVersion">This Claudette's version; by default, the one it was built with.</param>
+    /// <param name="systemProcesses">Every running process by name, for project tools (DESIGN.md §18). Null can't tell.</param>
+    /// <param name="unrealRegistry">Unreal's Windows registry entries. Null has none.</param>
+    /// <param name="projectToolPaths">Where other programs keep their files; by default the current user's folders.</param>
     public AppServices(
         AppPaths paths,
         IProcessLauncher launcher,
@@ -54,7 +59,10 @@ public sealed class AppServices : IAsyncDisposable
         ICredentialStore? credentials = null,
         IAppInstaller? appInstaller = null,
         HttpMessageHandler? httpHandler = null,
-        AppVersion? appVersion = null)
+        AppVersion? appVersion = null,
+        ISystemProcesses? systemProcesses = null,
+        IUnrealEngineRegistry? unrealRegistry = null,
+        ProjectToolPaths? projectToolPaths = null)
     {
         AppInstaller = appInstaller ?? new NoAppInstaller();
         AppVersion = appVersion ?? BuiltVersion();
@@ -80,6 +88,7 @@ public sealed class AppServices : IAsyncDisposable
         Notifications = new NotificationService(this, notifier ?? NullNotifier.Instance);
         Tips = new ShortcutTips(Settings);
         Perforce = new PerforceService(this, credentials ?? new UnavailableCredentialStore());
+        ProjectTools = new ProjectToolsService(this, systemProcesses, unrealRegistry ?? NoUnrealEngineRegistry.Instance, projectToolPaths ?? ProjectToolPaths.ForCurrentUser());
         UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time);
         SettingsChanged += (_, _) =>
         {
@@ -120,6 +129,9 @@ public sealed class AppServices : IAsyncDisposable
 
     /// <summary>Perforce ticket handling and changelists, shared by the tabs (DESIGN.md §18).</summary>
     public PerforceService Perforce { get; }
+
+    /// <summary>Project tools: detecting a tab's project and running its actions (DESIGN.md §18).</summary>
+    public ProjectToolsService ProjectTools { get; }
 
     /// <summary>Makes the updater for a <c>claude</c> path (DESIGN.md §12). Tests replace it.</summary>
     internal Func<string, IClaudeUpdater> UpdaterFactory { get; set; }

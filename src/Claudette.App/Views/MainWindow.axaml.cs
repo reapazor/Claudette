@@ -15,7 +15,15 @@ public partial class MainWindow : Window
         InitializeComponent();
         UseMicaOnWindows11();
         // Notifications are skipped for what's already in front of the user (DESIGN.md §10).
-        Activated += (_, _) => _viewModel?.Services.Notifications.SetAppActive(true);
+        Activated += (_, _) =>
+        {
+            _viewModel?.Services.Notifications.SetAppActive(true);
+            // Back from an editor, perhaps with claudette.json changed: the actions and links follow (DESIGN.md §18).
+            if (_viewModel?.Shell?.SelectedTab is { } tab)
+            {
+                _ = tab.RefreshProjectFileAsync();
+            }
+        };
         Deactivated += (_, _) => _viewModel?.Services.Notifications.SetAppActive(false);
     }
 

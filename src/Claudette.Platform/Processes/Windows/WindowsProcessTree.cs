@@ -413,7 +413,7 @@ internal sealed class WindowsProcessTree : ProcessTree
     }
 
     /// <summary>The command line, from <c>ProcessCommandLineInformation</c> (Windows 8.1 and later).</summary>
-    private static unsafe string? CommandLine(SafeProcessHandle handle)
+    internal static unsafe string? CommandLine(SafeProcessHandle handle)
     {
         var size = 1024u;
         for (var attempt = 0; attempt < 4; attempt++)

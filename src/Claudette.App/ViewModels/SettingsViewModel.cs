@@ -118,7 +118,7 @@ public sealed partial class QuickSuffixEditor(QuickSuffix suffix, Action changed
 public sealed partial class SettingsViewModel : ViewModelBase
 {
     public static readonly IReadOnlyList<string> AllCategories =
-        ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Notifications", "Keyboard", "Perforce", "Advanced"];
+        ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Project tools", "Notifications", "Keyboard", "Perforce", "Advanced"];
 
     private readonly AppServices _services;
     private readonly AppSettings _settings;
@@ -203,12 +203,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Diff tool", "Diff tool"),
         new("Diff tool", "Custom diff command"),
         new("Diff tool", "Test the diff tool"),
+        .. ProjectToolsSearchEntries(),
         new("Notifications", "A tab finishes its turn"),
         new("Notifications", "A tab needs permission or an answer"),
         new("Notifications", "A tab's Claude Code stops with an error"),
         new("Notifications", "Usage alerts"),
         new("Notifications", "Claude Code needs me to sign in"),
         new("Notifications", "A Claude Code update is ready"),
+        new("Notifications", "A project action finishes"),
         new("Notifications", "Dock or taskbar badge"),
         .. KeyboardShortcuts.All.Select(c => new SettingsSearchResult("Keyboard", $"{c.Label} shortcut")),
         .. PerforceSearchEntries(),
@@ -262,7 +264,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsGeneral), nameof(IsClaudeCode), nameof(IsNewTabs), nameof(IsAppearance), nameof(IsSessions), nameof(IsCheckIns), nameof(IsQuickSuffixes), nameof(IsAdvanced))]
-    [NotifyPropertyChangedFor(nameof(IsUsage), nameof(IsProcesses), nameof(IsDiffTool), nameof(IsNotifications), nameof(IsKeyboard))]
+    [NotifyPropertyChangedFor(nameof(IsUsage), nameof(IsProcesses), nameof(IsDiffTool), nameof(IsNotifications), nameof(IsKeyboard), nameof(IsProjectTools))]
     public partial string SelectedCategory { get; set; }
 
     public bool IsKeyboard => SelectedCategory == "Keyboard";
@@ -933,6 +935,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         OnPropertyChanged(nameof(NotifyUsageAlerts));
         OnPropertyChanged(nameof(NotifySignIn));
         OnPropertyChanged(nameof(NotifyUpdateReady));
+        OnPropertyChanged(nameof(NotifyProjectActions));
         OnPropertyChanged(nameof(ShowBadge));
     }
 

@@ -15,6 +15,7 @@ using Claudette.Core.Settings;
 using Claudette.Platform.Credentials;
 using Claudette.Platform.Notifications;
 using Claudette.Platform.Processes;
+using Claudette.Platform.ProjectTools;
 using Claudette.Platform.Shell;
 using Claudette.Platform.Shell.Windows;
 using Claudette.Platform.Updates;
@@ -50,7 +51,9 @@ public partial class App : Application
                 processTrees: trees,
                 notifier: Notifier.CreateForCurrentOS(launcher),
                 credentials: CredentialStores.CreateForCurrentOS(launcher, TimeProvider.System),
-                appInstaller: AppInstallers.CreateForCurrentOS(launcher, TimeProvider.System, paths.UpdatesDirectory, NullLogger.Instance));
+                appInstaller: AppInstallers.CreateForCurrentOS(launcher, TimeProvider.System, paths.UpdatesDirectory, NullLogger.Instance),
+                systemProcesses: new SystemProcesses(launcher, TimeProvider.System),
+                unrealRegistry: UnrealEngineRegistries.CreateForCurrentOS());
             var services = _services;
             // The Dock or taskbar badge needs the window's native handle, so it's set up once the window exists.
             window.Opened += (_, _) => services.Notifications.UseBadge(
