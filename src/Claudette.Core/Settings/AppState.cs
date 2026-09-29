@@ -112,6 +112,13 @@ public sealed class TabState
     /// </summary>
     public bool SyncToLibrary { get; set; }
 
+    /// <summary>
+    /// Connect this tab to the Claude app with Remote Control whenever its session runs, so it reconnects by itself after
+    /// a restart (DESIGN.md §18, "Remote Control"). Off unless the tab opted in: new tabs take Settings → Claude Code →
+    /// Connect new tabs to the Claude app. The tab's own state, like <see cref="SyncToLibrary"/>, not an override.
+    /// </summary>
+    public bool RemoteControl { get; set; }
+
     public TabOverrides Overrides { get; set; } = new();
 
     /// <summary>Quick suffixes kept on this tab, by suffix id.</summary>

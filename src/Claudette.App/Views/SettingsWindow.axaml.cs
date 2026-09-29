@@ -13,6 +13,7 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         // Tunnel, so the key press is recorded before a focused button or text box acts on it.
         AddHandler(KeyDownEvent, OnRecordingKeyDown, RoutingStrategies.Tunnel);
+        Closed += (_, _) => (DataContext as IDisposable)?.Dispose();
     }
 
     /// <summary>While a shortcut is being recorded (Settings → Keyboard), the next key press is the new shortcut.</summary>

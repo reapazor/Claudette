@@ -89,6 +89,7 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
         CheckInMessage = checkIns.Message;
         NotifyOnCheckIn = checkIns.Notify;
         SyncToLibrary = tab.State.SyncToLibrary;
+        RemoteControl = tab.State.RemoteControl;
         _sharedRows = LoadRows(ProjectFileScope.Shared, out var sharedError);
         _localRows = LoadRows(ProjectFileScope.Local, out var localError);
         _fileErrors[ProjectFileScope.Shared] = sharedError;
@@ -152,6 +153,21 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
     /// </summary>
     [ObservableProperty]
     public partial bool SyncToLibrary { get; set; }
+
+    /// <summary>
+    /// <b>Connect to the Claude app</b> (DESIGN.md §18, "Remote Control"). The tab's own state like
+    /// <see cref="SyncToLibrary"/>, so <b>Use defaults</b> leaves it as it is.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool RemoteControl { get; set; }
+
+    /// <summary>The account can use Remote Control, or the tab is on and can be turned off.</summary>
+    public bool CanChangeRemoteControl => _tab.CanToggleRemoteControl;
+
+    /// <summary>Why the switch is disabled, or null.</summary>
+    public string? RemoteControlUnavailableText => CanChangeRemoteControl ? null : _services.RemoteControl.UnavailableReason;
+
+    public bool HasRemoteControlUnavailableText => RemoteControlUnavailableText is not null;
 
     // ---- Project actions (DESIGN.md §18, "Custom actions"): the folder's claudette.json files, saved with Apply ------
 
@@ -333,6 +349,7 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
         };
         _close();
         _tab.SetSyncToLibrary(SyncToLibrary);
+        await _tab.SetRemoteControlAsync(RemoteControl);
         await _tab.ApplyOverridesAsync(previous);
     }
 

@@ -498,6 +498,51 @@ public sealed class RealCliTests : IAsyncLifetime
         Assert.Equal("Done with the tool.", done.Result.Result);
     }
 
+    [Fact]
+    public async Task Remote_control_answers_with_its_eligibility_check()
+    {
+        await using var session = await StartAsync(environment: OutsideCloudSessions());
+
+        var error = await Assert.ThrowsAsync<Core.Protocol.ControlRequestException>(() => session.EnableRemoteControlAsync("Test tab", TestContext.Current.CancellationToken));
+        var (state, _) = await session.ReadUntilAsync<SystemNotice>(n => n.Message.Subtype == "bridge_state", TimeSpan.FromSeconds(10));
+
+        // DESIGN.md §18: the real check ran. Against the mock, the custom ANTHROPIC_BASE_URL is what rules it out.
+        Assert.Contains("Remote Control", error.Error, StringComparison.Ordinal);
+        Assert.False(Core.RemoteControl.RemoteControlProtocol.IsUnsupported(error.Error));
+        Assert.Equal(Core.RemoteControl.RemoteBridgeState.Failed, Core.RemoteControl.RemoteControlProtocol.BridgeState(state.Message.Raw));
+        Assert.Equal(error.Error, state.Message.Raw["detail"]?.GetValue<string>());
+        Assert.DoesNotContain(_api.Requests, r => r.Path.Contains("/messages", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task The_remote_control_command_isnt_available_in_headless_mode()
+    {
+        await using var session = await StartAsync(environment: OutsideCloudSessions());
+
+        await session.SendUserMessageAsync("/remote-control Test tab", TestContext.Current.CancellationToken);
+        var (done, seen) = await session.ReadUntilAsync<TurnCompleted>();
+
+        // DESIGN.md §18: why Claudette connects with the remote_control request. A local command, whatever the account.
+        var reply = seen.OfType<AssistantMessageReceived>().Single().Message;
+        var text = string.Concat(reply.Content.OfType<Core.Protocol.TextBlock>().Select(b => b.Text));
+        Assert.Equal("/remote-control isn't available in this environment.", text);
+        Assert.Equal(Core.RemoteControl.RemoteControlProtocol.UnavailableHeadless, reply.Raw["local_command_outcome"]?["kind"]?.GetValue<string>());
+        Assert.Equal(0, done.Result.Raw["num_turns"]?.GetValue<int>());
+        Assert.Equal(Core.RemoteControl.RemoteControlState.Unavailable,
+            Core.RemoteControl.RemoteControlProtocol.FromCommandReply(text, reply.Raw["local_command_outcome"]?["kind"]?.GetValue<string>()).State);
+        Assert.DoesNotContain(_api.Requests, r => r.Path.Contains("/messages", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A cloud session's own variables, which Claude Code doesn't set for its children, change what it says about
+    /// Remote Control ("this session is already running as a cloud session"). Without them, as on a desktop.
+    /// </summary>
+    private static Dictionary<string, string?> OutsideCloudSessions() =>
+        System.Environment.GetEnvironmentVariables().Keys.OfType<string>()
+            .Where(name => name.StartsWith("CLAUDE_CODE_REMOTE", StringComparison.OrdinalIgnoreCase)
+                || name is "CLAUDE_SESSION_INGRESS_TOKEN_FILE" or "CLAUDE_CODE_PROXY_RESOLVES_HOSTS" or "CLAUDE_CODE_CONTAINER_ID")
+            .ToDictionary(name => name, _ => (string?)null);
+
     private async Task<ClaudeSession> StartAsync(string? permissionMode = null, string? resume = null, IReadOnlyList<HookRegistration>? hooks = null, string? appendSystemPrompt = null, Dictionary<string, string?>? environment = null)
     {
         Assert.SkipWhen(_factory is null, "Claude Code isn't installed.");

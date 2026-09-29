@@ -61,6 +61,12 @@ public sealed class ConversationBuilder
     public bool ShowUnsupportedMessages { get; set; }
 
     /// <summary>
+    /// What a prompt Claude Code withdraws says: "Answered in the Claude app" while the tab is connected to it (DESIGN.md
+    /// §18, "Remote Control"). Null, or no function, keeps <see cref="PromptItem.WithdrawnOutcome"/>.
+    /// </summary>
+    public Func<string?>? WithdrawnOutcome { get; set; }
+
+    /// <summary>
     /// The tab's agent map (DESIGN.md §18), kept from the same routing as the subagent groups so the two agree.
     /// </summary>
     public AgentMap? Agents
@@ -123,10 +129,10 @@ public sealed class ConversationBuilder
         }
     }
 
-    public void AddNote(string text, NoteKind kind = NoteKind.Info)
+    public void AddNote(string text, NoteKind kind = NoteKind.Info, string? link = null)
     {
         CloseOpen();
-        Items.Add(new NoteItem(text, kind));
+        Items.Add(new NoteItem(text, kind) { Link = link });
     }
 
     /// <summary>Clears the conversation, for example after <c>/clear</c>.</summary>
@@ -199,7 +205,7 @@ public sealed class ConversationBuilder
             case PermissionCancelled cancelled:
                 if (_permissions.TryGetValue(cancelled.RequestId, out var cancelledItem))
                 {
-                    cancelledItem.Cancel();
+                    cancelledItem.Cancel(WithdrawnOutcome?.Invoke());
                 }
                 break;
 

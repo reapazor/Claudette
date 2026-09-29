@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Claudette.App\Claudette.App.csproj" />
+    <!-- The mock Messages API, for the RealCli test that drives a tab with the real claude (RemoteControlRealCliTests). -->
+    <ProjectReference Include="..\..\tools\Claudette.MockApi\Claudette.MockApi.csproj" />
   </ItemGroup>
 
   <ItemGroup>

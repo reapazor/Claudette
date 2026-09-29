@@ -44,7 +44,9 @@ public sealed class UtilitySession : IAsyncDisposable
     public Task Completion => _session.Completion;
 
     /// <param name="protocolLogPath">Where to log its protocol traffic, or null (DESIGN.md §13, "Logging").</param>
-    public static async Task<UtilitySession> StartAsync(IClaudeSessionFactory factory, string workingDirectory, CancellationToken cancellationToken = default, string? protocolLogPath = null)
+    /// <param name="environmentOverrides">Applied on top of its clean environment, as for every <c>claude</c> Claudette starts.</param>
+    public static async Task<UtilitySession> StartAsync(IClaudeSessionFactory factory, string workingDirectory, CancellationToken cancellationToken = default, string? protocolLogPath = null,
+        IReadOnlyDictionary<string, string?>? environmentOverrides = null)
     {
         Directory.CreateDirectory(workingDirectory);
         var session = await factory.StartAsync(new ClaudeLaunchOptions
@@ -53,6 +55,7 @@ public sealed class UtilitySession : IAsyncDisposable
             PersistSession = false,
             IncludePartialMessages = false,
             ProtocolLogPath = protocolLogPath,
+            EnvironmentOverrides = environmentOverrides ?? new Dictionary<string, string?>(),
         }, cancellationToken).ConfigureAwait(false);
         return new UtilitySession(session);
     }

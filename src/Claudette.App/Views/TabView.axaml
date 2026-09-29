@@ -517,8 +517,15 @@
     </DataTemplate>
 
     <DataTemplate DataType="conv:NoteItem">
-      <SelectableTextBlock Classes="muted small" FontStyle="Italic" TextWrapping="Wrap" Text="{Binding Text}"
-                           Classes.error="{Binding IsError}" Classes.warning="{Binding IsWarning}" />
+      <StackPanel Spacing="2">
+        <SelectableTextBlock Classes="muted small" FontStyle="Italic" TextWrapping="Wrap" Text="{Binding Text}"
+                             Classes.error="{Binding IsError}" Classes.warning="{Binding IsWarning}" />
+        <!-- Such as the tab's session in the Claude app (DESIGN.md §18, "Remote Control") -->
+        <Button Classes="flat" Padding="0" HorizontalAlignment="Left" IsVisible="{Binding HasLink}" ToolTip.Tip="Open in your browser"
+                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenLinkCommand}" CommandParameter="{Binding Link}">
+          <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding Link}" TextWrapping="Wrap" TextDecorations="Underline" />
+        </Button>
+      </StackPanel>
     </DataTemplate>
 
     <!-- Skipped by Claudette, shown while protocol logging is on (DESIGN.md §16) -->

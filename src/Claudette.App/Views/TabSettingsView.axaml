@@ -39,6 +39,13 @@
       <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                  Text="Copies this session to the session library after each turn, so another machine can open it from History." />
 
+      <!-- Remote Control (DESIGN.md §18): the tab's own choice too -->
+      <CheckBox Content="Connect to the Claude app" IsChecked="{Binding RemoteControl}" IsEnabled="{Binding CanChangeRemoteControl}" />
+      <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                 Text="Continue this tab from the Claude app on your phone or at claude.ai/code while it runs here. It reconnects whenever the tab starts." />
+      <TextBlock Classes="small warning" TextWrapping="Wrap" Margin="28,-8,0,0" Text="{Binding RemoteControlUnavailableText}"
+                 IsVisible="{Binding HasRemoteControlUnavailableText}" />
+
       <!-- The folder's custom project actions, in its claudette.json files (DESIGN.md §18, "Custom actions"); saved with Apply -->
       <TextBlock Text="Project actions" FontWeight="SemiBold" Margin="0,4,0,0" />
       <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectActionFiles}" SelectedItem="{Binding SelectedProjectActionFile}"

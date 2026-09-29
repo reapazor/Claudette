@@ -45,6 +45,12 @@ public sealed record AppPaths(string DataDirectory, string SettingsDirectory)
     public string UpdatesDirectory => Path.Combine(DataDirectory, "updates");
 
     /// <summary>
+    /// There while Claudette's window is in front. Every <c>claude</c> gets it as <c>CLAUDE_CLIENT_PRESENCE_FILE</c>, so
+    /// Remote Control doesn't push to the phone then (DESIGN.md §10, §18).
+    /// </summary>
+    public string PresenceFile => Path.Combine(DataDirectory, "presence");
+
+    /// <summary>
     /// The per-user defaults. Data: <c>%LOCALAPPDATA%\Claudette</c>, <c>~/Library/Application Support/Claudette</c>,
     /// <c>~/.local/share/claudette</c>. Settings: <c>%APPDATA%\Claudette</c>, the same Application Support folder on
     /// macOS, and <c>~/.config/claudette</c> on Linux.

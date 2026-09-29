@@ -176,6 +176,27 @@
               <ContentControl Content="{Binding SignIn}" IsVisible="{Binding HasSignIn}" HorizontalAlignment="Left" />
             </StackPanel>
           </Panel>
+
+          <!-- The Claude app, Remote Control (DESIGN.md §18): each tab has its own switch; this is what new tabs start with -->
+          <StackPanel x:Name="RemoteControlSettings" Spacing="12">
+            <TextBlock Text="Claude app (Remote Control)" FontWeight="SemiBold" Margin="0,8,0,0" />
+            <CheckBox Content="Connect new tabs to the Claude app" IsChecked="{Binding ConnectNewTabsToClaudeApp}" IsEnabled="{Binding CanUseRemoteControl}" />
+            <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                       Text="Continue a tab from the Claude app on your phone, or at claude.ai/code, while Claudette keeps running here. Each tab has Connect to the Claude app in its menu; this only sets it for tabs opened from now on. While a tab is connected, its transcript is stored on Anthropic's servers. Needs a claude.ai subscription sign-in." />
+            <TextBlock Classes="small warning" TextWrapping="Wrap" Margin="28,-8,0,0" Text="{Binding RemoteControlUnavailableText}"
+                       IsVisible="{Binding HasRemoteControlUnavailableText}" />
+            <StackPanel Spacing="2" Margin="28,-8,0,0">
+              <TextBlock Classes="muted small" TextWrapping="Wrap"
+                         Text="For a push notification on your phone when a tab needs an answer, turn on Push when actions required in Claude Code's /config; Push when Claude decides adds the ones Claude chooses to send. None arrive while Claudette is in front." />
+              <Button Classes="flat" Padding="0" HorizontalAlignment="Left" Command="{Binding OpenPushNotificationsDocsCommand}"
+                      ToolTip.Tip="{x:Static vm:SettingsViewModel.PushNotificationsDocs}">
+                <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="How to set up push notifications" TextDecorations="Underline" />
+              </Button>
+            </StackPanel>
+            <CheckBox Content="Keep this computer awake while tabs are connected" IsChecked="{Binding KeepAwakeWhileConnected}" />
+            <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                       Text="So the Claude app can still reach them. The screen can still turn off." />
+          </StackPanel>
           <!-- macOS and Linux only (DESIGN.md §13, "Login shell environment") -->
           <CheckBox Content="Use my login shell's environment" IsChecked="{Binding UseLoginShellEnvironment}"
                     IsVisible="{x:Static vm:SettingsViewModel.ShowLoginShellSetting}" />
@@ -654,13 +675,15 @@
 
           <!-- DESIGN.md §16, "Staying tolerant at runtime" -->
           <TextBlock Classes="section" Text="Diagnostics" Margin="0,8,0,0" />
-          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
+          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
             <TextBlock Text="Claude Code" />
             <TextBlock Grid.Column="1" Text="{Binding InstalledVersionText}" />
             <TextBlock Grid.Row="1" Text="Minimum supported Claude Code version" TextWrapping="Wrap" />
             <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MinimumVersionText}" />
             <TextBlock Grid.Row="2" Text="Login shell environment" TextWrapping="Wrap" />
             <SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding LoginShellText}" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="3" Text="Keeping the computer awake" TextWrapping="Wrap" />
+            <SelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding KeepAwakeText}" TextWrapping="Wrap" />
           </Grid>
           <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6">
             <SelectableTextBlock Text="{Binding DiagnosticsText}" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
