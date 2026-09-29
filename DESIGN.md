@@ -25,7 +25,7 @@ Claudette does not replace Claude Code. It runs the real `claude` CLI as a child
 |---|---|---|
 | Runtime | .NET 10 (LTS) | |
 | UI | Avalonia 12 | One codebase for Windows, macOS and Linux. |
-| Look & feel | Fluent theme on Windows, macOS-style theme on macOS | Follows the OS light/dark setting and accent color. Mica backdrop on Windows 11; native title bar, traffic lights and menu bar on macOS. |
+| Look & feel | Fluent theme on Windows, macOS-style theme on macOS | Follows the OS light/dark setting and accent color. Mica backdrop on Windows 11; native title bar, traffic lights and menu bar on macOS. Mica is used only once Windows grants it: the title bar, header and tab strip show it, and the page keeps an opaque background. The macOS-style theme isn't built yet; macOS uses the Fluent theme for now. |
 | Pattern | MVVM with CommunityToolkit.Mvvm | |
 | Markdown | LiveMarkdown.Avalonia | For assistant messages. Built for streaming: text is appended as it arrives instead of re-rendering the whole message. Includes syntax-highlighted code blocks. (Markdown.Avalonia only had an alpha for Avalonia 12.) |
 | Diffs | Claudette's own line diff and diff view, highlighted with TextMateSharp | The TextMate grammars and themes LiveMarkdown already ships for code blocks. AvaloniaEdit was the plan, but a read-only diff doesn't need an editor. |
@@ -158,6 +158,9 @@ Using the picker:
 - The command line: `Claudette --folder <path>` opens a tab in that folder on startup. Open Recent and the jump list use this too.
 - On macOS, **File → Open Recent** and the Dock icon's menu list recent folders. On Windows, the taskbar jump list does the same.
 - Choosing any of these opens a new tab in that folder.
+- The lists hold favorites first, then recent folders, up to 10, leaving out folders that no longer exist. Folders with the same name show their parent too (`work/api`), as tab groups do.
+- **One Claudette at a time.** A launch while Claudette is running (from the jump list, or by opening the app again) passes its arguments to the running one over a named pipe and exits. The running one comes to the front, and opens a tab if a folder was given. A development copy with its own `CLAUDETTE_HOME` counts as a separate instance.
+- The macOS menu bar also has **File → New Tab**, **History…** and **Close Tab**, and the app menu has **Settings…**. Each shows its shortcut from Settings → Keyboard ([§14](#keyboard-shortcuts)).
 
 ### Process monitor
 

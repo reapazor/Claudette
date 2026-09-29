@@ -137,6 +137,20 @@ public class NotifierTests
         }
     }
 
+    /// <summary>Builds a real jump list without committing it: checks the shell interfaces against Windows itself.</summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void Windows_builds_a_jump_list()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only.");
+        var jumpList = new Claudette.Platform.Shell.Windows.WindowsJumpList(Environment.ProcessPath!, NullLogger.Instance);
+
+        var list = jumpList.Build([new("api", Path.GetTempPath()), new("docs", Environment.CurrentDirectory)], out var added);
+        list.AbortList();
+
+        Assert.Equal(2, added);
+    }
+
     private static async Task WaitFor(Func<bool> condition)
     {
         for (var i = 0; i < 500 && !condition(); i++)

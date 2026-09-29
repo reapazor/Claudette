@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Media;
 using Claudette.App.ViewModels;
 
 namespace Claudette.App.Views;
@@ -12,6 +13,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        UseMicaOnWindows11();
         // Notifications are skipped for what's already in front of the user (DESIGN.md §10).
         Activated += (_, _) => _viewModel?.Services.Notifications.SetAppActive(true);
         Deactivated += (_, _) => _viewModel?.Services.Notifications.SetAppActive(false);
@@ -43,6 +45,42 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(MainWindowViewModel.Updates) && _viewModel?.Updates is { } updates)
         {
             updates.OpenRequested += OpenUpdateDialog;
+        }
+    }
+
+    /// <summary>
+    /// The Mica backdrop on Windows 11 (DESIGN.md §2). Only once Windows actually grants it does the window's background
+    /// go transparent: the header, tab strip and title bar then show Mica, and the page keeps an opaque background.
+    /// </summary>
+    private void UseMicaOnWindows11()
+    {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+        {
+            return;
+        }
+        TransparencyLevelHint = [WindowTransparencyLevel.Mica];
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == ActualTransparencyLevelProperty || e.Property == ActualThemeVariantProperty)
+            {
+                ApplyBackdrop();
+            }
+        };
+    }
+
+    private void ApplyBackdrop()
+    {
+        if (ActualTransparencyLevel == WindowTransparencyLevel.Mica)
+        {
+            Background = Brushes.Transparent;
+            Resources["PageBackgroundBrush"] = this.FindResource(ActualThemeVariant, "MicaPageBrush");
+            Resources["TabStripBrush"] = this.FindResource(ActualThemeVariant, "MicaTabStripBrush");
+        }
+        else
+        {
+            ClearValue(BackgroundProperty);
+            Resources.Remove("PageBackgroundBrush");
+            Resources.Remove("TabStripBrush");
         }
     }
 

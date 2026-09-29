@@ -1,4 +1,6 @@
 using Avalonia;
+using Claudette.Core;
+using Claudette.Platform;
 
 namespace Claudette.App;
 
@@ -6,6 +8,9 @@ internal sealed class Program
 {
     // Don't use Avalonia, third-party APIs or anything that needs a SynchronizationContext before AppMain is
     // called: they aren't initialized yet.
+    /// <summary>Takes the arguments of later launches, such as the jump list's <c>--folder</c> (DESIGN.md §4).</summary>
+    internal static SingleInstance? Instance { get; private set; }
+
     [STAThread]
     public static void Main(string[] args)
     {
@@ -13,7 +18,23 @@ internal sealed class Program
         {
             SetWindowsIdentity();
         }
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        // One Claudette per user and data folder: a second launch hands its arguments over and exits.
+        var instance = new SingleInstance(AppPaths.ForCurrentUser().DataDirectory);
+        if (instance.TryHandOffAsync(args).GetAwaiter().GetResult())
+        {
+            instance.Dispose();
+            return;
+        }
+        instance.Listen();
+        Instance = instance;
+        try
+        {
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+        finally
+        {
+            instance.Dispose();
+        }
     }
 
     /// <summary>

@@ -27,7 +27,7 @@
   <Grid RowDefinitions="Auto,*">
 
     <!-- Tab strip, grouped by folder (DESIGN.md §4) -->
-    <Border Grid.Row="0" Background="{DynamicResource TabStripBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="8,6">
+    <Border x:Name="TabStrip" Grid.Row="0" Background="{DynamicResource TabStripBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="8,6">
       <Grid ColumnDefinitions="*,Auto">
         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
           <StackPanel Orientation="Horizontal" Spacing="8">

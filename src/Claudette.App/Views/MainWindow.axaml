@@ -157,6 +157,6 @@
       </Grid>
     </Border>
 
-    <ContentControl Content="{Binding CurrentPage}" />
+    <ContentControl Content="{Binding CurrentPage}" Background="{DynamicResource PageBackgroundBrush}" />
   </DockPanel>
 </Window>

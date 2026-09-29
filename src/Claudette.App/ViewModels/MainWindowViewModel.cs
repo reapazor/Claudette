@@ -196,8 +196,21 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         }
     }
 
-    /// <summary>Asks the window to come to the front, for a clicked notification.</summary>
+    /// <summary>Asks the window to come to the front, for a clicked notification or a second launch.</summary>
     public event Action? BringToFrontRequested;
+
+    /// <summary>
+    /// Claudette was launched again, for example from the jump list or Open Recent (DESIGN.md §4, "Other ways in"):
+    /// come to the front, and open a tab in the folder it names.
+    /// </summary>
+    public void OnLaunchedAgain(IReadOnlyList<string> args)
+    {
+        BringToFrontRequested?.Invoke();
+        if (LaunchArguments.Folder(args) is { } folder && _shell is not null && CurrentPage == _shell)
+        {
+            _ = _shell.OpenFolderAsync(folder);
+        }
+    }
 
     /// <summary>
     /// A notification was clicked (DESIGN.md §10): bring Claudette to the front and go to the tab or screen it was

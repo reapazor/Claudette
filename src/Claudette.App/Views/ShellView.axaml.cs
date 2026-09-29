@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using Claudette.App.Services;
 using Claudette.App.ViewModels;
@@ -27,7 +28,30 @@ public partial class ShellView : UserControl
         GroupStrip.AddHandler(PointerPressedEvent, OnStripPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
         GroupStrip.AddHandler(PointerMovedEvent, OnStripPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
         GroupStrip.AddHandler(PointerReleasedEvent, OnStripPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+        // A folder dragged from Finder or Explorer onto the tab strip opens a tab there (DESIGN.md §4, "Other ways in").
+        DragDrop.SetAllowDrop(TabStrip, true);
+        TabStrip.AddHandler(DragDrop.DragOverEvent, OnFolderDragOver);
+        TabStrip.AddHandler(DragDrop.DropEvent, OnFolderDrop);
     }
+
+    private void OnFolderDragOver(object? sender, DragEventArgs e) =>
+        e.DragEffects = DroppedFolders(e).Any() ? DragDropEffects.Link : DragDropEffects.None;
+
+    private void OnFolderDrop(object? sender, DragEventArgs e)
+    {
+        if (ViewModel is not { } shell)
+        {
+            return;
+        }
+        foreach (var folder in DroppedFolders(e))
+        {
+            _ = shell.OpenFolderAsync(folder);
+        }
+        e.Handled = true;
+    }
+
+    private static IEnumerable<string> DroppedFolders(DragEventArgs e) =>
+        (e.DataTransfer.TryGetFiles() ?? []).Select(item => item.TryGetLocalPath()).OfType<string>().Where(Directory.Exists);
 
     // ---- Dragging tabs and groups (DESIGN.md §4) ------------------------------------------------------------------
 

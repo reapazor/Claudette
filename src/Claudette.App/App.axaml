@@ -3,6 +3,7 @@
              xmlns:vm="using:Claudette.App.ViewModels"
              xmlns:views="using:Claudette.App.Views"
              x:Class="Claudette.App.App"
+             Name="Claudette"
              RequestedThemeVariant="Default">
   <!-- "Default" follows the OS light/dark setting (DESIGN.md §2); Settings → Appearance can force one. -->
 
@@ -172,6 +173,8 @@
       </ResourceDictionary.MergedDictionaries>
 
       <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Menlo, monospace</FontFamily>
+      <!-- The page's background: none, except under Mica (MainWindow sets it then). -->
+      <SolidColorBrush x:Key="PageBackgroundBrush" Color="Transparent" />
       <!-- Updated from Settings → Appearance. -->
       <x:Double x:Key="ConversationFontSize">14</x:Double>
       <x:Double x:Key="CodeFontSize">13</x:Double>
@@ -185,6 +188,9 @@
       <!-- Claudette's color tokens, per theme. Views use only these, never Fluent's internal resource names. -->
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
+          <!-- With Mica on Windows 11 (MainWindow): the page stays opaque and the tab strip lets the backdrop through. -->
+          <SolidColorBrush x:Key="MicaPageBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="MicaTabStripBrush" Color="#66F3F3F3" />
           <SolidColorBrush x:Key="MutedTextBrush" Color="#5F6368" />
           <SolidColorBrush x:Key="DividerBrush" Color="#1F000000" />
           <SolidColorBrush x:Key="CardBrush" Color="#FAFAFA" />
@@ -216,6 +222,8 @@
           <SolidColorBrush x:Key="MeterCriticalBrush" Color="#C42B1C" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="MicaPageBrush" Color="#202020" />
+          <SolidColorBrush x:Key="MicaTabStripBrush" Color="#66141416" />
           <SolidColorBrush x:Key="MutedTextBrush" Color="#A6A6A6" />
           <SolidColorBrush x:Key="DividerBrush" Color="#2EFFFFFF" />
           <SolidColorBrush x:Key="CardBrush" Color="#1F1F1F" />

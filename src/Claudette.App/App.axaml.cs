@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using Claudette.App.Services;
 using Claudette.App.ViewModels;
 using Claudette.App.Views;
@@ -11,6 +12,9 @@ using Claudette.Core.Processes;
 using Claudette.Core.Settings;
 using Claudette.Platform.Notifications;
 using Claudette.Platform.Processes;
+using Claudette.Platform.Shell;
+using Claudette.Platform.Shell.Windows;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Claudette.App;
 
@@ -18,6 +22,7 @@ public partial class App : Application
 {
     private AppServices? _services;
     private MainWindowViewModel? _mainViewModel;
+    private PlatformChrome? _chrome;
     private bool _shutdownComplete;
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -43,15 +48,25 @@ public partial class App : Application
                 Notifier.CreateBadgeForCurrentOS(() => window.TryGetPlatformHandle()?.Handle ?? 0, BadgeIcon.Render));
             ApplyAppearance();
             _services.SettingsChanged += (_, _) => ApplyAppearance();
-            _mainViewModel = new MainWindowViewModel(_services, FolderArgument(desktop.Args ?? []));
+            _mainViewModel = new MainWindowViewModel(_services, LaunchArguments.Folder(desktop.Args ?? []));
             window.DataContext = _mainViewModel;
+            var main = _mainViewModel;
+            if (Program.Instance is { } instance)
+            {
+                instance.ArgumentsReceived += args => Dispatcher.UIThread.Post(() => main.OnLaunchedAgain(args));
+            }
             window.Closing += OnMainWindowClosing;
             desktop.MainWindow = window;
+            _chrome = new PlatformChrome(this, window, _mainViewModel, _services, CreateJumpList());
             _ = _mainViewModel.StartAsync();
         }
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    /// <summary>Recent folders in the taskbar jump list, on Windows (DESIGN.md §4).</summary>
+    private static IJumpList? CreateJumpList() =>
+        OperatingSystem.IsWindows() && Environment.ProcessPath is { } exe ? new WindowsJumpList(exe, NullLogger.Instance) : null;
 
     /// <summary>Process tracking for the process monitor and tab cleanup (DESIGN.md §4). Optional: tabs work without it.</summary>
     private static IProcessTreeTracker? TryCreateProcessTracker(IProcessLauncher launcher)
@@ -84,12 +99,6 @@ public partial class App : Application
         Resources["CodeFontSize"] = appearance.CodeFontSize;
     }
 
-    /// <summary><c>--folder &lt;path&gt;</c> opens a tab in that folder on startup (DESIGN.md §4, "Other ways in").</summary>
-    private static string? FolderArgument(string[] args)
-    {
-        var index = Array.IndexOf(args, "--folder");
-        return index >= 0 && index + 1 < args.Length ? Path.GetFullPath(args[index + 1]) : null;
-    }
 
     /// <summary>Stops every Claude Code process before the window closes (interrupting a working turn first).</summary>
     private async void OnMainWindowClosing(object? sender, WindowClosingEventArgs e)
@@ -102,6 +111,7 @@ public partial class App : Application
         window.IsEnabled = false;
         try
         {
+            _chrome?.Dispose();
             if (_mainViewModel is not null)
             {
                 await _mainViewModel.DisposeAsync();

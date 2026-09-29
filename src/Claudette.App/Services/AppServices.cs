@@ -182,7 +182,14 @@ public sealed class AppServices : IAsyncDisposable
         Debounce(ref _pendingSettingsSave, () => JsonFileStore<AppSettings>.Serialize(Settings), _settingsStore);
     }
 
-    public void SaveState() => Debounce(ref _pendingStateSave, () => JsonFileStore<AppState>.Serialize(State), _stateStore);
+    public void SaveState()
+    {
+        StateChanged?.Invoke(this, EventArgs.Empty);
+        Debounce(ref _pendingStateSave, () => JsonFileStore<AppState>.Serialize(State), _stateStore);
+    }
+
+    /// <summary>Raised on the UI thread when the state changes, for example the recent folders.</summary>
+    public event EventHandler? StateChanged;
 
     /// <summary>Writes anything still pending, for shutdown.</summary>
     public async Task FlushAsync()

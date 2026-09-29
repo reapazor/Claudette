@@ -125,4 +125,21 @@ public sealed class SettingsAndStateTests : IDisposable
         Assert.Equal("feature/auth", GitInfo.TryGetBranch(Path.Combine(repo, "src", "deep")));
         Assert.Equal("0123456", GitInfo.TryGetBranch(worktree));
     }
+
+    [Fact]
+    public void The_recent_folder_shortlist_puts_favorites_first_and_tells_same_names_apart()
+    {
+        var root = OperatingSystem.IsWindows() ? @"C:\src" : "/src";
+        string P(params string[] parts) => Path.Combine([root, .. parts]);
+        var state = new AppState
+        {
+            FavoriteFolders = [P("personal", "api")],
+            RecentFolders = [new() { Path = P("work", "api") }, new() { Path = P("gone") }, new() { Path = P("docs") }, new() { Path = P("personal", "api") }],
+        };
+
+        var shortlist = FolderHistory.Shortlist(state, max: 10, exists: path => !path.EndsWith("gone", StringComparison.Ordinal));
+
+        Assert.Equal([("personal/api", P("personal", "api")), ("work/api", P("work", "api")), ("docs", P("docs"))], shortlist);
+        Assert.Single(FolderHistory.Shortlist(state, max: 1, exists: _ => true));
+    }
 }

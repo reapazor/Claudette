@@ -34,4 +34,28 @@ public static class FolderHistory
 
     public static string Normalize(string folder) =>
         Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+
+    /// <summary>
+    /// The folders for Open Recent, the Dock menu and the jump list (DESIGN.md §4, "Other ways in"): favorites first,
+    /// then recent folders, skipping ones that no longer exist, at most <paramref name="max"/>. Each is labeled with its
+    /// name, and its parent's too when two share a name (<c>work/api</c>, <c>personal/api</c>), as tab groups are.
+    /// </summary>
+    public static IReadOnlyList<(string Label, string Path)> Shortlist(AppState state, int max, Func<string, bool> exists)
+    {
+        var paths = state.FavoriteFolders.Concat(state.RecentFolders.Select(r => r.Path))
+            .Select(Normalize)
+            .Distinct(PathComparer)
+            .Where(exists)
+            .Take(max)
+            .ToList();
+        return paths.Select(path =>
+        {
+            var name = Name(path);
+            var clash = paths.Any(other => !SamePath(other, path) && string.Equals(Name(other), name, StringComparison.OrdinalIgnoreCase));
+            var parent = System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(path) ?? "");
+            return (clash && parent.Length > 0 ? $"{parent}/{name}" : name, path);
+        }).ToList();
+
+        static string Name(string path) => System.IO.Path.GetFileName(path) is { Length: > 0 } name ? name : path;
+    }
 }
