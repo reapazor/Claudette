@@ -9,13 +9,16 @@
       <TextBlock Classes="muted small" TextWrapping="Wrap"
                  Text="These replace the defaults from Settings for this tab only, and are saved with the tab." />
 
-      <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+      <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
         <TextBlock Text="Model" VerticalAlignment="Center" />
         <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ModelChoices}" SelectedItem="{Binding SelectedModel}" />
         <TextBlock Grid.Row="1" Text="Effort" VerticalAlignment="Center" />
         <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding EffortChoices}" SelectedItem="{Binding SelectedEffort}" />
         <TextBlock Grid.Row="2" Text="Permission mode" VerticalAlignment="Center" />
         <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ModeChoices}" SelectedItem="{Binding SelectedMode}" />
+        <TextBlock Grid.Row="3" Text="Process monitor" VerticalAlignment="Center" />
+        <ComboBox Grid.Row="3" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding MonitorChoices}" SelectedItem="{Binding SelectedMonitor}"
+                  ToolTip.Tip="The processes this tab starts, with their CPU and memory, in the composer bar and the side panel" />
       </Grid>
 
       <CheckBox Content="Use different check-in settings for this tab" IsChecked="{Binding UseCustomCheckIns}" />

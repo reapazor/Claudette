@@ -35,10 +35,12 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
         }
         EffortChoices = [new Choice(null, $"Default ({defaults.NewTabs.DefaultEffort ?? "model default"})"), .. new[] { "low", "medium", "high", "xhigh", "max" }.Select(e => new Choice(e, e))];
         ModeChoices = [new Choice(null, $"Default ({PermissionModeInfo.Label(defaults.NewTabs.DefaultPermissionMode)})"), .. PermissionModeInfo.Choices.Select(m => new Choice(m.Value, m.Label))];
+        MonitorChoices = [new Choice(null, $"Default ({(defaults.Processes.ShowMonitor ? "on" : "off")})"), new Choice(On, "On"), new Choice(Off, "Off")];
 
         SelectedModel = ModelChoices.First(c => c.Value == overrides.Model);
         SelectedEffort = EffortChoices.FirstOrDefault(c => c.Value == overrides.Effort) ?? EffortChoices[0];
         SelectedMode = ModeChoices.FirstOrDefault(c => c.Value == overrides.PermissionMode) ?? ModeChoices[0];
+        SelectedMonitor = MonitorChoices.First(c => c.Value == overrides.ShowProcessMonitor switch { true => On, false => Off, null => null });
 
         var checkIns = overrides.CheckIns ?? defaults.CheckIns;
         UseCustomCheckIns = overrides.CheckIns is not null;
@@ -56,6 +58,15 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
     public IReadOnlyList<Choice> EffortChoices { get; }
 
     public IReadOnlyList<Choice> ModeChoices { get; }
+
+    private const string On = "on";
+    private const string Off = "off";
+
+    /// <summary>The process monitor for this tab (DESIGN.md §4, "Process monitor").</summary>
+    public IReadOnlyList<Choice> MonitorChoices { get; }
+
+    [ObservableProperty]
+    public partial Choice SelectedMonitor { get; set; }
 
     [ObservableProperty]
     public partial Choice SelectedModel { get; set; }
@@ -93,6 +104,7 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
             Model = SelectedModel.Value,
             Effort = SelectedEffort.Value,
             PermissionMode = SelectedMode.Value,
+            ShowProcessMonitor = SelectedMonitor.Value switch { On => true, Off => false, _ => null },
             CheckIns = UseCustomCheckIns
                 ? new CheckInSettings
                 {
@@ -114,6 +126,7 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
         SelectedModel = ModelChoices[0];
         SelectedEffort = EffortChoices[0];
         SelectedMode = ModeChoices[0];
+        SelectedMonitor = MonitorChoices[0];
         UseCustomCheckIns = false;
     }
 

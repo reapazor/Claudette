@@ -203,7 +203,10 @@ internal sealed class NoPlatform : IPlatformServices
 
     public string? Clipboard { get; private set; }
 
-    public Task<string?> PickFolderAsync(string title) => Task.FromResult<string?>(null);
+    /// <summary>What the folder picker returns: null is Cancel.</summary>
+    public string? FolderToPick { get; set; }
+
+    public Task<string?> PickFolderAsync(string title) => Task.FromResult(FolderToPick);
 
     public Task<string?> PickFileAsync(string title) => Task.FromResult<string?>(null);
 

@@ -530,6 +530,17 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
 
+      <!-- The folder is gone, for example a deleted clone (DESIGN.md §9, "Missing folder") -->
+      <Border Classes="codeblock" IsVisible="{Binding IsFolderMissing}">
+        <StackPanel Spacing="8">
+          <TextBlock Classes="error" TextWrapping="Wrap" Text="{Binding FolderMissingText}" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Classes="accent" Content="Choose folder…" Command="{Binding ChooseFolderCommand}" />
+            <Button Content="{Binding CloseMissingText}" Command="{Binding UnpinAndCloseCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
       <!-- Taken over by another machine (DESIGN.md §9) -->
       <Border Classes="codeblock" IsVisible="{Binding IsReadOnly}">
         <TextBlock Classes="warning" TextWrapping="Wrap" Text="{Binding ReadOnlyText}" />

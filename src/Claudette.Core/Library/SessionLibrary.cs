@@ -126,6 +126,28 @@ public sealed class SessionLibrary(string libraryFolder, TimeProvider time)
     }
 
     /// <summary>
+    /// Copies a transcript Claude Code keeps under another folder's project, with its subagents' transcripts, to the
+    /// local working folder, so the session can go on in a different folder with <c>--resume &lt;path&gt;</c>: Claude
+    /// Code finds sessions by folder, so <c>--resume &lt;id&gt;</c> wouldn't (DESIGN.md §9, "Missing folder"). Returns
+    /// the working copy; a transcript that already is one is left where it is.
+    /// </summary>
+    public static async Task<string> CopyToWorkingFolderAsync(string transcript, string sessionId, string localSessionsFolder, CancellationToken cancellationToken = default)
+    {
+        var target = Path.Combine(localSessionsFolder, TranscriptName(CheckId(sessionId)));
+        if (string.Equals(Path.GetFullPath(transcript), Path.GetFullPath(target), OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
+        {
+            return target;
+        }
+        await LibraryFiles.CopyIfChangedAsync(transcript, target, cancellationToken).ConfigureAwait(false);
+        var subagents = Path.Combine(Path.GetDirectoryName(transcript)!, sessionId, SubagentsFolderName);
+        if (Directory.Exists(subagents))
+        {
+            await CopyTranscriptsAsync(subagents, Path.Combine(localSessionsFolder, sessionId, SubagentsFolderName), cancellationToken).ConfigureAwait(false);
+        }
+        return target;
+    }
+
+    /// <summary>
     /// Library retention (Settings → Sessions): deletes session folders last used longer ago than
     /// <paramref name="keepFor"/>. Kept regardless: the ids in <paramref name="keep"/>, folders with a live (not stale)
     /// lease, and folders whose record can't be read. A null <paramref name="keepFor"/> keeps everything.

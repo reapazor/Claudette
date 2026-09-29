@@ -99,7 +99,10 @@ public sealed class TabOverrides
 
     public CheckInSettings? CheckIns { get; set; }
 
-    public bool HasAny => Model is not null || Effort is not null || PermissionMode is not null || CheckIns is not null;
+    /// <summary>The process monitor for this tab (DESIGN.md §4), or null for Settings → Processes.</summary>
+    public bool? ShowProcessMonitor { get; set; }
+
+    public bool HasAny => Model is not null || Effort is not null || PermissionMode is not null || CheckIns is not null || ShowProcessMonitor is not null;
 }
 
 public sealed class RecentFolder

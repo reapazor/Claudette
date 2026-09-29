@@ -199,7 +199,7 @@ Using the picker:
 
 ### Process monitor
 
-An optional view of the processes each tab has started, such as test runs, dev servers, builds and MCP servers, with their CPU and memory use. It's off by default and turned on in Settings → Processes. There's no per-tab switch yet; each tab shows its own processes on the Processes page of its side panel.
+An optional view of the processes each tab has started, such as test runs, dev servers, builds and MCP servers, with their CPU and memory use. It's off by default and turned on in Settings → Processes. One tab can turn it on or off for itself in its **Tab settings…** ([§14](#per-tab-overrides)). Each tab shows its own processes on the Processes page of its side panel.
 
 - **Summary.** When it's on, the composer bar shows a compact summary for the tab, for example `3 procs · 42% CPU · 1.1 GB`, except while the side panel is open. The count leaves out `claude` itself. The tab itself gets a small activity icon while any child process is using noticeable CPU (5% or more).
 - **Processes panel.** A second page of the side panel, next to Changed files. It shows a tree of the tab's processes, starting from its `claude` process, with these columns:
@@ -220,7 +220,9 @@ An optional view of the processes each tab has started, such as test runs, dev s
     - The job doesn't kill on close, so "leave them running" stays possible. If the job can't be created, Claudette falls back to walking parent links.
     - CPU, memory and start times come from the process APIs, and command lines from `NtQueryInformationProcess` (no WMI).
     - Windows gives every console program a console host (`conhost.exe`) in the job; it's hidden from the list and the counts.
-  - **macOS and Linux.** Claudette walks the process tree from the tab's `claude` process: `/proc` on Linux, and `ps` on macOS, which is simpler to get right than libproc. A process that detaches and gets re-parented (for example a daemonized dev server) drops out of the tree. Claudette keeps listing any process it has already seen, marked "detached", until it exits. This code compiles but hasn't run on either OS yet.
+  - **macOS and Linux.** Claudette walks the process tree from the tab's `claude` process: `/proc` on Linux, and `ps` on macOS, which is simpler to get right than libproc. A process that detaches and gets re-parented (for example a daemonized dev server) drops out of the tree. Claudette keeps listing any process it has already seen, marked "detached", until it exits.
+    - On Linux it's tested against real processes: children and their details, a process whose parent exited, **Stop** with `SIGTERM` and then `SIGKILL` for one that ignores it, CPU use, and ending a tree that keeps starting processes.
+    - The macOS code compiles and its `ps` parsing is tested, but it hasn't run on a Mac yet.
 - **Linking a process to its tool call.** A process that first appears while a Bash call is running is linked to that call. A `task_started` message ties a background task to its Bash call, so **Stop** goes through Claude Code (`stop_task`) for those.
 - **Cleanup.** The same tracking lets Claudette end a tab's whole process tree when the tab closes, so no orphaned dev servers are left running.
   - If processes are still running, the close confirmation lists them. The choices are **Close and stop them** and **Close, leave running**.
@@ -532,7 +534,9 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 - Tabs come back in the same order and resume their sessions, with the earlier conversation loaded so you can scroll back.
 - **Starting fast.** Restored tabs don't start their `claude` process until you first select them or send them a message. Launching with many pinned tabs is quick, and tabs you don't touch use no resources.
 - **Old sessions.** Claude Code deletes local transcripts after 30 days by default. A pinned tab you haven't used in a while could lose its transcript, so Claudette resumes from its session library copy, which isn't affected by that cleanup. If neither copy exists, the tab says so and offers to start a new session in the same folder.
-- **Missing folder.** If a restored tab's folder no longer exists (for example a deleted clone), the tab shows an error with **Choose folder…** and **Unpin and close**.
+- **Missing folder.** If a restored tab's folder no longer exists (for example a deleted clone), the tab shows an error as soon as it's restored, with **Choose folder…** and **Unpin and close** (**Close tab** for an unpinned tab).
+  - **Choose folder…** is for a folder that moved, or another clone of the same project. The tab moves to the chosen folder's group and its session carries on there.
+  - Claude Code finds sessions by folder, so Claudette copies the transcript to its local working folder and resumes from that file, as for a session from another machine ([Session library](#session-library-sync-across-machines)).
 - Pinned tabs belong to this machine. On another machine, the same sessions appear in History ([below](#history)) instead.
 
 ### History
@@ -938,7 +942,7 @@ Settings → Keyboard lists every shortcut Claudette handles, with its default f
 
 ### Per-tab overrides
 
-Some settings can be changed for a single tab from the tab's right-click menu, under **Tab settings…**: model, effort level, permission mode, and the check-in settings. A tab with overrides shows a small dot next to its settings entry, and **Use defaults** clears them. Overrides are saved with the tab.
+Some settings can be changed for a single tab from the tab's right-click menu, under **Tab settings…**: model, effort level, permission mode, the process monitor ([§4](#process-monitor)), and the check-in settings. A tab with overrides shows a small dot next to its settings entry, and **Use defaults** clears them. Overrides are saved with the tab.
 
 ### Storage
 
@@ -1191,10 +1195,10 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
    - **Changed files:** the Changed files panel (session edits, or working tree vs HEAD), the built-in diff view with syntax highlighting, and external diff tools with presets, a custom command and **Test**.
    - **Processes:** the process monitor, and stopping a tab's processes when it closes.
    - **Deferred:**
-     - The per-tab switch for the process monitor.
-     - Running the macOS and Linux process code for real (it compiles and its parsers are tested).
+     - The per-tab switch for the process monitor: built 2026-09-29.
+     - Running the process code for real: done on Linux 2026-09-29, in CI's Ubuntu job too. macOS still needs a Mac; its code compiles and its `ps` parsing is tested.
      - Resuming a transcript recorded on the other OS ([§9](#session-library-sync-across-machines)).
-     - **Choose folder…** and **Unpin and close** for a restored tab whose folder is gone; it still shows a note.
+     - **Choose folder…** and **Unpin and close** for a restored tab whose folder is gone: built 2026-09-29.
 7. **Polish & ship.** ✅ Built 2026-09-29.
    - **Claude Code updates ([§12](#12-claude-code-updates)):**
      - Checks with `claude --version`, `claude doctor` and Homebrew or WinGet, at launch and every 4 hours.

@@ -179,6 +179,143 @@ public sealed class RealProcessTreeTests
         await AssertKillAllEndsEverythingAsync(tree, sample, run.Process);
     }
 
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public async Task Linux_reads_names_executables_start_times_and_memory()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Linux only.");
+        await using var run = Start("/bin/sh", "-c", "sleep 30 & wait");
+
+        var sample = await SampleUntilAsync(run.Tree, s => s.Any(p => p.Name == "sleep"));
+
+        var sleep = Assert.Single(sample, p => p.Name == "sleep");
+        Assert.Equal("sleep", Path.GetFileName(sleep.ExecutablePath));
+        Assert.Equal("sleep 30", sleep.CommandLine);
+        // Start times come from the boot time and clock ticks in /proc; a wrong unit would be far off.
+        Assert.All(sample, p => Assert.InRange(DateTimeOffset.UtcNow - p.StartTime!.Value, TimeSpan.FromSeconds(-5), TimeSpan.FromMinutes(1)));
+        Assert.All(sample, p => Assert.InRange(p.MemoryBytes, 64 * 1024, 1024L * 1024 * 1024));
+    }
+
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public async Task Linux_keeps_listing_a_process_whose_parent_exited()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Linux only.");
+        // The inner shell starts a background sleep and exits a second later, leaving that sleep to be re-parented.
+        await using var run = Start("/bin/sh", "-c", "sh -c 'sleep 30 & sleep 1' & sleep 31");
+        var tree = run.Tree;
+        var first = await SampleUntilAsync(tree, s => s.Any(p => p.CommandLine == "sleep 30") && s.Any(p => p.CommandLine == "sleep 31"));
+        var orphanPid = Assert.Single(first, p => p.CommandLine == "sleep 30").Pid;
+
+        var sample = await SampleUntilAsync(tree, s => s.Any(p => p.Pid == orphanPid && p.IsDetached));
+
+        var orphan = Assert.Single(sample, p => p.Pid == orphanPid);
+        Assert.DoesNotContain(sample, p => p.Pid == orphan.ParentPid);
+        var attached = Assert.Single(sample, p => p.CommandLine == "sleep 31");
+        Assert.False(attached.IsDetached);
+        Assert.Equal(run.Process.Id, attached.ParentPid);
+        Assert.Contains(orphanPid, tree.DescendantIds());
+
+        await AssertKillAllEndsEverythingAsync(tree, sample, run.Process);
+    }
+
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public async Task Linux_stops_a_process_with_SIGTERM_and_one_that_ignores_it_with_SIGKILL()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Linux only.");
+        await using var run = Start("/bin/sh", "-c", "sleep 30 & sh -c 'trap \"\" TERM; while :; do sleep 1; done' & wait");
+        var sample = await SampleUntilAsync(run.Tree, s => s.Any(p => p.Name == "sleep" && p.CommandLine == "sleep 30") && s.Any(p => p.Name == "sh" && !p.IsRoot));
+        var polite = Assert.Single(sample, p => p.CommandLine == "sleep 30");
+        var stubborn = Assert.Single(sample, p => p.Name == "sh" && !p.IsRoot);
+        var grace = TimeSpan.FromMilliseconds(700);
+
+        var stopwatch = Stopwatch.StartNew();
+        await run.Tree.StopAsync(polite.Pid, grace, TestContext.Current.CancellationToken);
+        Assert.True(stopwatch.Elapsed < grace, $"sleep took {stopwatch.Elapsed} to stop: SIGTERM should have been enough.");
+        Assert.DoesNotContain(polite.Pid, run.Tree.DescendantIds());
+
+        stopwatch.Restart();
+        await run.Tree.StopAsync(stubborn.Pid, grace, TestContext.Current.CancellationToken);
+        Assert.True(stopwatch.Elapsed >= grace, "The shell ignoring SIGTERM stopped before the grace period ended.");
+        Assert.DoesNotContain(stubborn.Pid, run.Tree.DescendantIds());
+    }
+
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public async Task Linux_measures_the_CPU_a_busy_process_uses()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Linux only.");
+        await using var run = Start("/bin/sh", "-c", "sh -c 'while :; do :; done' & sleep 30 & wait");
+        await SampleUntilAsync(run.Tree, s => s.Any(p => p.Name == "sleep") && s.Any(p => p.Name == "sh" && !p.IsRoot));
+
+        await Task.Delay(1000, TestContext.Current.CancellationToken);
+        var sample = run.Tree.Sample(includeCommandLines: false);
+        TestContext.Current.TestOutputHelper?.WriteLine(string.Join("; ", sample.Select(p => $"{p.Name} {p.CpuPercent:0.#}%")));
+
+        // 100% is one core, as in top. A loop that never sleeps gets most of one even on a busy machine.
+        Assert.InRange(Assert.Single(sample, p => p.Name == "sh" && !p.IsRoot).CpuPercent!.Value, 20, 105);
+        Assert.InRange(Assert.Single(sample, p => p.Name == "sleep").CpuPercent!.Value, 0, 5);
+    }
+
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public async Task Linux_ends_a_tree_that_keeps_starting_processes()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Linux only.");
+        // Every sleep this tree starts carries a marker, so any left behind can be found afterwards.
+        var marker = $"30.{Random.Shared.Next(100000, 999999)}";
+        await using var run = Start("/bin/sh", "-c", $"while :; do sleep {marker} & sleep 0.02; done");
+        var sample = await SampleUntilAsync(run.Tree, s => s.Count(p => p.CommandLine == $"sleep {marker}") >= 5);
+
+        run.Tree.KillAll();
+
+        await run.Process.Exited.WaitAsync(WaitLimit, TestContext.Current.CancellationToken);
+        var leftOver = await WaitUntilAsync(() => LiveProcessesWith(marker), survivors => survivors.Count == 0);
+        Assert.True(leftOver.Count == 0, $"Still running after KillAll: {string.Join(", ", leftOver)}");
+    }
+
+    /// <summary>Live processes whose command line mentions <paramref name="marker"/>, from /proc; zombies aren't counted.</summary>
+    [SupportedOSPlatform("linux")]
+    private static List<int> LiveProcessesWith(string marker)
+    {
+        var found = new List<int>();
+        foreach (var directory in Directory.EnumerateDirectories("/proc"))
+        {
+            if (!int.TryParse(Path.GetFileName(directory), out var pid))
+            {
+                continue;
+            }
+            try
+            {
+                var commandLine = File.ReadAllText(Path.Combine(directory, "cmdline")).Replace('\0', ' ');
+                var stat = File.ReadAllText(Path.Combine(directory, "stat"));
+                var state = stat[(stat.LastIndexOf(')') + 2)..].Split(' ')[0];
+                if (commandLine.Contains(marker, StringComparison.Ordinal) && state != "Z")
+                {
+                    found.Add(pid);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Gone meanwhile.
+            }
+        }
+        return found;
+    }
+
+    private static async Task<T> WaitUntilAsync<T>(Func<T> read, Func<T, bool> done)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var value = read();
+        while (!done(value) && stopwatch.Elapsed < WaitLimit)
+        {
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+            value = read();
+        }
+        return value;
+    }
+
     private TrackedRun Start(string fileName, params string[] arguments)
     {
         var process = _launcher.Start(new ProcessStartSpec(fileName, arguments) { TrackProcessTree = true });

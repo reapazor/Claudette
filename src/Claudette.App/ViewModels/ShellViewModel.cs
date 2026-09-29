@@ -185,6 +185,11 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             {
                 tab.RestoreDraft(draft);
             }
+            // A deleted clone, say: shown straight away, not only once the tab is selected (DESIGN.md §9, "Missing folder").
+            if (!Directory.Exists(tab.Folder))
+            {
+                tab.MarkFolderMissing();
+            }
         }
         SelectedTab = AllTabs.FirstOrDefault(t => t.Id == (snapshot?.SelectedTabId ?? state.SelectedTabId)) ?? AllTabs.FirstOrDefault();
         SaveTabs();
@@ -232,6 +237,32 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     [RelayCommand]
     private Task NewTabInGroupAsync(TabGroupViewModel? group) =>
         group is null ? Task.CompletedTask : OpenFolderAsync(group.Folder);
+
+    /// <summary>
+    /// A tab's folder moved (<b>Choose folder…</b> for a missing folder, DESIGN.md §9): the tab joins that folder's
+    /// group, and the folder becomes a recent one.
+    /// </summary>
+    internal void MoveTabToFolder(TabViewModel tab, string folder)
+    {
+        var normalized = FolderHistory.Normalize(folder);
+        var selected = SelectedTab;
+        if (Groups.FirstOrDefault(g => g.Tabs.Contains(tab)) is { } old)
+        {
+            old.Tabs.Remove(tab);
+            if (old.Tabs.Count == 0)
+            {
+                Groups.Remove(old);
+            }
+        }
+        OpenTabs.Remove(tab);
+        tab.State.Folder = normalized;
+        AddTab(tab);
+        UpdateGroupLabels();
+        OnPropertyChanged(nameof(HasTabs));
+        SelectedTab = selected;
+        FolderHistory.Touch(_services.State, normalized, _services.Time.GetUtcNow(), _services.Settings.NewTabs.RecentFolderLimit);
+        SaveTabs();
+    }
 
     private void AddTab(TabViewModel tab)
     {
