@@ -67,6 +67,8 @@ public sealed partial class SettingsViewModel
         OnPropertyChanged(nameof(CodeFont));
         OnPropertyChanged(nameof(ExpandThinking));
         OnPropertyChanged(nameof(FunWorkingWords));
+        OnPropertyChanged(nameof(ShowContextOnTabs));
+        OnPropertyChanged(nameof(Density));
     }
 
     [RelayCommand]

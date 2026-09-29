@@ -14,7 +14,92 @@
              FontSize="{DynamicResource ConversationFontSize}"
              FontFamily="{DynamicResource ConversationFont}">
 
+  <UserControl.Resources>
+    <!-- A message's time and Copy button (DESIGN.md §5, "Copy and times"): a small chip on its top-right corner, shown
+         on hover and while it has keyboard focus. -->
+    <DataTemplate x:Key="MessageTools" x:DataType="conv:MessageItem">
+      <StackPanel Orientation="Horizontal" Spacing="2">
+        <TextBlock Classes="muted small" Background="Transparent" Text="{Binding TimeText}" ToolTip.Tip="{Binding TimeTip}" IsVisible="{Binding HasTime}"
+                   VerticalAlignment="Center" Margin="6,0,2,0" />
+        <Button Classes="flat" Padding="5,3" VerticalAlignment="Center" ToolTip.Tip="Copy message" AutomationProperties.Name="Copy message"
+                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyMessageCommand}" CommandParameter="{Binding}">
+          <Panel>
+            <Path Data="{StaticResource IconCopy}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.1" StrokeJoin="Round"
+                  Width="12" Height="12" Stretch="None" IsVisible="{Binding !IsCopied}" />
+            <TextBlock Classes="muted small" Text="Copied" IsVisible="{Binding IsCopied}" />
+          </Panel>
+        </Button>
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.Resources>
+
   <UserControl.Styles>
+    <!-- The chip with a message's time and Copy button: quiet until the message is hovered or focused. -->
+    <Style Selector="ContentControl.messagetools">
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Margin" Value="0,-10,4,0" />
+      <Setter Property="Padding" Value="1" />
+      <Setter Property="Background" Value="{DynamicResource DialogBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Opacity" Value="0" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style Selector="Panel.message:pointerover > ContentControl.messagetools, Panel.message:focus-within > ContentControl.messagetools">
+      <Setter Property="Opacity" Value="1" />
+      <Setter Property="IsHitTestVisible" Value="True" />
+    </Style>
+
+    <!-- Settings → Appearance → Density (DESIGN.md §14): ShellView takes the "compact" class. -->
+    <Style Selector="ItemsControl#ConversationItems">
+      <Setter Property="Margin" Value="24,16,24,24" />
+    </Style>
+    <Style Selector=".compact ItemsControl#ConversationItems">
+      <Setter Property="Margin" Value="20,10,20,14" />
+    </Style>
+    <Style Selector="StackPanel.conversation">
+      <Setter Property="Spacing" Value="8" />
+    </Style>
+    <Style Selector=".compact StackPanel.conversation">
+      <Setter Property="Spacing" Value="3" />
+    </Style>
+    <Style Selector="Border.usermessage">
+      <Setter Property="Padding" Value="12,8" />
+      <Setter Property="Margin" Value="0,6,0,2" />
+    </Style>
+    <Style Selector=".compact Border.usermessage">
+      <Setter Property="Padding" Value="10,4" />
+      <Setter Property="Margin" Value="0,3,0,1" />
+    </Style>
+    <Style Selector="StackPanel.toolcard">
+      <Setter Property="Spacing" Value="4" />
+    </Style>
+    <Style Selector=".compact StackPanel.toolcard">
+      <Setter Property="Spacing" Value="1" />
+    </Style>
+    <!-- Tool, thinking and subagent rows -->
+    <Style Selector=".compact StackPanel.conversation Button.row">
+      <Setter Property="Padding" Value="4,0" />
+    </Style>
+    <Style Selector="StackPanel.composerarea">
+      <Setter Property="Margin" Value="16,4,16,12" />
+      <Setter Property="Spacing" Value="6" />
+    </Style>
+    <Style Selector=".compact StackPanel.composerarea">
+      <Setter Property="Margin" Value="12,2,12,6" />
+      <Setter Property="Spacing" Value="3" />
+    </Style>
+    <Style Selector="TextBox#Composer">
+      <Setter Property="MinHeight" Value="40" />
+      <Setter Property="Padding" Value="2,6" />
+    </Style>
+    <Style Selector=".compact TextBox#Composer">
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="2,3" />
+    </Style>
+
     <Style Selector="Border.diffline.added">
       <Setter Property="Background" Value="{DynamicResource DiffAddedBrush}" />
     </Style>
@@ -30,6 +115,9 @@
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="8,6" />
+    </Style>
+    <Style Selector=".compact Border.codeblock">
+      <Setter Property="Padding" Value="6,3" />
     </Style>
     <Style Selector="TextBlock.done">
       <Setter Property="TextDecorations" Value="Strikethrough" />
@@ -53,6 +141,10 @@
       <Setter Property="Margin" Value="0,2" />
       <Setter Property="BorderBrush" Value="{DynamicResource CautionBorderBrush}" />
       <Setter Property="Background" Value="{DynamicResource CautionBackgroundBrush}" />
+    </Style>
+    <Style Selector=".compact Border.prompt">
+      <Setter Property="Padding" Value="10,6" />
+      <Setter Property="Margin" Value="0,1" />
     </Style>
     <Style Selector="Border.prompt.question">
       <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
@@ -93,35 +185,41 @@
   <UserControl.DataTemplates>
 
     <DataTemplate DataType="conv:UserMessageItem">
-      <Border Background="{DynamicResource UserBoxBrush}" BorderBrush="{DynamicResource UserBoxBorderBrush}" BorderThickness="1"
-              CornerRadius="8" Padding="12,8" Margin="0,6,0,2">
-        <StackPanel Spacing="4">
-          <TextBlock Classes="muted small" Text="Automatic check-in" IsVisible="{Binding IsCheckIn}" />
-          <!-- Attached images (DESIGN.md §5, "Attachments") -->
-          <ItemsControl ItemsSource="{Binding Images}" IsVisible="{Binding HasImages}">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <WrapPanel ItemSpacing="6" LineSpacing="6" />
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate DataType="protocol:MessageImage">
-                <Border Classes="thumbnail">
-                  <Image Source="{Binding Data, Converter={x:Static services:ImageFiles.Thumbnail}}" Height="72" MaxWidth="160" Stretch="UniformToFill"
-                         AutomationProperties.Name="Attached image" />
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-          <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" IsVisible="{Binding Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-          <SelectableTextBlock Classes="muted small" Text="{Binding SuffixText}" TextWrapping="Wrap" IsVisible="{Binding HasSuffix}" />
-        </StackPanel>
-      </Border>
+      <Panel Classes="message">
+        <Border Classes="usermessage" Background="{DynamicResource UserBoxBrush}" BorderBrush="{DynamicResource UserBoxBorderBrush}" BorderThickness="1"
+                CornerRadius="8">
+          <StackPanel Spacing="4">
+            <TextBlock Classes="muted small" Text="Automatic check-in" IsVisible="{Binding IsCheckIn}" />
+            <!-- Attached images (DESIGN.md §5, "Attachments") -->
+            <ItemsControl ItemsSource="{Binding Images}" IsVisible="{Binding HasImages}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel ItemSpacing="6" LineSpacing="6" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="protocol:MessageImage">
+                  <Border Classes="thumbnail">
+                    <Image Source="{Binding Data, Converter={x:Static services:ImageFiles.Thumbnail}}" Height="72" MaxWidth="160" Stretch="UniformToFill"
+                           AutomationProperties.Name="Attached image" />
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" IsVisible="{Binding Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <SelectableTextBlock Classes="muted small" Text="{Binding SuffixText}" TextWrapping="Wrap" IsVisible="{Binding HasSuffix}" />
+          </StackPanel>
+        </Border>
+        <ContentControl Classes="messagetools" Content="{Binding}" ContentTemplate="{StaticResource MessageTools}" />
+      </Panel>
     </DataTemplate>
 
     <DataTemplate DataType="conv:AssistantTextItem">
-      <md:MarkdownRenderer MarkdownBuilder="{Binding Markdown}"
-                           LinkCommand="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenLinkCommand}" />
+      <Panel Classes="message">
+        <md:MarkdownRenderer MarkdownBuilder="{Binding Markdown}"
+                             LinkCommand="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenLinkCommand}" />
+        <ContentControl Classes="messagetools" Content="{Binding}" ContentTemplate="{StaticResource MessageTools}" />
+      </Panel>
     </DataTemplate>
 
     <DataTemplate DataType="conv:ThinkingItem">
@@ -152,7 +250,7 @@
                 IsVisible="{Binding IsExpanded}">
           <StackPanel Spacing="6">
             <SelectableTextBlock Classes="muted small" Text="{Binding Detail}" TextWrapping="Wrap" MaxHeight="120" IsVisible="{Binding HasDetail}" />
-            <ItemsControl ItemsSource="{Binding Items}">
+            <ItemsControl ItemsSource="{Binding Items}" ClipToBounds="False">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <StackPanel Spacing="6" />
@@ -165,7 +263,7 @@
     </DataTemplate>
 
     <DataTemplate DataType="conv:ToolUseItem">
-      <StackPanel Spacing="4">
+      <StackPanel Classes="toolcard">
         <Grid ColumnDefinitions="*,Auto">
           <Button Classes="flat row" Command="{Binding ToggleCommand}" IsHitTestVisible="{Binding CanExpand}">
             <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
@@ -532,10 +630,11 @@
         </Border>
 
         <ScrollViewer x:Name="ConversationScroll" HorizontalScrollBarVisibility="Disabled">
-          <ItemsControl x:Name="ConversationItems" ItemsSource="{Binding Items}" Margin="24,16,24,24" MaxWidth="900">
+          <!-- Not clipped, so the first message's time and Copy chip can sit over its top edge (DESIGN.md §5). -->
+          <ItemsControl x:Name="ConversationItems" ItemsSource="{Binding Items}" MaxWidth="900" ClipToBounds="False">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
-                <StackPanel Spacing="8" />
+                <StackPanel Classes="conversation" />
               </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
           </ItemsControl>
@@ -602,7 +701,7 @@
     </Grid>
 
     <!-- Composer (DESIGN.md §5) -->
-    <StackPanel Grid.Row="1" Margin="16,4,16,12" MaxWidth="948" Spacing="6">
+    <StackPanel Grid.Row="1" Classes="composerarea" MaxWidth="948">
 
       <!-- Working line (DESIGN.md §5): a twinkling glyph, a fun verb, the turn's time and tokens -->
       <Panel x:Name="WorkingLine" Margin="4,0,4,-2" IsVisible="{Binding IsWorkingLineShown}">
@@ -715,8 +814,7 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
 
-          <TextBox x:Name="Composer" Grid.Row="1" Text="{Binding ComposerText}" AcceptsReturn="True" TextWrapping="Wrap"
-                   MinHeight="40" MaxHeight="240" Padding="2,6"
+          <TextBox x:Name="Composer" Grid.Row="1" Text="{Binding ComposerText}" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="240"
                    PlaceholderText="{Binding Tips.ComposerPlaceholder}" />
 
           <!-- / and @ autocomplete (DESIGN.md §5, "Composer"): keyboard first, the text box keeps focus -->

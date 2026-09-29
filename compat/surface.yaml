@@ -810,9 +810,9 @@ items:
   - id: "timestamp"
     kind: file
     status: undocumented
-    usedIn: src/Claudette.Core/History/HistoryIndex.cs
-    test: HistoryIndexTests
-    fallback: Last activity falls back to the transcript's last-write time.
+    usedIn: src/Claudette.Core/History/HistoryIndex.cs, src/Claudette.Core/Transcripts/TranscriptReader.cs
+    test: HistoryIndexTests, TranscriptReaderTests, MessageCopyAndTimeTests
+    fallback: Last activity falls back to the transcript's last-write time. A restored tab's messages show no time on hover, and its start time is when it was restored.
   - id: "version"
     kind: file
     status: undocumented

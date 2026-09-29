@@ -7,7 +7,11 @@ using Claudette.Core.Protocol;
 namespace Claudette.Core.Transcripts;
 
 /// <summary>One thing to show when replaying a transcript.</summary>
-public abstract record TranscriptItem;
+public abstract record TranscriptItem
+{
+    /// <summary>The entry's <c>timestamp</c>: when it was sent (DESIGN.md §5). Null when the entry has none.</summary>
+    public DateTimeOffset? Time { get; init; }
+}
 
 /// <summary>Something the user typed.</summary>
 public sealed record TranscriptPrompt(string Text) : TranscriptItem
@@ -94,7 +98,19 @@ public static class TranscriptReader
         return new Transcript(read.Entries.Select(e => e.Item).ToArray(), read.AiTitle, read.CustomTitle, read.StartedAt);
     }
 
-    private sealed record Entry(DateTimeOffset? Time, TranscriptItem Item);
+    /// <summary>An item with the time of the entry it came from, which the item carries too.</summary>
+    private sealed record Entry
+    {
+        public Entry(DateTimeOffset? time, TranscriptItem item)
+        {
+            Time = time;
+            Item = item with { Time = time };
+        }
+
+        public DateTimeOffset? Time { get; }
+
+        public TranscriptItem Item { get; }
+    }
 
     private sealed record ReadResult(List<Entry> Entries, string? AiTitle, string? CustomTitle, DateTimeOffset? StartedAt);
 

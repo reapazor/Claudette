@@ -185,6 +185,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Appearance", "Code font size"),
         new("Appearance", "Show thinking expanded"),
         new("Appearance", "Show fun words while Claude works"),
+        new("Appearance", "Show context on tab rows"),
+        new("Appearance", "Density"),
         new("Usage", "Warn at (% of session used)"),
         new("Usage", "Alert at (% of session used)"),
         new("Usage", "Burn rate window (minutes)"),
@@ -452,6 +454,22 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         get => _settings.Appearance.FunWorkingWords;
         set => Set(value, v => _settings.Appearance.FunWorkingWords = v);
+    }
+
+    /// <summary>The context ring on each tab's row (DESIGN.md §4, "Sidebar").</summary>
+    public bool ShowContextOnTabs
+    {
+        get => _settings.Appearance.ShowContextOnTabs;
+        set => Set(value, v => _settings.Appearance.ShowContextOnTabs = v);
+    }
+
+    public IReadOnlyList<Density> Densities { get; } = [Density.Comfortable, Density.Compact];
+
+    /// <summary>Compact tightens the conversation, the sidebar's rows and the composer (DESIGN.md §14).</summary>
+    public Density Density
+    {
+        get => _settings.Appearance.Density;
+        set => Set(value, v => _settings.Appearance.Density = v);
     }
 
     // ---- Sessions ------------------------------------------------------------------------------------------------

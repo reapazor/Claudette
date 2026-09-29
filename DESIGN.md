@@ -202,6 +202,10 @@ The tabs are listed in a sidebar on the left of the window, rather than a strip 
 - **A tab's row** has two lines:
   - The status icon, a pin icon if pinned, a sync icon if it syncs to the session library (muted, with the tip *"Synced to the session library"*), a gear while a process it started is busy ([Process monitor](#process-monitor)), and the name, cut short with an ellipsis if it doesn't fit. With **Show changelist on tabs** on, a `CL 12345` badge sits at the end of the line ([§18](#perforce-changelist-in-the-tab-title)).
   - The model and effort, or instead what needs attention: *Needs your input*, the error, or *Possibly stuck* when check-ins get no reply ([§5](#check-ins-on-long-turns)).
+  - **Context ring.** A small ring at the end of the row, level with the second line and under the close button, fills up with the tab's context window ([§6](#per-tab-context)).
+    - It's muted, amber when the context indicator warns (near auto-compact), and red from 95%.
+    - Its tip is the composer bar's context text and detail, for example *"Context 75% (150,000 of 200,000 tokens · auto-compacts at 160,000)"*.
+    - It's hidden until the tab has context data, so a tab that hasn't started has none. **Show context on tab rows** (Settings → Appearance, on by default) turns it off. The rail doesn't show it.
   - The close button shows on hover and on the selected tab. Hovering the row shows the tab info card; double-clicking renames it.
 - **Top:** **New tab**, which opens the picker ([Opening a tab](#opening-a-tab)), and the button that collapses the sidebar.
 - **Foot:** **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), the Claudette update badge when there's a new release ([§2](#updating-claudette)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
@@ -288,8 +292,8 @@ The conversation is drawn from Claude Code's structured output stream, not from 
 
 | Item | How it's shown |
 |---|---|
-| User message | Right-aligned bubble; attached images as thumbnails. |
-| Assistant text | Markdown with syntax-highlighted code blocks and copy buttons. Streams in as it's generated. |
+| User message | Right-aligned bubble; attached images as thumbnails. Its time and **Copy** on hover ([below](#copy-and-times)). |
+| Assistant text | Markdown with syntax-highlighted code blocks, each with **Copy**. Streams in as it's generated. Its time and **Copy** on hover. |
 | Thinking | Collapsed "Thinking…" row; click to expand. |
 | Tool call | Compact card: tool icon, name and a one-line summary (file path, command, search pattern). Expand to see full input and output. |
 | Edit / Write | Card shows `+added −removed`; expand for an inline diff, or **Open diff** to see the file in the diff view ([§8](#8-file-changes--diff-view)): from before Claude's first change in this session to the file now, as Changed files shows it. |
@@ -301,6 +305,20 @@ The conversation is drawn from Claude Code's structured output stream, not from 
 | Turn summary | Small footer after each turn: duration, tokens, model. |
 
 Scrolling follows new output unless the user has scrolled up; a "Jump to latest" button appears when they have.
+
+### Copy and times
+
+- **Code blocks.** A code block has a header line with its language, **Wrap lines** and **Copy**.
+  - Copy puts the block's code on the clipboard, without the Markdown fences and with the OS's line endings, and the button says *Copied* for 1.5 seconds.
+  - The buttons are LiveMarkdown's, in Claudette's own template for the block. The tab does the copying, through the same clipboard as everything else. Code blocks in the agent map's prompts and reports work the same way.
+- **Messages.** Hovering a user message or a reply shows a small chip on its top-right corner: when it was sent, and **Copy message**.
+  - It also shows while the message has keyboard focus, so Tab reaches the button.
+  - A reply copies as its Markdown, as Claude wrote it. A user message copies as it was sent, with its quick suffixes after a blank line.
+  - The button says *Copied* for a moment, as on code blocks.
+- **Times.** The chip's time is short, in the current culture: *14:05* today, *Mon 14:05* in the week before, else the date and time. Its tooltip has the full date.
+  - A live message takes the time it was added: when it was sent, or when the reply started.
+  - A restored message takes its transcript entry's `timestamp`. An entry without one shows no time, rather than the time it was restored.
+  - Selecting a tab brings "today" up to date, for a tab left open overnight.
 
 ### Composer
 
@@ -464,6 +482,7 @@ Separate from plan limits, each tab shows how full its **context window** is (in
 
 - Clicking the context indicator shows the detail and **Compact now**, which sends `/compact` to the session.
 - A `compact_boundary` message adds a "Conversation compacted" note, or says Claude Code compacted it by itself.
+- **On every tab's row.** A small ring in the sidebar shows the same percentage for each tab, so a tab nearing its limit stands out without selecting it ([§4](#sidebar)). It's muted, amber when the indicator warns, and red from 95%. It comes from the same `get_context_usage` reply, or the same estimate when that isn't available.
 
 ### Alerts
 
@@ -1089,7 +1108,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
 | Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. |
 | New tabs | Default model, effort level and permission mode. The model and effort lists are what Claude Code offered in its last `initialize` reply on this machine (the models and each one's effort levels, kept with the machine's state), with a built-in list only until a session has started; Tab settings… lists them the same way. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (**Add folder…**, **Move up**, **Move down**, **Remove**), in the order the new tab picker shows them. See [Opening a tab](#opening-a-tab). |
-| Appearance | Theme: follow system, light or dark. Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. Show fun words while Claude works (on by default; [Working line](#working-line)). |
+| Appearance | Theme: follow system, light or dark. Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. Show fun words while Claude works (on by default; [Working line](#working-line)). Show context on tab rows (on by default; [§4](#sidebar)). **Density**: Comfortable (the default) or Compact, which tightens the conversation's spacing, message and card padding and tool rows, the sidebar's rows, and the composer's padding. It applies at once and syncs with the other Appearance settings. |
 | Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
 | Quick suffixes | The list of suffixes: label, text and optional shortcut. Add, edit, reorder, delete. See [§5](#quick-suffixes). |
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
@@ -1431,6 +1450,10 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Updating Claudette ([§2](#updating-claudette)).** An installed Claudette checks its GitHub releases, downloads the package for its platform, checks it, and restarts into it with every tab as it was, through the source builds' handover. Settings → General has the version, the checks and pre-releases.
     - **Per-tab sync ([§9](#session-library-sync-across-machines)).** Syncing to the session library is opt-in per tab: **Sync to other machines** in the tab menu and **Tab settings…**, a sync icon on the tab's row, and **Sync new tabs to the session library** in Settings → Sessions (off by default). Sessions opened from the library keep syncing; a tab that doesn't sync writes nothing to the library and ignores leases.
     - **Working line ([§5](#working-line)).** A twinkling glyph, a fun verb, the turn's time and tokens above the composer while Claude works, with Claude Code's `spinnerVerbs`, and **Show fun words while Claude works** in Settings → Appearance.
+    - **Conversation and sidebar polish.**
+      - A context ring on each tab's row, with **Show context on tab rows** in Settings → Appearance ([§4](#sidebar), [§6](#per-tab-context)).
+      - **Copy** on code blocks, user messages and replies, and each message's time on hover, from the clock live and from the transcript when restored ([§5](#copy-and-times)).
+      - **Density** in Settings → Appearance: Comfortable or Compact ([§14](#categories)).
     - **Still to verify:** installing an update on a real Windows and Mac, which needs signed packages from a published release.
 13. **Later.** New features go in [§18](#18-future-features) first.
 

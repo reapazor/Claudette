@@ -218,19 +218,23 @@
         <!-- Appearance -->
         <StackPanel Spacing="12" IsVisible="{Binding IsAppearance}">
           <TextBlock Classes="section" Text="Appearance" />
-          <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
+          <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
             <TextBlock Classes="label" Text="Theme" />
             <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" />
-            <TextBlock Grid.Row="1" Classes="label" Text="Conversation font" />
-            <AutoCompleteBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding InstalledFonts}" Text="{Binding ConversationFont}" FilterMode="ContainsOrdinal"
+            <!-- Compact tightens the conversation, the sidebar's rows and the composer (DESIGN.md §14) -->
+            <TextBlock Grid.Row="1" Classes="label" Text="Density" />
+            <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Densities}" SelectedItem="{Binding Density}"
+                      AutomationProperties.Name="Density" ToolTip.Tip="Compact tightens the conversation, the sidebar's rows and the message box" />
+            <TextBlock Grid.Row="2" Classes="label" Text="Conversation font" />
+            <AutoCompleteBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding InstalledFonts}" Text="{Binding ConversationFont}" FilterMode="ContainsOrdinal"
                              PlaceholderText="Claudette's default" MinimumPrefixLength="0" AutomationProperties.Name="Conversation font" />
-            <TextBlock Grid.Row="2" Classes="label" Text="Conversation font size" />
-            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="9" Maximum="28" Increment="1" FormatString="0" Value="{Binding ConversationFontSize}" />
-            <TextBlock Grid.Row="3" Classes="label" Text="Code font" />
-            <AutoCompleteBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding InstalledFonts}" Text="{Binding CodeFont}" FilterMode="ContainsOrdinal"
+            <TextBlock Grid.Row="3" Classes="label" Text="Conversation font size" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="9" Maximum="28" Increment="1" FormatString="0" Value="{Binding ConversationFontSize}" />
+            <TextBlock Grid.Row="4" Classes="label" Text="Code font" />
+            <AutoCompleteBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding InstalledFonts}" Text="{Binding CodeFont}" FilterMode="ContainsOrdinal"
                              PlaceholderText="Cascadia Mono, Consolas or Menlo" MinimumPrefixLength="0" AutomationProperties.Name="Code font" />
-            <TextBlock Grid.Row="4" Classes="label" Text="Code font size" />
-            <NumericUpDown Grid.Row="4" Grid.Column="1" Minimum="8" Maximum="28" Increment="1" FormatString="0" Value="{Binding CodeFontSize}" />
+            <TextBlock Grid.Row="5" Classes="label" Text="Code font size" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1" Minimum="8" Maximum="28" Increment="1" FormatString="0" Value="{Binding CodeFontSize}" />
           </Grid>
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,-4,0,0"
                      Text="Leave a font empty for the default. A font that isn't installed on this machine falls back to the default." />
@@ -238,6 +242,9 @@
           <CheckBox Content="Show fun words while Claude works" IsChecked="{Binding FunWorkingWords}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                      Text="A twinkling line above the message box, such as “Noodling… 42s · 3.1k tokens”. Off, it says “Working…”. Verbs added to spinnerVerbs in Claude Code's settings show here too." />
+          <CheckBox Content="Show context on tab rows" IsChecked="{Binding ShowContextOnTabs}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="A small ring on each tab in the sidebar fills up with the tab's context window. It turns amber when Claude Code is about to compact the conversation, and red when it's nearly full." />
           <Button Content="Reset to defaults" Command="{Binding ResetAppearanceCommand}" />
         </StackPanel>
 

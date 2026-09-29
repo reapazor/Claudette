@@ -40,6 +40,54 @@
     <Style Selector="md|CodeInline">
       <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
     </Style>
+    <!-- Code blocks (DESIGN.md §5): LiveMarkdown's own parts, in Claudette's look. A header line has the language, Wrap
+         and Copy; Copy goes through the tab (Views/CodeBlockCopy), which puts the code on the clipboard and gives the
+         block the "copied" class for a moment. -->
+    <Style Selector="md|CodeBlock">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{DynamicResource SubtleBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1" CornerRadius="6">
+            <DockPanel>
+              <DockPanel DockPanel.Dock="Top" Margin="10,2,4,0">
+                <TextBlock x:Name="PART_LanguageTextBlock" DockPanel.Dock="Left" Classes="muted small" Text="{TemplateBinding Language}" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="2">
+                  <ToggleButton x:Name="PART_ToggleTextWrapButton" Classes="codetool" Focusable="False" IsChecked="{TemplateBinding IsCodeWrapped, Mode=TwoWay}"
+                                ToolTip.Tip="Wrap long lines" AutomationProperties.Name="Wrap lines">
+                    <Path Data="{DynamicResource IconWrap}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" StrokeLineCap="Round"
+                          Width="12" Height="12" Stretch="None" />
+                  </ToggleButton>
+                  <Button x:Name="PART_CopyButton" Classes="flat codetool" Focusable="False" ToolTip.Tip="Copy the code" AutomationProperties.Name="Copy code">
+                    <TextBlock x:Name="CopyLabel" Classes="muted small" Text="Copy" />
+                  </Button>
+                </StackPanel>
+              </DockPanel>
+              <ScrollViewer x:Name="PART_ScrollViewer" HorizontalScrollBarVisibility="{TemplateBinding HorizontalScrollBarVisibility}"
+                            VerticalScrollBarVisibility="Disabled">
+                <md:MarkdownTextBlock x:Name="PART_CodeTextBlock" Margin="10,2,10,8" FontFamily="{TemplateBinding FontFamily}"
+                                      TextWrapping="{TemplateBinding TextWrapping}" />
+              </ScrollViewer>
+            </DockPanel>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="md|CodeBlock.copied /template/ TextBlock#CopyLabel">
+      <Setter Property="Text" Value="Copied" />
+    </Style>
+    <Style Selector=".compact md|CodeBlock /template/ md|MarkdownTextBlock#PART_CodeTextBlock">
+      <Setter Property="Margin" Value="10,0,10,5" />
+    </Style>
+    <Style Selector=":is(Button).codetool">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="6,2" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector=":is(Button).codetool:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.codetool:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+    </Style>
 
     <Style Selector="Border.card">
       <Setter Property="Background" Value="{DynamicResource CardBrush}" />
@@ -108,6 +156,29 @@
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     </Style>
+    <!-- A tab's row. Settings → Appearance → Density (DESIGN.md §14): ShellView takes the "compact" class. -->
+    <Style Selector="Button.tabrow">
+      <Setter Property="Padding" Value="6,5,4,5" />
+    </Style>
+    <Style Selector=".compact Button.tabrow">
+      <Setter Property="Padding" Value="6,2,4,2" />
+    </Style>
+    <!-- The context ring on a tab's row (DESIGN.md §4): muted, amber near auto-compact, red when nearly full. -->
+    <Style Selector="Ellipse.contexttrack">
+      <Setter Property="Stroke" Value="{DynamicResource MeterTrackBrush}" />
+      <Setter Property="StrokeThickness" Value="2" />
+    </Style>
+    <Style Selector="Arc.contextarc">
+      <Setter Property="Stroke" Value="{DynamicResource MutedTextBrush}" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+    </Style>
+    <Style Selector="Arc.contextarc.high">
+      <Setter Property="Stroke" Value="{DynamicResource MeterWarningBrush}" />
+    </Style>
+    <Style Selector="Arc.contextarc.critical">
+      <Setter Property="Stroke" Value="{DynamicResource MeterCriticalBrush}" />
+    </Style>
     <!-- A row's close button shows on hover and on the selected tab, so the list stays quiet and names get the room. -->
     <Style Selector="Button.tab Button.closetab">
       <Setter Property="IsVisible" Value="False" />
@@ -174,6 +245,9 @@
       <Setter Property="CornerRadius" Value="10" />
       <Setter Property="Padding" Value="10,6,6,6" />
     </Style>
+    <Style Selector=".compact Border.composer">
+      <Setter Property="Padding" Value="8,2,4,3" />
+    </Style>
     <Style Selector="Border.composer.bypass">
       <Setter Property="BorderBrush" Value="{DynamicResource BypassBorderBrush}" />
       <Setter Property="BorderThickness" Value="2" />
@@ -230,6 +304,10 @@
       <StreamGeometry x:Key="IconRestart">M10.5,6 A4.5,4.5 0 1 1 9.18,2.82 M9.4,0.6 L9.18,2.82 L6.96,2.6</StreamGeometry>
       <!-- Two arrows chasing round a circle: a tab that syncs to the session library (DESIGN.md §4, "Sidebar"). -->
       <StreamGeometry x:Key="IconSync">M1.5,6 A4.5,4.5 0 0 1 9.9,3.75 M7.83,3 L9.9,3.75 L10.28,1.58 M10.5,6 A4.5,4.5 0 0 1 2.1,8.25 M4.17,9 L2.1,8.25 L1.72,10.42</StreamGeometry>
+      <!-- Two sheets: Copy on a message (DESIGN.md §5, "Copy and times"). -->
+      <StreamGeometry x:Key="IconCopy">M4,4 L10.5,4 L10.5,10.5 L4,10.5 Z M8,2.5 L8,1.5 L1.5,1.5 L1.5,8 L2.5,8</StreamGeometry>
+      <!-- A line wrapping back under itself: Wrap on a code block. -->
+      <StreamGeometry x:Key="IconWrap">M1.5,2.5 L10.5,2.5 M1.5,6 L9,6 A2,2 0 0 1 9,10 L6,10 M7.5,8.5 L6,10 L7.5,11.5 M1.5,10 L3.5,10</StreamGeometry>
       <StreamGeometry x:Key="IconAttach">M9.5,5.5 L5.6,9.4 A2.3,2.3 0 0 1 2.35,6.15 L6.6,1.9 A1.5,1.5 0 0 1 8.72,4.02 L4.6,8.14 A0.7,0.7 0 0 1 3.6,7.15 L7.2,3.55</StreamGeometry>
       <!-- Tool cards (DESIGN.md §5); ToolIcons maps tool names to these. -->
       <StreamGeometry x:Key="IconToolRead">M2.5,1 L7,1 L9.5,3.5 L9.5,11 L2.5,11 Z M7,1 L7,3.5 L9.5,3.5 M4.2,6 L7.8,6 M4.2,8.2 L7.8,8.2</StreamGeometry>

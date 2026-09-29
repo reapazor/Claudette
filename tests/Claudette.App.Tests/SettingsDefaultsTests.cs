@@ -22,6 +22,8 @@ public class SettingsDefaultsTests
         s.NewTabs.RecentFolderLimit = 5;
         s.Appearance.Theme = ThemeChoice.Dark;
         s.Appearance.CodeFont = "Fira Code";
+        s.Appearance.ShowContextOnTabs = false;
+        s.Appearance.Density = Density.Compact;
         s.DiffTool.Kind = "custom";
         s.DiffTool.CustomCommand = "meld {left} {right}";
         s.Advanced.ExtraArguments = "--verbose";
@@ -47,10 +49,33 @@ public class SettingsDefaultsTests
         Assert.Equal(20, s.NewTabs.RecentFolderLimit);
         Assert.Equal(ThemeChoice.System, s.Appearance.Theme);
         Assert.Null(s.Appearance.CodeFont);
+        Assert.True(s.Appearance.ShowContextOnTabs);
+        Assert.True(settings.ShowContextOnTabs);
+        Assert.Equal(Density.Comfortable, s.Appearance.Density);
+        Assert.Equal(Density.Comfortable, settings.Density);
         Assert.Equal("builtIn", s.DiffTool.Kind);
         Assert.Equal("", s.Advanced.ExtraArguments);
         Assert.False(s.Advanced.LogProtocol);
         Assert.Equal("", settings.CodeFont);
+    }
+
+    [Fact]
+    public async Task Density_applies_at_once()
+    {
+        await using var h = new TabTestHarness();
+        var settings = new SettingsViewModel(h.Services, null);
+        Assert.Equal(Density.Comfortable, settings.Density);
+        Assert.Equal([Density.Comfortable, Density.Compact], settings.Densities);
+        Assert.False(h.Shell.IsCompact);
+
+        settings.Density = Density.Compact;
+
+        Assert.Equal(Density.Compact, h.Services.Settings.Appearance.Density);
+        Assert.True(h.Shell.IsCompact);
+
+        settings.ResetAppearanceCommand.Execute(null);
+
+        Assert.False(h.Shell.IsCompact);
     }
 
     [Fact]

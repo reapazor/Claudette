@@ -202,6 +202,19 @@ public sealed class AppearanceSettings
 
     /// <summary>The working line's twinkling glyph and fun verbs (DESIGN.md §5, "Working line"); off shows "Working…".</summary>
     public bool FunWorkingWords { get; set; } = true;
+
+    /// <summary>A small ring on each tab's row showing how full its context is (DESIGN.md §4, "Sidebar").</summary>
+    public bool ShowContextOnTabs { get; set; } = true;
+
+    /// <summary>How much room the conversation, the sidebar's rows and the composer take (DESIGN.md §14).</summary>
+    public Density Density { get; set; } = Density.Comfortable;
+}
+
+/// <summary>Settings → Appearance → Density: Compact tightens spacing and padding (DESIGN.md §14).</summary>
+public enum Density
+{
+    Comfortable,
+    Compact,
 }
 
 public sealed class SessionSettings

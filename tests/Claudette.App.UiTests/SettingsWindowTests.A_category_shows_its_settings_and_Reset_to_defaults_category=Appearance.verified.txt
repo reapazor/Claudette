@@ -1,6 +1,8 @@
 ﻿"Appearance"
 "Theme"
 [choice] "System"
+"Density"
+[choice] "Comfortable"
 "Conversation font"
 [field] "Claudette's default"
 "Conversation font size"
@@ -17,4 +19,6 @@
 [ ] Show thinking expanded
 [x] Show fun words while Claude works
 "A twinkling line above the message box, such as “Noodling… 42s · 3.1k tokens”. Off, it says “Working…”. Verbs added to spinnerVerbs in Claude Code's settings show here too."
+[x] Show context on tab rows
+"A small ring on each tab in the sidebar fills up with the tab's context window. It turns amber when Claude Code is about to compact the conversation, and red when it's nearly full."
 [button] Reset to defaults
