@@ -119,6 +119,85 @@ public class WorkingLineTests
         Assert.StartsWith("31s", tab.Working.Detail, StringComparison.Ordinal);
     }
 
+    private static string ToolUse(string id, string name, string input, string? parent = null) => new System.Text.Json.Nodes.JsonObject
+    {
+        ["type"] = "assistant",
+        ["parent_tool_use_id"] = parent,
+        ["message"] = new System.Text.Json.Nodes.JsonObject
+        {
+            ["id"] = $"m-{id}",
+            ["content"] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject
+            {
+                ["type"] = "tool_use",
+                ["id"] = id,
+                ["name"] = name,
+                ["input"] = System.Text.Json.Nodes.JsonNode.Parse(input),
+            }),
+        },
+    }.ToJsonString();
+
+    private static string ToolResult(string id, string? parent = null) => new System.Text.Json.Nodes.JsonObject
+    {
+        ["type"] = "user",
+        ["parent_tool_use_id"] = parent,
+        ["message"] = new System.Text.Json.Nodes.JsonObject
+        {
+            ["role"] = "user",
+            ["content"] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["type"] = "tool_result", ["tool_use_id"] = id, ["content"] = "ok" }),
+        },
+    }.ToJsonString();
+
+    [Fact]
+    public async Task While_a_tool_runs_the_line_says_what_it_is_doing()
+    {
+        var (h, tab) = await WorkingTabAsync(["Noodling"]);
+        await using var _ = h;
+
+        h.Transport.Emit(ToolUse("t1", "Bash", """{"command":"dotnet test"}"""));
+        await TabTestHarness.Eventually(() => tab.Working.Verb == "Running dotnet test…", "the tool");
+
+        // A subagent's own calls show on the agent map, not here.
+        h.Transport.Emit(ToolUse("s1", "Read", """{"file_path":"/x/secret.cs"}""", parent: "t0"));
+        h.Transport.Emit(ToolResult("t1"));
+
+        await TabTestHarness.Eventually(() => tab.Working.Verb == "Noodling…", "the verb again");
+    }
+
+    [Fact]
+    public async Task Several_agents_at_once_are_counted()
+    {
+        var (h, tab) = await WorkingTabAsync(["Noodling"]);
+        await using var _ = h;
+
+        foreach (var id in new[] { "a1", "a2", "a3" })
+        {
+            h.Transport.Emit(ToolUse(id, "Agent", """{"description":"Look around"}"""));
+        }
+
+        await TabTestHarness.Eventually(() => tab.Working.Verb == "Running 3 agents…", "the agents");
+        h.Transport.Emit("""{"type":"result","subtype":"success","is_error":false,"session_id":"s1"}""");
+        await TabTestHarness.Eventually(() => !tab.Working.IsActive, "the end of the turn");
+
+        // The next turn starts with a clean slate.
+        tab.ComposerText = "again";
+        await tab.SendCommand.ExecuteAsync(null);
+        await TabTestHarness.Eventually(() => tab.Working.IsActive, "the next turn");
+        Assert.Equal("Noodling…", tab.Working.Verb);
+    }
+
+    [Fact]
+    public async Task With_the_tool_bit_off_the_verb_stays()
+    {
+        var (h, tab) = await WorkingTabAsync(["Noodling"], h => h.Services.Settings.Appearance.ShowToolInWorkingLine = false);
+        await using var _ = h;
+
+        h.Transport.Emit(ToolUse("t1", "Bash", """{"command":"dotnet test"}"""));
+        h.Transport.Emit("""{"type":"assistant","message":{"id":"m9","content":[{"type":"text","text":"still here"}],"usage":{"input_tokens":10,"output_tokens":1}}}""");
+
+        await TabTestHarness.Eventually(() => tab.Working.Detail.Contains("tokens", StringComparison.Ordinal), "the next event");
+        Assert.Equal("Noodling…", tab.Working.Verb);
+    }
+
     [Theory]
     [InlineData(0, "0s")]
     [InlineData(59, "59s")]

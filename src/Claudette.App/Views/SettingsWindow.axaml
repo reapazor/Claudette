@@ -238,6 +238,9 @@
           <CheckBox Content="Show fun words while Claude works" IsChecked="{Binding FunWorkingWords}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                      Text="A twinkling line above the message box, such as “Noodling… 42s · 3.1k tokens”. Off, it says “Working…”. Verbs added to spinnerVerbs in Claude Code's settings show here too." />
+          <CheckBox Content="Show what Claude is doing while it works" IsChecked="{Binding ShowToolInWorkingLine}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="While a tool runs, the line says what it's doing instead, such as “Running dotnet test…” or “Reading TabView.axaml…”." />
           <Button Content="Reset to defaults" Command="{Binding ResetAppearanceCommand}" />
         </StackPanel>
 

@@ -185,6 +185,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Appearance", "Code font size"),
         new("Appearance", "Show thinking expanded"),
         new("Appearance", "Show fun words while Claude works"),
+        new("Appearance", "Show what Claude is doing while it works"),
         new("Usage", "Warn at (% of session used)"),
         new("Usage", "Alert at (% of session used)"),
         new("Usage", "Burn rate window (minutes)"),
@@ -452,6 +453,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         get => _settings.Appearance.FunWorkingWords;
         set => Set(value, v => _settings.Appearance.FunWorkingWords = v);
+    }
+
+    /// <summary>The working line says what the running tool is doing (DESIGN.md §5, "Working line").</summary>
+    public bool ShowToolInWorkingLine
+    {
+        get => _settings.Appearance.ShowToolInWorkingLine;
+        set => Set(value, v => _settings.Appearance.ShowToolInWorkingLine = v);
     }
 
     // ---- Sessions ------------------------------------------------------------------------------------------------

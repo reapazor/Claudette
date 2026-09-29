@@ -202,6 +202,9 @@ public sealed class AppearanceSettings
 
     /// <summary>The working line's twinkling glyph and fun verbs (DESIGN.md §5, "Working line"); off shows "Working…".</summary>
     public bool FunWorkingWords { get; set; } = true;
+
+    /// <summary>The working line says what the running tool is doing, such as "Running dotnet test…".</summary>
+    public bool ShowToolInWorkingLine { get; set; } = true;
 }
 
 public sealed class SessionSettings

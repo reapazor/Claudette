@@ -1236,6 +1236,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             TrackReplies(sessionEvent);
             ObserveForComposer(sessionEvent);
             OnPerforceSessionEvent(sessionEvent);
+            TrackToolsForWorkingLine(sessionEvent);
             switch (sessionEvent)
             {
                 case StateChanged { State: SessionState.Working }:

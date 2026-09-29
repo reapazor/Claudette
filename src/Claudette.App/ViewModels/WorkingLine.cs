@@ -14,6 +14,7 @@ namespace Claudette.App.ViewModels;
 /// <param name="isFun">Settings → Appearance → Show fun words while Claude works. Off shows a still "Working…".</param>
 /// <param name="turnTokens">The turn's tokens so far.</param>
 /// <param name="stopShortcut">The Stop shortcut as it reads now, or null when it has been removed.</param>
+/// <param name="showActivity">Settings → Appearance → Show what Claude is doing: the running tool instead of the verb.</param>
 public sealed partial class WorkingLine(
     TimeProvider timeProvider,
     IUiDispatcher dispatcher,
@@ -21,7 +22,8 @@ public sealed partial class WorkingLine(
     Func<bool> isFun,
     Func<long> turnTokens,
     Func<string?> stopShortcut,
-    Random random) : ObservableObject, IDisposable
+    Random random,
+    Func<bool>? showActivity = null) : ObservableObject, IDisposable
 {
     /// <summary>The frames of the glyph, as Claude Code's terminal spinner draws them, there and back.</summary>
     public static readonly IReadOnlyList<string> Frames = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
@@ -39,6 +41,8 @@ public sealed partial class WorkingLine(
     private DateTimeOffset _startedAt;
     private DateTimeOffset _verbSince;
     private int _frame;
+    private string _funVerb = "Working…";
+    private string? _activity;
 
     /// <summary>A turn is running: the line counts, whether or not it's shown right now.</summary>
     [ObservableProperty]
@@ -47,7 +51,7 @@ public sealed partial class WorkingLine(
     [ObservableProperty]
     public partial string Glyph { get; private set; } = StillGlyph;
 
-    /// <summary>"Noodling…", or "Working…" with the fun off.</summary>
+    /// <summary>"Noodling…", "Running dotnet test…" while a tool runs, or "Working…" with the fun off.</summary>
     [ObservableProperty]
     public partial string Verb { get; private set; } = "Working…";
 
@@ -69,8 +73,18 @@ public sealed partial class WorkingLine(
             _timer = timeProvider.CreateTimer(_ => dispatcher.Post(Tick), null, FrameInterval, FrameInterval);
         }
         IsActive = true;
-        Verb = NextVerb(null);
+        _funVerb = NextVerb(null);
         Update();
+    }
+
+    /// <summary>What the running tools are doing (<see cref="Conversation.ToolActivity"/>), or null when none is running.</summary>
+    public void SetActivity(string? activity)
+    {
+        _activity = activity;
+        if (IsActive)
+        {
+            Update();
+        }
     }
 
     /// <summary>The turn ended.</summary>
@@ -82,6 +96,7 @@ public sealed partial class WorkingLine(
             _timer = null;
         }
         IsActive = false;
+        _activity = null;
     }
 
     /// <summary>Shows the latest tokens straight away, rather than on the next tick.</summary>
@@ -104,7 +119,7 @@ public sealed partial class WorkingLine(
         if (now - _verbSince >= VerbInterval)
         {
             _verbSince = now;
-            Verb = NextVerb(Verb);
+            _funVerb = NextVerb(_funVerb);
         }
         Update();
     }
@@ -115,13 +130,16 @@ public sealed partial class WorkingLine(
         Glyph = fun ? Frames[_frame % Frames.Count] : StillGlyph;
         if (!fun)
         {
-            Verb = "Working…";
+            _funVerb = "Working…";
         }
-        else if (Verb == "Working…")
+        else if (_funVerb == "Working…")
         {
             // The fun was just turned back on.
-            Verb = NextVerb(null);
+            _funVerb = NextVerb(null);
         }
+        Verb = _activity is { } activity && (showActivity?.Invoke() ?? false)
+            ? activity.EndsWith('…') ? activity : activity + "…"
+            : _funVerb;
         var parts = new List<string> { Elapsed(timeProvider.GetUtcNow() - _startedAt) };
         if (turnTokens() is > 0 and var tokens)
         {
