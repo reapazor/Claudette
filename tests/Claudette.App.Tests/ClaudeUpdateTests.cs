@@ -208,8 +208,11 @@ public class ClaudeUpdateTests
 
         service.Start();
         await TabTestHarness.Eventually(() => updater.Checks == 1, "the launch check");
+        // A tick while a check is still finishing joins it instead of starting another, so let it finish first.
+        await service.LastCheck!;
         h.Time.Advance(ClaudeUpdateService.CheckInterval);
         await TabTestHarness.Eventually(() => updater.Checks == 2, "the next check");
+        await service.LastCheck!;
 
         h.Services.Settings.ClaudeCode.CheckForUpdates = false;
         h.Services.SaveSettings();

@@ -380,7 +380,8 @@ internal sealed class TabTestHarness : IAsyncDisposable
     {
         await Shell.OpenFolderAsync(WorkFolder);
         var tab = Shell.SelectedTab!;
-        await Eventually(() => tab.Status == TabStatus.Idle);
+        // Idle comes first; the start's own events and context usage request follow, and would undo a status a test sets.
+        await Eventually(() => tab.Status == TabStatus.Idle && tab.IsSettled, "the tab to start");
         return tab;
     }
 

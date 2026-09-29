@@ -954,7 +954,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(EffortLevels));
             Status = TabStatus.Idle;
             _pump = PumpAsync(session);
-            _ = RefreshContextUsageAsync(session);
+            _contextRefresh = RefreshContextUsageAsync(session);
         }
         catch (Exception ex) when (Core.Auth.SignInErrors.IsSignInFailure(ex))
         {
@@ -1184,15 +1184,42 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         var batch = new List<SessionEvent>();
         while (await reader.WaitToReadAsync().ConfigureAwait(false))
         {
+            // Counted before reading, so the events are always either queued or in flight (see IsSettled).
+            Interlocked.Increment(ref _batchesInFlight);
             while (reader.TryRead(out var sessionEvent))
             {
                 batch.Add(sessionEvent);
             }
             var events = batch.ToArray();
             batch.Clear();
-            _services.Dispatcher.Post(() => Apply(session, events));
+            _services.Dispatcher.Post(() =>
+            {
+                try
+                {
+                    Apply(session, events);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref _batchesInFlight);
+                }
+            });
         }
     }
+
+    /// <summary>Batches of session events read but not applied yet.</summary>
+    private int _batchesInFlight;
+
+    /// <summary>The context usage asked for as the session started.</summary>
+    private Task? _contextRefresh;
+
+    /// <summary>
+    /// For tests: every session event so far is applied, and the start's context usage request has finished. A tab
+    /// shows Idle as soon as its session starts, while the start's own events (its state changes) are still queued.
+    /// </summary>
+    internal bool IsSettled =>
+        Volatile.Read(ref _batchesInFlight) == 0
+        && _session?.Events is not { CanCount: true, Count: > 0 }
+        && _contextRefresh is null or { IsCompleted: true };
 
     private void Apply(ClaudeSession session, IReadOnlyList<SessionEvent> events)
     {

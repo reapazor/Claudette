@@ -155,7 +155,7 @@ public class AppUpdateTests
         h.Shell.Restore(null);
         h.Services.Settings.Sessions.RestoreUnpinnedTabs = false;
         var (pinned, unpinned) = (h.Shell.AllTabs.First(), h.Shell.AllTabs.Last());
-        await TabTestHarness.Eventually(() => pinned.Status == TabStatus.Idle, "the selected tab to start");
+        await TabTestHarness.Eventually(() => pinned.Status == TabStatus.Idle && pinned.IsSettled, "the selected tab to start");
         unpinned.ComposerText = "half-typed";
         return (pinned, unpinned);
     }
@@ -229,6 +229,8 @@ public class AppUpdateTests
         s.H.Services.Settings.General.CheckForAppUpdates = true;
         s.Updates.OnSettingsChanged();
         await TabTestHarness.Eventually(() => s.Updates.Available is not null, "the check at launch");
+        // A tick while a check is still finishing joins it instead of starting another, so let it finish first.
+        await s.Updates.LastCheck!;
         var checks = s.GitHub.Requests.Count(r => r == ReleasesUrl);
 
         s.H.Time.Advance(AppUpdateService.CheckInterval);

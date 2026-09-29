@@ -72,7 +72,7 @@ public class RestartTests
         h.Shell.Restore(null);
         h.Services.Settings.Sessions.RestoreUnpinnedTabs = false;
         var (pinned, unpinned) = (h.Shell.AllTabs.First(), h.Shell.AllTabs.Last());
-        await TabTestHarness.Eventually(() => pinned.Status == TabStatus.Idle, "the selected tab to start");
+        await TabTestHarness.Eventually(() => pinned.Status == TabStatus.Idle && pinned.IsSettled, "the selected tab to start");
         unpinned.ComposerText = "half-typed";
         unpinned.AddSuffixCommand.Execute(h.Services.Settings.QuickSuffixes[0]);
         unpinned.AddImage(Png, "Pasted image");
