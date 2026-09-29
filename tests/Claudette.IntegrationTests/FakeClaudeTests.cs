@@ -108,6 +108,53 @@ public sealed class FakeClaudeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_quiet_turn_answers_a_check_in_sent_mid_turn()
+    {
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("SILENT", TestContext.Current.CancellationToken);
+        await session.ReadUntilAsync<TextDelta>();
+        await session.SendUserMessageAsync("Everything OK? Give me a one or two sentence status update.", TestContext.Current.CancellationToken);
+        var (done, seen) = await session.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(10));
+
+        Assert.Equal("status sent", done.Result.Result);
+        Assert.Contains(seen.OfType<AssistantMessageReceived>(), a => a.Message.Content.OfType<TextBlock>().Any(t => t.Text.StartsWith("Status:", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task A_hung_turn_ends_only_when_interrupted()
+    {
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("HANG", TestContext.Current.CancellationToken);
+        await session.ReadUntilAsync<TurnStarted>();
+        await session.InterruptAsync(TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(10));
+
+        Assert.Equal("aborted_streaming", done.Result.TerminalReason);
+    }
+
+    [Fact]
+    public async Task A_spawned_child_process_outlives_the_turn()
+    {
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("SPAWN 20", TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(10));
+
+        var pid = int.Parse(done.Result.Result!["started child ".Length..], System.Globalization.CultureInfo.InvariantCulture);
+        using var child = System.Diagnostics.Process.GetProcessById(pid);
+        try
+        {
+            Assert.False(child.HasExited);
+        }
+        finally
+        {
+            child.Kill();
+        }
+    }
+
+    [Fact]
     public async Task A_crash_is_reported_with_its_exit_code_and_stderr()
     {
         await using var session = await StartAsync();

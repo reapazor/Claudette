@@ -24,7 +24,14 @@
 //   ASK_PERMISSION   asks can_use_tool for a Bash command, then reports whether it was allowed
 //   SLOW             streams text for ~10 seconds (for interrupts)
 //   CRASH            exits with code 7 and a line on stderr
+//   SPAWN [s] [busy] starts a child process that runs for s seconds (default 30), using CPU when "busy", and ends the
+//                    turn while it keeps running, like a dev server (for the process monitor)
+//   SILENT           streams a little, then goes quiet until a message arrives mid-turn (a check-in), answers it with a
+//                    status and ends the turn
+//   HANG             goes quiet and ignores everything until interrupted (a stuck turn)
 //   anything else    replies "pong: <prompt>"
+//
+//   fake-claude --child <seconds> [busy]   the child process SPAWN starts
 using System.Collections;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -53,6 +60,24 @@ if (Environment.GetEnvironmentVariable("FAKE_CLAUDE_RECORD") is { Length: > 0 } 
 if (args is ["--version", ..])
 {
     Console.WriteLine($"{version} (Claude Code)");
+    return 0;
+}
+
+if (args is ["--child", var childSeconds, .. var childOptions])
+{
+    // SPAWN's child: sleeps, or keeps a core busy, until its time is up.
+    var until = DateTime.UtcNow.AddSeconds(double.Parse(childSeconds, System.Globalization.CultureInfo.InvariantCulture));
+    while (DateTime.UtcNow < until)
+    {
+        if (childOptions.Contains("busy"))
+        {
+            Thread.SpinWait(1_000_000);
+        }
+        else
+        {
+            Thread.Sleep(100);
+        }
+    }
     return 0;
 }
 
@@ -274,6 +299,28 @@ internal sealed class FakeSession(string version)
                     }
                     await ResultAsync("slow done");
                 }
+                else if (prompt.StartsWith("SPAWN", StringComparison.Ordinal))
+                {
+                    var words = prompt.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    var seconds = words.Length > 1 && int.TryParse(words[1], out var s) ? s : 30;
+                    var child = StartChild(seconds, words.Contains("busy"));
+                    await ResultAsync($"started child {child.Id}");
+                }
+                else if (prompt.StartsWith("SILENT", StringComparison.Ordinal))
+                {
+                    await DeltaAsync("working on it… ");
+                    await _promptSignal.WaitAsync(_turn.Token);
+                    lock (_prompts)
+                    {
+                        _prompts.Dequeue();
+                    }
+                    await AssistantAsync(new JsonObject { ["type"] = "text", ["text"] = "Status: waiting on a long build; not stuck." });
+                    await ResultAsync("status sent");
+                }
+                else if (prompt.StartsWith("HANG", StringComparison.Ordinal))
+                {
+                    await Task.Delay(Timeout.Infinite, _turn.Token);
+                }
                 else if (prompt.StartsWith("ASK_PERMISSION", StringComparison.Ordinal))
                 {
                     await AssistantAsync(new JsonObject { ["type"] = "tool_use", ["id"] = "toolu_fake_1", ["name"] = "Bash", ["input"] = new JsonObject { ["command"] = "touch fake.txt" } });
@@ -301,6 +348,24 @@ internal sealed class FakeSession(string version)
                 await WriteAsync(new JsonObject { ["type"] = "result", ["subtype"] = "error_during_execution", ["is_error"] = true, ["terminal_reason"] = "aborted_streaming", ["session_id"] = _sessionId });
             }
         }
+    }
+
+    /// <summary>Starts this program again as a child process that outlives the turn.</summary>
+    private static System.Diagnostics.Process StartChild(int seconds, bool busy)
+    {
+        var exe = Environment.ProcessPath!;
+        var start = new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false };
+        if (Path.GetFileNameWithoutExtension(exe) == "dotnet")
+        {
+            start.ArgumentList.Add(System.Reflection.Assembly.GetEntryAssembly()!.Location);
+        }
+        start.ArgumentList.Add("--child");
+        start.ArgumentList.Add(seconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (busy)
+        {
+            start.ArgumentList.Add("busy");
+        }
+        return System.Diagnostics.Process.Start(start)!;
     }
 
     private Task DeltaAsync(string text) => WriteAsync(new JsonObject
