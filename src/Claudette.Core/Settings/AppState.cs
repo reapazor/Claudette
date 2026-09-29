@@ -1,5 +1,6 @@
 using Claudette.Core.Development;
 using Claudette.Core.Sessions;
+using Claudette.Core.Status;
 
 namespace Claudette.Core.Settings;
 
@@ -86,6 +87,12 @@ public sealed class AppState
 
     /// <summary>The sidebar's Links section is collapsed (DESIGN.md §18, "Links").</summary>
     public bool LinksCollapsed { get; set; }
+
+    /// <summary>
+    /// The service status banner the user dismissed: hidden until a different incident arrives or things get worse
+    /// (DESIGN.md §18, "Service status"). Forgotten once everything is back to operational.
+    /// </summary>
+    public ServiceStatusDismissal? DismissedServiceStatus { get; set; }
 }
 
 /// <summary>What's saved for one tab (DESIGN.md §9, "Restore on launch").</summary>

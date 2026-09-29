@@ -24,6 +24,10 @@
   <ItemGroup>
     <!-- The pretend p4, shared with the Core tests. -->
     <Compile Include="..\Claudette.Core.Tests\Support\FakeP4.cs" Link="Support\FakeP4.cs" />
+    <!-- Answers Claudette's own web requests (Claude's status page) from a table, so nothing reaches the network. -->
+    <Compile Include="..\Claudette.Core.Tests\Support\FakeHttpHandler.cs" Link="Support\FakeHttpHandler.cs" />
+    <!-- Claude's status page during a real incident (DESIGN.md §18, "Service status"). -->
+    <None Include="..\Claudette.Core.Tests\Fixtures\status\*.json" LinkBase="Fixtures\status" CopyToOutputDirectory="PreserveNewest" />
     <!-- Recorded Claude Code traffic, replayed through a tab (DESIGN.md §15, "Protocol fixtures"). -->
     <None Include="..\Claudette.Core.Tests\Fixtures\protocol\**\*.jsonl" LinkBase="Fixtures\protocol" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

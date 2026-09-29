@@ -21,6 +21,9 @@
   <ItemGroup>
     <!-- The same scripted Claude Code, fake clock and fakes as the view model tests. -->
     <Compile Include="..\Claudette.App.Tests\Support\*.cs" LinkBase="Support" />
+    <Compile Include="..\Claudette.Core.Tests\Support\FakeHttpHandler.cs" Link="Support\FakeHttpHandler.cs" />
+    <!-- Claude's status page during a real incident (DESIGN.md §18, "Service status"). -->
+    <None Include="..\Claudette.Core.Tests\Fixtures\status\*.json" LinkBase="Fixtures\status" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

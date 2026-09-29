@@ -31,6 +31,7 @@ Claudette does not replace Claude Code. It runs the real `claude` CLI as a child
 | Diffs | Claudette's own line diff and diff view, highlighted with TextMateSharp | The TextMate grammars and themes LiveMarkdown already ships for code blocks. AvaloniaEdit was the plan, but a read-only diff doesn't need an editor. |
 | Usage history | SQLite (Microsoft.Data.Sqlite) | [§6](#usage-history) |
 | Dependency | Claude Code CLI | Must already be installed. Claudette finds `claude` on `PATH` (on macOS and Linux, the login shell's `PATH`, [§13](#login-shell-environment)) or at a path set in Settings, checks its version on launch against a minimum supported version, and shows a setup screen if it is missing or too old. Sign-in is handled inside Claudette (see [§11](#11-sign-in)). |
+| Service status | Claude's public status page, status.claude.com | Read for the header's status dot and the incident banner: its Statuspage summary, with no sign-in. Settings → General turns it off. [§18](#service-status). |
 | Packaging | Windows: MSIX. macOS: signed, notarized `.app` in a `.dmg`. | [Below](#packaging-and-signing). |
 
 ### Packaging and signing
@@ -133,7 +134,7 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
 └──────────────────┴─────────────────────────────────────────────────────────┘
 ```
 
-1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. A chevron at its right draws it taller, with charts ([Detailed header](#detailed-header)). See [§6](#6-token-burn-awareness).
+1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. A chevron at its right draws it taller, with charts ([Detailed header](#detailed-header)). See [§6](#6-token-burn-awareness). At its right, before the account name, a dot shows Claude's service status, and while Claude has an incident a banner runs across the top under it ([§18](#service-status)).
 2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder. **New tab** is at its top; the selected tab's **Links** ([§18](#project-tools)), **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
 3. **Conversation.** The selected tab's conversation. See [§5](#5-conversation-view).
 4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), its project's tools and their output when it has any ([§18](#project-tools)), and optionally its running processes ([§4](#process-monitor)).
@@ -1017,6 +1018,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 │  Git: identity, working tree │                                  │   environment     │
 │  Auth, install checks        │                                  └───────────────────┘
 │  Perforce: tickets, CLs      │
+│  Claude's service status     │
 │  Settings, state, sync       │
 └───────────────┬──────────────┘
                 │ stdin/stdout (JSON lines)
@@ -1199,7 +1201,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 
 | Category | Settings |
 |---|---|
-| General | Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. Claudette's version and updates: check for updates automatically (on by default), include pre-releases (off), **Check now**, and the update's actions. See [Updating Claudette](#updating-claudette). |
+| General | Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. Show Claude's service status (on by default): the header's dot and the incident banner ([§18](#service-status)). Claudette's version and updates: check for updates automatically (on by default), include pre-releases (off), **Check now**, and the update's actions. See [Updating Claudette](#updating-claudette). |
 | Sessions | Also restore unpinned tabs on launch (off by default; pinned tabs are always restored). Session library folder (with **Browse…** and **Move library…**, which copies existing sessions to the new folder). Sync new tabs to the session library (off by default; each tab can be switched with **Sync to other machines** in its menu). Name for this machine, as shown in History. How long to keep sessions in the library. Sync Claudette's settings through the library (off by default). See [§9](#session-library-sync-across-machines) and [Settings sync](#settings-sync-optional). |
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
 | Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. Use my login shell's environment (macOS and Linux only, on by default; [§13](#login-shell-environment)). **Claude app (Remote Control)**: Connect new tabs to the Claude app (off by default; each tab has its own switch), with what it does, the privacy note and how to get pushes on the phone, and Keep this computer awake while tabs are connected (on by default). Disabled, with the reason, when the account can't use it ([§18](#remote-control-the-claude-app)). |
@@ -1277,7 +1279,7 @@ These apply from milestone 1:
 
 - `ClaudeSession` talks to Claude Code only through `IClaudeTransport`, never directly to a process, so tests can swap in a fake.
 - Processes are started through `IProcessLauncher`, so tests can check the exact command line and environment, and fake the process.
-- All time-based code (burn rate, check-ins, leases, usage retention, update checks, sampling) uses .NET's `TimeProvider`. Tests move the clock forward with `FakeTimeProvider` instead of waiting.
+- All time-based code (burn rate, check-ins, leases, usage retention, update checks, service status checks, sampling) uses .NET's `TimeProvider`. Tests move the clock forward with `FakeTimeProvider` instead of waiting.
 - File locations (app data, the session library, Claude Code's config folder) are injected, so tests use temporary folders.
 
 ### Test layers
@@ -1373,6 +1375,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 | Perforce | A pretend `p4` (`tests/Claudette.Core.Tests/Support/FakeP4.cs`, also compiled into the App tests), `Perforce*Tests` in the Core and App tests, and a shell-script `p4` for a real pipe in `PerforceIntegrationTests`. Credential stores: `CredentialStoreTests`. |
 | Real-CLI checks of subagents and stopping one | `RealCliTests`, with the mock's `SUBAGENTS` and `LONG_AGENT` scripts; the `12-subagents` fixture was recorded from `SUBAGENTS` |
 | Login shell environment | `LoginShellTests` in `tests/Claudette.Platform.Tests/LoginShell/`: reading the output, the terminal rule, timeouts and failures with a fake launcher and `FakeTimeProvider`, and real bash, dash, zsh and fish (each where installed) with a made-up `HOME`, never the user's rc files. `UserEnvironmentTests` in Core (the merge, waiting, and the callers) and `LoginShellSettingsTests` in the App tests. |
+| Service status | `ServiceStatusTests` in the Core tests (the summary, levels and names, dismissals, which API errors count, the feed) and the App tests (the schedule with `FakeTimeProvider`, the banner, the setting), and `ServiceStatusUiTests`. The status page is `FakeHttpHandler` with a real summary from an incident, trimmed, in `tests/Claudette.Core.Tests/Fixtures/status/`. |
 
 ## 16. Tracking Claude Code Changes
 
@@ -1588,11 +1591,14 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
       - Push delivery to the phone, and the presence file holding pushes off while Claudette is in front.
       - `enabled: false` disconnecting cleanly, and a restarted or restored tab reconnecting.
       - Keeping the computer awake on real Windows, macOS and Linux machines (the Windows call and `caffeinate` only run in CI).
-15. **Later.** New features go in [§18](#18-future-features) first.
+15. **Running tasks, service status and project settings.**
+    - **Service status ([§18](#service-status)).** ✅ Built 2026-09-29. Claude's status from status.claude.com, at launch, every 5 minutes and straight away when a tab's API requests fail on Anthropic's side: a dot before the account name (green, amber, red or grey) with each watched service (Claude Code, the Claude API, claude.ai) in its tooltip, and a banner across the top while an incident concerns them, with **Status page** and **Dismiss**, remembered on this machine. Settings → General → **Show Claude's service status**.
+      - **Still to verify:** a real incident seen live in the running app, and how the dot and banner look on real Windows, macOS and Linux desktops (so far rendered headlessly, both styles, light and dark).
+16. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features
 
-Features beyond v1. All five below are built (milestones 10, 11, 13 and 14); new ones go here first, each with a fuller design before it's built.
+Features beyond v1. All six below are built (milestones 10, 11, 13, 14 and 15); new ones go here first, each with a fuller design before it's built.
 
 ### Perforce ticket handling
 
@@ -1998,6 +2004,45 @@ A tab can be used from the Claude app on a phone, or at claude.ai/code, while Cl
 **Tests.** `RemoteControlProtocolTests` in Core (the wire format, replies, states and eligibility); `SleepBlockerTests` in Platform (fakes, the process mechanics with a harmless `sleep`, and the Windows call and `caffeinate` on their own OS); `RemoteControlTests` for the tab with the scripted transport (the switch, connecting before any prompt, the fallback, `bridge_state`, `worker_shutting_down`, the restart, restoring, eligibility, prompts answered in the app, the presence file and keeping awake); `RemoteControlUiTests` for the rendered menu, row icon, Tab settings and Settings block; and the RealCli tests: the real `claude` answering `remote_control` with its eligibility check and `/remote-control` with *"isn't available"* (`RealCliTests`), and a tab whose switch is turned on ending *Not available* with the reason (`RemoteControlRealCliTests`). No test connects for real.
 
 > **Not yet tried for real** (needs a claude.ai subscription, a phone and the Claude app): a real connection and what its answer and `bridge_state` messages hold; the session's title in the app, and whether it follows renames; prompts answered on the phone closing their cards here; pushes arriving, and the presence file holding them off; disconnecting with `enabled: false`; a restarted or restored tab reconnecting to a new session in the app; and keeping real Windows, macOS and Linux machines awake. A later version could pass `bridge_session_id` back as `reattach_session_id` so a restarted tab keeps its session in the app.
+
+### Service status
+
+✅ Built 2026-09-29.
+
+When Claude itself has trouble, tabs fail in ways that look like Claudette's fault or the user's: retries, overloaded errors, a sign-in that won't finish. Claudette reads Claude's public status page and says so: a dot in the header, and a banner across the top while an incident concerns what Claudette uses.
+
+- **The source.** `https://status.claude.com/api/v2/summary.json`, the page's Atlassian Statuspage v2 summary (status.claude.ai redirects there). A plain `GET` with Claudette's User-Agent (`Claudette/<version>`) through `AppServices.Http`, the client the update check uses ([§2](#updating-claudette)). No sign-in, and nothing else is sent. The fields it reads, tolerantly (unknown fields are ignored, and unknown values read as unknown):
+  - `status.indicator`: `none`, `minor`, `major` or `critical` (or `maintenance`).
+  - `components[]`: `id`, `name` and `status`: `operational`, `degraded_performance`, `partial_outage`, `major_outage` or `under_maintenance`.
+  - `incidents[]`, the unresolved ones: `id`, `name`, `status` (`investigating`, `identified`, `monitoring`, `resolved`, `postmortem`), `impact`, `shortlink`, `updated_at`, and `components` when it names them.
+  - `scheduled_maintenances[]`: `id`, `name`, `status` (`scheduled`, `in_progress`, `verifying`, `completed`), `shortlink`, `scheduled_for`, `scheduled_until` and `components`.
+  - A failed request, an error status, or an answer that isn't a JSON object is *Status unknown*, never an error dialog.
+- **What's watched.** What Claudette relies on: **Claude Code**, the **Claude API** (Claude Code's model calls) and **claude.ai** (sign-in, and [Remote Control](#remote-control-the-claude-app)). Components are matched by name, tolerantly, ignoring case and surrounding spaces: "Claude Code"; a name containing "Claude API" or "api.anthropic.com" (today "Claude API (api.anthropic.com)"); and "claude.ai". Others, such as the Console, Cowork and Claude for Government, don't count.
+- **One level**, for the dot:
+  - The worst of the watched services: *operational*; *degraded* (`degraded_performance`); *outage* (`partial_outage` or `major_outage`: a partial outage is an outage for whoever it hits); *maintenance* (`under_maintenance`).
+  - An open incident that concerns a watched service makes it at least degraded, and maintenance in progress at least maintenance.
+  - When none of the watched services is listed (renamed, say), the page's own indicator decides: `none` is operational, `minor` degraded, `major` and `critical` an outage. Anything else is unknown.
+- **Which incidents.** Unresolved ones that name a watched component (by name or id), or name no components at all, newest update first. Maintenance counts while it's under way (`in_progress`, `verifying`) on a watched service or names none; scheduled maintenance isn't shown until it starts.
+- **When it checks.**
+  - At launch, before Claude Code is found or signed in (an incident can be why those fail), then every 5 minutes, on `TimeProvider` timers.
+  - Straight away when a tab's request fails on Anthropic's side, at most once a minute: `system/api_retry` with a 5xx `error_status` (529 is an overload) or an `overloaded` or `server_error` category, the same in a subagent's `subagent_retry`, or a turn that ended with a 5xx `api_error_status`. Within a minute of the last check, the next one is brought forward to a minute after it. A rate limit (429), a sign-in problem or a bad request is the user's own, and doesn't count.
+  - A failed check backs off: 5 minutes, then 10, 20, and 30 from then on. Meanwhile the dot says *Status unknown*. The first good answer goes back to every 5 minutes.
+- **The dot**, at the header's right, before the account name: green when operational, amber when degraded or under maintenance, red for an outage, and grey when unknown or not checked yet.
+  - Its tooltip: the level, each watched service and its status, the latest incident's name and status, any maintenance under way, and "as of HH:mm" (the check's time); after a failed check, why it failed.
+  - Clicking it opens status.claude.com. Its accessible name says the level.
+- **The banner**, across the top under the header, while a watched service isn't operational or an open incident concerns one:
+  - *"Claude is having problems: Elevated errors on claude.ai, Claude Code, Claude Cowork and the Claude API (investigating)"*: the latest incident and where it's at, with "and 1 more incident" when there are others. Without an incident, the services that aren't well: *"claude.ai (partial outage)"*.
+  - It uses the caution colors, like the usage alert. Maintenance alone gets a quieter banner in the subtle surface colors: *"Claude maintenance in progress: <its name>"*.
+  - **Status page** opens the incident's (or maintenance's) short link, else status.claude.com.
+  - **Dismiss** hides it until a different incident or maintenance arrives, or the level gets worse. What was dismissed (the ids and the level) is kept with this machine's state (`AppState.DismissedServiceStatus`) and forgotten once everything is operational with nothing open.
+  - It goes by itself when everything is operational again; the dot stays, green. A failed check hides it too, since the status is then unknown.
+- **The setting.** Settings → General → **Show Claude's service status**, on by default. It's kept on this machine (General doesn't sync). Off hides the dot and banner and stops the checks; on checks straight away.
+- **Both styles.** Only existing tokens: `OkTextBrush`, `MeterWarningBrush`, `MeterCriticalBrush` and `MutedTextBrush` for the dot; `CautionBackgroundBrush` and `CautionBorderBrush` for the banner (warm tints of the accent in the Claude style); `SubtleBrush` and `DividerBrush` for the maintenance banner.
+- **Not Claude Code's surface.** The status page isn't part of Claude Code, so it isn't in `compat/surface.yaml`; its address and fields are recorded here. The Claude Code fields the tabs read for it (`error_status`, `error_category` and `api_error_status`) are.
+
+**Code.** `Claudette.Core/Status`: `StatusSummary` (the parser), `StatusFeed` (the request), `ServiceStatusReport` (the watched services, the level, the incidents, and `ServiceStatusDismissal`) and `ApiTrouble` (which session events are worth a check). In the app, `Services/ServiceStatusService.cs` (the schedule, the backoff and dismissing), started by `MainWindowViewModel` at launch and told about API errors by `TabViewModel`, and `ViewModels/ServiceStatusViewModel.cs` (the dot and the banner).
+
+**Tests.** `ServiceStatusTests` in Core: the real summary from an incident on 2026-09-29 (trimmed, in `Fixtures/status/`), all operational, maintenance, unknown values and malformed answers, levels and name matching, which incidents count, dismissals, which API errors count, and the request against `FakeHttpHandler`. `ServiceStatusTests` in the App tests, with `FakeTimeProvider`: the check at launch, every 5 minutes, the backoff up to 30, checks on API errors at most once a minute (and from a tab's `api_retry`), the banner shown, dismissed, back for a new incident or a worse level, gone on recovery, maintenance, and the setting. `ServiceStatusUiTests`: the dot's place and tooltip, the banner rendered, **Dismiss**, and the colors in both styles, light and dark. Nothing reaches the network.
 
 ## 19. Open Questions
 

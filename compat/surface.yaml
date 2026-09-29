@@ -269,9 +269,28 @@ items:
   - id: "api_retry"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.Core/Status/ApiTrouble.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: none yet
+    test: ServiceStatusTests
+  # A retry or a failed turn on Anthropic's side checks Claude's status page straight away (DESIGN.md §18, "Service status").
+  - id: "error_status"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Status/ApiTrouble.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ServiceStatusTests
+  - id: "error_category"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.Core/Status/ApiTrouble.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ServiceStatusTests
+  - id: "api_error_status"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Status/ApiTrouble.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ServiceStatusTests
   - id: "parent_tool_use_id"
     kind: field
     status: documented
@@ -919,9 +938,9 @@ items:
   - id: "subagent_retry"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs, src/Claudette.Core/Status/ApiTrouble.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: MessageParserTests
+    test: MessageParserTests, ServiceStatusTests
   - id: "heartbeat"
     kind: field
     status: documented

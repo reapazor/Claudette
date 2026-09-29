@@ -71,6 +71,10 @@
           <CheckBox Content="Confirm before closing a tab where Claude is working" IsChecked="{Binding ConfirmCloseWorkingTab}" />
           <CheckBox Content="Also rename the session in Claude Code when I rename a tab" IsChecked="{Binding RenameInClaudeCode}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Then claude --resume &lt;name&gt; in a terminal finds the session by the same name." Margin="28,-8,0,0" />
+          <!-- Claude's service status (DESIGN.md §18, "Service status") -->
+          <CheckBox Content="Show Claude's service status" IsChecked="{Binding ShowServiceStatus}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="A dot in the header, and a banner while Claude Code, the Claude API or claude.ai has an incident. Read from status.claude.com every 5 minutes." />
 
           <!-- Claudette's own updates, from its GitHub releases (DESIGN.md §2, "Updating Claudette") -->
           <TextBlock Text="Claudette updates" FontWeight="SemiBold" Margin="0,8,0,0" />
