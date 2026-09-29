@@ -224,7 +224,61 @@ public sealed class RealCliTests : IAsyncLifetime
         Assert.True(File.Exists(Path.Combine(library, $"{sessionId}.jsonl")), "The continued transcript should be written next to the resumed file (DESIGN.md §9).");
     }
 
-    private async Task<ClaudeSession> StartAsync(string? permissionMode = null, string? resume = null)
+    /// <summary>
+    /// The PreToolUse hook Perforce handling registers (DESIGN.md §18): Claude Code calls it back before the Bash
+    /// command, waits for the answer, and then asks for permission as usual; the note goes in with
+    /// --append-system-prompt.
+    /// </summary>
+    [Fact]
+    public async Task A_PreToolUse_hook_is_called_back_before_Bash_runs()
+    {
+        var calls = new List<(HookInput Input, DateTimeOffset At)>();
+        var hook = new HookRegistration("PreToolUse", "Bash", async (input, _) =>
+        {
+            lock (calls)
+            {
+                calls.Add((input, DateTimeOffset.UtcNow));
+            }
+            // Holds the command back, as a login would.
+            await Task.Delay(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+            return HookOutputs.Continue();
+        }, TimeSpan.FromMinutes(5));
+        await using var session = await StartAsync(hooks: [hook], appendSystemPrompt: "This folder is in a Perforce workspace.");
+
+        await session.SendUserMessageAsync("RUN_BASH touch hooked.txt", TestContext.Current.CancellationToken);
+        var (requested, _) = await session.ReadUntilAsync<PermissionRequested>();
+        var askedAt = DateTimeOffset.UtcNow;
+        requested.Request.Allow();
+        await session.ReadUntilAsync<TurnCompleted>();
+
+        var (input, calledAt) = Assert.Single(calls);
+        Assert.Equal(("PreToolUse", "Bash", "touch hooked.txt"), (input.EventName, input.ToolName, input.Command));
+        Assert.Equal(requested.Request.ToolUseId, input.ToolUseId);
+        Assert.True(askedAt - calledAt >= TimeSpan.FromSeconds(0.9), "The permission prompt should wait for the hook's answer.");
+        Assert.True(File.Exists(Path.Combine(Work, "hooked.txt")));
+    }
+
+    [Fact]
+    public async Task A_PreToolUse_hook_that_times_out_stops_the_command()
+    {
+        var hook = new HookRegistration("PreToolUse", "Bash", async (_, token) =>
+        {
+            await Task.Delay(Timeout.Infinite, token);
+            return HookOutputs.Continue();
+        }, TimeSpan.FromSeconds(2));
+        await using var session = await StartAsync(hooks: [hook]);
+
+        await session.SendUserMessageAsync("RUN_BASH touch never.txt", TestContext.Current.CancellationToken);
+        var (_, seen) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.DoesNotContain(seen, e => e is PermissionRequested);
+        var result = seen.OfType<ToolResultsReceived>().Single().Message.Content.OfType<Core.Protocol.ToolResultBlock>().Single();
+        Assert.True(result.IsError);
+        Assert.Contains("did not respond before its timeout", result.Text, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(Work, "never.txt")));
+    }
+
+    private async Task<ClaudeSession> StartAsync(string? permissionMode = null, string? resume = null, IReadOnlyList<HookRegistration>? hooks = null, string? appendSystemPrompt = null)
     {
         Assert.SkipWhen(_factory is null, "Claude Code isn't installed.");
         return await _factory!.StartAsync(new ClaudeLaunchOptions
@@ -233,6 +287,8 @@ public sealed class RealCliTests : IAsyncLifetime
             Model = "claude-haiku-4-5",
             PermissionMode = permissionMode,
             Resume = resume,
+            Hooks = hooks ?? [],
+            AppendSystemPrompt = appendSystemPrompt,
             EnvironmentOverrides = new Dictionary<string, string?>
             {
                 ["ANTHROPIC_BASE_URL"] = _api.BaseAddress.ToString().TrimEnd('/'),

@@ -19,6 +19,9 @@
 //
 // Session prompts:
 //   ASK_PERMISSION   asks can_use_tool for a Bash command, then reports whether it was allowed
+//   RUN_BASH <cmd>   a Bash tool call: calls back any PreToolUse hooks registered with initialize for Bash
+//                    (hook_callback, as Claude Code does), then "runs" it; the result is FAKE_CLAUDE_BASH_OUTPUT, or
+//                    "ran: <cmd>". A hook that doesn't answer within its timeout is cancelled and the command isn't run.
 //   SLOW             streams text for ~10 seconds (for interrupts)
 //   CRASH            exits with code 7 and a line on stderr
 //   anything else    replies "pong: <prompt>"
@@ -131,6 +134,7 @@ internal sealed class FakeSession(string version)
     private readonly SemaphoreSlim _promptSignal = new(0);
     private CancellationTokenSource? _turn;
     private int _requestCounter;
+    private readonly List<(string? Matcher, List<string> CallbackIds, int? Timeout)> _preToolUseHooks = [];
 
     public async Task<int> RunAsync()
     {
@@ -172,6 +176,16 @@ internal sealed class FakeSession(string version)
     {
         var requestId = message["request_id"]!.GetValue<string>();
         var subtype = message["request"]!["subtype"]!.GetValue<string>();
+        if (subtype == "initialize" && message["request"]!["hooks"]?["PreToolUse"] is JsonArray matchers)
+        {
+            foreach (var matcher in matchers.OfType<JsonObject>())
+            {
+                _preToolUseHooks.Add((
+                    matcher["matcher"]?.GetValue<string>(),
+                    matcher["hookCallbackIds"]?.AsArray().Select(id => id!.GetValue<string>()).ToList() ?? [],
+                    matcher["timeout"]?.GetValue<int>()));
+            }
+        }
         JsonObject? response = subtype switch
         {
             "initialize" => new JsonObject
@@ -244,6 +258,10 @@ internal sealed class FakeSession(string version)
                     });
                     await ResultAsync($"permission: {behavior}");
                 }
+                else if (prompt.StartsWith("RUN_BASH ", StringComparison.Ordinal))
+                {
+                    await RunBashAsync(prompt["RUN_BASH ".Length..].Trim());
+                }
                 else
                 {
                     var reply = $"pong: {prompt}";
@@ -258,6 +276,52 @@ internal sealed class FakeSession(string version)
                 await WriteAsync(new JsonObject { ["type"] = "result", ["subtype"] = "error_during_execution", ["is_error"] = true, ["terminal_reason"] = "aborted_streaming", ["session_id"] = _sessionId });
             }
         }
+    }
+
+    /// <summary>A Bash tool call, with the PreToolUse hooks Claude Code would call back first.</summary>
+    private async Task RunBashAsync(string command)
+    {
+        var toolUseId = $"toolu_fake_{Interlocked.Increment(ref _requestCounter)}";
+        var input = new JsonObject { ["command"] = command, ["description"] = "fake command" };
+        await AssistantAsync(new JsonObject { ["type"] = "tool_use", ["id"] = toolUseId, ["name"] = "Bash", ["input"] = input.DeepClone() });
+        var blocked = false;
+        foreach (var (matcher, ids, timeout) in _preToolUseHooks.Where(h => h.Matcher is null or "" or "*" || h.Matcher.Split('|').Contains("Bash")))
+        {
+            foreach (var id in ids)
+            {
+                var request = new JsonObject
+                {
+                    ["subtype"] = "hook_callback",
+                    ["callback_id"] = id,
+                    ["input"] = new JsonObject
+                    {
+                        ["session_id"] = _sessionId,
+                        ["cwd"] = Environment.CurrentDirectory,
+                        ["permission_mode"] = "default",
+                        ["hook_event_name"] = "PreToolUse",
+                        ["tool_name"] = "Bash",
+                        ["tool_input"] = input.DeepClone(),
+                        ["tool_use_id"] = toolUseId,
+                    },
+                    ["tool_use_id"] = toolUseId,
+                };
+                if (await RequestAsync(request, TimeSpan.FromSeconds(timeout ?? 60)) is null)
+                {
+                    blocked = true;
+                }
+            }
+        }
+        var output = blocked
+            ? "PreToolUse hook did not respond before its timeout (host client may be unreachable). The tool call was not executed; other configured hooks may not have completed."
+            : Environment.GetEnvironmentVariable("FAKE_CLAUDE_BASH_OUTPUT") ?? $"ran: {command}";
+        await WriteAsync(new JsonObject
+        {
+            ["type"] = "user",
+            ["message"] = new JsonObject { ["role"] = "user", ["content"] = new JsonArray(new JsonObject { ["type"] = "tool_result", ["tool_use_id"] = toolUseId, ["content"] = output, ["is_error"] = blocked }) },
+            ["parent_tool_use_id"] = null,
+            ["tool_use_result"] = blocked ? $"Error: {output}" : new JsonObject { ["stdout"] = output, ["stderr"] = "", ["interrupted"] = false },
+        });
+        await ResultAsync(blocked ? "The hook timed out." : "Done with the tool.");
     }
 
     private Task DeltaAsync(string text) => WriteAsync(new JsonObject
@@ -291,6 +355,25 @@ internal sealed class FakeSession(string version)
         _pendingFromUs[requestId] = waiter;
         await WriteAsync(new JsonObject { ["type"] = "control_request", ["request_id"] = requestId, ["request"] = request });
         return await waiter.Task.WaitAsync(_turn!.Token);
+    }
+
+    /// <summary>Like Claude Code: a request not answered in time is withdrawn with control_cancel_request. Null then.</summary>
+    private async Task<JsonObject?> RequestAsync(JsonObject request, TimeSpan timeout)
+    {
+        var requestId = $"fake_{Interlocked.Increment(ref _requestCounter)}";
+        var waiter = new TaskCompletionSource<JsonObject>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pendingFromUs[requestId] = waiter;
+        await WriteAsync(new JsonObject { ["type"] = "control_request", ["request_id"] = requestId, ["request"] = request });
+        try
+        {
+            return await waiter.Task.WaitAsync(timeout, _turn!.Token);
+        }
+        catch (TimeoutException)
+        {
+            _pendingFromUs.TryRemove(requestId, out _);
+            await WriteAsync(new JsonObject { ["type"] = "control_cancel_request", ["request_id"] = requestId });
+            return null;
+        }
     }
 
     private async Task WriteAsync(JsonObject message)
