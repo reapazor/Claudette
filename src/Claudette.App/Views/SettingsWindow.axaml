@@ -402,7 +402,7 @@
             <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectFileFormatChoices}" SelectedItem="{Binding SelectedProjectFileFormat}" />
           </Grid>
           <TextBlock Classes="muted small" TextWrapping="Wrap"
-                     Text="The configuration is the default for projects that haven't been given their own in the project's menu. Rider opens the Visual Studio solution, or the .uproject itself." />
+                     Text="The configuration is the default for projects that haven't been given their own in the project's menu. Rider opens the .uproject itself, so it needs no project files (Unreal Engine 4.25.4 or later on Windows, 4.26 on macOS and Linux)." />
           <CheckBox Content="Tell Claude about Unreal projects" IsChecked="{Binding TellClaudeAboutUnreal}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                      Text="Adds a short note to the session: the engine version and folder, and the exact commands to build the editor and regenerate project files. Applies to tabs started after the change." />

@@ -14,11 +14,13 @@ public sealed class UnrealProviderTests : IDisposable
     public void Dispose() => _temp.Dispose();
 
     /// <summary>A code project under an engine in a parent folder (EngineAssociation empty): no registry needed.</summary>
-    private (ProjectInfo Info, string Engine, string Project) NativeProject(ProjectToolSettings? settings = null, IProjectMemory? memory = null, bool code = true)
+    private (ProjectInfo Info, string Engine, string Project) NativeProject(ProjectToolSettings? settings = null, IProjectMemory? memory = null, bool code = true,
+        ToolOS? os = null, (int Major, int Minor, int Patch)? version = null)
     {
-        var engine = ProjectToolFixtures.Engine(_temp, "UE5", installed: false);
+        var (major, minor, patch) = version ?? (5, 4, 2);
+        var engine = ProjectToolFixtures.Engine(_temp, "UE5", major, minor, patch, installed: false);
         var project = ProjectToolFixtures.UProject(_temp, "UE5/NightOwl/NightOwl.uproject", association: "", code: code);
-        var context = ProjectToolFixtures.Context(_temp, settings: settings, memory: memory);
+        var context = ProjectToolFixtures.Context(_temp, os: os, settings: settings, memory: memory);
         var info = _unreal.Describe(new ProjectCandidate(UnrealProvider.KindId, project, "NightOwl"), context);
         return (info, engine, project);
     }
@@ -70,6 +72,63 @@ public sealed class UnrealProviderTests : IDisposable
         Assert.True(Action(after, "open-solution").IsEnabled);
         Assert.Equal(sln, Action(after, "open-solution").OpenPath);
         Assert.True(Action(after, "open-solution").OpenWithIde);
+    }
+
+    /// <summary>
+    /// Rider reads a <c>.uproject</c> itself, so with Rider chosen the action opens the project, with nothing to generate
+    /// first, whatever the project file format (GitHub issue #6).
+    /// </summary>
+    [Theory]
+    [InlineData(ToolOS.Windows)]
+    [InlineData(ToolOS.MacOS)]
+    [InlineData(ToolOS.Linux)]
+    public void With_Rider_Open_in_Rider_opens_the_uproject_with_no_project_files_needed(ToolOS os)
+    {
+        var (info, _, project) = NativeProject(new ProjectToolSettings { OpenSolutionsWith = SolutionOpener.Rider }, os: os);
+
+        var open = Action(info, "open-solution");
+        Assert.Equal("Open in Rider", open.Label);
+        Assert.True(open.IsEnabled);
+        Assert.Equal(project, open.OpenPath);
+        Assert.True(open.OpenWithIde);
+        Assert.NotNull(open.WithoutIde);
+        Assert.Equal("Opens NightOwl.uproject in Rider, which reads the project itself: no project files to generate.", open.Tip);
+        Assert.EndsWith("Rider doesn't need them: Open in Rider reads the .uproject itself.", Action(info, "generate-project-files").Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Other_IDEs_open_the_generated_solution_and_fall_back_to_the_OSs_app()
+    {
+        var (info, _, _) = NativeProject(new ProjectToolSettings { OpenSolutionsWith = SolutionOpener.VisualStudio, ProjectFileFormat = ProjectFileFormat.VisualStudio });
+
+        var open = Action(info, "open-solution");
+        Assert.Equal("Open solution", open.Label);
+        Assert.Null(open.WithoutIde);
+        Assert.DoesNotContain("Rider", Action(info, "generate-project-files").Description, StringComparison.Ordinal);
+    }
+
+    /// <summary>Rider reads a .uproject from Unreal Engine 4.25.4 on Windows and 4.26 elsewhere; older engines open the solution.</summary>
+    [Theory]
+    [InlineData(ToolOS.Windows, 4, 25, 3, false)]
+    [InlineData(ToolOS.Windows, 4, 25, 4, true)]
+    [InlineData(ToolOS.MacOS, 4, 25, 4, false)]
+    [InlineData(ToolOS.MacOS, 4, 26, 0, true)]
+    [InlineData(ToolOS.Linux, 4, 26, 2, true)]
+    [InlineData(ToolOS.Linux, 5, 4, 2, true)]
+    public void Rider_reads_a_uproject_from_the_engines_that_support_it(ToolOS os, int major, int minor, int patch, bool reads)
+    {
+        Assert.Equal(reads, UnrealProvider.RiderReadsUProject(new UnrealBuildVersion(major, minor, patch, null), os));
+        Assert.True(UnrealProvider.RiderReadsUProject(null, os));
+    }
+
+    [Fact]
+    public void With_Rider_and_an_engine_too_old_for_its_uproject_model_the_solution_opens_as_before()
+    {
+        var settings = new ProjectToolSettings { OpenSolutionsWith = SolutionOpener.Rider, ProjectFileFormat = ProjectFileFormat.VisualStudio };
+        var (info, _, _) = NativeProject(settings, os: ToolOS.Windows, version: (4, 24, 3));
+
+        Assert.Equal("Open solution", Action(info, "open-solution").Label);
+        Assert.Equal("Generate project files first", Action(info, "open-solution").Tip);
     }
 
     [Fact]

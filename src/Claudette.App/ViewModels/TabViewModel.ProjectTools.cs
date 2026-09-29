@@ -537,7 +537,7 @@ public sealed partial class TabViewModel
                 StartProjectJob(action, spec);
                 break;
             case ProjectActionKind.Open when action.OpenPath is { } path:
-                await OpenProjectPathAsync(path, action.OpenWithIde);
+                await OpenProjectPathAsync(path, action.OpenWithIde, action.WithoutIde);
                 break;
             case ProjectActionKind.Destructive when action.Destructive is DeleteFolders delete:
                 await ConfirmDeleteAsync(action, delete);
@@ -551,7 +551,11 @@ public sealed partial class TabViewModel
     private static bool IsStartFailure(Exception ex) =>
         ex is Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException or ArgumentException or PlatformNotSupportedException;
 
-    private async Task OpenProjectPathAsync(string path, bool withIde)
+    /// <summary>
+    /// Opens a project's file or folder: with the chosen IDE when <paramref name="withIde"/>, falling back to the OS's
+    /// app, or when <paramref name="withoutIde"/> says why not, to that note instead (a <c>.uproject</c> for Rider).
+    /// </summary>
+    private async Task OpenProjectPathAsync(string path, bool withIde, string? withoutIde = null)
     {
         if (withIde)
         {
@@ -565,8 +569,18 @@ public sealed partial class TabViewModel
                 }
                 catch (Exception ex) when (IsStartFailure(ex))
                 {
+                    if (withoutIde is not null)
+                    {
+                        _conversation.AddNote($"Couldn't start {Path.GetFileName(spec.FileName)}: {ex.Message}", NoteKind.Error);
+                        return;
+                    }
                     _conversation.AddNote($"Couldn't start {Path.GetFileName(spec.FileName)}: {ex.Message}. Opened it with the OS's app instead.", NoteKind.Warning);
                 }
+            }
+            else if (withoutIde is not null)
+            {
+                _conversation.AddNote(withoutIde, NoteKind.Warning);
+                return;
             }
             else if (opening.Note is { } note)
             {

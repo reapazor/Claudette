@@ -1,6 +1,7 @@
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
+using Claudette.Core.Diffs;
 using Claudette.Core.ProjectTools;
 using Claudette.Core.ProjectTools.Unreal;
 using Claudette.Core.Settings;
@@ -115,6 +116,54 @@ public class ProjectToolsTests
         Assert.True(Entry(tab, "Open solution").IsEnabled);
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "open-solution"));
         Assert.Equal([Path.Combine(h.WorkFolder, "NightOwl.sln")], h.Platform.OpenedFiles);
+    }
+
+    /// <summary>With Rider chosen, <b>Open in Rider</b> gives Rider the .uproject, with no solution needed (GitHub issue #6).</summary>
+    [Fact]
+    public async Task Open_in_Rider_opens_the_uproject_in_Rider_without_a_solution()
+    {
+        var (h, launcher, uproject) = UnrealHarness(s => s.ProjectTools.OpenSolutionsWith = SolutionOpener.Rider);
+        await using var _h = h;
+        h.Services.ProjectTools.Probe = new RiderProbe(installed: true);
+        var tab = await OpenWithProjectAsync(h);
+
+        Assert.True(Entry(tab, "Open in Rider").IsEnabled);
+        Assert.DoesNotContain(tab.ProjectMenu, e => e.Label == "Open solution");
+        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "open-solution"));
+
+        Assert.Contains(uproject, launcher.Started.Last().Arguments);
+        Assert.Empty(h.Platform.OpenedFiles);
+    }
+
+    /// <summary>
+    /// Without Rider, the .uproject isn't handed to the OS's app, which would start the Unreal editor: a note says why.
+    /// </summary>
+    [Fact]
+    public async Task Open_in_Rider_without_Rider_says_so_rather_than_starting_the_editor()
+    {
+        Assert.SkipWhen(OperatingSystem.IsMacOS(), "On macOS, open -a finds Rider itself, so Claudette never decides it's missing.");
+        var (h, launcher, _) = UnrealHarness(s => s.ProjectTools.OpenSolutionsWith = SolutionOpener.Rider);
+        await using var _h = h;
+        h.Services.ProjectTools.Probe = new RiderProbe(installed: false);
+        var tab = await OpenWithProjectAsync(h);
+        var started = launcher.Started.Count;
+
+        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "open-solution"));
+
+        Assert.Empty(h.Platform.OpenedFiles);
+        Assert.Equal(started, launcher.Started.Count);
+        Assert.Contains(tab.Items, i => i is Conversation.NoteItem note && note.Text.StartsWith("Rider wasn't found, so the project wasn't opened", StringComparison.Ordinal));
+    }
+
+    /// <summary>Finds Rider on the PATH, or nothing, whichever OS runs the test.</summary>
+    private sealed class RiderProbe(bool installed) : IFileProbe
+    {
+        public bool FileExists(string path) => installed && Path.GetFileName(path).StartsWith("rider", StringComparison.OrdinalIgnoreCase);
+
+        public string? FindOnPath(string fileName) =>
+            installed && fileName.StartsWith("rider", StringComparison.OrdinalIgnoreCase) ? Path.Combine(Path.GetTempPath(), "rider", "bin", fileName) : null;
+
+        public string ExpandEnvironmentVariables(string path) => path;
     }
 
     [Fact]

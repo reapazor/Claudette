@@ -36,6 +36,13 @@ public sealed record ProjectAction(string Id, string Label, ProjectActionKind Ki
     /// <summary>Open with the IDE chosen in Settings → Project tools → Open solutions with, rather than the OS's app.</summary>
     public bool OpenWithIde { get; init; }
 
+    /// <summary>
+    /// What to say, instead of opening the path with the OS's app, when <see cref="OpenWithIde"/> can't find or start
+    /// the IDE; null falls back to the OS's app. <b>Open in Rider</b> sets it: the OS's app for a <c>.uproject</c> starts
+    /// the Unreal editor, which isn't what was asked for.
+    /// </summary>
+    public string? WithoutIde { get; init; }
+
     /// <summary>What a <see cref="ProjectActionKind.Destructive"/> action does, once confirmed.</summary>
     public DestructiveWork? Destructive { get; init; }
 
