@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Claudette.Core\Claudette.Core.csproj" />
+    <ProjectReference Include="..\..\src\Claudette.Usage\Claudette.Usage.csproj" />
     <ProjectReference Include="..\..\tools\Claudette.MockApi\Claudette.MockApi.csproj" />
     <ProjectReference Include="..\..\tools\Claudette.FakeClaude\Claudette.FakeClaude.csproj" />
     <ProjectReference Include="..\..\tools\Claudette.Fixtures\Claudette.Fixtures.csproj" />
