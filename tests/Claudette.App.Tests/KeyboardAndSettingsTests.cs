@@ -267,4 +267,28 @@ public class KeyboardAndSettingsTests
         Assert.Equal("Primary+Shift+N", second.Services.Settings.Keyboard.Bindings[KeyboardShortcuts.NewTab]);
         Assert.False(second.Services.Settings.Notifications.TurnFinished);
     }
+
+    [Fact]
+    public async Task Density_and_the_context_ring_sync_with_the_other_appearance_settings()
+    {
+        await using var first = new TabTestHarness();
+        await using var second = new TabTestHarness();
+        var library = Path.Combine(first.Root, "shared-library");
+        first.Services.Settings.Appearance.Density = Density.Compact;
+        first.Services.Settings.Appearance.ShowContextOnTabs = false;
+        first.Services.Settings.Sessions.LibraryFolder = library;
+        first.Services.Settings.Sessions.SyncSettings = true;
+        first.Services.Library.OnSettingsChanged();
+        var syncFile = Path.Combine(library, "settings-sync.json");
+        await TabTestHarness.Eventually(() => File.Exists(syncFile) && File.ReadAllText(syncFile).Contains("appearance.density", StringComparison.Ordinal), "the published settings");
+
+        second.Services.Settings.Sessions.LibraryFolder = library;
+        second.Services.Settings.Sessions.SyncSettings = true;
+        second.Services.Library.OnSettingsChanged();
+        await TabTestHarness.Eventually(() => second.Services.Settings.Appearance.Density == Density.Compact, "the synced density");
+
+        Assert.False(second.Services.Settings.Appearance.ShowContextOnTabs);
+        // Applied as it arrives, like a change made here.
+        Assert.True(second.Shell.IsCompact);
+    }
 }

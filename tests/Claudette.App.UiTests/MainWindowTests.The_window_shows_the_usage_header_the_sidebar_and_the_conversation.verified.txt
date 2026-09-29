@@ -21,6 +21,8 @@
 [button] History
 [button] Settings
 "Found two problems in Parser.cs."
+"12:00"
+[button] Copy message
 "Opus"
 [field] "Message Claude…  (Enter to send, Shift+Enter for a new line, Esc to stop)"
 [button] Attach a file

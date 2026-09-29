@@ -1,6 +1,8 @@
 ﻿"Appearance"
 "Theme"
 [choice] "System"
+"Density"
+[choice] "Comfortable"
 "Conversation font"
 [field] "Claudette's default"
 "Conversation font size"
@@ -21,6 +23,8 @@
 "While a tool runs, the line says what it's doing instead, such as “Running dotnet test…” or “Reading TabView.axaml…”."
 [ ] Detailed usage header
 "Draws the usage header taller, with charts of the session and the week, the burn rate and the busiest tabs. The chevron at the header's right does the same. Kept on this machine, not synced."
+[x] Show context on tab rows
+"A small ring on each tab in the sidebar fills up with the tab's context window. It turns amber when Claude Code is about to compact the conversation, and red when it's nearly full."
 [button] Reset to defaults
 [button] Line up
 [button] Page up

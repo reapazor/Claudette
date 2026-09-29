@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Claudette.Core.Protocol;
@@ -12,7 +13,71 @@ namespace Claudette.App.Conversation;
 /// <summary>One row in a tab's conversation (DESIGN.md §5).</summary>
 public abstract class ConversationItem : ObservableObject;
 
-public sealed class UserMessageItem(string text, string? suffixText = null, bool isCheckIn = false) : ConversationItem
+/// <summary>
+/// A user message or an assistant reply. It has a Copy button and shows when it was sent, on hover (DESIGN.md §5,
+/// "Copy and times").
+/// </summary>
+public abstract partial class MessageItem : ConversationItem
+{
+    private TimeProvider? _clock;
+
+    /// <summary>When it was sent: live, as it was built; restored, from its transcript entry. Null when unknown.</summary>
+    public DateTimeOffset? SentAt { get; private set; }
+
+    public bool HasTime => SentAt is not null && _clock is not null;
+
+    /// <summary>Short, in the current culture: "14:05" today, "Mon 14:05" in the last week, else the date and time.</summary>
+    public string? TimeText => SentAt is { } sent && _clock is { } clock ? MessageTimes.Short(sent, clock) : null;
+
+    /// <summary>The full date and time, for the tooltip.</summary>
+    public string? TimeTip => SentAt is { } sent && _clock is { } clock ? MessageTimes.Full(sent, clock) : null;
+
+    /// <summary>What <b>Copy message</b> puts on the clipboard.</summary>
+    public abstract string CopyText { get; }
+
+    /// <summary>Just copied: the button says "Copied" for a moment.</summary>
+    [ObservableProperty]
+    public partial bool IsCopied { get; set; }
+
+    /// <summary>Sets when the message was sent; <paramref name="clock"/> says what "today" is when it's shown.</summary>
+    public void Stamp(DateTimeOffset? sentAt, TimeProvider clock)
+    {
+        SentAt = sentAt;
+        _clock = clock;
+        RefreshTime();
+    }
+
+    /// <summary>"Today" moved on, for example past midnight: the short time may need its day now.</summary>
+    public void RefreshTime()
+    {
+        OnPropertyChanged(nameof(SentAt));
+        OnPropertyChanged(nameof(HasTime));
+        OnPropertyChanged(nameof(TimeText));
+        OnPropertyChanged(nameof(TimeTip));
+    }
+}
+
+/// <summary>How a message's time reads, in the clock's time zone and the current culture (DESIGN.md §5).</summary>
+public static class MessageTimes
+{
+    /// <summary>"14:05" today, "Mon 14:05" in the six days before, else the short date and time.</summary>
+    public static string Short(DateTimeOffset sent, TimeProvider clock)
+    {
+        var culture = CultureInfo.CurrentCulture;
+        var local = TimeZoneInfo.ConvertTime(sent, clock.LocalTimeZone);
+        var today = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), clock.LocalTimeZone).Date;
+        var time = local.ToString("t", culture);
+        return local.Date == today ? time
+            : local.Date < today && local.Date > today.AddDays(-7) ? $"{local.ToString("ddd", culture)} {time}"
+            : local.ToString("g", culture);
+    }
+
+    /// <summary>The long date and the time, for the tooltip.</summary>
+    public static string Full(DateTimeOffset sent, TimeProvider clock) =>
+        TimeZoneInfo.ConvertTime(sent, clock.LocalTimeZone).ToString("f", CultureInfo.CurrentCulture);
+}
+
+public sealed class UserMessageItem(string text, string? suffixText = null, bool isCheckIn = false) : MessageItem
 {
     public string Text { get; } = text;
 
@@ -20,6 +85,9 @@ public sealed class UserMessageItem(string text, string? suffixText = null, bool
     public string? SuffixText { get; } = suffixText;
 
     public bool HasSuffix => !string.IsNullOrEmpty(SuffixText);
+
+    /// <summary>The message as it was sent: its text, then its quick suffixes after a blank line.</summary>
+    public override string CopyText => !HasSuffix ? Text : Text.Length == 0 ? SuffixText! : $"{Text}\n\n{SuffixText}";
 
     /// <summary>Sent by Claudette as an automatic check-in (DESIGN.md §5, "Check-ins on long turns").</summary>
     public bool IsCheckIn { get; } = isCheckIn;
@@ -31,7 +99,7 @@ public sealed class UserMessageItem(string text, string? suffixText = null, bool
 }
 
 /// <summary>Assistant text, streamed in as Markdown.</summary>
-public sealed partial class AssistantTextItem : ConversationItem
+public sealed partial class AssistantTextItem : MessageItem
 {
     public ObservableStringBuilder Markdown { get; } = new();
 
@@ -39,6 +107,9 @@ public sealed partial class AssistantTextItem : ConversationItem
     public partial bool IsStreaming { get; set; } = true;
 
     public string Text => Markdown.ToString();
+
+    /// <summary>The reply's Markdown, as Claude wrote it.</summary>
+    public override string CopyText => Text;
 
     public void Append(string text) => Markdown.Append(text);
 }

@@ -29,6 +29,18 @@ public enum TabStatus
     Exited,
 }
 
+/// <summary>The ring on a tab's row (DESIGN.md §4, "Sidebar"): how full its context window is.</summary>
+public enum ContextLevel
+{
+    /// <summary>No context data yet: the ring is hidden.</summary>
+    None,
+    Normal,
+    /// <summary>Near the point where Claude Code compacts by itself: amber.</summary>
+    High,
+    /// <summary>Nearly full: red.</summary>
+    Critical,
+}
+
 /// <summary>A quick suffix picked for the next message (DESIGN.md §5, "Quick suffixes").</summary>
 public sealed partial class SuffixChip(QuickSuffix suffix, bool isKept) : ObservableObject
 {
@@ -83,6 +95,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             ExpandThinking = services.Settings.Appearance.ExpandThinking,
             ShowUnsupportedMessages = services.Settings.Advanced.LogProtocol,
             Agents = Agents,
+            Time = services.Time,
         };
         _checkIns = new CheckInMonitor(services.Time, () => CheckInSettings, SendCheckInFromTimer, stuck => _services.Dispatcher.Post(() => IsPossiblyStuck = stuck));
         Status = TabStatus.NotStarted;
@@ -300,6 +313,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 Status = TabStatus.Idle;
             }
+            RefreshMessageTimes();
             _ = EnsureStartedAsync();
         }
     }
@@ -518,14 +532,42 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     // ---- Context and tokens (DESIGN.md §4, §6) -----------------------------------------------------------
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ContextTip))]
     public partial string? ContextText { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(InfoRows))]
+    [NotifyPropertyChangedFor(nameof(InfoRows), nameof(ContextTip))]
     public partial string? ContextDetail { get; set; }
 
+    /// <summary>Near the point where Claude Code compacts by itself: the indicator and the ring turn amber.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ContextLevel))]
     public partial bool IsContextHigh { get; set; }
+
+    /// <summary>How full the context window is, 0–100. Null until the tab has context data (it hasn't started yet).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ContextLevel), nameof(IsContextCritical), nameof(ContextSweep), nameof(ShowContextRing))]
+    public partial double? ContextPercent { get; set; }
+
+    /// <summary>From this full, the ring on the tab's row turns red (DESIGN.md §4, "Sidebar").</summary>
+    public const double CriticalContextPercent = 95;
+
+    /// <summary>What the ring on the tab's row shows: nothing, muted, amber or red.</summary>
+    public ContextLevel ContextLevel => ContextPercent is not { } percent ? ContextLevel.None
+        : percent >= CriticalContextPercent ? ContextLevel.Critical
+        : IsContextHigh ? ContextLevel.High
+        : ContextLevel.Normal;
+
+    public bool IsContextCritical => ContextLevel == ContextLevel.Critical;
+
+    /// <summary>The ring's arc, in degrees clockwise from the top.</summary>
+    public double ContextSweep => Math.Clamp(ContextPercent ?? 0, 0, 100) * 3.6;
+
+    /// <summary>The ring on the tab's row: once there's context data, unless Settings → Appearance turns it off.</summary>
+    public bool ShowContextRing => ContextPercent is not null && _services.Settings.Appearance.ShowContextOnTabs;
+
+    /// <summary>The ring's tooltip: the composer bar's context text and its detail.</summary>
+    public string? ContextTip => ContextText is not { } text ? null : ContextDetail is { } detail ? $"{text} ({detail})" : text;
 
     /// <summary>Summarizes the conversation to free context, like <c>/compact</c> in the terminal (DESIGN.md §6).</summary>
     [RelayCommand(CanExecute = nameof(CanCompact))]
@@ -589,6 +631,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         ContextText = $"Context {percentage:0}%";
         ContextDetail = $"about {tokens:N0} of {window:N0} tokens, estimated from the last call{compacts}";
         IsContextHigh = _autocompact is { Enabled: true, Threshold: { } limit } ? tokens >= limit * 0.9 : percentage >= 80;
+        ContextPercent = percentage;
     }
 
     private void RefreshTokens()
@@ -728,6 +771,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(SuffixMenu));
         _conversation.ExpandThinking = _services.Settings.Appearance.ExpandThinking;
         _conversation.ShowUnsupportedMessages = _services.Settings.Advanced.LogProtocol;
+        OnPropertyChanged(nameof(ShowContextRing));
         UpdateSampler();
         OnPerforceSettingsChanged();
     }
@@ -831,6 +875,73 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     [RelayCommand]
     private Task OpenLinkAsync(object? link) =>
         link?.ToString() is { Length: > 0 } url ? _services.Platform.OpenUrlAsync(url) : Task.CompletedTask;
+
+    // ---- Copy and times (DESIGN.md §5, "Copy and times") ---------------------------------------------------
+
+    /// <summary>How long a Copy button says "Copied".</summary>
+    public static readonly TimeSpan CopiedFor = TimeSpan.FromSeconds(1.5);
+
+    /// <summary>What says "Copied" now, and the timer that puts it back.</summary>
+    private readonly Dictionary<object, ITimer> _copied = [];
+
+    /// <summary><b>Copy message</b> on a user message or a reply: its text, as Markdown for a reply.</summary>
+    [RelayCommand]
+    private async Task CopyMessageAsync(MessageItem? message)
+    {
+        if (message is null)
+        {
+            return;
+        }
+        await _services.Platform.SetClipboardTextAsync(message.CopyText);
+        ShowCopied(message, copied => message.IsCopied = copied);
+    }
+
+    /// <summary>
+    /// <b>Copy</b> on a code block in a reply: the code as the block shows it, without the Markdown fences.
+    /// <paramref name="showCopied"/> switches the block's button to "Copied" and back.
+    /// </summary>
+    public async Task CopyCodeAsync(string code, object block, Action<bool> showCopied)
+    {
+        await _services.Platform.SetClipboardTextAsync(code.TrimEnd('\r', '\n'));
+        ShowCopied(block, showCopied);
+    }
+
+    /// <summary>Says "Copied" on <paramref name="target"/> for <see cref="CopiedFor"/>, timed by the tab's clock.</summary>
+    private void ShowCopied(object target, Action<bool> show)
+    {
+        if (_copied.Remove(target, out var earlier))
+        {
+            earlier.Dispose();
+        }
+        show(true);
+        ITimer? timer = null;
+        timer = _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() =>
+        {
+            if (_copied.TryGetValue(target, out var current) && ReferenceEquals(current, timer))
+            {
+                _copied.Remove(target);
+                current.Dispose();
+                show(false);
+            }
+        }), null, CopiedFor, Timeout.InfiniteTimeSpan);
+        _copied[target] = timer;
+    }
+
+    /// <summary>A message's short time says "today" only on the day it was sent; looking at the tab again catches up.</summary>
+    private void RefreshMessageTimes()
+    {
+        foreach (var message in Messages(Items))
+        {
+            message.RefreshTime();
+        }
+
+        static IEnumerable<MessageItem> Messages(IEnumerable<ConversationItem> items) => items.SelectMany(item => item switch
+        {
+            MessageItem message => [message],
+            SubagentItem group => Messages(group.Items),
+            _ => [],
+        });
+    }
 
     // ---- Check-ins (DESIGN.md §5, "Check-ins on long turns") ----------------------------------------------
 
@@ -1114,19 +1225,19 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                         Agents.OnTaskNotification(notification);
                         break;
                     case TranscriptPrompt prompt:
-                        _conversation.AddUserMessage(prompt.Text, images: prompt.Images);
+                        _conversation.ReplayUserMessage(prompt.Text, prompt.Images, prompt.Time);
                         break;
                     case TranscriptNote note:
                         _conversation.AddNote(note.Text);
                         break;
                     case TranscriptMessage { Message: AssistantMessage assistant }:
                         var assistantEvent = new AssistantMessageReceived(assistant);
-                        _conversation.Apply(assistantEvent);
+                        _conversation.Replay(assistantEvent, item.Time);
                         RecordFileChanges(assistantEvent);
                         break;
                     case TranscriptMessage { Message: UserMessage results }:
                         var resultsEvent = new ToolResultsReceived(results);
-                        _conversation.Apply(resultsEvent);
+                        _conversation.Replay(resultsEvent, item.Time);
                         RecordFileChanges(resultsEvent);
                         break;
                 }
@@ -1408,6 +1519,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             IsContextHigh = usage.AutoCompactThreshold is { } limit && usage.AutoCompactEnabled
                 ? usage.TotalTokens >= limit * 0.9
                 : usage.Percentage >= 80;
+            ContextPercent = usage.Percentage;
         });
     }
 
@@ -1495,6 +1607,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     public async ValueTask CloseAsync(bool killProcesses)
     {
         _checkIns.Dispose();
+        foreach (var timer in _copied.Values)
+        {
+            timer.Dispose();
+        }
+        _copied.Clear();
         StopAgentTicker();
         _services.Notifications.ClearTab(Id);
         StopPerforce();

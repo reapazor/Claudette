@@ -25,6 +25,8 @@ public partial class TabView : UserControl
         AddHandler(KeyDownEvent, OnPromptKeyDown, RoutingStrategies.Tunnel);
         Composer.AddHandler(KeyDownEvent, OnComposerKeyDown, RoutingStrategies.Tunnel);
         ConversationScroll.ScrollChanged += OnConversationScrollChanged;
+        // Copy on a code block goes through the tab and says "Copied" (DESIGN.md §5, "Copy and times").
+        CodeBlockCopy.Attach(this);
         WireComposerAssist();
     }
 

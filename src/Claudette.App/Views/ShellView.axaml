@@ -3,7 +3,10 @@
              xmlns:vm="using:Claudette.App.ViewModels"
              xmlns:views="using:Claudette.App.Views"
              x:Class="Claudette.App.Views.ShellView"
-             x:DataType="vm:ShellViewModel">
+             x:DataType="vm:ShellViewModel"
+             Classes.compact="{Binding IsCompact}">
+  <!-- Settings → Appearance → Density (DESIGN.md §14): "compact" tightens the rows, the conversation and the composer,
+       through the styles in App.axaml and TabView. -->
 
   <UserControl.Resources>
     <!-- The tab info card (DESIGN.md §4), used as the tab tooltip. -->
@@ -132,7 +135,7 @@
                       </ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="vm:TabViewModel">
-                          <Button Classes="tab" Classes.selected="{Binding IsSelected}" Classes.bypass="{Binding IsBypassMode}" Padding="6,5,4,5"
+                          <Button Classes="tab tabrow" Classes.selected="{Binding IsSelected}" Classes.bypass="{Binding IsBypassMode}"
                                   Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).SelectCommand}" CommandParameter="{Binding}"
                                   DoubleTapped="OnTabDoubleTapped" ToolTip.ShowDelay="600" ToolTip.Placement="Right">
                             <ToolTip.Tip>
@@ -175,10 +178,23 @@
                                 <TextBlock Classes="muted small" Classes.warning="{Binding IsAlertStatus}" Classes.error="{Binding IsErrorStatus}"
                                            Text="{Binding RowDetail}" TextTrimming="CharacterEllipsis" />
                               </StackPanel>
-                              <Button Grid.Column="2" Classes="flat closetab" Padding="4" VerticalAlignment="Top" ToolTip.Tip="Close tab" AutomationProperties.Name="Close tab"
-                                      Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CloseTabCommand}" CommandParameter="{Binding}">
-                                <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
-                              </Button>
+                              <Panel Grid.Column="2">
+                                <Button Classes="flat closetab" Padding="4" VerticalAlignment="Top" ToolTip.Tip="Close tab" AutomationProperties.Name="Close tab"
+                                        Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CloseTabCommand}" CommandParameter="{Binding}">
+                                  <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
+                                </Button>
+                                <!-- How full the tab's context is (DESIGN.md §4, §6): muted, amber near auto-compact, red when
+                                     nearly full. Under the close button, level with the second line; the border gives the tip
+                                     somewhere to hover. -->
+                                <Border x:Name="ContextRing" Width="16" Height="16" VerticalAlignment="Bottom" Background="Transparent"
+                                        IsVisible="{Binding ShowContextRing}" ToolTip.Tip="{Binding ContextTip}" AutomationProperties.Name="{Binding ContextText}">
+                                  <Panel Width="13" Height="13">
+                                    <Ellipse Classes="contexttrack" />
+                                    <Arc Classes="contextarc" Classes.high="{Binding IsContextHigh}" Classes.critical="{Binding IsContextCritical}"
+                                         StartAngle="-90" SweepAngle="{Binding ContextSweep}" />
+                                  </Panel>
+                                </Border>
+                              </Panel>
                             </Grid>
                             <Button.ContextMenu>
                               <ContextMenu>

@@ -26,8 +26,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         IsSidebarCollapsed = services.State.SidebarCollapsed;
         SidebarWidth = Math.Clamp(services.State.SidebarWidth ?? DefaultSidebarWidth, MinSidebarWidth, MaxSidebarWidth);
         _services.Notifications.SelectedTabId = () => SelectedTab?.Id;
+        IsCompact = services.Settings.Appearance.Density == Density.Compact;
         _services.SettingsChanged += (_, _) =>
         {
+            IsCompact = _services.Settings.Appearance.Density == Density.Compact;
             foreach (var tab in AllTabs)
             {
                 tab.OnSettingsChanged();
@@ -778,6 +780,13 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         await Task.WhenAll(tabs.Select(t => t.CloseAsync(killProcesses: true).AsTask()));
         OnTabStatusChanged();
     }
+
+    /// <summary>
+    /// Settings → Appearance → Density is Compact (DESIGN.md §14): the view takes the <c>compact</c> class, whose styles
+    /// tighten the conversation, the sidebar's rows and the composer.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsCompact { get; private set; }
 
     // ---- Sidebar (DESIGN.md §4, "Sidebar") ------------------------------------------------------------------
 

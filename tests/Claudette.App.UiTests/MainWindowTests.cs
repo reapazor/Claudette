@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Arc = Avalonia.Controls.Shapes.Arc;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -17,7 +18,9 @@ using Claudette.App.ViewModels;
 using Claudette.App.Views;
 using Claudette.Core.Auth;
 using Claudette.Core.Library;
+using Claudette.Core.Settings;
 using Claudette.Usage;
+using LiveMarkdown.Avalonia;
 
 namespace Claudette.App.UiTests;
 
@@ -270,6 +273,141 @@ public class MainWindowTests
         Assert.False(tab.SyncToLibrary);
         Assert.False(item.IsChecked);
         Assert.False(icon.IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task A_tabs_row_has_a_ring_for_its_context_with_the_context_in_its_tip()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        h.Transport.Answers["get_context_usage"] = _ => new JsonObject
+        {
+            ["totalTokens"] = 150000, ["maxTokens"] = 200000, ["percentage"] = 75, ["autoCompactThreshold"] = 160000, ["isAutoCompactEnabled"] = true,
+        };
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+
+        var ring = window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "ContextRing");
+        Assert.True(ring.IsEffectivelyVisible);
+        Assert.Same(tab, ring.FindAncestorOfType<Button>()!.DataContext);
+        Assert.Contains("tabrow", ring.FindAncestorOfType<Button>()!.Classes);
+        Assert.Equal("Context 75% (150,000 of 200,000 tokens · auto-compacts at 160,000)", ToolTip.GetTip(ring));
+        Assert.Equal("Context 75%", AutomationProperties.GetName(ring));
+        // Three quarters round, in amber: near the point where Claude Code compacts by itself.
+        var arc = ring.GetVisualDescendants().OfType<Arc>().Single();
+        Assert.Equal(270, arc.SweepAngle, precision: 6);
+        Assert.Same(arc.FindResource(arc.ActualThemeVariant, "MeterWarningBrush"), arc.Stroke);
+        Assert.Equal(new Size(16, 16), ring.Bounds.Size);
+
+        // Settings → Appearance can turn it off.
+        h.Services.Settings.Appearance.ShowContextOnTabs = false;
+        h.Services.SaveSettings();
+        UiText.Settle(window);
+
+        Assert.False(ring.IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task Copy_on_a_code_block_copies_its_code_and_says_Copied_for_a_moment()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        await h.OpenTabAsync();
+        h.Transport.EmitTurn("Run the tests:\n\n```bash\ndotnet build\ndotnet test\n```\n\nBoth should pass.");
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        await UiText.SettleUntilAsync(window, () => window.GetVisualDescendants().OfType<CodeBlock>().Any(b => b.Inlines.Count > 0), "the code block");
+        var block = window.GetVisualDescendants().OfType<CodeBlock>().Single();
+        var copy = block.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Copy code");
+        var shown = UiText.Describe(block);
+
+        Click(window, copy);
+        await UiText.SettleUntilAsync(window, () => h.Platform.Clipboard is not null, "the copied code");
+
+        // The code, without the fences, in the OS's line endings.
+        Assert.Equal($"dotnet build{Environment.NewLine}dotnet test", h.Platform.Clipboard);
+        Assert.Contains("copied", block.Classes);
+        Assert.Equal("[button] Copy code: Copied", UiText.Describe(copy).Trim());
+
+        h.Time.Advance(TabViewModel.CopiedFor);
+        UiText.Settle(window);
+
+        Assert.DoesNotContain("copied", block.Classes);
+        Assert.Equal("[button] Copy code: Copy", UiText.Describe(copy).Trim());
+        // Verify resumes off the UI thread, so it comes last.
+        await Verify(shown);
+    }
+
+    [AvaloniaFact]
+    public async Task A_replys_time_and_Copy_show_on_hover_and_on_keyboard_focus()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        await h.OpenTabAsync();
+        h.Transport.EmitTurn("Found **two** problems.");
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        await UiText.SettleUntilAsync(window, () => UiText.Describe(window).Contains("Found two problems.", StringComparison.Ordinal), "the reply");
+        var reply = window.GetVisualDescendants().OfType<Panel>().Single(p => p.Classes.Contains("message"));
+        var tools = reply.GetVisualDescendants().OfType<ContentControl>().Single(c => c.Classes.Contains("messagetools"));
+        var copy = tools.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Copy message");
+        var time = tools.GetVisualDescendants().OfType<TextBlock>().First();
+        Assert.Equal(0, tools.Opacity);
+        Assert.False(tools.IsHitTestVisible);
+        Assert.Equal("12:00", time.Text);
+        Assert.Equal("Monday, 28 September 2026 12:00", ToolTip.GetTip(time));
+
+        window.MouseMove(reply.TranslatePoint(new Point(20, reply.Bounds.Height / 2), window)!.Value);
+        UiText.Settle(window);
+        Assert.Equal(1, tools.Opacity);
+        Click(window, copy);
+        await UiText.SettleUntilAsync(window, () => h.Platform.Clipboard is not null, "the copied reply");
+
+        // The reply's Markdown, as Claude wrote it.
+        Assert.Equal("Found **two** problems.", h.Platform.Clipboard);
+        Assert.Equal("[button] Copy message: Copied", UiText.Describe(copy).Trim());
+
+        // Away from it, and with the focus elsewhere, it's quiet again; tabbing to its button shows it too.
+        window.MouseMove(new Point(600, 700));
+        window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "Composer").Focus();
+        h.Time.Advance(TabViewModel.CopiedFor);
+        UiText.Settle(window);
+        Assert.Equal(0, tools.Opacity);
+        copy.Focus(NavigationMethod.Tab);
+        UiText.Settle(window);
+        Assert.Equal(1, tools.Opacity);
+        Assert.Equal("[button] Copy message", UiText.Describe(copy).Trim());
+    }
+
+    [AvaloniaFact]
+    public async Task Compact_density_tightens_the_rows_the_conversation_and_the_composer()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        tab.ComposerText = "Fix the build";
+        await tab.SendCommand.ExecuteAsync(null);
+        h.Transport.EmitTurn("Done.");
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        await UiText.SettleUntilAsync(window, () => UiText.Describe(window).Contains("Done.", StringComparison.Ordinal), "the reply");
+        var row = window.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("tabrow"));
+        var items = window.GetVisualDescendants().OfType<StackPanel>().Single(p => p.Classes.Contains("conversation"));
+        var composer = window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "ComposerBox");
+        var comfortable = (Row: row.Bounds.Height, Composer: composer.Bounds.Height);
+        Assert.Equal(new Thickness(6, 5, 4, 5), row.Padding);
+        Assert.Equal(8, items.Spacing);
+
+        h.Services.Settings.Appearance.Density = Density.Compact;
+        h.Services.SaveSettings();
+        UiText.Settle(window);
+
+        Assert.Contains("compact", window.GetVisualDescendants().OfType<ShellView>().Single().Classes);
+        Assert.Equal(new Thickness(6, 2, 4, 2), row.Padding);
+        Assert.Equal(comfortable.Row - 6, row.Bounds.Height, precision: 3);
+        Assert.Equal(3, items.Spacing);
+        Assert.True(composer.Bounds.Height < comfortable.Composer, $"The composer is {composer.Bounds.Height} px high, as before.");
+
+        // Back to Comfortable, as it was.
+        h.Services.Settings.Appearance.Density = Density.Comfortable;
+        h.Services.SaveSettings();
+        UiText.Settle(window);
+
+        Assert.Equal(comfortable.Row, row.Bounds.Height, precision: 3);
+        Assert.Equal(comfortable.Composer, composer.Bounds.Height, precision: 3);
     }
 
     /// <summary>What the menu does with a click on a check item: it ticks or unticks the item, then raises Click.</summary>

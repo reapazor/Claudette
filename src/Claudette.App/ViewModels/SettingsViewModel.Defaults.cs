@@ -70,6 +70,8 @@ public sealed partial class SettingsViewModel
         OnPropertyChanged(nameof(ExpandThinking));
         OnPropertyChanged(nameof(FunWorkingWords));
         OnPropertyChanged(nameof(ShowToolInWorkingLine));
+        OnPropertyChanged(nameof(ShowContextOnTabs));
+        OnPropertyChanged(nameof(Density));
     }
 
     [RelayCommand]
