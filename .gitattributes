@@ -1,2 +1,5 @@
 # Verify snapshots: compared byte for byte, so keep them LF and UTF-8 everywhere.
 *.verified.txt text eol=lf working-tree-encoding=UTF-8
+
+# Shell scripts run on macOS and Linux: keep them LF on a Windows checkout too.
+*.sh text eol=lf

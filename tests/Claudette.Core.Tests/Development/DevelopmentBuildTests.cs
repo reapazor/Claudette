@@ -235,6 +235,25 @@ public class DevelopmentBuildTests
     }
 
     [Fact]
+    public void An_updates_snapshot_waits_longer_and_is_taken_by_a_launch_without_its_nonce()
+    {
+        using var temp = new TempFolder();
+        var path = temp.Combine("restart.json");
+        var now = new DateTimeOffset(Built);
+        new RestartSnapshot { Nonce = "abc", CreatedAt = now, Update = new AppUpdateHandover("1.2.0", "1.3.0") }.Save(path);
+
+        // Windows didn't start the new version, and the user opens Claudette hours later.
+        var later = now.AddHours(5);
+        Assert.Equal(new AppUpdateHandover("1.2.0", "1.3.0"), RestartSnapshot.Load(path, null, later)?.Update);
+        Assert.NotNull(RestartSnapshot.Load(path, "abc", later));
+        Assert.Null(RestartSnapshot.Load(path, null, now + RestartSnapshot.UpdateMaxAge + TimeSpan.FromSeconds(1)));
+
+        // A source build's snapshot is only for the launch it names.
+        new RestartSnapshot { Nonce = "abc", CreatedAt = now }.Save(path);
+        Assert.Null(RestartSnapshot.Load(path, null, now));
+    }
+
+    [Fact]
     public void The_new_build_says_it_is_up_for_its_own_restart()
     {
         using var temp = new TempFolder();

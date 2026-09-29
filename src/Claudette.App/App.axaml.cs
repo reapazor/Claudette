@@ -17,6 +17,7 @@ using Claudette.Platform.Notifications;
 using Claudette.Platform.Processes;
 using Claudette.Platform.Shell;
 using Claudette.Platform.Shell.Windows;
+using Claudette.Platform.Updates;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Claudette.App;
@@ -39,15 +40,17 @@ public partial class App : Application
             _placement = new WindowPlacementTracker(window);
             var launcher = new ProcessLauncher();
             var trees = TryCreateProcessTracker(launcher);
+            var paths = AppPaths.ForCurrentUser();
             _services = new AppServices(
-                AppPaths.ForCurrentUser(),
+                paths,
                 trees is null ? launcher : new TrackingProcessLauncher(launcher, trees),
                 TimeProvider.System,
                 new AvaloniaPlatformServices(() => TopLevel.GetTopLevel(window)),
                 new AvaloniaUiDispatcher(),
                 processTrees: trees,
                 notifier: Notifier.CreateForCurrentOS(launcher),
-                credentials: CredentialStores.CreateForCurrentOS(launcher, TimeProvider.System));
+                credentials: CredentialStores.CreateForCurrentOS(launcher, TimeProvider.System),
+                appInstaller: AppInstallers.CreateForCurrentOS(launcher, TimeProvider.System, paths.UpdatesDirectory, NullLogger.Instance));
             var services = _services;
             // The Dock or taskbar badge needs the window's native handle, so it's set up once the window exists.
             window.Opened += (_, _) => services.Notifications.UseBadge(
@@ -56,8 +59,9 @@ public partial class App : Application
             _services.SettingsChanged += (_, _) => ApplyAppearance();
             var args = desktop.Args ?? [];
             _mainViewModel = new MainWindowViewModel(_services, LaunchArguments.Folder(args));
-            var restoreNonce = UseDevelopmentBuild(window, args);
-            if (restoreNonce is null && _services.State.Window is { } saved)
+            UseRestarts(window, args);
+            var restored = RestoreAfterRestart(args);
+            if (restored is null && _services.State.Window is { } saved)
             {
                 // Where the window was last time on this machine (DESIGN.md §14).
                 _placement.Apply(saved);
@@ -74,57 +78,72 @@ public partial class App : Application
             var opened = new TaskCompletionSource();
             window.Opened += (_, _) => opened.TrySetResult();
             var started = _mainViewModel.StartAsync();
-            if (restoreNonce is not null)
+            if (restored is not null)
             {
-                _ = SignalRestartedAsync(started, opened.Task, _services.Paths.RestartReadyFile, restoreNonce);
+                _ = SignalRestartedAsync(started, opened.Task, _services.Paths, restored.Nonce);
             }
         }
 
         base.OnFrameworkInitializationCompleted();
     }
 
-    // ---- Source builds (DESIGN.md §9, "Working on Claudette") ---------------------------------------------------
+    // ---- Restarts: source builds (DESIGN.md §9, "Working on Claudette") and updates (§2, "Updating Claudette") -----
 
     /// <summary>
-    /// For a source build: offer its new builds, and when this build was restarted into, take over the earlier build's
-    /// tabs and window placement. Returns the restart's nonce then, or null.
+    /// Sets up handing over to a new build or version: the window's placement, closing once it's up, and passing on
+    /// later launches. A source build also watches for its new builds.
     /// </summary>
-    private string? UseDevelopmentBuild(MainWindow window, IReadOnlyList<string> args)
+    private void UseRestarts(MainWindow window, IReadOnlyList<string> args)
     {
-        if (_services is null || _mainViewModel is null || DevelopmentLaunch.Current(args) is not { } build)
+        if (_mainViewModel is not { } main)
         {
-            return null;
+            return;
         }
-        var main = _mainViewModel;
         var instance = Program.Instance;
-        main.UseDevelopmentBuild(build, instance is null ? null : instance.StopListening, instance is null ? null : instance.Listen);
-        var placement = _placement!;
-        main.GetWindowPlacement = placement.Current;
+        Action? stopListening = instance is null ? null : instance.StopListening;
+        Action? resumeListening = instance is null ? null : instance.Listen;
+        if (DevelopmentLaunch.Current(args) is { } build)
+        {
+            main.UseDevelopmentBuild(build, stopListening, resumeListening);
+        }
+        else
+        {
+            main.UseSingleInstance(stopListening, resumeListening);
+        }
+        main.GetWindowPlacement = _placement!.Current;
         main.ExitRequested += window.Close;
-        if (LaunchArguments.RestoreNonce(args) is not { } nonce)
-        {
-            return null;
-        }
-        if (RestartSnapshot.Load(_services.Paths.RestartFile, nonce, _services.Time.GetUtcNow()) is { } snapshot)
-        {
-            main.RestoreOnStart(snapshot);
-            if (snapshot.Window is { } where)
-            {
-                placement.Apply(where);
-            }
-        }
-        return nonce;
     }
 
     /// <summary>
-    /// Tells the build that restarted into this one that it's up, so it closes: once the window is open, the startup
-    /// checks are done and the page they led to has rendered. Until then that build can still take its tabs back.
+    /// When an earlier build or version restarted into this one, takes over its tabs and window placement: the snapshot
+    /// named by <c>--restore</c>, or, when Claudette was opened by hand after an update, the update's snapshot.
     /// </summary>
-    private static async Task SignalRestartedAsync(Task started, Task opened, string readyFile, string nonce)
+    private RestartSnapshot? RestoreAfterRestart(IReadOnlyList<string> args)
+    {
+        if (_services is null || _mainViewModel is null
+            || RestartSnapshot.Load(_services.Paths.RestartFile, LaunchArguments.RestoreNonce(args), _services.Time.GetUtcNow()) is not { } snapshot)
+        {
+            return null;
+        }
+        _mainViewModel.RestoreOnStart(snapshot);
+        if (snapshot.Window is { } where)
+        {
+            _placement!.Apply(where);
+        }
+        return snapshot;
+    }
+
+    /// <summary>
+    /// Tells the build or version that restarted into this one that it's up, so it closes: once the window is open, the
+    /// startup checks are done and the page they led to has rendered. Until then that build can still take its tabs
+    /// back, so the snapshot is only deleted now.
+    /// </summary>
+    private static async Task SignalRestartedAsync(Task started, Task opened, AppPaths paths, string nonce)
     {
         await Task.WhenAll(started, opened);
         await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
-        RestartHandshake.SignalReady(readyFile, nonce);
+        RestartHandshake.SignalReady(paths.RestartReadyFile, nonce);
+        RestartSnapshot.Delete(paths.RestartFile);
     }
 
     /// <summary>Recent folders in the taskbar jump list, on Windows (DESIGN.md §4).</summary>

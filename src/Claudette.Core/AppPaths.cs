@@ -38,6 +38,9 @@ public sealed record AppPaths(string DataDirectory, string SettingsDirectory)
     /// <summary>Where the new build says it has started.</summary>
     public string RestartReadyFile => Path.Combine(DataDirectory, "restart-ready");
 
+    /// <summary>Downloaded Claudette releases, one folder per version (DESIGN.md §2, "Updating Claudette").</summary>
+    public string UpdatesDirectory => Path.Combine(DataDirectory, "updates");
+
     /// <summary>
     /// The per-user defaults. Data: <c>%LOCALAPPDATA%\Claudette</c>, <c>~/Library/Application Support/Claudette</c>,
     /// <c>~/.local/share/claudette</c>. Settings: <c>%APPDATA%\Claudette</c>, the same Application Support folder on

@@ -54,6 +54,57 @@ The files are in `packaging/`, and `.github/workflows/package.yml` builds them.
 
 > **Not yet tested on a real machine:** installing and running the MSIX and the `.dmg`, and signing and notarization, which need the certificates. The pull request build checks that both packages build.
 
+### Updating Claudette
+
+An installed Claudette checks its GitHub releases for a newer version, downloads it, installs it and restarts into it, with every tab as it was: the same handover a source build uses for a new build ([§9](#working-on-claudette)).
+
+- **Checking.**
+  - At launch and every 6 hours, Claudette asks the GitHub REST API for `reapazor/Claudette`'s releases. It doesn't sign in, and the check sends nothing but the request.
+  - It offers the newest release above the running version. Tags are versions such as `v1.3.0` or `v1.4.0-beta.1`, ordered as Semantic Versioning orders them.
+  - Pre-releases count only with **Include pre-releases**. Drafts aren't visible without signing in to GitHub, so a release is offered once it's published: the package workflow's draft release becomes an update when it's published.
+  - **Check for Claudette updates automatically** turns this off. Both settings are in Settings → General, which also shows the version, when it last checked and **Check now**.
+  - A source build never checks. Its new builds come from its checkout.
+- **Which package.** The release asset named for this install, as `package.yml` names them:
+  - `Claudette-<version>-<x64|arm64>.msix` for an MSIX install.
+  - `Claudette-<version>-<arm64|x64>.dmg` for `Claudette.app`.
+  - Anything else, such as a Linux build or an unpackaged Windows one, can't replace itself. The release is still announced, with a link to its page.
+- **Offering it.** A badge at the foot of the sidebar, like Claude Code's ([§12](#applying-it)): *"Claudette 1.3.0 is available"*. Its dialog shows:
+  - the release notes and a link to the release page;
+  - **Download and restart**, which becomes **Restart to update** once the package is downloaded;
+  - **Update when idle**, while a tab is working, which waits until no tab is starting, working or waiting on the user;
+  - **Download**, to fetch it now and install later;
+  - **Skip this version**, which hides the badge until a newer release (saved with this machine's state).
+
+  Settings → General has the same actions.
+- **Downloading.**
+  - The package goes to `updates/<version>/` in the data folder, under a temporary name.
+  - It's kept only once its size and the SHA-256 digest GitHub publishes for it match. A package that doesn't match is deleted.
+  - A package already downloaded isn't fetched again. Downloads of the running version and older ones are deleted at launch.
+- **Checking the package** before anything closes. If the package fails a check, nothing else happens.
+  - **MSIX:** its manifest must be `reapazor.Claudette`, from the same publisher as the installed package (compared as the package family name, so a package signed by someone else would install beside this one instead of replacing it). It must also be the release's version and this machine's architecture. Windows checks the signature when it installs.
+  - **macOS:** the image is mounted, and its `Claudette.app` copied next to the running one, as `.Claudette-update.app` in the same folder. The copy must have:
+    - a valid signature (`codesign --verify --deep --strict`), from the same team as the running app (when the running app is signed);
+    - the bundle identifier `com.reapazor.claudette`;
+    - the release's version.
+- **The handover**, as for a new build ([§9](#working-on-claudette)):
+  1. Claudette writes the restart snapshot (every tab, draft, the selected tab and the window's placement) with the versions it's updating from and to.
+  2. It saves its state and stops writing it, stops every tab as closing does, and stops taking later launches.
+  3. **Windows:** it calls `RegisterApplicationRestart` with `--restore <nonce>`, then `PackageManager.AddPackageAsync` with `ForceApplicationShutdown`, as Microsoft documents for apps published outside the Store. Windows closes Claudette, installs the update and starts the new version with those arguments. If the install finishes without closing Claudette, Claudette starts the new version itself (`IApplicationActivationManager`) and waits up to 60 seconds for it to say it's up.
+  4. **macOS:** Claudette starts a small helper script and quits. Once Claudette has quit, the helper:
+     - renames the running app to `Claudette.app.previous` and the new one to `Claudette.app`;
+     - starts it with `--restore <nonce>`;
+     - waits up to 60 seconds for it to write the nonce to `restart-ready`.
+  5. The new version opens the snapshot's tabs, writes the nonce once its first page has drawn, and only then deletes the snapshot.
+- **If it goes wrong.**
+  - **Before Claudette closes** (the check fails, Windows refuses the package, the helper can't start): the tabs come straight back and the dialog says why.
+    - If the package is fine but couldn't be installed this way, **Open the installer** (App Installer on Windows) or **Open the disk image** installs it by hand.
+    - macOS runs an app opened from Downloads from a temporary, read-only copy (app translocation), and that copy can't be updated. The dialog asks to move Claudette to Applications, or to install by hand.
+  - **The new version doesn't start** (macOS): the helper stops it, puts the old app back and starts that with the same `--restore`. The old app takes the tabs back from the snapshot, which is still there, and says the update didn't finish.
+  - **Windows doesn't start the new version:** the snapshot waits a day. The next launch within that time takes the tabs from it, even without `--restore`, and says whether the update installed.
+- **MSIX versions** have four parts and no pre-release label (`1.4.0-beta.1` packages as `1.4.0.0`), so a pre-release and its final release have the same package version. Windows won't reinstall the same version, so give the final release a higher version than its pre-releases' packages.
+
+> **Not yet tested on a real machine:** installing an update on Windows and macOS, which needs signed packages from a published release. The steps before and after are covered by tests: finding and downloading the release against a fake GitHub, checking the packages, the handover and taking the tabs back. On Linux the macOS helper script is run for real, both swapping the apps and going back.
+
 ## 3. Main Window
 
 ```
@@ -83,7 +134,7 @@ The files are in `packaging/`, and `.github/workflows/package.yml` builds them.
 ```
 
 1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. See [§6](#6-token-burn-awareness).
-2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder. **New tab** is at its top; **History**, the Claude Code update badge and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
+2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder. **New tab** is at its top; **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
 3. **Conversation.** The selected tab's conversation. See [§5](#5-conversation-view).
 4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), and optionally its running processes ([§4](#process-monitor)).
 5. **Composer.** Where you type to the selected tab, plus the Stop button and per-tab controls.
@@ -152,7 +203,7 @@ The tabs are listed in a sidebar on the left of the window, rather than a strip 
   - The model and effort, or instead what needs attention: *Needs your input*, the error, or *Possibly stuck* when check-ins get no reply ([§5](#check-ins-on-long-turns)).
   - The close button shows on hover and on the selected tab. Hovering the row shows the tab info card; double-clicking renames it.
 - **Top:** **New tab**, which opens the picker ([Opening a tab](#opening-a-tab)), and the button that collapses the sidebar.
-- **Foot:** **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
+- **Foot:** **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), the Claudette update badge when there's a new release ([§2](#updating-claudette)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
 - **Resizing.** Drag the sidebar's edge to make it wider or narrower (180 to 420 pixels; 248 by default). Double-click the edge for the default width. The width is remembered.
 - **Collapsing.** The collapse button, or `Ctrl/Cmd+B`, shrinks the sidebar to a rail:
   - The rail shows each group's color, then a square per tab with the first letter of its name and a small status icon. Hovering a square shows the tab info card.
@@ -651,7 +702,7 @@ Claude Code's credentials and settings are never copied.
 
 ### Working on Claudette
 
-Claudette can host the Claude Code session that works on Claudette's own source. When it runs from a source build, its state survives the rebuilds that session makes: it restarts into each new build with every tab as it was.
+Claudette can host the Claude Code session that works on Claudette's own source. When it runs from a source build, its state survives the rebuilds that session makes: it restarts into each new build with every tab as it was. An installed Claudette uses the same handover to restart into a new release ([§2](#updating-claudette)).
 
 - **Source builds.** A Claudette whose program is in a `bin` folder below a checkout with `Claudette.slnx` is a source build, for example one started with `dotnet run --project src/Claudette.App`. Everything below applies only to source builds.
 - **Running from a copy.** A source build copies its build output to `builds` in the data folder and runs from there, so the build output itself is never in use. On Windows a running program's files are locked, so every rebuild would fail; elsewhere, replacing a running program's files can crash it.
@@ -836,8 +887,9 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 │  Diffs: line diff, changed   │                                  │  Jump list, one   │
 │   files, external diff tools │                                  │   instance        │
 │  Claude Code updates         │                                  │  Credential store │
-│  Source builds: copies, new  │                                  └───────────────────┘
-│   builds, restart snapshots  │
+│  Source builds: copies, new  │                                  │  Update installers│
+│   builds, restart snapshots  │                                  │  (MSIX, .app)     │
+│  Claudette releases, updates │                                  └───────────────────┘
 │  Git: identity, working tree │
 │  Auth, install checks        │
 │  Perforce: tickets, CLs      │
@@ -851,7 +903,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 
 - **Claudette.Core** has no UI dependencies, so it can be unit tested and could be reused by another front end. External diff tools live here rather than in Platform: they only look for files and start processes through `IProcessLauncher`. So does running a source build from a copy and restarting it into new builds ([§9](#working-on-claudette)), which is plain file copying and process starting on every OS.
 - **Claudette.Usage** holds the usage engine, with no UI: parsing, the SQLite history, the burn rate and projection, alerts and the polling schedule.
-- **Claudette.Platform** holds the OS-specific code: the process monitor, notifications with the Dock and taskbar badge ([§10](#10-notifications)), and the OS credential store for a stored Perforce password ([§18](#perforce-ticket-handling)). The credential store's interface, `ICredentialStore`, is in Core.
+- **Claudette.Platform** holds the OS-specific code: the process monitor, notifications with the Dock and taskbar badge ([§10](#10-notifications)), the OS credential store for a stored Perforce password ([§18](#perforce-ticket-handling)), and the installers for Claudette's own updates: the MSIX update through `PackageManager` on Windows, and swapping `Claudette.app` on macOS ([§2](#updating-claudette)). Their interfaces, `ICredentialStore` and `IAppInstaller`, are in Core, with the release feed and the downloader.
   - `ClaudeSession` owns one `claude` process. It turns the output stream into typed events (`AssistantDelta`, `ToolUse`, `ToolResult`, `PermissionRequest`, `TurnCompleted`, `TitleChanged`, `UsageUpdated`, `RateLimit`, `AuthRequired`, `Exited`…), and exposes commands such as `SendAsync`, `InterruptAsync`, `RespondToPermissionAsync`, `SetModelAsync`, `SetEffortAsync` and `SetPermissionModeAsync`.
 - **Threading.** Each session reads its process on a background task. Events go to the UI thread through a channel, and streaming text is batched so the UI isn't updated for every token.
 - **Resilience.** If a process exits unexpectedly, the tab shows an error with a **Restart** button that resumes the same session ID.
@@ -992,7 +1044,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 
 | Category | Settings |
 |---|---|
-| General | Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. |
+| General | Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. Claudette's version and updates: check for updates automatically (on by default), include pre-releases (off), **Check now**, and the update's actions. See [Updating Claudette](#updating-claudette). |
 | Sessions | Also restore unpinned tabs on launch (off by default; pinned tabs are always restored). Session library folder (with **Browse…** and **Move library…**, which copies existing sessions to the new folder). Name for this machine, as shown in History. How long to keep sessions in the library. Sync Claudette's settings through the library (off by default). See [§9](#session-library-sync-across-machines) and [Settings sync](#settings-sync-optional). |
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
 | Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. |
@@ -1333,7 +1385,9 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Still to verify:** a real Perforce server (including SSO and multi-factor), P4V, and the Windows and macOS credential stores in the running app.
 11. **Agent map.** ✅ Built 2026-09-29 ([§18](#agent-map)): the Agents page of the side panel and its own window, with live status, activity, running time, tool calls and tokens for each subagent, the prompt it was given and the report it returned, clicking through to its group or its waiting prompt, Stop for one subagent through `stop_task`, the info card's Agents row, and restored tabs replaying the finished tree from the subagents' own transcripts.
     - **Still to verify:** clicking through it in a real window, and `subagent_retry` against real API errors.
-12. **Later.** New features go in [§18](#18-future-features) first.
+12. **Updating Claudette.** ✅ Built 2026-09-29. An installed Claudette checks its GitHub releases, downloads the package for its platform, checks it, and restarts into it with every tab as it was, through the source builds' handover ([§2](#updating-claudette)). Settings → General has the version, the checks and pre-releases.
+
+13. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features
 

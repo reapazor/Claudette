@@ -68,6 +68,9 @@ public sealed class AppState
 
     /// <summary>The Claude Code version the last "update ready" notification was for: once per version (DESIGN.md §10).</summary>
     public string? NotifiedClaudeUpdate { get; set; }
+
+    /// <summary>The Claudette release the user chose to skip: not offered again until a newer one (DESIGN.md §2).</summary>
+    public string? SkippedAppUpdate { get; set; }
 }
 
 /// <summary>What's saved for one tab (DESIGN.md §9, "Restore on launch").</summary>

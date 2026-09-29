@@ -60,6 +60,28 @@
           <CheckBox Content="Confirm before closing a tab where Claude is working" IsChecked="{Binding ConfirmCloseWorkingTab}" />
           <CheckBox Content="Also rename the session in Claude Code when I rename a tab" IsChecked="{Binding RenameInClaudeCode}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Then claude --resume &lt;name&gt; in a terminal finds the session by the same name." Margin="28,-8,0,0" />
+
+          <!-- Claudette's own updates, from its GitHub releases (DESIGN.md §2, "Updating Claudette") -->
+          <TextBlock Text="Claudette updates" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <CheckBox Content="Check for Claudette updates automatically" IsChecked="{Binding CheckForAppUpdates}" />
+          <CheckBox Content="Include pre-releases" IsChecked="{Binding IncludePrereleases}" />
+          <Panel IsVisible="{Binding HasAppUpdates}">
+            <StackPanel Spacing="8" DataContext="{Binding AppUpdates}" x:DataType="vm:AppUpdateViewModel">
+              <TextBlock Text="{Binding CurrentVersionText, FallbackValue=''}" TextWrapping="Wrap" />
+              <TextBlock Classes="muted small" Text="{Binding CheckStatusText, FallbackValue=''}" TextWrapping="Wrap" />
+              <TextBlock Classes="muted small" Text="{Binding ManualText}" TextWrapping="Wrap" IsVisible="{Binding HasManualText}" />
+              <ProgressBar Minimum="0" Maximum="100" Value="{Binding DownloadPercent}" IsVisible="{Binding IsDownloading}" />
+              <TextBlock Classes="small warning" Text="{Binding ErrorText}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
+              <WrapPanel ItemSpacing="8" LineSpacing="8">
+                <Button Content="Check now" Command="{Binding CheckNowCommand}" IsEnabled="{Binding CanCheck}" IsVisible="{Binding !IsSourceBuild}" />
+                <Button Classes="accent" Content="{Binding RestartLabel}" Command="{Binding RestartToUpdateCommand}" IsVisible="{Binding CanRestartToUpdate}" />
+                <Button Content="Download" Command="{Binding DownloadCommand}" IsVisible="{Binding CanDownload}" />
+                <Button Content="Cancel download" Command="{Binding CancelDownloadCommand}" IsVisible="{Binding IsDownloading}" />
+                <Button Content="{Binding OpenPackageLabel}" Command="{Binding OpenPackageCommand}" IsVisible="{Binding CanOpenPackage}" />
+                <Button Classes="flat" Content="Release notes" Command="{Binding OpenReleasePageCommand}" IsVisible="{Binding HasRelease}" />
+              </WrapPanel>
+            </StackPanel>
+          </Panel>
           <Button Content="Reset to defaults" Command="{Binding ResetGeneralCommand}" />
         </StackPanel>
 

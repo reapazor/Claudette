@@ -737,6 +737,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty]
     public partial NewBuildViewModel? NewBuild { get; set; }
 
+    /// <summary>The sidebar's entry for a new release of Claudette (DESIGN.md §2, "Updating Claudette").</summary>
+    [ObservableProperty]
+    public partial AppUpdateViewModel? AppUpdate { get; set; }
+
     /// <summary>Whether a tab is starting, in a turn, or waiting on the user.</summary>
     public bool AnyTabWorking => AllTabs.Any(t => t.IsWorking || t.Status == TabStatus.Starting);
 

@@ -12,6 +12,12 @@ public sealed class RestartSnapshot
     /// <summary>A snapshot older than this is ignored: the restart it was for didn't happen.</summary>
     public static readonly TimeSpan MaxAge = TimeSpan.FromMinutes(10);
 
+    /// <summary>
+    /// How long the tabs closed for an update wait to be opened again (DESIGN.md §2, "Updating Claudette"). Windows
+    /// normally starts the new version itself; if it doesn't, the next launch within this time takes them.
+    /// </summary>
+    public static readonly TimeSpan UpdateMaxAge = TimeSpan.FromDays(1);
+
     /// <summary>Ties the snapshot to the launch it was written for.</summary>
     public string Nonce { get; set; } = "";
 
@@ -30,6 +36,9 @@ public sealed class RestartSnapshot
 
     public WindowPlacement? Window { get; set; }
 
+    /// <summary>Set when the restart is for installing a release, rather than a new source build.</summary>
+    public AppUpdateHandover? Update { get; set; }
+
     public void Save(string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -38,8 +47,11 @@ public sealed class RestartSnapshot
         File.Move(temp, path, overwrite: true);
     }
 
-    /// <summary>The snapshot in <paramref name="path"/> if it was written for <paramref name="nonce"/> and isn't stale.</summary>
-    public static RestartSnapshot? Load(string path, string nonce, DateTimeOffset now)
+    /// <summary>
+    /// The snapshot in <paramref name="path"/> if it was written for <paramref name="nonce"/> and isn't stale. With no
+    /// nonce, as when Claudette is opened by hand after an update, only an update's snapshot is taken.
+    /// </summary>
+    public static RestartSnapshot? Load(string path, string? nonce, DateTimeOffset now)
     {
         try
         {
@@ -48,7 +60,9 @@ public sealed class RestartSnapshot
             {
                 return null;
             }
-            return snapshot.Nonce == nonce && now - snapshot.CreatedAt <= MaxAge ? snapshot : null;
+            var matches = nonce is null ? snapshot.Update is not null : snapshot.Nonce == nonce;
+            var maxAge = snapshot.Update is null ? MaxAge : UpdateMaxAge;
+            return matches && now - snapshot.CreatedAt <= maxAge ? snapshot : null;
         }
         catch (Exception ex) when (ex is JsonException or IOException or NotSupportedException)
         {
@@ -68,6 +82,9 @@ public sealed class RestartSnapshot
         }
     }
 }
+
+/// <summary>The versions an update restart went from and to, so the new version can tell whether it installed.</summary>
+public sealed record AppUpdateHandover(string From, string To);
 
 /// <summary>A tab's unsent message: the text and the one-off quick suffixes added to it (DESIGN.md §5).</summary>
 public sealed record TabDraft(string Text, IReadOnlyList<string> SuffixIds);

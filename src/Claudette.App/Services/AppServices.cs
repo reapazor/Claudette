@@ -7,6 +7,7 @@ using Claudette.Core.Processes;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
+using Claudette.Core.Updates;
 using Claudette.Platform.Notifications;
 using Claudette.Platform.Processes;
 using Claudette.Usage;
@@ -38,6 +39,9 @@ public sealed class AppServices : IAsyncDisposable
     /// </param>
     /// <param name="notifier">Shows OS notifications (DESIGN.md §10). Null shows none.</param>
     /// <param name="credentials">The OS credential store, for stored Perforce passwords (DESIGN.md §18). Null has none.</param>
+    /// <param name="appInstaller">Installs Claudette's own updates (DESIGN.md §2, "Updating Claudette"). Null can't.</param>
+    /// <param name="httpHandler">Sends Claudette's own web requests: the update check and download. Tests pass a fake.</param>
+    /// <param name="appVersion">This Claudette's version; by default, the one it was built with.</param>
     public AppServices(
         AppPaths paths,
         IProcessLauncher launcher,
@@ -47,8 +51,17 @@ public sealed class AppServices : IAsyncDisposable
         ILoggerFactory? loggerFactory = null,
         IProcessTreeTracker? processTrees = null,
         INotifier? notifier = null,
-        ICredentialStore? credentials = null)
+        ICredentialStore? credentials = null,
+        IAppInstaller? appInstaller = null,
+        HttpMessageHandler? httpHandler = null,
+        AppVersion? appVersion = null)
     {
+        AppInstaller = appInstaller ?? new NoAppInstaller();
+        AppVersion = appVersion ?? BuiltVersion();
+        Http = new HttpClient(httpHandler ?? new SocketsHttpHandler { AutomaticDecompression = System.Net.DecompressionMethods.All }, disposeHandler: true)
+        {
+            Timeout = TimeSpan.FromSeconds(60),
+        };
         Paths = paths;
         _launcher = launcher;
         Time = timeProvider;
@@ -79,6 +92,28 @@ public sealed class AppServices : IAsyncDisposable
 
     /// <summary>Tooltips naming the current keyboard shortcuts (DESIGN.md §14, "Keyboard").</summary>
     public ShortcutTips Tips { get; }
+
+    /// <summary>This Claudette's version, as its releases are tagged.</summary>
+    public AppVersion AppVersion { get; }
+
+    /// <summary>Installs a downloaded release over this Claudette, when the way it was installed allows (DESIGN.md §2).</summary>
+    public IAppInstaller AppInstaller { get; }
+
+    /// <summary>For Claudette's own requests to GitHub. Everything Claude-related goes through Claude Code instead.</summary>
+    public HttpClient Http { get; }
+
+    /// <summary>What Claudette's web requests call themselves.</summary>
+    public string UserAgent => $"Claudette/{AppVersion}";
+
+    /// <summary>The version the running app was built with (<c>-p:Version=…</c> in packaging/), without build metadata.</summary>
+    private static AppVersion BuiltVersion()
+    {
+        var informational = typeof(AppServices).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+            .FirstOrDefault()?.InformationalVersion;
+        return AppVersion.TryParse(informational) ?? AppVersion.TryParse(typeof(AppServices).Assembly.GetName().Version?.ToString(3)) ?? new AppVersion(0, 0, 0);
+    }
 
     /// <summary>OS notifications and the Dock/taskbar badge (DESIGN.md §10).</summary>
     public NotificationService Notifications { get; }
@@ -328,6 +363,7 @@ public sealed class AppServices : IAsyncDisposable
             await _utility.DisposeAsync();
             _utility = null;
         }
+        Http.Dispose();
     }
 
     /// <summary>

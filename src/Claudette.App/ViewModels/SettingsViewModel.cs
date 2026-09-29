@@ -151,6 +151,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [
         new("General", "Confirm before closing a tab where Claude is working"),
         new("General", "Also rename the session in Claude Code when I rename a tab"),
+        new("General", "Claudette version"),
+        new("General", "Check for Claudette updates automatically"),
+        new("General", "Include pre-releases"),
+        new("General", "Check for Claudette updates now"),
         new("Sessions", "Also restore unpinned tabs when Claudette starts"),
         new("Sessions", "Name for this machine"),
         new("Sessions", "Keep library sessions for"),
@@ -298,6 +302,29 @@ public sealed partial class SettingsViewModel : ViewModelBase
         set => Set(value, v => _settings.General.RenameInClaudeCode = v);
     }
 
+    /// <summary>Check GitHub for new Claudette releases (DESIGN.md §2, "Updating Claudette").</summary>
+    public bool CheckForAppUpdates
+    {
+        get => _settings.General.CheckForAppUpdates;
+        set => Set(value, v => _settings.General.CheckForAppUpdates = v);
+    }
+
+    public bool IncludePrereleases
+    {
+        get => _settings.General.IncludePrereleases;
+        set
+        {
+            Set(value, v => _settings.General.IncludePrereleases = v);
+            // Takes effect with the next check: do that now.
+            AppUpdates?.CheckNowCommand.Execute(null);
+        }
+    }
+
+    /// <summary>Claudette's version, update status and actions, the same as the sidebar's badge. Null in some tests.</summary>
+    public AppUpdateViewModel? AppUpdates { get; init; }
+
+    public bool HasAppUpdates => AppUpdates is not null;
+
     [RelayCommand]
     private void ResetGeneral()
     {
@@ -305,6 +332,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         Save();
         OnPropertyChanged(nameof(ConfirmCloseWorkingTab));
         OnPropertyChanged(nameof(RenameInClaudeCode));
+        OnPropertyChanged(nameof(CheckForAppUpdates));
+        OnPropertyChanged(nameof(IncludePrereleases));
     }
 
     // ---- Claude Code -----------------------------------------------------------------------------------------

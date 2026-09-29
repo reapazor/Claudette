@@ -148,6 +148,12 @@ public sealed class GeneralSettings
 
     /// <summary>Also send tab renames to Claude Code, so <c>claude --resume &lt;name&gt;</c> sees them.</summary>
     public bool RenameInClaudeCode { get; set; }
+
+    /// <summary>Check GitHub for new Claudette releases at launch and every few hours (DESIGN.md §2, "Updating Claudette").</summary>
+    public bool CheckForAppUpdates { get; set; } = true;
+
+    /// <summary>Offer pre-releases too, not only full releases.</summary>
+    public bool IncludePrereleases { get; set; }
 }
 
 public sealed class ClaudeCodeSettings

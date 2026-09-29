@@ -184,12 +184,13 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
             _shell.TabStatusChanged += () => _tabsChanged?.Invoke();
             OnPropertyChanged(nameof(Shell));
             CurrentPage = _shell;
-            if (_restore is { } snapshot)
+            var restored = _restore;
+            _restore = null;
+            if (restored is not null)
             {
-                // Restarted into this build: the tabs the last one had (DESIGN.md §9, "Working on Claudette").
-                _restore = null;
-                _shell.Restore(null, snapshot);
-                RestartSnapshot.Delete(services.Paths.RestartFile);
+                // Restarted into this build or release: the tabs the last one had (DESIGN.md §9, "Working on
+                // Claudette"). The window deletes the snapshot once this build is up.
+                _shell.Restore(null, restored);
             }
             else
             {
@@ -198,6 +199,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
             StartUsage();
             StartUpdateChecks(_shell);
             StartRestarts(_shell);
+            StartAppUpdates(_shell, restored?.Update);
         }
         else
         {
@@ -330,8 +332,35 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     public void UseDevelopmentBuild(DevelopmentBuild build, Action? stopListening = null, Action? resumeListening = null)
     {
         _development = build;
+        UseSingleInstance(stopListening, resumeListening);
+    }
+
+    /// <summary>How a restart hands later launches to the new build or version, and takes them back if it fails.</summary>
+    public void UseSingleInstance(Action? stopListening, Action? resumeListening)
+    {
         _stopListening = stopListening;
         _resumeListening = resumeListening;
+    }
+
+    // ---- Claudette's own updates (DESIGN.md §2, "Updating Claudette") --------------------------------------------
+
+    /// <summary>Release checks, downloads and installs.</summary>
+    public AppUpdateService? AppUpdates { get; private set; }
+
+    /// <summary>The sidebar's update badge and Settings' Claudette updates section.</summary>
+    [ObservableProperty]
+    public partial AppUpdateViewModel? AppUpdate { get; private set; }
+
+    private void StartAppUpdates(ShellViewModel shell, AppUpdateHandover? handover)
+    {
+        var updates = AppUpdates = new AppUpdateService(services, this, _development is not null, _stopListening, _resumeListening);
+        AppUpdate = shell.AppUpdate = new AppUpdateViewModel(updates);
+        services.SettingsChanged += (_, _) => updates.OnSettingsChanged();
+        if (handover is not null)
+        {
+            updates.OnRestoredAfterUpdate(handover);
+        }
+        updates.Start();
     }
 
     /// <summary>The tabs to open instead of the saved ones: this build was restarted into from an earlier one.</summary>
@@ -364,9 +393,9 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         return snapshot;
     }
 
-    async Task IRestartHost.CloseTabsAsync()
+    async Task IRestartHost.CloseTabsAsync(string message)
     {
-        CurrentPage = new BusyViewModel("Restarting into the new build…");
+        CurrentPage = new BusyViewModel(message);
         if (_shell is not null)
         {
             await _shell.CloseTabsForRestartAsync();
@@ -391,6 +420,8 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         Updates?.Dispose();
         _shell?.NewBuild?.Dispose();
         Restarts?.Dispose();
+        AppUpdate?.Dispose();
+        AppUpdates?.Dispose();
         if (_shell is not null)
         {
             await _shell.DisposeAsync();

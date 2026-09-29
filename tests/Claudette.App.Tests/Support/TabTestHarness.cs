@@ -256,7 +256,13 @@ internal sealed class NoPlatform : IPlatformServices
 
     public Task<byte[]?> GetClipboardImageAsync() => Task.FromResult(ClipboardImage);
 
-    public Task OpenFileAsync(string path) => Task.CompletedTask;
+    public List<string> OpenedFiles { get; } = [];
+
+    public Task OpenFileAsync(string path)
+    {
+        OpenedFiles.Add(path);
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>A process tree the test controls: which children are "running", and whether they were killed.</summary>
@@ -311,12 +317,16 @@ internal sealed class TabTestHarness : IAsyncDisposable
     /// <param name="updater">Claude Code's installation, for update tests; when given, update checks are set up too.</param>
     /// <param name="launcher">Starts processes other than Claude Code, which the scripted sessions stand in for.</param>
     /// <param name="dispatcher">The UI thread: an inline stand-in for view model tests, Avalonia's own for rendered UI tests.</param>
-    public TabTestHarness(Action<AppSettings>? configure = null, FakeClaudeUpdater? updater = null, IProcessLauncher? launcher = null, IUiDispatcher? dispatcher = null)
+    /// <param name="appInstaller">Installs Claudette's own updates; by default none can be.</param>
+    /// <param name="http">Answers Claudette's own web requests; by default every request fails, so nothing reaches the network.</param>
+    public TabTestHarness(Action<AppSettings>? configure = null, FakeClaudeUpdater? updater = null, IProcessLauncher? launcher = null, IUiDispatcher? dispatcher = null,
+        Core.Updates.IAppInstaller? appInstaller = null, HttpMessageHandler? http = null, Core.Updates.AppVersion? appVersion = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "work"));
         Directory.CreateDirectory(ProjectsDirectory);
         Trees = new FakeProcessTreeTracker(Time);
-        Services = new AppServices(AppPaths.Under(_root), launcher ?? new ProcessLauncher(), Time, Platform, dispatcher ?? new InlineDispatcher(), processTrees: Trees, notifier: Notifier);
+        Services = new AppServices(AppPaths.Under(_root), launcher ?? new ProcessLauncher(), Time, Platform, dispatcher ?? new InlineDispatcher(), processTrees: Trees, notifier: Notifier,
+            appInstaller: appInstaller, httpHandler: http ?? new OfflineHandler(), appVersion: appVersion);
         Services.Notifications.UseBadge(Notifier);
         configure?.Invoke(Services.Settings);
         if (updater is not null)
@@ -404,4 +414,11 @@ internal sealed class TabTestHarness : IAsyncDisposable
 internal static class SettingsExtensions
 {
     public static QuickSuffix Suffix(this AppServices services, string id) => services.Settings.QuickSuffixes.Single(s => s.Id == id);
+}
+
+/// <summary>Fails every request, so a test that doesn't script Claudette's web requests can't reach the network.</summary>
+public sealed class OfflineHandler : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+        throw new HttpRequestException("Tests don't reach the network.");
 }

@@ -360,6 +360,53 @@
                 </Flyout>
               </Button.Flyout>
             </Button>
+            <!-- A new release of Claudette (DESIGN.md §2, "Updating Claudette"): small and non-blocking, like Claude Code's -->
+            <Button x:Name="AppUpdateBadge" Classes="flat side update" DataContext="{Binding AppUpdate}" x:DataType="vm:AppUpdateViewModel"
+                    IsVisible="{Binding HasBadge, FallbackValue=False}" ToolTip.Tip="{Binding BadgeText}" ToolTip.Placement="Right"
+                    AutomationProperties.Name="Claudette update">
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Path Classes="icon" Data="{StaticResource IconUpdate}" />
+                <TextBlock Classes="badge" Text="{Binding BadgeText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           IsVisible="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).IsSidebarExpanded, FallbackValue=False}" />
+              </StackPanel>
+              <Button.Flyout>
+                <Flyout Placement="RightEdgeAlignedBottom">
+                  <StackPanel Spacing="10" Width="420" Margin="4">
+                    <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Classes="muted small" Text="{Binding CurrentVersionText}" TextWrapping="Wrap" />
+                    <TextBlock Classes="muted small" Text="{Binding ReleasedText}" TextWrapping="Wrap"
+                               IsVisible="{Binding ReleasedText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6" MaxHeight="220" IsVisible="{Binding HasNotes}">
+                      <ScrollViewer>
+                        <SelectableTextBlock Text="{Binding NotesText}" TextWrapping="Wrap" FontSize="12" />
+                      </ScrollViewer>
+                    </Border>
+                    <Button Classes="flat" Content="Release notes on GitHub" Command="{Binding OpenReleasePageCommand}" HorizontalAlignment="Left" Padding="0,2"
+                            IsVisible="{Binding HasRelease}" />
+                    <TextBlock Classes="muted small" Text="{Binding ManualText}" TextWrapping="Wrap" IsVisible="{Binding HasManualText}" />
+                    <TextBlock Classes="warning" Text="{Binding WorkingText}" TextWrapping="Wrap"
+                               IsVisible="{Binding WorkingText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <Border Background="{DynamicResource CautionBackgroundBrush}" BorderBrush="{DynamicResource CautionBorderBrush}" BorderThickness="1"
+                            CornerRadius="6" Padding="8,6" MaxHeight="160" IsVisible="{Binding HasError}">
+                      <ScrollViewer>
+                        <SelectableTextBlock Text="{Binding ErrorText}" TextWrapping="Wrap" FontSize="12" />
+                      </ScrollViewer>
+                    </Border>
+                    <WrapPanel ItemSpacing="8" LineSpacing="8">
+                      <Button Classes="accent" Content="{Binding RestartLabel}" Command="{Binding RestartToUpdateCommand}" IsVisible="{Binding CanRestartToUpdate}" />
+                      <Button Content="Update when idle" Command="{Binding UpdateWhenIdleCommand}" IsVisible="{Binding CanUpdateWhenIdle}" />
+                      <Button Content="Don't update" Command="{Binding CancelWaitingCommand}" IsVisible="{Binding IsWaitingForIdle}" />
+                      <Button Content="Download" Command="{Binding DownloadCommand}" IsVisible="{Binding CanDownload}" />
+                      <Button Content="Cancel download" Command="{Binding CancelDownloadCommand}" IsVisible="{Binding IsDownloading}" />
+                      <Button Content="{Binding OpenPackageLabel}" Command="{Binding OpenPackageCommand}" IsVisible="{Binding CanOpenPackage}" />
+                      <Button Classes="flat" Content="Skip this version" Command="{Binding SkipCommand}" IsVisible="{Binding CanSkip}" />
+                    </WrapPanel>
+                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding DownloadPercent}" IsVisible="{Binding IsDownloading}" />
+                    <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsInstalling}" />
+                  </StackPanel>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
             <Button Classes="flat side" Command="{Binding OpenSettingsCommand}" ToolTip.Tip="{Binding Tips.Settings}" ToolTip.Placement="Right" AutomationProperties.Name="Settings">
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <Path Classes="icon" Data="{StaticResource IconSettings}" />
