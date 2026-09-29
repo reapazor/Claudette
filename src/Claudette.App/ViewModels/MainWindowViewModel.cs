@@ -338,6 +338,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     public void UseDevelopmentBuild(DevelopmentBuild build, Action? stopListening = null, Action? resumeListening = null)
     {
         _development = build;
+        services.IsSourceBuild = true;
         UseSingleInstance(stopListening, resumeListening);
     }
 

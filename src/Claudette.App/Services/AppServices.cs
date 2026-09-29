@@ -63,6 +63,7 @@ public sealed class AppServices : IAsyncDisposable
     {
         AppInstaller = appInstaller ?? new NoAppInstaller();
         AppVersion = appVersion ?? BuiltVersion();
+        BuildCommit = AppBuild.CommitOf(InformationalVersion());
         Http = new HttpClient(httpHandler ?? new SocketsHttpHandler { AutomaticDecompression = System.Net.DecompressionMethods.All }, disposeHandler: true)
         {
             Timeout = TimeSpan.FromSeconds(60),
@@ -113,15 +114,30 @@ public sealed class AppServices : IAsyncDisposable
     /// <summary>What Claudette's web requests call themselves.</summary>
     public string UserAgent => $"Claudette/{AppVersion}";
 
+    /// <summary>The commit this Claudette was built from, shortened, or null when the build didn't record one.</summary>
+    internal string? BuildCommit { get; set; }
+
+    /// <summary>
+    /// Runs from a source build (DESIGN.md §9, "Working on Claudette"), set at launch: its version is the checkout's,
+    /// so the commit tells it from the release.
+    /// </summary>
+    public bool IsSourceBuild { get; set; }
+
+    /// <summary>This copy of Claudette, for the foot of the Settings sidebar and bug reports (DESIGN.md §14, "Version").</summary>
+    public AppBuild Build => new(AppVersion, IsSourceBuild ? AppInstallKind.SourceBuild : AppInstaller.Kind, BuildCommit);
+
     /// <summary>The version the running app was built with (<c>-p:Version=…</c> in packaging/), without build metadata.</summary>
-    private static AppVersion BuiltVersion()
-    {
-        var informational = typeof(AppServices).Assembly
+    private static AppVersion BuiltVersion() =>
+        AppVersion.TryParse(InformationalVersion())
+        ?? AppVersion.TryParse(typeof(AppServices).Assembly.GetName().Version?.ToString(3))
+        ?? new AppVersion(0, 0, 0);
+
+    /// <summary>Such as <c>0.1.0+842169b…</c>: the version, and the commit the .NET SDK records from the checkout.</summary>
+    private static string? InformationalVersion() =>
+        typeof(AppServices).Assembly
             .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
             .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
             .FirstOrDefault()?.InformationalVersion;
-        return AppVersion.TryParse(informational) ?? AppVersion.TryParse(typeof(AppServices).Assembly.GetName().Version?.ToString(3)) ?? new AppVersion(0, 0, 0);
-    }
 
     /// <summary>OS notifications and the Dock/taskbar badge (DESIGN.md §10).</summary>
     public NotificationService Notifications { get; }

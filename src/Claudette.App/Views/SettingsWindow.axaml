@@ -5,7 +5,7 @@
         x:Class="Claudette.App.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Title="Settings"
-        Width="820" Height="600" MinWidth="620" MinHeight="420"
+        Width="820" Height="650" MinWidth="620" MinHeight="420"
         WindowStartupLocation="CenterOwner">
   <Window.Styles>
     <Style Selector="TextBlock.section">
@@ -25,6 +25,17 @@
         <!-- DESIGN.md §14: a search box filters settings by name -->
         <TextBox DockPanel.Dock="Top" Margin="8,8,8,2" Text="{Binding SearchText}" PlaceholderText="Search settings"
                  AutomationProperties.Name="Search settings" />
+        <!-- DESIGN.md §14, "Version": which Claudette this is, copied with a click, and a bug report with it filled in -->
+        <StackPanel DockPanel.Dock="Bottom" Margin="8,4,8,10" Spacing="0">
+          <Button Classes="flat" Command="{Binding CopyVersionCommand}" ToolTip.Tip="{Binding VersionTip}"
+                  AutomationProperties.Name="Copy version details">
+            <TextBlock Classes="muted small" Text="{Binding VersionLabel}" TextTrimming="CharacterEllipsis" />
+          </Button>
+          <Button Classes="flat" Command="{Binding ReportIssueCommand}"
+                  ToolTip.Tip="Opens a new issue on Claudette's GitHub with the versions filled in. Nothing is sent until you submit it.">
+            <TextBlock Classes="muted small" Text="Report an issue" />
+          </Button>
+        </StackPanel>
         <Panel>
           <ListBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}" Background="Transparent" Margin="6"
                    IsVisible="{Binding !IsSearching}" />

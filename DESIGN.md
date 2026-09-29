@@ -62,7 +62,7 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
   - At launch and every 6 hours, Claudette asks the GitHub REST API for `reapazor/Claudette`'s releases. It doesn't sign in, and the check sends nothing but the request.
   - It offers the newest release above the running version. Tags are versions such as `v1.3.0` or `v1.4.0-beta.1`, ordered as Semantic Versioning orders them.
   - Pre-releases count only with **Include pre-releases**. Drafts aren't visible without signing in to GitHub, so a release is offered once it's published: the package workflow's draft release becomes an update when it's published.
-  - **Check for Claudette updates automatically** turns this off. Both settings are in Settings → General, which also shows the version, when it last checked and **Check now**.
+  - **Check for Claudette updates automatically** turns this off. Both settings are in Settings → General, which also shows the version, when it last checked and **Check now**. The version is also at the foot of the Settings sidebar ([§14](#version)).
   - A source build never checks. Its new builds come from its checkout.
 - **Which package.** The release asset named for this install, as `package.yml` names them:
   - `Claudette-<version>-<x64|arm64>.msix` for an MSIX install.
@@ -1146,6 +1146,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 - Changes apply immediately; there is no Save button.
 - Each category has **Reset to defaults**. In Sessions it leaves the library folder and settings sync as they are, since changing either moves where sessions and settings live; in New tabs it leaves favorite and recent folders, which are this machine's data rather than settings.
 - A search box filters settings by name.
+- The foot of the sidebar shows Claudette's version and **Report an issue** ([Version](#version)).
 
 ### Categories
 
@@ -1179,6 +1180,15 @@ Settings → Keyboard lists every shortcut Claudette handles, with its default f
 - Tooltips and the composer's placeholder show the current shortcuts.
 
 **Search.** The box above the categories filters settings by name: it lists matching settings with their category, and picking one opens that category.
+
+### Version
+
+The foot of the Settings sidebar shows which Claudette this is, on every page: "Claudette 0.1.0".
+
+- **The version** is the one being worked on, set in `Directory.Build.props` and tagged `vX.Y.Z` when it's released ([§2](#updating-claudette)); releases pass it to the build too. The first release is `v0.1.0`.
+- **A source build** ([§9](#working-on-claudette)) adds the commit it was built from ("Claudette 0.1.0 · 842169b"), taken from the informational version the .NET SDK writes from the checkout, so a build of a checkout can be told from the release with the same version. An installed Claudette shows only the version.
+- **Clicking it** copies the versions for a bug report, one per line, and it says "Copied" for two seconds: Claudette's version and how it was installed (MSIX, `.dmg`, source build and its commit), Claude Code's version, the OS and its runtime identifier, and the .NET runtime. Only versions: never paths, names or account details, since it's meant to be posted. **Copy diagnostics** ([§16](#staying-tolerant-at-runtime)) starts with the same Claudette line.
+- **Report an issue** opens a new issue on Claudette's GitHub repository in the browser, with an outline (what happened, what you expected, steps to reproduce) and the same versions filled in. Nothing is sent until the user submits it there.
 
 ### Per-tab overrides
 
@@ -1500,6 +1510,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Per-tab sync ([§9](#session-library-sync-across-machines)).** Syncing to the session library is opt-in per tab: **Sync to other machines** in the tab menu and **Tab settings…**, a sync icon on the tab's row, and **Sync new tabs to the session library** in Settings → Sessions (off by default). Sessions opened from the library keep syncing; a tab that doesn't sync writes nothing to the library and ignores leases.
     - **Working line ([§5](#working-line)).** A twinkling glyph, a fun verb (or what the running tool is doing), the turn's time and tokens above the composer while Claude works, with Claude Code's `spinnerVerbs`, and both options in Settings → Appearance.
     - **Login shell environment ([§13](#login-shell-environment)).** On macOS and Linux, a Claudette not started from a terminal reads the login shell's environment once in the background, and `claude`, git, `p4`, diff tools and Homebrew start with it merged in. **Use my login shell's environment** in Settings → Claude Code (on by default), and a Diagnostics line saying which shell was used, or why not.
+    - **Version ([§14](#version)).** The foot of the Settings sidebar shows Claudette's version (0.1.0, the first release), with the commit for a source build; clicking it copies the versions for a bug report, and **Report an issue** opens a new GitHub issue with them filled in.
     - **Detailed header ([§6](#detailed-header)).** The header's chevron, or **Detailed usage header** in Settings → Appearance, draws the header taller: charts of the session and the week with the thresholds, projections and a mark where the session crosses the critical threshold, the burn rate, the time to the limit and the busiest tabs. Remembered on this machine.
       - **Still to verify:** how it looks on real screens. So far it has only been rendered headlessly (Skia, light and dark, at several widths). Check it on Windows with Mica, on macOS, on high-DPI displays and with other accent colors.
     - **Still to verify:** installing an update on a real Windows and Mac, which needs signed packages from a published release; the login shell's environment in a Claudette started from the Dock on macOS and from a desktop launcher on Linux.

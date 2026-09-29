@@ -1230,7 +1230,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         var lines = new List<string>();
         if (includeHeader)
         {
-            lines.Add($"Claudette {typeof(SettingsViewModel).Assembly.GetName().Version}");
+            lines.Add($"Claudette {_services.Build.Description}");
             lines.Add($"OS: {System.Runtime.InteropServices.RuntimeInformation.OSDescription} ({System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier})");
             lines.Add($"Claude Code: {InstalledVersionText}{(_services.Install is { } install ? $" at {install.Path}" : "")}");
             lines.Add($"Minimum supported Claude Code: {MinimumVersionText}");

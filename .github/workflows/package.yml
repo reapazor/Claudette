@@ -41,7 +41,7 @@ jobs:
           elif [[ -n "${{ inputs.version }}" ]]; then
             version="${{ inputs.version }}"
           else
-            version="0.7.${{ github.run_number }}"
+            version="0.1.${{ github.run_number }}"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
