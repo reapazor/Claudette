@@ -32,11 +32,40 @@ public interface INotifier : IDisposable
     event Action<string>? Activated;
 }
 
-/// <summary>The number on the Dock icon (macOS) or taskbar button (Windows): tabs needing input (DESIGN.md §10).</summary>
+/// <summary>Where an OS shows the icon's animation (DESIGN.md §10).</summary>
+public enum AppIconSurface
+{
+    /// <summary>Nowhere: Linux, and tests.</summary>
+    None,
+
+    /// <summary>The taskbar button's overlay (Windows), a small image it shares with the count.</summary>
+    Overlay,
+
+    /// <summary>The whole Dock icon (macOS); the count is a label over it.</summary>
+    Icon,
+}
+
+/// <summary>
+/// The Dock icon (macOS) or taskbar button (Windows), DESIGN.md §10: the number of tabs needing input, a frame of an
+/// animation while tabs work or wait, and a flash to ask for attention. Call it on the UI thread.
+/// </summary>
 public interface IAppBadge
 {
-    /// <summary>Shows <paramref name="count"/>; 0 clears it. Call it on the UI thread.</summary>
+    /// <summary>Where this OS shows <see cref="ShowFrame"/>.</summary>
+    AppIconSurface Surface { get; }
+
+    /// <summary>Shows <paramref name="count"/>; 0 clears it.</summary>
     void SetCount(int count);
+
+    /// <summary>
+    /// Shows one frame of an animation, a PNG for <see cref="Surface"/>, or none: the overlay goes, or the Dock icon is
+    /// Claudette's own again. On Windows a count, while there is one, stays in front of it.
+    /// </summary>
+    /// <param name="description">What it means, for screen readers (Windows).</param>
+    void ShowFrame(byte[]? png, string? description);
+
+    /// <summary>Flashes the taskbar button until Claudette comes to the front (Windows); false stops it.</summary>
+    void Flash(bool on);
 }
 
 /// <summary>Nothing to show on: tests, and platforms without notifications.</summary>
@@ -45,6 +74,8 @@ public sealed class NullNotifier : INotifier, IAppBadge
     public static NullNotifier Instance { get; } = new();
 
     public bool IsAvailable => false;
+
+    public AppIconSurface Surface => AppIconSurface.None;
 
     public event Action<string>? Activated
     {
@@ -61,6 +92,14 @@ public sealed class NullNotifier : INotifier, IAppBadge
     }
 
     public void SetCount(int count)
+    {
+    }
+
+    public void ShowFrame(byte[]? png, string? description)
+    {
+    }
+
+    public void Flash(bool on)
     {
     }
 
@@ -101,7 +140,7 @@ public static class Notifier
         return NullNotifier.Instance;
     }
 
-    /// <summary>The Dock or taskbar badge for this OS; nothing on Linux.</summary>
+    /// <summary>The Dock icon or taskbar button for this OS; nothing on Linux.</summary>
     /// <param name="windowHandle">The main window's native handle (Windows).</param>
     /// <param name="renderIcon">Draws the count as a small PNG icon (Windows overlay icons are images).</param>
     public static IAppBadge CreateBadgeForCurrentOS(Func<nint> windowHandle, Func<int, byte[]?> renderIcon, ILoggerFactory? loggerFactory = null)

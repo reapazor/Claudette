@@ -200,11 +200,14 @@ if (Environment.GetEnvironmentVariable("FAKE_CLAUDE_START_AUTH_ERROR") == "1")
     return 1;
 }
 
-return await new FakeSession(version).RunAsync();
+var modeFlag = Array.IndexOf(args, "--permission-mode");
+return await new FakeSession(version, modeFlag >= 0 && modeFlag + 1 < args.Length ? args[modeFlag + 1] : "default").RunAsync();
 
-internal sealed class FakeSession(string version)
+internal sealed class FakeSession(string version, string permissionMode)
 {
     private readonly string _sessionId = Guid.NewGuid().ToString();
+    // Reported as Claude Code reports it: the --permission-mode it started with, then set_permission_mode's.
+    private string _permissionMode = permissionMode;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TaskCompletionSource<JsonObject>> _pendingFromUs = new();
     private readonly Queue<string> _prompts = new();
@@ -299,13 +302,13 @@ internal sealed class FakeSession(string version)
             "initialize" => new JsonObject
             {
                 ["models"] = new JsonArray(
-                    new JsonObject { ["value"] = "default", ["resolvedModel"] = "claude-fake-1", ["displayName"] = "Default (recommended)", ["supportsEffort"] = true, ["supportedEffortLevels"] = new JsonArray("low", "high") },
-                    new JsonObject { ["value"] = "fake", ["resolvedModel"] = "claude-fake-1", ["displayName"] = "Fake", ["supportsEffort"] = true, ["supportedEffortLevels"] = new JsonArray("low", "high") }),
+                    new JsonObject { ["value"] = "default", ["resolvedModel"] = "claude-fake-1", ["displayName"] = "Default (recommended)", ["supportsEffort"] = true, ["supportedEffortLevels"] = new JsonArray("low", "high"), ["supportsAutoMode"] = true },
+                    new JsonObject { ["value"] = "fake", ["resolvedModel"] = "claude-fake-1", ["displayName"] = "Fake", ["supportsEffort"] = true, ["supportedEffortLevels"] = new JsonArray("low", "high"), ["supportsAutoMode"] = true }),
                 ["commands"] = new JsonArray(
                     new JsonObject { ["name"] = "review", ["description"] = "Review the changes (project)", ["argumentHint"] = "[path]" },
                     new JsonObject { ["name"] = "compact", ["description"] = "Free up context by summarizing the conversation so far", ["argumentHint"] = "<optional custom summarization instructions>", ["builtin"] = true }),
                 ["account"] = new JsonObject { ["email"] = "fake@example.com", ["subscriptionType"] = "Claude Max" },
-                ["current_permission_mode"] = "default",
+                ["current_permission_mode"] = _permissionMode,
             },
             "interrupt" => new JsonObject { ["still_queued"] = new JsonArray() },
             "set_model" or "apply_flag_settings" or "set_permission_mode" => new JsonObject(),
@@ -316,6 +319,10 @@ internal sealed class FakeSession(string version)
         if (subtype == "interrupt")
         {
             _turn?.Cancel();
+        }
+        if (subtype == "set_permission_mode" && message["request"]!["mode"]?.GetValue<string>() is { } mode)
+        {
+            _permissionMode = mode;
         }
         await WriteAsync(response is null
             ? new JsonObject { ["type"] = "control_response", ["response"] = new JsonObject { ["subtype"] = "error", ["request_id"] = requestId, ["error"] = $"unsupported: {subtype}" } }
@@ -378,7 +385,7 @@ internal sealed class FakeSession(string version)
                 prompt = _prompts.Dequeue();
             }
             _turn = new CancellationTokenSource();
-            await WriteAsync(new JsonObject { ["type"] = "system", ["subtype"] = "init", ["session_id"] = _sessionId, ["model"] = "claude-fake-1", ["permissionMode"] = "default", ["claude_code_version"] = version, ["capabilities"] = new JsonArray("interrupt_receipt_v1"), ["slash_commands"] = new JsonArray("review", "compact") });
+            await WriteAsync(new JsonObject { ["type"] = "system", ["subtype"] = "init", ["session_id"] = _sessionId, ["model"] = "claude-fake-1", ["permissionMode"] = _permissionMode, ["claude_code_version"] = version, ["capabilities"] = new JsonArray("interrupt_receipt_v1"), ["slash_commands"] = new JsonArray("review", "compact") });
             try
             {
                 if (prompt.StartsWith("AUTH_FAIL", StringComparison.Ordinal) || !FakeAuth.IsLoggedIn())
@@ -554,7 +561,7 @@ internal sealed class FakeSession(string version)
                     {
                         ["session_id"] = _sessionId,
                         ["cwd"] = Environment.CurrentDirectory,
-                        ["permission_mode"] = "default",
+                        ["permission_mode"] = _permissionMode,
                         ["hook_event_name"] = "PreToolUse",
                         ["tool_name"] = "Bash",
                         ["tool_input"] = input.DeepClone(),

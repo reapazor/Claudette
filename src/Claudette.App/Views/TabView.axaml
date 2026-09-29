@@ -171,14 +171,15 @@
       <Setter Property="CornerRadius" Value="14" />
     </Style>
 
-    <!-- Send and Stop. In the Claude style they're round, with an arrow for Send, as in the Claude apps. -->
+    <!-- Send and Stop. In the Claude style they're round, with an arrow for Send, as in the Claude apps, and a drawn
+         square for Stop: the ■ character sits off-center in a circle, by its font's ascent and descent. -->
     <Style Selector="Button.send">
       <Setter Property="Padding" Value="14,4" />
     </Style>
     <Style Selector="Button.stop">
       <Setter Property="Padding" Value="12,4" />
     </Style>
-    <Style Selector="Button.send Path.sendarrow">
+    <Style Selector="Button.send Path.sendarrow, Button.stop Path.stopsquare">
       <Setter Property="IsVisible" Value="False" />
     </Style>
     <Style Selector=".claude Button.send, .claude Button.stop">
@@ -189,10 +190,10 @@
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
-    <Style Selector=".claude Button.send TextBlock.sendlabel">
+    <Style Selector=".claude Button.send TextBlock.sendlabel, .claude Button.stop TextBlock.stoplabel">
       <Setter Property="IsVisible" Value="False" />
     </Style>
-    <Style Selector=".claude Button.send Path.sendarrow">
+    <Style Selector=".claude Button.send Path.sendarrow, .claude Button.stop Path.stopsquare">
       <Setter Property="IsVisible" Value="True" />
     </Style>
     <Style Selector="Border.prompt.question">
@@ -1245,7 +1246,12 @@
                         StrokeLineCap="Round" StrokeJoin="Round" Width="14" Height="14" Stretch="None" />
                 </Panel>
               </Button>
-              <Button Classes="stop" Content="■" Margin="6,0,0,0" ToolTip.Tip="Stop (Esc)" AutomationProperties.Name="Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsWorking}" />
+              <Button Classes="stop" Margin="6,0,0,0" ToolTip.Tip="Stop (Esc)" AutomationProperties.Name="Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsWorking}">
+                <Panel>
+                  <TextBlock Classes="stoplabel" Text="■" />
+                  <Path Classes="stopsquare" Data="{StaticResource IconStop}" Fill="{Binding $parent[Button].Foreground}" Width="10" Height="10" Stretch="Uniform" />
+                </Panel>
+              </Button>
             </StackPanel>
           </controls:ControlBarPanel>
         </Grid>

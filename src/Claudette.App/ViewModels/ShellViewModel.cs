@@ -5,6 +5,7 @@ using Claudette.Core.Development;
 using Claudette.Core.Git;
 using Claudette.Core.Library;
 using Claudette.Core.Settings;
+using Claudette.Platform.Processes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -106,11 +107,51 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     internal void OnRunningVersionsChanged() => RunningVersionsChanged?.Invoke();
 
-    /// <summary>A tab's status changed: the Dock/taskbar badge counts tabs needing input (DESIGN.md §10).</summary>
+    /// <summary>
+    /// A tab's status changed: the Dock/taskbar badge counts tabs needing input, and the icon animates while tabs work
+    /// (DESIGN.md §10).
+    /// </summary>
     internal void OnTabStatusChanged()
     {
-        _services.Notifications.SetTabsNeedingInput(AllTabs.Count(t => t.NeedsInput));
+        _services.Notifications.SetTabActivity(AllTabs.Count(t => t.NeedsInput), AllTabs.Count(t => t.Status == TabStatus.Working));
+        // A closed tab's processes leave the header's total.
+        OnTabProcessesSampled();
         TabStatusChanged?.Invoke();
+    }
+
+    // ---- Every tab's processes, in the header (DESIGN.md §4, "Process monitor") -------------------------------------
+
+    /// <summary>
+    /// The CPU and memory of every tab's processes, <c>claude</c> included, such as <c>42% CPU · 1.1 GB</c>. Null while
+    /// no tab has the process monitor on and a sample.
+    /// </summary>
+    [ObservableProperty]
+    public partial string? ProcessTotalsText { get; private set; }
+
+    /// <summary>Each tab's part of the total.</summary>
+    [ObservableProperty]
+    public partial string? ProcessTotalsTip { get; private set; }
+
+    /// <summary>A tab sampled its processes, or stopped sampling: adds up the latest samples again.</summary>
+    internal void OnTabProcessesSampled()
+    {
+        var all = AllTabs.ToArray();
+        var sampled = all.Where(t => t.LatestProcessSummary is not null).ToArray();
+        if (sampled.Length == 0)
+        {
+            ProcessTotalsText = null;
+            ProcessTotalsTip = null;
+            return;
+        }
+        ProcessTotalsText = ProcessSummary.Sum(sampled.Select(t => t.LatestProcessSummary!)).UsageText;
+        var others = all.Length - sampled.Length;
+        ProcessTotalsTip = string.Join("\n",
+        [
+            "Processes of every tab, Claude Code included",
+            .. sampled.Select(t => $"{t.DisplayName}: {t.LatestProcessSummary}"),
+            .. others == 0 ? Array.Empty<string>()
+                : [$"Not counted: {(others == 1 ? "1 tab" : $"{others} tabs")} not started, or with the process monitor off"],
+        ]);
     }
 
     /// <summary>Raised when a tab's status changes, for restarting into a new build once no tab is working.</summary>

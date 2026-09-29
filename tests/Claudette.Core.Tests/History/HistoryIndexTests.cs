@@ -52,6 +52,7 @@ public sealed class HistoryIndexTests : IDisposable
             """{"type":"user","isMeta":true,"message":{"role":"user","content":"meta"},"timestamp":"2026-01-01T00:00:00Z","cwd":"/work/first"}""",
             """{"type":"user","message":{"role":"user","content":"<command-name>/model</command-name>"},"timestamp":"2026-01-01T00:00:01Z"}""",
             """{"type":"user","message":{"role":"user","content":"<local-command-stdout>Set model</local-command-stdout>"}}""",
+            """{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Ask clarifying questions."},{"type":"text","text":"<command-name>/compact</command-name>"}]}}""",
             """{"type":"user","message":{"role":"user","content":[{"type":"text","text":"<system-reminder>context</system-reminder>"}]}}""",
             "not json at all",
             """{"type":"user","isSidechain":true,"message":{"role":"user","content":"a subagent prompt"}}""",

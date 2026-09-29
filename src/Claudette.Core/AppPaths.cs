@@ -29,6 +29,9 @@ public sealed record AppPaths(string DataDirectory, string SettingsDirectory)
     /// <summary>"Before" files handed to external diff tools, per tab (DESIGN.md §8).</summary>
     public string DiffTempDirectory => Path.Combine(DataDirectory, "diff-temp");
 
+    /// <summary>Large files' content before Claude's first change, which transcripts leave out (DESIGN.md §8, "Before content").</summary>
+    public string BeforeContentDirectory => Path.Combine(DataDirectory, "before-content");
+
     /// <summary>Copies of a source build that Claudette runs from (DESIGN.md §9, "Working on Claudette").</summary>
     public string BuildCopiesDirectory => Path.Combine(DataDirectory, "builds");
 

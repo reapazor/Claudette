@@ -73,6 +73,30 @@ public class MainWindowTests
         await Verify(UiText.Describe(window, (h.Root, "{root}")));
     }
 
+    /// <summary>Every tab's processes together, in the header before the account (DESIGN.md §4, "Process monitor").</summary>
+    [AvaloniaFact]
+    public async Task The_header_shows_the_tabs_processes_together_while_the_monitor_is_on()
+    {
+        await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true, dispatcher: new AvaloniaUiDispatcher());
+        await h.OpenTabAsync();
+        h.Trees.Trees[4242].Children.Add((5001, "node"));
+        h.Time.Advance(Claudette.Platform.Processes.ProcessSampler.SummaryInterval);
+        var main = new MainWindowViewModel(h.Services);
+        main.UseShell(h.Shell);
+        main.Account.Status = new AuthStatus(true, "claude.ai", null, "me@example.com", null, "max", null, null);
+
+        var window = new MainWindow { DataContext = main, Width = 1200, Height = 800 };
+        window.Show();
+        await UiText.SettleUntilAsync(window, () => window.GetVisualDescendants().OfType<TextBlock>().Any(t => t is { Name: "ProcessTotals", IsEffectivelyVisible: true }), "the total");
+        var totals = window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "ProcessTotals");
+        var account = window.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Account");
+
+        Assert.True(totals.IsEffectivelyVisible);
+        Assert.Equal("21% CPU · 150 MB", totals.Text);
+        Assert.StartsWith("Processes of every tab, Claude Code included", ToolTip.GetTip(totals) as string, StringComparison.Ordinal);
+        Assert.True(totals.TranslatePoint(default, window)!.Value.X < account.TranslatePoint(default, window)!.Value.X);
+    }
+
     [AvaloniaFact]
     public async Task The_chevron_draws_the_usage_header_taller_with_charts()
     {

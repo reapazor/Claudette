@@ -46,6 +46,16 @@ public sealed class ProcessSummaryTests
         Assert.Equal(ProcessSummary.Empty, ProcessSummary.From([]));
     }
 
+    [Fact]
+    public void Several_tabs_add_up_for_the_header()
+    {
+        var total = ProcessSummary.Sum([new ProcessSummary(3, 20.25, 600 * MB), new ProcessSummary(0, 1.5, 526 * MB), ProcessSummary.Empty]);
+
+        Assert.Equal(new ProcessSummary(3, 21.75, 1126 * MB), total);
+        Assert.Equal("22% CPU · 1.1 GB", total.UsageText);
+        Assert.Equal(ProcessSummary.Empty, ProcessSummary.Sum([]));
+    }
+
     [Theory]
     [InlineData(41.5, "42%")]
     [InlineData(41.49, "41%")]

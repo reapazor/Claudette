@@ -11,6 +11,9 @@ public sealed record AppBuild(AppVersion Version, AppInstallKind Kind, string? C
     /// <summary>How many characters of the commit are shown, as git shortens it.</summary>
     public const int ShortCommitLength = 7;
 
+    /// <summary>The configuration it was built in, such as <c>Debug</c> or <c>Release</c>; null when the build didn't record one.</summary>
+    public string? Configuration { get; init; }
+
     /// <summary>"Claudette 0.1.0", or "Claudette 0.1.0 · 842169b" for a source build.</summary>
     public string Label => Kind == AppInstallKind.SourceBuild && Commit is { } commit
         ? $"Claudette {Version} · {commit}"

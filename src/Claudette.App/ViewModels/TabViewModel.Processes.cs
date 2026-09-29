@@ -64,6 +64,18 @@ public sealed partial class TabViewModel
     /// <summary>In the composer bar, unless the side panel is open and already shows it.</summary>
     public bool ShowProcessSummary => ProcessSummaryText is not null && !IsSidePanelOpen;
 
+    /// <summary>
+    /// The latest sample's totals, <c>claude</c> included, for the header's total across the tabs; null while the monitor
+    /// is off or before the first sample.
+    /// </summary>
+    public ProcessSummary? LatestProcessSummary { get; private set; }
+
+    private void SetLatestProcessSummary(ProcessSummary? summary)
+    {
+        LatestProcessSummary = summary;
+        _shell.OnTabProcessesSampled();
+    }
+
     /// <summary>A child process is using noticeable CPU: the tab shows an activity icon.</summary>
     [ObservableProperty]
     public partial bool HasBusyProcesses { get; set; }
@@ -107,6 +119,10 @@ public sealed partial class TabViewModel
             ProcessSummaryText = null;
             HasBusyProcesses = false;
             Processes.Clear();
+            if (LatestProcessSummary is not null)
+            {
+                SetLatestProcessSummary(null);
+            }
             return;
         }
         if (_sampler is null)
@@ -138,6 +154,7 @@ public sealed partial class TabViewModel
         var summary = ProcessSummary.From(snapshots);
         ProcessSummaryText = summary.Count > 0 ? summary.ToString() : null;
         HasBusyProcesses = snapshots.Any(s => !s.IsRoot && s.CpuPercent >= ActiveCpuPercent);
+        SetLatestProcessSummary(summary);
 
         // Link a new process to the Bash call that was running when it appeared.
         var running = Items.OfType<ToolUseItem>().LastOrDefault(t => t is { Name: "Bash", IsComplete: false });
@@ -288,6 +305,8 @@ public sealed partial class TabViewModel
     {
         _sampler?.Dispose();
         _sampler = null;
+        // Its processes leave the header's total; on the UI thread, like the samples, since closing can finish elsewhere.
+        _services.Dispatcher.Post(() => SetLatestProcessSummary(null));
         if (_tree is { } tree)
         {
             if (killProcesses)

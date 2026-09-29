@@ -158,6 +158,28 @@ public class AccountAndSignInTests
     }
 
     [Fact]
+    public async Task A_held_slash_command_keeps_its_suffix_apart()
+    {
+        await using var h = new TabTestHarness();
+        Track(h);
+        var tab = await h.OpenTabAsync();
+        await SendAsync(tab, "hello");
+        h.Transport.Emit(Init);
+        h.Transport.Emit(SignedOutReply);
+        h.Transport.Emit(SignedOutResult);
+        await TabTestHarness.Eventually(() => tab.IsWaitingForSignIn, "the sign-in error");
+
+        tab.AddSuffixCommand.Execute(h.Services.Suffix("clarify"));
+        await SendAsync(tab, "/review");
+        await h.Shell.OnSignedInAgainAsync();
+        await TabTestHarness.Eventually(() => h.Transport.Sent.Count(m => m["type"]?.GetValue<string>() == "user") == 3, "the held messages");
+
+        // Still before the command, so it doesn't become the command's arguments (DESIGN.md §5, "Quick suffixes").
+        var resent = h.Transport.Sent.Last(m => m["type"]?.GetValue<string>() == "user")["message"]!["content"]!.AsArray();
+        Assert.Equal(["Ask clarifying questions before you start.", "/review"], resent.Select(b => b!["text"]!.GetValue<string>()));
+    }
+
+    [Fact]
     public async Task A_message_that_was_answered_is_not_sent_again()
     {
         await using var h = new TabTestHarness();
@@ -448,13 +470,24 @@ public class AccountAndSignInTests
     }
 
     [Fact]
-    public async Task In_the_header_the_email_opens_the_menu_and_the_plan_beside_it_opens_billing()
+    public async Task In_the_header_the_email_opens_the_menu_and_the_plan_beside_it_opens_its_usage()
     {
         await using var h = new TabTestHarness();
         var account = new AccountViewModel(h.Services) { Status = new AuthStatus(true, "claude.ai", "firstParty", "me@example.com", null, "max", null, null) };
 
         Assert.Equal("me@example.com", account.HeaderName);
         Assert.Equal("Max plan", account.HeaderPlan);
+        Assert.Equal("Plan usage", account.HeaderPlanName);
+        await account.OpenHeaderPlanCommand.ExecuteAsync(null);
+        Assert.Equal(["https://claude.ai/new#settings/usage"], h.Platform.OpenedUrls);
+        // The account menu's link still opens billing.
+        Assert.Equal(AccountViewModel.ClaudeBillingUrl, account.BillingUrl);
+
+        // A Console account has no plan usage on claude.ai: its plan goes to the Console's billing.
+        account.Status = new AuthStatus(true, "api_key", "firstParty", "me@example.com", null, null, null, null);
+        Assert.Equal("API key", account.HeaderPlan);
+        Assert.Equal(AccountViewModel.ConsoleBillingUrl, account.HeaderPlanUrl);
+        Assert.Equal("Console billing", account.HeaderPlanName);
 
         // With nowhere to manage billing, the header reads as before.
         account.Status = new AuthStatus(true, "third_party", "bedrock", null, null, null, null, null);

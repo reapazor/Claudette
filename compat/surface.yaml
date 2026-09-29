@@ -70,9 +70,17 @@ items:
   - id: "--permission-mode"
     kind: flag
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.cs
     docs: https://code.claude.com/docs/en/cli-reference
-    test: RealCliTests
+    test: RealCliTests, PermissionModeTests
+  - id: "--permission-mode auto"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Claude/StartingPermissionMode.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/permission-modes
+    test: RealCliTests, PermissionModeTests
+    # DESIGN.md §7, "Starting mode": claude -p starts in Manual, so a tab asks for auto mode itself. Where auto mode is
+    # unavailable (the model, disableAutoMode, turned off server-side) Claude Code starts in Manual instead.
   - id: "--resume"
     kind: flag
     status: documented
@@ -221,8 +229,8 @@ items:
     kind: field
     status: undocumented
     usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.Core/Diffs/ChangedFiles.cs
-    test: RealCliTests, ChangedFilesTests
-    fallback: See tool_use_result. Without it, a changed file's "before" side is unknown; the Working tree vs HEAD view still works in a git repository.
+    test: RealCliTests, ChangedFilesTests, BeforeContentStoreTests
+    fallback: See tool_use_result. Without it, a changed file's "before" side is unknown; the Working tree vs HEAD view still works in a git repository. An Edit's null means a new file only with an empty oldString; transcripts also write null for a large file (see "originalFile over 10,000 characters is null in transcripts").
   - id: "<local-command-stdout>"
     kind: field
     status: undocumented
@@ -470,10 +478,10 @@ items:
   - id: "set_permission_mode"
     kind: control
     status: undocumented
-    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: ClaudeSessionTests
-    fallback: See control_request.
+    test: ClaudeSessionTests, PermissionModeTests, RealCliTests
+    fallback: See control_request. A resumed tab uses it to switch to auto mode after it starts (DESIGN.md §7, "Starting mode"); if it fails, the tab stays in Manual.
   - id: "get_context_usage"
     kind: control
     status: undocumented
@@ -579,6 +587,12 @@ items:
     usedIn: src/Claudette.Core/Protocol/OutgoingMessages.cs
     test: RealCliTests
     fallback: Claudette puts the text after the images. If mentions next to images stop being read, send the images first in a user message with shouldQuery false (documented; Claude Code holds it and merges it into the next message, checked against 2.1.284), then the text as a plain-text message.
+  - id: "a slash command is read from the last content block, with the blocks before it passed to its prompt"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Core/Protocol/OutgoingMessages.cs, src/Claudette.Core/Transcripts/TranscriptPrompts.cs
+    test: RealCliTests, QuickSuffixMessageTests, TranscriptReaderTests
+    fallback: Claudette sends a command's quick suffixes in a text block before it, because Claude Code takes everything after the command's name as its arguments. A local command such as /compact records those blocks ahead of its <command-name> echo, which the transcript readers skip. If the blocks stop reaching the command's prompt, append the suffixes to the command after a blank line again (they then arrive as its arguments) and say so in §5.
   - id: "image blocks in transcript user entries"
     kind: file
     status: undocumented
@@ -605,6 +619,12 @@ items:
     usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs
     test: TranscriptReaderTests
     fallback: Restored tool cards show the tool result text without diffs.
+  - id: "originalFile over 10,000 characters is null in transcripts"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs, src/Claudette.Core/Diffs/BeforeContentStore.cs
+    test: RealCliTests, BeforeContentStoreTests, SidePanelTests
+    fallback: "In 2.1.284 the live tool_use_result carries the whole originalFile, but the transcript's toolUseResult has null when it's over 10,000 characters (DESIGN.md §8, \"Large files in transcripts\"). Claudette saves the first change's originalFile when it's over BeforeContentStore.TranscriptLimit and reads it back on replay. If the limit drops, files between the new limit and 10,000 characters replay with an unknown \"before\" (modified, without counts) until TranscriptLimit follows it. If transcripts keep it whole again, nothing breaks."
   - id: "isSidechain"
     kind: file
     status: undocumented
@@ -616,15 +636,46 @@ items:
   - id: "settings.local.json"
     kind: file
     status: documented
-    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs, src/Claudette.Core/Claude/SpinnerVerbs.cs
+    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs, src/Claudette.Core/Claude/SpinnerVerbs.cs, src/Claudette.Core/Claude/StartingPermissionMode.cs
     docs: https://code.claude.com/docs/en/settings
-    test: RealCliTests, SpinnerVerbsTests
+    test: RealCliTests, SpinnerVerbsTests, StartingPermissionModeTests
   - id: "settings.json"
     kind: file
     status: documented
-    usedIn: src/Claudette.Core/Claude/SpinnerVerbs.cs
+    usedIn: src/Claudette.Core/Claude/SpinnerVerbs.cs, src/Claudette.Core/Claude/StartingPermissionMode.cs
     docs: https://code.claude.com/docs/en/settings
-    test: SpinnerVerbsTests
+    test: SpinnerVerbsTests, StartingPermissionModeTests
+  - id: "managed-settings.json"
+    kind: file
+    status: documented
+    usedIn: src/Claudette.Core/Claude/StartingPermissionMode.cs
+    docs: https://code.claude.com/docs/en/managed-settings
+    test: StartingPermissionModeTests
+    # With the managed-settings.d drop-ins, in C:\Program Files\ClaudeCode, /Library/Application Support/ClaudeCode and
+    # /etc/claude-code. Read only for the starting mode; MDM, registry and server-managed settings aren't read.
+  - id: "permissions.defaultMode"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Claude/StartingPermissionMode.cs
+    docs: https://code.claude.com/docs/en/settings-reference
+    test: StartingPermissionModeTests
+    # Where one is set, a tab is started without --permission-mode, so Claude Code applies it. auto and
+    # bypassPermissions don't take effect from a project's files (DESIGN.md §7, "Starting mode").
+  - id: "disableAutoMode"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Claude/StartingPermissionMode.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/settings-reference
+    test: StartingPermissionModeTests, PermissionModeTests
+    # "disable", at the top level or under permissions: no auto mode flag, and no Auto in the mode picker.
+  - id: "claude -p starts in Manual, and -p --resume brings back plan mode without --permission-mode"
+    kind: behavior
+    status: documented
+    usedIn: src/Claudette.Core/Claude/StartingPermissionMode.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/sessions
+    test: PermissionModeTests
+    # https://code.claude.com/docs/en/permission-modes (which mode a session starts in). If -p ever starts in auto mode
+    # on its own, the flag is harmless; the switch after a resume only happens when the tab came back in Manual.
   - id: "spinnerVerbs"
     kind: field
     status: documented
@@ -813,6 +864,14 @@ items:
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: SettingsDefaultsTests
     # The models (and their effort levels) in the initialize reply, kept per machine for the lists in Settings.
+  - id: "supportsAutoMode"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/InitializeResult.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ClaudeSessionTests, PermissionModeTests, RealCliTests
+    # On each model in the initialize reply; left out for a model without auto mode (Haiku 4.5 in 2.1.284). The mode
+    # picker offers Auto only for the tab's model when it's true (DESIGN.md §7).
 
   # --- History and the session library (DESIGN.md §9) --------------------------------------------------
   - id: "isMeta"

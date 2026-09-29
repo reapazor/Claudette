@@ -42,8 +42,9 @@ public sealed class ChangedFile
     public bool IsNew { get; }
 
     /// <summary>
-    /// False when the first change's result didn't say what the file held before: an unknown result shape, or a Write
-    /// over a file too large for Claude Code to diff.
+    /// False when the first change's result didn't say what the file held before and nothing was saved for it: a
+    /// transcript's result for a file over 10,000 characters, a Write over a file too large for Claude Code to diff, or an
+    /// unknown result shape.
     /// </summary>
     public bool BeforeKnown { get; }
 
@@ -79,7 +80,8 @@ public sealed record ChangedFileState(ChangedFileStatus Status, int? Added, int?
 
 /// <summary>
 /// The files a tab's session changed, built from its Edit/Write tool calls (DESIGN.md §8). A file's "before" side is
-/// the <c>originalFile</c> from Claude's first change to it, so no snapshots are needed.
+/// the <c>originalFile</c> from Claude's first change to it, so no snapshots are needed. Transcripts leave out a large
+/// one, so replays find it in <see cref="Befores"/>.
 /// </summary>
 /// <remarks>
 /// Used from the UI thread only. Tool use ids are remembered, so replaying a transcript that's already been seen
@@ -111,6 +113,12 @@ public sealed class ChangedFiles
 
     /// <summary>Files larger than this are listed without line counts or content.</summary>
     public long MaxInspectBytes { get; init; } = TextFiles.DefaultMaxBytes;
+
+    /// <summary>
+    /// Where a large file's <c>originalFile</c> is kept for replays, since transcripts leave it out. Null: a replayed
+    /// large file's "before" is unknown.
+    /// </summary>
+    public BeforeContentStore? Befores { get; init; }
 
     /// <summary>The changed files, in order of first change.</summary>
     public IReadOnlyList<ChangedFile> Files => _files;
@@ -163,6 +171,14 @@ public sealed class ChangedFiles
         else
         {
             var (before, isNew, beforeKnown) = ReadBefore(pending.ToolName, result);
+            if (!beforeKnown && Befores?.Load(toolUseId) is { } saved)
+            {
+                (before, beforeKnown) = (saved, true);
+            }
+            else if (before is { Length: > BeforeContentStore.TranscriptLimit })
+            {
+                Befores?.Save(toolUseId, before);
+            }
             file = new ChangedFile(path, before, isNew, beforeKnown, toolUseId, when);
             _byPath.Add(key, file);
             _files.Add(file);
@@ -258,9 +274,10 @@ public sealed class ChangedFiles
         return original switch
         {
             JsonValue value when value.GetValueKind() == JsonValueKind.String => (value.GetValue<string>(), false, true),
-            // A Write over an existing file reports null when that file was too large to diff.
-            null when type == "update" => (null, false, false),
-            null => (null, true, true),
+            // An Edit with nothing to replace creates the file.
+            null when result.GetString("oldString") == "" => (null, true, true),
+            // Otherwise it was left out: transcripts leave out one over 10,000 characters, and a Write over a file too
+            // large to diff reports null.
             _ => (null, false, false),
         };
     }

@@ -30,6 +30,10 @@ public sealed record SideBySideDiffRow(DiffCell? Left, DiffCell? Right, bool IsH
 }
 
 /// <summary>What the diff view compares, and what it can do with the file.</summary>
+/// <param name="BeforeKnown">
+/// False when there's nothing to compare with: what the file held before Claude's first change isn't known (DESIGN.md
+/// §8, "Before content"). The view shows the whole file as it is now, with nothing marked as changed.
+/// </param>
 public sealed record DiffSource(
     string Path,
     string DisplayPath,
@@ -38,7 +42,8 @@ public sealed record DiffSource(
     Func<Task>? OpenInDiffTool,
     Func<Task> OpenInEditor,
     Func<Task> Reveal,
-    Func<Task> CopyPath);
+    Func<Task> CopyPath,
+    bool BeforeKnown = true);
 
 /// <summary>
 /// The built-in diff view (DESIGN.md §8): the file before Claude's first change (or at HEAD) against the file now,
@@ -56,6 +61,7 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
     {
         _source = source;
         _dark = dark;
+        ShowWholeFile = !source.BeforeKnown;
         _ = LoadAsync();
     }
 
@@ -138,14 +144,17 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
                 current is null ? "The file has been deleted." : null);
         });
         _after = after;
-        _beforeColors = beforeColors;
+        _beforeColors = _source.BeforeKnown ? beforeColors : afterColors;
         _afterColors = afterColors;
         Message = message;
         var (added, removed) = LineDiff.Count(before, after);
-        Stats = $"+{added} −{removed}";
+        Stats = _source.BeforeKnown ? $"+{added} −{removed}" : "";
         IsLoading = false;
         Build();
     }
+
+    /// <summary>With the "before" unknown, the file is compared with itself, so nothing shows as changed.</summary>
+    private string? Before => _source.BeforeKnown ? _source.Before : _after;
 
     private void Build()
     {
@@ -153,7 +162,7 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
         {
             return;
         }
-        var before = _source.Before;
+        var before = Before;
         var lines = new List<(DiffLineEntry? Line, string? Header)>();
         if (ShowWholeFile)
         {

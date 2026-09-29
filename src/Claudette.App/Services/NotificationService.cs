@@ -25,9 +25,10 @@ public enum NotificationKind
 public sealed record NotificationTarget(NotificationKind Kind, string? TabId);
 
 /// <summary>
-/// Decides which OS notifications to send and routes clicks back (DESIGN.md §10), and keeps the Dock/taskbar badge.
-/// A notification is skipped when its type is off, or when Claudette is in front and already showing what it's about:
-/// the tab it's about is selected, or, for app-wide ones, the header or screen that already says it. Use on the UI thread.
+/// Decides which OS notifications to send and routes clicks back (DESIGN.md §10), and keeps the Dock icon or taskbar
+/// button: its badge, its animation and its flash. A notification is skipped when its type is off, or when Claudette is
+/// in front and already showing what it's about: the tab it's about is selected, or, for app-wide ones, the header or
+/// screen that already says it. Use on the UI thread.
 /// </summary>
 public sealed class NotificationService : IDisposable
 {
@@ -36,7 +37,12 @@ public sealed class NotificationService : IDisposable
     private readonly Dictionary<string, NotificationTarget> _shown = new(StringComparer.Ordinal);
     private IAppBadge _badge = NullNotifier.Instance;
     private int _tabsNeedingInput;
+    private int _tabsWorking;
     private int _badgeShown = -1;
+    private bool _flashing;
+    private AppIconAnimation? _animation;
+    private int _frame;
+    private ITimer? _frameTimer;
 
     public NotificationService(AppServices services, INotifier notifier)
     {
@@ -120,38 +126,116 @@ public sealed class NotificationService : IDisposable
     {
         IsAppActive = active;
         _services.RemoteControl.SetAppActive(active);
-        if (active && SelectedTabId() is { } selected)
+        if (active)
         {
-            ClearTab(selected);
+            SetFlashing(false);
+            if (SelectedTabId() is { } selected)
+            {
+                ClearTab(selected);
+            }
         }
     }
 
-    /// <summary>The Dock icon or taskbar button to badge. Set once the main window exists.</summary>
+    /// <summary>The Dock icon or taskbar button to badge and animate. Set once the main window exists.</summary>
     public void UseBadge(IAppBadge badge)
     {
+        Animate(null);
         _badge = badge;
         _badgeShown = -1;
         UpdateBadge();
     }
 
-    /// <summary>The number of tabs with a waiting prompt, question or plan.</summary>
-    public void SetTabsNeedingInput(int count)
+    /// <summary>
+    /// The number of tabs with a waiting prompt, question or plan, and of tabs working. When more tabs need input while
+    /// Claudette isn't in front, the taskbar button flashes, if that notification is on.
+    /// </summary>
+    public void SetTabActivity(int needingInput, int working)
     {
-        _tabsNeedingInput = count;
+        if (needingInput > _tabsNeedingInput && !IsAppActive && IsEnabled(NotificationKind.NeedsInput))
+        {
+            SetFlashing(true);
+        }
+        else if (needingInput == 0)
+        {
+            SetFlashing(false);
+        }
+        _tabsNeedingInput = needingInput;
+        _tabsWorking = working;
         UpdateBadge();
     }
 
-    /// <summary>Settings changed: the badge may have been turned on or off.</summary>
+    /// <summary>Settings changed: the badge or the animation may have been turned on or off.</summary>
     public void OnSettingsChanged() => UpdateBadge();
 
     private void UpdateBadge()
     {
-        var count = _services.Settings.Notifications.Badge ? _tabsNeedingInput : 0;
+        var settings = _services.Settings.Notifications;
+        var count = settings.Badge ? _tabsNeedingInput : 0;
         if (count != _badgeShown)
         {
             _badgeShown = count;
             _badge.SetCount(count);
         }
+        Animate(!settings.AnimateIcon ? null : _badge.Surface switch
+        {
+            // The overlay shows the count or the spark, and the count matters more.
+            AppIconSurface.Overlay => count == 0 && _tabsWorking > 0 ? AppIconAnimations.Spark : null,
+            AppIconSurface.Icon => _tabsNeedingInput > 0 ? AppIconAnimations.Waving : _tabsWorking > 0 ? AppIconAnimations.Typing : null,
+            _ => null,
+        });
+    }
+
+    private void SetFlashing(bool on)
+    {
+        // Flashing again restarts it, for another tab needing input.
+        if (on || _flashing)
+        {
+            _flashing = on;
+            _badge.Flash(on);
+        }
+    }
+
+    // ---- The icon's animation -----------------------------------------------------------------------------------
+
+    private void Animate(AppIconAnimation? animation)
+    {
+        if (ReferenceEquals(animation, _animation))
+        {
+            return;
+        }
+        _frameTimer?.Dispose();
+        _frameTimer = null;
+        _animation = animation;
+        _frame = 0;
+        if (animation is null)
+        {
+            _badge.ShowFrame(null, null);
+            return;
+        }
+        // One timer per animation, so a tick queued before it changed does nothing.
+        _frameTimer = _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() => NextFrame(animation)), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        ShowFrame();
+    }
+
+    private void NextFrame(AppIconAnimation animation)
+    {
+        if (!ReferenceEquals(animation, _animation))
+        {
+            return;
+        }
+        _frame = (_frame + 1) % animation.Frames.Count;
+        ShowFrame();
+    }
+
+    private void ShowFrame()
+    {
+        if (_animation is not { } animation)
+        {
+            return;
+        }
+        var frame = animation.Frames[_frame];
+        _badge.ShowFrame(frame.Png, animation.Description);
+        _frameTimer?.Change(frame.Duration, Timeout.InfiniteTimeSpan);
     }
 
     private void OnNotifierActivated(string id) => _services.Dispatcher.Post(() =>
@@ -166,6 +250,8 @@ public sealed class NotificationService : IDisposable
 
     public void Dispose()
     {
+        _frameTimer?.Dispose();
+        _frameTimer = null;
         _notifier.Activated -= OnNotifierActivated;
         _notifier.Dispose();
     }

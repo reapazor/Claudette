@@ -51,7 +51,11 @@ The files are in `packaging/`, and `.github/workflows/package.yml` builds them.
   - A `v*` tag builds signed packages and attaches them to a draft GitHub release. **Run workflow** builds them for a given version.
   - A pull request that changes `packaging/` builds them unsigned, to check the scripts.
   - Signing and notarization use repository secrets, listed at the top of the workflow. Without them, the packages are built unsigned.
-- **The icon** is a placeholder drawn by Claudette's own renderer: `packaging/icon/claudette-1024.png` for macOS, and `src/Claudette.App/Assets/claudette.ico` and `packaging/windows/Assets/` for Windows. Replace those files to change it.
+- **The icon** is Claudette: Clawd, Claude Code's pixel mascot, with hair on top, a berry hair tie and a ponytail. `packaging/icon/build-icons.mjs` draws every file from one 12×12 sprite, with a whole number of pixels per cell so the small sizes stay crisp. To change the icon, change the sprite and run the script (`node packaging/icon/build-icons.mjs`).
+  - **Windows:** `src/Claudette.App/Assets/claudette.ico` and `packaging/windows/Assets/`, with no background. Its taskbar sizes include 24, 36 and 48 px (100%, 150% and 200% scaling), where the sprite fills the icon.
+  - **macOS:** `packaging/icon/claudette-1024.png`, on an ivory tile.
+  - **SVG:** `packaging/icon/claudette.svg`. The script also writes it to `.idea/.idea.Claudette/.idea/icon.svg`, where Rider looks for a project icon.
+  - **Animation frames** ([§10](#10-notifications)): `src/Claudette.App/Assets/AppIcon/`, embedded in the app. The taskbar overlay's spark, and Claudette typing and waving on the Dock icon, drawn at half the macOS icon's size so the Dock icon doesn't shift when an animation starts.
 
 > **Not yet tested on a real machine:** installing and running the MSIX and the `.dmg`, and signing and notarization, which need the certificates. The pull request build checks that both packages build.
 
@@ -134,7 +138,7 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
 └──────────────────┴─────────────────────────────────────────────────────────┘
 ```
 
-1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. A chevron at its right draws it taller, with charts ([Detailed header](#detailed-header)). See [§6](#6-token-burn-awareness). At its right, before the account name, a dot shows Claude's service status, and while Claude has an incident a banner runs across the top under it ([§18](#service-status)).
+1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. A chevron at its right draws it taller, with charts ([Detailed header](#detailed-header)). See [§6](#6-token-burn-awareness). At its right, before the account name, the CPU and memory of every tab's processes while the process monitor is on ([§4](#process-monitor)), then a dot that shows Claude's service status; while Claude has an incident a banner runs across the top under it ([§18](#service-status)).
 2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder, and under a tab's row, the runs of its project actions ([§18](#project-tools)). **New tab** is at its top; the selected tab's project and **Links** ([§18](#project-tools)), **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
 3. **Conversation.** The selected tab's conversation. See [§5](#5-conversation-view).
 4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), its project's tools and their output when it has any ([§18](#project-tools)), and optionally its running processes ([§4](#process-monitor)).
@@ -287,6 +291,7 @@ Using the picker:
 An optional view of the processes each tab has started, such as test runs, dev servers, builds and MCP servers, with their CPU and memory use. It's off by default and turned on in Settings → Processes. One tab can turn it on or off for itself in its **Tab settings…** ([§14](#per-tab-overrides)). Each tab shows its own processes on the Processes page of its side panel.
 
 - **Summary.** When it's on, the composer bar shows a compact summary for the tab, for example `3 procs · 42% CPU · 1.1 GB`, except while the side panel is open. The count leaves out `claude` itself. The tab itself gets a small activity icon while any child process is using noticeable CPU (5% or more).
+- **Header total.** The usage header, before the service status dot, adds up every tab's latest sample, `claude` included: `63% CPU · 2.4 GB`. Its tooltip gives each tab's summary, and how many tabs aren't counted (not started yet, or with the monitor off). It comes from the tabs' own samples, so it takes no sampling of its own and follows their pace, and it's hidden while no tab has the monitor on. Claudette's own process isn't in it.
 - **Processes panel.** A page of the side panel, next to Changed files, Agents and Project. It shows a tree of the tab's processes, starting from its `claude` process, with these columns:
   - Name and PID.
   - CPU %, following the platform's convention: on Windows, 100% means all cores, as in Task Manager; on macOS, 100% means one core, as in Activity Monitor.
@@ -467,6 +472,7 @@ Saved snippets of instructions that can be added to a message in one click, such
 - **Picking one.** A **Suffixes ▾** button next to the text box opens a dropdown of saved suffixes. `Ctrl/Cmd+Shift+S` opens it from the keyboard, and the first nine entries can be picked with `1`–`9`.
 - **Chips.** A picked suffix appears as a chip under the text box instead of being pasted into the text, so the message stays easy to edit. Several can be picked at once. Click a chip's `×` to remove it.
 - **Sending.** When the message is sent, the suffixes are appended in the order shown, separated from the message by a blank line. The sent message in the conversation shows the full text, with the suffix part in a lighter style. Sending with only suffixes and no typed text is allowed.
+- **After a slash command.** Claude Code takes everything after a command's name as its arguments, so a message that starts with `/` gets its suffixes in a text block of their own before the command instead. A command that runs a prompt (a skill or a custom command) gets them alongside that prompt, and its arguments stay what was typed. A local command such as `/compact` or `/model` doesn't query the model, so its suffixes change nothing (checked against 2.1.284).
 - **Keeping one on.** Right-click a chip → **Keep on this tab** adds that suffix to every message in the tab until it's turned off. A kept chip is marked "(kept)". Kept suffixes are saved with the tab.
 - **Own shortcut.** Each suffix can have its own keyboard shortcut that adds it directly.
 - **Managing them.** Settings → Quick suffixes: add, edit, reorder and delete. Each suffix has a short **label** (shown in the dropdown and on the chip) and its **text**. Dropdown entries also include **Edit suffixes…** as a shortcut to Settings.
@@ -674,8 +680,9 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 - Keyboard: `Ctrl/Cmd+Enter` allows, `Ctrl/Cmd+Backspace` denies the oldest waiting prompt in the tab.
   - Not while typing in one of the prompt's own fields, and `Ctrl/Cmd+Backspace` still deletes a word in a field with text.
   - A request Claude Code marks `defaultToNo` can't be allowed from the keyboard.
-- **Permission mode picker** per tab: Default, Accept edits, Plan, Bypass permissions.
-  - Picking a mode changes it for this session only. The mode a tab starts in comes from Tab settings or the New tabs default.
+- **Permission mode picker** per tab: Manual, Accept edits, Plan, Auto, Bypass permissions. Manual is Claude Code's `default` mode, named as its terminal and VS Code extension name it now.
+  - Picking a mode changes it for this session only. The mode a tab starts in comes from Tab settings or the New tabs default, and without either, from Claude Code ([Starting mode](#starting-mode) below).
+  - Auto is offered only while the tab's model supports it (`supportsAutoMode` on the model in the `initialize` reply; Claude Code leaves it out for Haiku) and no settings file Claudette reads sets `disableAutoMode`. Claude Code refuses the switch otherwise ("auto mode unavailable for this model").
   - The picker always shows the mode Claude Code reports, including changes it makes itself (for example after a plan is approved).
   - Bypass needs a confirmation and gives the tab a visible warning style: a red border on the tab and the composer, and a warning line above the composer.
   - Claude Code only allows switching into Bypass in a session that was started with bypass allowed. Claudette doesn't start sessions that way, so the switch is refused unless the tab started in Bypass mode, and the tab says how to do that. Launching every session with `--allow-dangerously-skip-permissions` would lift this, but that's left to a deliberate decision.
@@ -701,6 +708,20 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 - **Deny:** `{ "behavior": "deny", "message": "<text>" }`.
 - **Read-only commands** such as `sleep` never prompt at all.
 
+### Starting mode
+
+A tab starts in auto mode, like a Claude Code session in a terminal or VS Code, unless something chooses otherwise. Since 2.1.283 auto mode is Claude Code's built-in starting mode there, but not for `claude -p` or the Agent SDK, which start in Manual, and a tab is a `claude -p` session. So Claudette asks for auto mode itself (`StartingPermissionMode`):
+
+- **Chosen in Claudette:** a mode in Tab settings, else the New tabs default, is passed with `--permission-mode`, as before.
+- **Left to Claude Code** (New tabs → **Claude Code's default**, the default): Claudette reads the settings files Claude Code would, in its precedence order: `managed-settings.json` and its `managed-settings.d` drop-ins, the project's `.claude/settings.local.json` and `.claude/settings.json`, then `settings.json` in Claude Code's config folder.
+  - No file sets `permissions.defaultMode`: the tab is launched with `--permission-mode auto`.
+  - A file sets it: no flag, and Claude Code applies it, as it does for `-p`. As in a terminal, a project's files can't set `auto` (the built-in default applies instead, so the tab gets auto) or `bypassPermissions` (Manual).
+  - A file sets `disableAutoMode` to `"disable"`: no flag, and Auto isn't in the picker. Claude Code would start in Manual anyway.
+  - When auto mode turns out to be unavailable (the model doesn't support it, or Anthropic has turned it off), Claude Code starts the session in Manual by itself.
+- **A resumed tab** (restored, restarted into a new build, or after a sign-in) isn't given the flag. Without `--permission-mode`, `claude -p --resume` brings back plan mode for a session that ended in it. Once it has started, a tab that came back in Manual is switched to auto with `set_permission_mode`, quietly: if Claude Code refuses, it stays in Manual. The mode picked in the last run isn't restored otherwise, as before.
+- **Tab settings → Default** switches back to the starting mode, auto included. Its label names that mode, "Default (Auto)", once the tab has started, and Settings → New tabs names the mode the user's and managed settings give: "Claude Code's default (Auto)".
+- Not read: managed settings from MDM, the Windows registry or the claude.ai console, and `--settings` in Settings → Advanced's extra arguments. An organization that sets a starting mode only there still gets auto mode in Claudette's tabs, but `disableAutoMode` from any of them is enforced by Claude Code.
+
 ## 8. File Changes / Diff View
 
 - A collapsible side panel lists the files changed in the selected tab's session: added, modified or deleted, with `+/−` line counts. It is built from the session's Edit/Write tool calls, live and when a transcript is replayed.
@@ -721,6 +742,10 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
   - `originalFile`: the file's full content before the change, or `null` for a new file.
   - `structuredPatch`: the change as diff hunks.
 - The "before" side of a file's diff is the `originalFile` from Claude's first change to that file in the session, so diffs are exact even outside a git repo. The spike confirmed this in Accept edits mode too. Claudette never has to snapshot files itself, so there's no race with the tool writing the file.
+- **Large files in transcripts.** Live, `originalFile` is always the whole file. The transcript (`toolUseResult`) writes it as `null` when it's over 10,000 characters, so a replay can't tell it from a new file (2.1.284; seen in the source and confirmed by `RealCliTests`). Most source files are over that size.
+  - So when the first change to a file brings an `originalFile` over 10,000 characters, Claudette saves it in `before-content` in the data folder, compressed, named by the tool call's id. A restored tab, or a session opened again from History, finds it there. Saved content that hasn't been used for 30 days is deleted at launch.
+  - An Edit's `null` means a new file only when its `oldString` is empty; otherwise the "before" is unknown, as it is for a Write over a file too large for Claude Code to diff.
+  - A file whose "before" is unknown, such as one from a session Claudette didn't run live, is listed as modified, without counts. The diff view shows it as it is now, with nothing marked as changed, and says what it held before isn't known; it opens there even when an external diff tool is set.
 
 ### External diff tool
 
@@ -906,9 +931,14 @@ Clicking a notification brings Claudette to the front and goes to the relevant t
   - A usage alert opens the Usage panel, an update opens the update dialog, and the sign-in notification opens the sign-in dialog ([§11](#signing-in)).
   - A project action's notification selects its tab and opens its Project page on the log of the run it's about.
 - **Badge.** Settings → Notifications → **Show the number of tabs needing input on the Dock or taskbar icon**. On Windows it's an overlay icon on the taskbar button, drawn by Claudette.
+- **The icon while tabs work.** Settings → Notifications → **Animate the Dock or taskbar icon while tabs are working** (on by default).
+  - **Windows:** while any tab is working, the taskbar button's overlay shows Claude's spark, pulsing. The overlay holds one image, and the number of tabs needing input comes first: the spark comes back once no tab needs input, or at once with the badge off. Windows takes the button's own icon from the package (or, unpackaged, from Claudette's AppUserModelID), so only the overlay can move.
+  - **macOS:** the whole Dock icon moves: Claudette types while tabs work, and waves while a tab needs input, under the badge's number.
+  - The frames are drawn with the icon ([§2](#packaging-and-signing)).
+- **Flashing.** When a tab starts needing input while Claudette isn't in front, the Windows taskbar button flashes until Claudette comes to the front, or no tab needs input any more. It follows **A tab needs permission or an answer**. The Dock has nothing like it; the waving does that job.
 - **How each OS does it** (the code is in `Claudette.Platform/Notifications`):
-  - **Windows:** WinRT toasts (`ToastNotificationManager`), called through source-generated COM interop so the app stays a plain `net10.0` build. A click raises the toast's `Activated` event in the running Claudette. An MSIX install has package identity. Run unpackaged, Claudette sets its AppUserModelID (`reapazor.Claudette`) and registers it under `HKCU\Software\Classes\AppUserModelId`, as the Windows App SDK does. The badge uses `ITaskbarList3::SetOverlayIcon`.
-  - **macOS:** `UNUserNotificationCenter` through the Objective-C runtime, with a delegate that reports clicks and lets notifications show while Claudette is in front. It needs the app bundle's identifier, so a build run with `dotnet run` has no notifications and Settings says so. The badge is the Dock tile's `badgeLabel`.
+  - **Windows:** WinRT toasts (`ToastNotificationManager`), called through source-generated COM interop so the app stays a plain `net10.0` build. A click raises the toast's `Activated` event in the running Claudette. An MSIX install has package identity. Run unpackaged, Claudette sets its AppUserModelID (`reapazor.Claudette`) and registers it under `HKCU\Software\Classes\AppUserModelId`, as the Windows App SDK does. The badge and the spark use `ITaskbarList3::SetOverlayIcon`, and the flash `FlashWindowEx`.
+  - **macOS:** `UNUserNotificationCenter` through the Objective-C runtime, with a delegate that reports clicks and lets notifications show while Claudette is in front. It needs the app bundle's identifier, so a build run with `dotnet run` has no notifications and Settings says so. The badge is the Dock tile's `badgeLabel`, and the animation sets `NSApplication`'s `applicationIconImage` to each frame (nil gives the bundle's icon back).
   - **Linux:** `notify-send --wait` with a default action, which reports a click. Without `notify-send`, there are no notifications.
 
 > **Not yet tested on a real machine:** showing and clicking notifications on Windows and macOS, and the badges. CI builds a real toast through WinRT on Windows (without showing it), and checks the Objective-C string calls on macOS.
@@ -954,7 +984,7 @@ Claude Code keeps its own credentials. Claudette never reads or stores them; it 
 - **Messages sent while signed out** stay queued, with their attached images, and are delivered, in order, once sign-in completes. The message that found Claude Code signed out is one of them: a message nothing came back for before the sign-in error never reached the model, so it's sent again. One that was answered before the error isn't.
 - If sign-in fails (timed out, cancelled, organization not allowed), Claudette shows Claude Code's message, from the control request or the command, and a **Try again** button, which repeats the same kind of sign-in.
 - **Account menu** (in the header, on the right): the signed-in email, plan and organization from `claude auth status`, or how Claude Code is signed in when there's no plan (an API key, say), and **Sign out…**, which runs `claude auth logout`. Signed out, it offers **Sign in**.
-- **Plan and billing.** In the header, the plan beside the email (*"Max plan"*) is a link, and the account menu has the same link. It opens where the account's billing is managed, in the browser:
+- **Plan and billing.** In the header, the plan beside the email (*"Max plan"*) is a link to the plan's usage on claude.ai, `claude.ai/new#settings/usage` ("Plan usage"). The account menu has a link to where the account's billing is managed; the header's plan goes there too for an account with no usage page on claude.ai (an API key or Console account). Both open in the browser:
   - a Claude plan, or a Claude account without one: `claude.ai/settings/billing`, **Plan and billing**;
   - an API key or Console account: the Claude Console's billing page, **Console billing**;
   - a cloud provider (Bedrock, Vertex, Foundry) bills through that provider, so there's no link, and the header shows the account as one piece.
@@ -1169,7 +1199,7 @@ Confirmed against Claude Code 2.1.284 with the mock Messages API (2026-09-29):
 
 **Tool results.** The `user` message that carries a tool result also has a `tool_use_result` field with structured details:
 
-- Edit and Write: `originalFile`, `structuredPatch`, `oldString` / `newString`.
+- Edit and Write: `originalFile`, `structuredPatch`, `oldString` / `newString`. Transcripts keep `originalFile` only up to 10,000 characters ([§8](#8-file-changes--diff-view), "Large files in transcripts").
 - Bash: `stdout`, `stderr`, `interrupted`.
 
 The conversation view and diff view use these instead of parsing the tool result text.
@@ -1240,14 +1270,14 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Sessions | Also restore unpinned tabs on launch (off by default; pinned tabs are always restored). Session library folder (with **Browse…** and **Move library…**, which copies existing sessions to the new folder). Sync new tabs to the session library (off by default; each tab can be switched with **Sync to other machines** in its menu). Name for this machine, as shown in History. How long to keep sessions in the library. Sync Claudette's settings through the library (off by default). See [§9](#session-library-sync-across-machines) and [Settings sync](#settings-sync-optional). |
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
 | Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. Use my login shell's environment (macOS and Linux only, on by default; [§13](#login-shell-environment)). **Claude app (Remote Control)**: Connect new tabs to the Claude app (off by default; each tab has its own switch), with what it does, the privacy note and how to get pushes on the phone, and Keep this computer awake while tabs are connected (on by default). Disabled, with the reason, when the account can't use it ([§18](#remote-control-the-claude-app)). |
-| New tabs | Default model, effort level and permission mode. The model and effort lists are what Claude Code offered in its last `initialize` reply on this machine (the models and each one's effort levels, kept with the machine's state), with a built-in list only until a session has started; Tab settings… lists them the same way. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (**Add folder…**, **Move up**, **Move down**, **Remove**), in the order the new tab picker shows them. See [Opening a tab](#opening-a-tab). |
+| New tabs | Default model, effort level and permission mode. The permission mode is **Claude Code's default** unless chosen, named with the mode it gives, usually Auto ([Starting mode](#starting-mode)). The model and effort lists are what Claude Code offered in its last `initialize` reply on this machine (the models and each one's effort levels, kept with the machine's state), with a built-in list only until a session has started; Tab settings… lists them the same way. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (**Add folder…**, **Move up**, **Move down**, **Remove**), in the order the new tab picker shows them. See [Opening a tab](#opening-a-tab). |
 | Appearance | Theme: follow system, light or dark. Style: Standard (the default) or Claude, the Claude apps' look ([Visual style](#visual-style)). Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. Show fun words while Claude works, and show what Claude is doing while it works (both on by default; [Working line](#working-line)). **Detailed usage header** (off by default): the same switch as the header's chevron, kept on this machine rather than synced ([Detailed header](#detailed-header)). Show context on tab rows (on by default; [§4](#sidebar)). **Density**: Comfortable (the default) or Compact, which tightens the conversation's spacing, message and card padding and tool rows, the sidebar's rows, and the composer's padding. It applies at once and syncs with the other Appearance settings. |
 | Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
 | Quick suffixes | The list of suffixes: label, text and optional shortcut. Add, edit, reorder, delete. See [§5](#quick-suffixes). |
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
 | Diff tool | Built-in, a preset or a custom command, with **Test**. See [§8](#external-diff-tool). |
 | Project tools | Unreal's default editor configuration (Development or DebugGame). Project files for Visual Studio, VS Code or Xcode (the OS's own by default). Tell Claude about Unreal projects (on by default). Unity's default code optimization (Release or Debug), and Tell Claude about Unity projects (on by default). The Godot executable (**Browse…**, **Detect**), and Tell Claude about Godot projects (on by default). Open solutions with the OS's app, Rider, Visual Studio, VS Code or another program (**Browse…**). See [§18](#project-tools). |
-| Notifications | On/off for each type in [§10](#10-notifications), including **A project action finishes**. Dock/taskbar badge on/off. |
+| Notifications | On/off for each type in [§10](#10-notifications), including **A project action finishes**. Dock/taskbar badge on/off, and animating the icon while tabs work. |
 | Keyboard | List of shortcuts, each one rebindable ([below](#keyboard-shortcuts)). |
 | Perforce | Off by default. Keep Perforce logins fresh. Password source. Renew-before time. Tickets for all hosts. Show changelist on tabs. The stored password (**Save** / **Forget**). Per-folder server and user. See [§18](#perforce-ticket-handling). |
 | Advanced | Protocol logging and **Open log folder**. **Diagnostics** page ([§16](#staying-tolerant-at-runtime)). Extra command-line arguments passed to `claude`. Minimum supported Claude Code version (read-only). |
@@ -1281,7 +1311,7 @@ Below the categories, a divider and a group headed by the selected tab's project
 The foot of the Settings sidebar shows which Claudette this is, on every page: "Claudette 0.1.0".
 
 - **The version** is the one being worked on, set in `Directory.Build.props` and tagged `vX.Y.Z` when it's released ([§2](#updating-claudette)); releases pass it to the build too. The first release is `v0.1.0`.
-- **A source build** ([§9](#working-on-claudette)) adds the commit it was built from ("Claudette 0.1.0 · 842169b"), taken from the informational version the .NET SDK writes from the checkout, so a build of a checkout can be told from the release with the same version. An installed Claudette shows only the version.
+- **A source build** ([§9](#working-on-claudette)) adds the commit it was built from ("Claudette 0.1.0 · 842169b"), taken from the informational version the .NET SDK writes from the checkout, so a build of a checkout can be told from the release with the same version. Its tooltip also says which configuration it was built in, from the assembly's configuration attribute: "Claudette 0.1.0 (source build 842169b), a Debug build from this checkout." An installed Claudette shows only the version.
 - **Clicking it** copies the versions for a bug report, one per line, and it says "Copied" for two seconds: Claudette's version and how it was installed (MSIX, `.dmg`, source build and its commit), Claude Code's version, the OS and its runtime identifier, and the .NET runtime. Only versions: never paths, names or account details, since it's meant to be posted. **Copy diagnostics** ([§16](#staying-tolerant-at-runtime)) starts with the same Claudette line.
 - **Report an issue** opens a new issue on Claudette's GitHub repository in the browser, with an outline (what happened, what you expected, steps to reproduce) and the same versions filled in. Nothing is sent until the user submits it there.
 
@@ -1583,7 +1613,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
      - Installing the MSIX and `.dmg`, and signing and notarization, which need the certificates.
    - **Deferred:**
      - A macOS-style theme ([§2](#2-platform--tech-stack)). macOS uses the Fluent theme for now; this needs a design decision.
-     - The replacement for the placeholder icon.
+     - The replacement for the placeholder icon: done 2026-09-29 ([§2](#packaging-and-signing)).
 8. **Working on Claudette.** ✅ Built 2026-09-29. A source build runs from a copy of its build output, notices new builds, and restarts into them with every tab, draft and the window as they were, taking its tabs back if the new build doesn't start ([§9](#working-on-claudette)). Checked end to end on Linux under Xvfb: rebuilding while it ran, the automatic restart, and a broken build being refused.
    - **Still to verify on Windows:** rebuilding while a copy runs, which is what the copy is for, and starting the new build from Explorer and from `dotnet run`.
 9. **Filling the gaps.** ✅ Built 2026-09-29. What an audit of §2–§16 found still missing:
@@ -1646,6 +1676,8 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
       - **Still to verify:** how the group and pages look on real Windows, macOS and Linux desktops, in both styles and themes; so far they've only been rendered headlessly.
     - **The project's menu moves to the sidebar.** The project chip left the composer's bar, which had grown crowded, for a row at the sidebar's foot above Links ([§18](#project-tools)). ✅ Built 2026-09-29.
     - **Open in Rider ([§18](#project-tools)).** With Rider chosen for solutions, an Unreal project opens in Rider by its `.uproject`, with no project files to generate; engines before 4.25.4 (Windows) or 4.26 keep Open solution ([issue #6](https://github.com/reapazor/Claudette/issues/6)). ✅ Built 2026-09-29.
+    - **Claudette's icon, and the icon while tabs work ([§2](#packaging-and-signing), [§10](#10-notifications)).** ✅ Built 2026-09-29. A female Clawd, with a ponytail, replaced the placeholder icon, drawn by `packaging/icon/build-icons.mjs`, which also writes Rider's project icon. While tabs work, the Windows taskbar overlay pulses Claude's spark (the count of tabs needing input comes first) and the macOS Dock icon shows Claudette typing, then waving while a tab needs input; the taskbar button flashes when a tab needs input while Claudette is in the background. Settings → Notifications → **Animate the Dock or taskbar icon while tabs are working**.
+      - **Still to verify on real machines:** the spark, the count taking its place and the flash on the Windows taskbar, installed and unpackaged; the Dock animation and the icon coming back on macOS.
 16. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features

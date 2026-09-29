@@ -175,11 +175,60 @@ public sealed unsafe class MacNotifier : INotifier
     }
 }
 
-/// <summary>The Dock tile's badge (DESIGN.md §10): the number of tabs needing input.</summary>
+/// <summary>
+/// The Dock icon (DESIGN.md §10): the tile's badge with the number of tabs needing input, and the whole icon replaced by
+/// each frame of an animation through <c>NSApplication.applicationIconImage</c>.
+/// </summary>
 [SupportedOSPlatform("macos")]
-public sealed class MacDockBadge(ILogger logger) : IAppBadge
+public sealed unsafe class MacDockBadge(ILogger logger) : IAppBadge
 {
+    /// <summary>An animation's few frames are shown over and over, so each is made into an NSImage once, and kept.</summary>
+    private readonly Dictionary<byte[], nint> _images = new(ReferenceEqualityComparer.Instance);
+
     private int _count;
+
+    public AppIconSurface Surface => AppIconSurface.Icon;
+
+    public void ShowFrame(byte[]? png, string? description)
+    {
+        try
+        {
+            // nil gives the Dock back the app's own icon.
+            var application = ObjC.Send(ObjC.GetClass("NSApplication"), "sharedApplication");
+            ObjC.Send(application, "setApplicationIconImage:", png is null ? 0 : Image(png));
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Couldn't set the Dock icon.");
+        }
+    }
+
+    /// <summary>The Dock has no flash; the badge and the waving ask for attention.</summary>
+    public void Flash(bool on)
+    {
+    }
+
+    private nint Image(byte[] png)
+    {
+        if (_images.TryGetValue(png, out var image))
+        {
+            return image;
+        }
+        fixed (byte* bytes = png)
+        {
+            var data = ObjC.Send(ObjC.Send(ObjC.GetClass("NSData"), "alloc"), "initWithBytes:length:", (nint)bytes, png.Length);
+            try
+            {
+                image = ObjC.Send(ObjC.Send(ObjC.GetClass("NSImage"), "alloc"), "initWithData:", data);
+            }
+            finally
+            {
+                ObjC.Release(data);
+            }
+        }
+        _images[png] = image;
+        return image;
+    }
 
     public void SetCount(int count)
     {

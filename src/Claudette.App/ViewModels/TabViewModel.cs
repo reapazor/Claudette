@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using Claudette.App.Conversation;
 using Claudette.App.Services;
+using Claudette.Core.Claude;
 using Claudette.Core.Development;
 using Claudette.Core.Git;
 using Claudette.Core.Library;
@@ -345,7 +346,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     public IReadOnlyList<ModelInfo> Models => _session?.Initialization?.Models.Where(m => m.Value != "default").ToArray() ?? [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ModelBadge), nameof(InfoRows), nameof(EffortLevels), nameof(RowDetail))]
+    [NotifyPropertyChangedFor(nameof(ModelBadge), nameof(InfoRows), nameof(EffortLevels), nameof(PermissionModeChoices), nameof(RowDetail))]
     public partial string? ModelName { get; set; }
 
     /// <summary>The model id Claude Code reports (for example <c>claude-opus-5-5[1m]</c>).</summary>
@@ -394,7 +395,19 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>Bypass mode gives the tab a warning style (DESIGN.md §7).</summary>
     public bool IsBypassMode => PermissionMode == PermissionModeInfo.Bypass;
 
-    public IReadOnlyList<PermissionModeChoice> PermissionModeChoices => PermissionModeInfo.Choices;
+    /// <summary>The modes to pick from: Auto only while the model supports it and no settings file turns it off.</summary>
+    public IReadOnlyList<PermissionModeChoice> PermissionModeChoices =>
+        IsAutoModeAvailable ? PermissionModeInfo.Choices : PermissionModeInfo.Choices.Where(c => !c.IsAuto).ToArray();
+
+    /// <summary>What Claude Code's settings files say about the mode this tab starts in, read as it starts (DESIGN.md §7).</summary>
+    private StartingPermissionMode? _startingMode;
+
+    private bool IsAutoModeAvailable => _startingMode?.AutoModeDisabled != true && CurrentModelInfo?.SupportsAutoMode != false;
+
+    /// <summary>The mode this tab starts in when neither its settings nor Claudette's choose one, once it has started.</summary>
+    internal string? ClaudeCodeStartingMode => _startingMode is { } starting
+        ? starting.Expected == PermissionModeInfo.Auto && !IsAutoModeAvailable ? PermissionModeInfo.Manual : starting.Expected
+        : null;
 
     /// <summary>Bypass waiting for confirmation.</summary>
     [ObservableProperty]
@@ -447,6 +460,23 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 ? " Claude Code only allows this in a session that started in Bypass permissions mode; set that in Tab settings and reopen the tab."
                 : "";
             _conversation.AddNote($"Couldn't switch to {PermissionModeInfo.Label(mode)} mode: {ex.Message}.{hint}", NoteKind.Error);
+        }
+    }
+
+    /// <summary>
+    /// Switches to the mode the tab starts in when nothing chose one. The user didn't ask for it, so if Claude Code
+    /// refuses, the tab stays in the mode it reports, as a new session with the flag would.
+    /// </summary>
+    private async Task SwitchModeQuietlyAsync(ClaudeSession session, string mode)
+    {
+        try
+        {
+            await session.SetPermissionModeAsync(mode);
+            PermissionMode = mode;
+        }
+        catch (Exception)
+        {
+            // Such as "auto mode unavailable for this model".
         }
     }
 
@@ -831,7 +861,6 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
         var suffixText = suffixes.Length > 0 ? string.Join("\n", suffixes) : null;
-        var message = suffixText is null ? text : text.Length == 0 ? suffixText : $"{text}\n\n{suffixText}";
 
         ComposerText = "";
         foreach (var chip in Chips.Where(c => !c.IsKept).ToArray())
@@ -841,16 +870,18 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         var images = TakeAttachments();
         _conversation.AddUserMessage(text, suffixText, images: images);
         _firstPrompt ??= text.Length > 0 ? text : suffixText;
-        await SendRawAsync(message, images);
+        await SendRawAsync(text, images, suffixText);
         _ = RequestTitleAsync();
     }
 
     private bool CanSend() => !IsReadOnly && (Status is not (TabStatus.Starting or TabStatus.Error) || IsWaitingForSignIn) && (ComposerText.Trim().Length > 0 || Chips.Count > 0 || Attachments.Count > 0);
 
-    private async Task SendRawAsync(string message, IReadOnlyList<MessageImage>? images = null)
+    /// <param name="suffix">Quick suffixes, which Claude Code gets after the message, or beside a slash command (DESIGN.md §5).</param>
+    private async Task SendRawAsync(string message, IReadOnlyList<MessageImage>? images = null, string? suffix = null)
     {
+        var pending = new PendingMessage(message, images ?? [], suffix);
         // Held while Claude Code needs a sign-in, and sent once it's done (DESIGN.md §11).
-        if (HoldForSignIn(message, images))
+        if (HoldForSignIn(pending))
         {
             return;
         }
@@ -860,11 +891,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             if (_session is null)
             {
                 // It couldn't start because Claude Code needs a sign-in: the message waits for it.
-                HoldForSignIn(message, images);
+                HoldForSignIn(pending);
                 return;
             }
-            _awaitingReply.Add(new PendingMessage(message, images ?? []));
-            await _session.SendUserMessageAsync(message, images ?? []);
+            _awaitingReply.Add(pending);
+            await _session.SendUserMessageAsync(message, pending.Images, suffix);
         }
         catch (Exception ex)
         {
@@ -1052,6 +1083,12 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         var settings = _services.Settings;
         try
         {
+            // With no mode chosen, a tab starts in auto mode as a terminal session would, where Claude Code's settings
+            // allow; claude -p alone starts in Manual. A resumed session is switched once it has started instead, so it
+            // can come back in plan mode (DESIGN.md §7, "Starting mode").
+            var chosenMode = State.Overrides.PermissionMode ?? settings.NewTabs.DefaultPermissionMode;
+            var folder = Folder;
+            var starting = _startingMode = await Task.Run(() => _services.ReadStartingPermissionMode(folder));
             var session = await sessions.StartAsync(await WithPerforceAsync(await WithProjectToolsAsync(new ClaudeLaunchOptions
             {
                 WorkingDirectory = Folder,
@@ -1059,7 +1096,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 ForkSession = fork,
                 Model = State.Overrides.Model ?? settings.NewTabs.DefaultModel,
                 Effort = State.Overrides.Effort ?? settings.NewTabs.DefaultEffort,
-                PermissionMode = State.Overrides.PermissionMode ?? settings.NewTabs.DefaultPermissionMode,
+                PermissionMode = chosenMode ?? (resume is null ? starting.LaunchMode : null),
                 AdditionalArguments = settings.Advanced.ExtraArguments.Split(' ', StringSplitOptions.RemoveEmptyEntries),
                 ProtocolLogPath = _services.ProtocolLogPath(FolderName),
                 // The presence file, among others: no pushes to the phone while Claudette is in front (DESIGN.md §10).
@@ -1088,6 +1125,12 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             ModelName = ModelDisplayName(_modelId) ?? CurrentModelInfo?.DisplayName;
             OnPropertyChanged(nameof(Models));
             OnPropertyChanged(nameof(EffortLevels));
+            OnPropertyChanged(nameof(PermissionModeChoices));
+            if (chosenMode is null && resume is not null && starting.LaunchMode is { } launchMode
+                && session.PermissionMode == PermissionModeInfo.Manual && IsAutoModeAvailable)
+            {
+                await SwitchModeQuietlyAsync(session, launchMode);
+            }
             Status = TabStatus.Idle;
             _pump = PumpAsync(session);
             _contextRefresh = RefreshContextUsageAsync(session);
@@ -1592,11 +1635,17 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 await _session.SetEffortAsync(effort);
                 Effort = effort;
             }
-            var mode = State.Overrides.PermissionMode ?? _services.Settings.NewTabs.DefaultPermissionMode;
-            if (State.Overrides.PermissionMode != previous.PermissionMode && mode is not null)
+            if (State.Overrides.PermissionMode != previous.PermissionMode)
             {
-                await _session.SetPermissionModeAsync(mode);
-                PermissionMode = mode;
+                if ((State.Overrides.PermissionMode ?? _services.Settings.NewTabs.DefaultPermissionMode) is { } mode)
+                {
+                    await _session.SetPermissionModeAsync(mode);
+                    PermissionMode = mode;
+                }
+                else if (_startingMode?.LaunchMode is { } launchMode && IsAutoModeAvailable)
+                {
+                    await SwitchModeQuietlyAsync(_session, launchMode);
+                }
             }
         }
         catch (Exception ex)

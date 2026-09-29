@@ -165,6 +165,11 @@
                       Width="11" Height="6" IsVisible="{Binding Usage.IsDetailed, FallbackValue=False}" />
               </Panel>
             </Button>
+            <!-- Every tab's processes together, Claude Code included, while the process monitor is on (DESIGN.md §4,
+                 "Process monitor"): each tab's part in the tooltip -->
+            <TextBlock Name="ProcessTotals" Classes="muted small" VerticalAlignment="Center" Margin="0,0,4,0"
+                       Text="{Binding Shell.ProcessTotalsText, FallbackValue={x:Null}}" ToolTip.Tip="{Binding Shell.ProcessTotalsTip, FallbackValue={x:Null}}"
+                       IsVisible="{Binding Shell.ProcessTotalsText, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}" />
             <!-- Claude's service status (DESIGN.md §18, "Service status"): each watched service in the tooltip, and a
                  click opens status.claude.com -->
             <Button Name="ServiceStatusDot" Classes="header" Padding="8" VerticalAlignment="Center" IsVisible="{Binding ServiceStatus.IsVisible}"
@@ -199,9 +204,9 @@
                 </Flyout>
               </Button.Flyout>
             </Button>
-            <!-- The plan beside the email opens billing in the browser (DESIGN.md §11) -->
-            <Button Classes="header" Command="{Binding Account.OpenBillingCommand}" IsVisible="{Binding Account.HeaderPlan, Converter={x:Static ObjectConverters.IsNotNull}}"
-                    ToolTip.Tip="{Binding Account.BillingTip}" AutomationProperties.Name="Plan and billing">
+            <!-- The plan beside the email opens its usage on claude.ai, or the Console's billing (DESIGN.md §11) -->
+            <Button Classes="header" Command="{Binding Account.OpenHeaderPlanCommand}" IsVisible="{Binding Account.HeaderPlan, Converter={x:Static ObjectConverters.IsNotNull}}"
+                    ToolTip.Tip="{Binding Account.HeaderPlanTip}" AutomationProperties.Name="{Binding Account.HeaderPlanName}">
               <TextBlock Classes="muted" Text="{Binding Account.HeaderPlan}" VerticalAlignment="Center" />
             </Button>
           </StackPanel>

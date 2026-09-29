@@ -352,7 +352,8 @@
 
       <!-- Small vector icons, so they look the same on every platform. -->
       <StreamGeometry x:Key="IconClose">M2,2 L10,10 M10,2 L2,10</StreamGeometry>
-      <!-- A square, filled: Stop on a running project run in the sidebar (DESIGN.md §18). -->
+      <!-- A square, filled: Stop on a running project run in the sidebar (DESIGN.md §18), and the Claude style's round
+           Stop button (DESIGN.md §3). -->
       <StreamGeometry x:Key="IconStop">M2,2 L10,2 L10,10 L2,10 Z</StreamGeometry>
       <!-- 14×14: the Claude style's round Send button (DESIGN.md §3). -->
       <StreamGeometry x:Key="IconSendArrow">M7,12 L7,2.5 M2.5,6.5 L7,2 L11.5,6.5</StreamGeometry>

@@ -88,6 +88,9 @@ public class NotifierTests
         Assert.False(NullNotifier.Instance.IsAvailable);
         NullNotifier.Instance.Show(Sample);
         NullNotifier.Instance.SetCount(3);
+        Assert.Equal(AppIconSurface.None, NullNotifier.Instance.Surface);
+        NullNotifier.Instance.ShowFrame([1, 2, 3], "Claude is working");
+        NullNotifier.Instance.Flash(true);
     }
 
     /// <summary>

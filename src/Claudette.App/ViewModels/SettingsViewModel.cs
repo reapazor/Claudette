@@ -258,6 +258,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         new("Notifications", "A Claude Code update is ready"),
         new("Notifications", "A project action finishes"),
         new("Notifications", "Dock or taskbar badge"),
+        new("Notifications", "Animate the Dock or taskbar icon"),
         .. KeyboardShortcuts.All.Select(c => new SettingsSearchResult("Keyboard", $"{c.Label} shortcut")),
         .. PerforceSearchEntries(),
         new("Advanced", "Extra arguments for every claude process"),
@@ -501,8 +502,15 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     public IReadOnlyList<Choice> EffortChoices => field ??= BuildEffortChoices();
 
-    public IReadOnlyList<Choice> ModeChoices { get; } =
-        [new(null, "Claude Code's default"), .. PermissionModeInfo.Choices.Select(m => new Choice(m.Value, m.Label))];
+    /// <summary>
+    /// "Claude Code's default" names the mode it comes to from the user's and managed settings, usually Auto (DESIGN.md
+    /// §7, "Starting mode"). A project's settings can still change it for its tabs.
+    /// </summary>
+    public IReadOnlyList<Choice> ModeChoices => field ??=
+    [
+        new(null, $"Claude Code's default ({PermissionModeInfo.Label(_services.ReadStartingPermissionMode(null).Expected)})"),
+        .. PermissionModeInfo.Choices.Select(m => new Choice(m.Value, m.Label)),
+    ];
 
     public Choice DefaultModel
     {
@@ -1081,6 +1089,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         set => Set(value, v => _settings.Notifications.Badge = v);
     }
 
+    public bool AnimateIcon
+    {
+        get => _settings.Notifications.AnimateIcon;
+        set => Set(value, v => _settings.Notifications.AnimateIcon = v);
+    }
+
     [RelayCommand]
     private void ResetNotifications()
     {
@@ -1094,6 +1108,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(NotifyUpdateReady));
         OnPropertyChanged(nameof(NotifyProjectActions));
         OnPropertyChanged(nameof(ShowBadge));
+        OnPropertyChanged(nameof(AnimateIcon));
     }
 
     // ---- Quick suffixes ------------------------------------------------------------------------------------------

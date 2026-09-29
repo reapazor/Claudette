@@ -10,8 +10,8 @@ namespace Claudette.App.ViewModels;
 /// </summary>
 public sealed partial class TabViewModel
 {
-    /// <summary>A message on its way, with the images attached to it.</summary>
-    private sealed record PendingMessage(string Text, IReadOnlyList<MessageImage> Images);
+    /// <summary>A message on its way, with the images attached to it and its quick suffixes.</summary>
+    private sealed record PendingMessage(string Text, IReadOnlyList<MessageImage> Images, string? Suffix = null);
 
     /// <summary>Messages sent while Claude Code needed a sign-in, in the order they were sent.</summary>
     private readonly List<PendingMessage> _heldForSignIn = [];
@@ -35,13 +35,13 @@ public sealed partial class TabViewModel
     public IReadOnlyList<string> HeldMessages => [.. _heldForSignIn.Select(m => m.Text)];
 
     /// <summary>Holds <paramref name="message"/> if Claude Code needs a sign-in. Returns whether it was held.</summary>
-    private bool HoldForSignIn(string message, IReadOnlyList<MessageImage>? images)
+    private bool HoldForSignIn(PendingMessage message)
     {
         if (!_shell.NeedsSignIn)
         {
             return false;
         }
-        _heldForSignIn.Add(new PendingMessage(message, images ?? []));
+        _heldForSignIn.Add(message);
         NoteHeldMessages();
         return true;
     }
@@ -133,7 +133,7 @@ public sealed partial class TabViewModel
         _conversation.AddNote(held.Length == 1 ? "Signed in. Sending your message." : $"Signed in. Sending your {held.Length} messages.");
         foreach (var message in held)
         {
-            await SendRawAsync(message.Text, message.Images);
+            await SendRawAsync(message.Text, message.Images, message.Suffix);
         }
         _ = RequestTitleAsync();
     }

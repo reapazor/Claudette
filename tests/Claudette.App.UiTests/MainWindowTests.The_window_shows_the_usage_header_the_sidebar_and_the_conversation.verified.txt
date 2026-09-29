@@ -9,7 +9,7 @@
   "Not enough data yet."
 [button] Expand the usage header
 [button] Account: me@example.com
-[button] Plan and billing: Max plan
+[button] Plan usage: Max plan
 [button] New tab
 [button] Collapse the sidebar
 [button] work
@@ -29,7 +29,7 @@
 [button] Suffixes ▾
 [button] Opus ▾
 [button] Default effort ▾
-[button] Default ▾
+[button] Manual ▾
 [button] Files (0)
 [button] Context 1%
 [button] 120 tok

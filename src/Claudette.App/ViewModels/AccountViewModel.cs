@@ -25,6 +25,7 @@ public sealed partial class AccountViewModel(AppServices services) : ViewModelBa
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsSignedIn), nameof(IsSignedOut), nameof(Email), nameof(PlanText), nameof(Organization), nameof(Summary), nameof(SettingsText), nameof(CanBeginSignIn))]
     [NotifyPropertyChangedFor(nameof(BillingUrl), nameof(HasBilling), nameof(BillingText), nameof(BillingTip), nameof(HeaderName), nameof(HeaderPlan))]
+    [NotifyPropertyChangedFor(nameof(HeaderPlanUrl), nameof(HeaderPlanTip), nameof(HeaderPlanName))]
     [NotifyCanExecuteChangedFor(nameof(SignOutCommand))]
     public partial AuthStatus? Status { get; set; }
 
@@ -53,6 +54,9 @@ public sealed partial class AccountViewModel(AppServices services) : ViewModelBa
 
     public const string ConsoleBillingUrl = "https://platform.claude.com/settings/billing";
 
+    /// <summary>The plan's usage on claude.ai, where the header's plan goes for a Claude account.</summary>
+    public const string ClaudeUsageUrl = "https://claude.ai/new#settings/usage";
+
     /// <summary>
     /// Where this account's plan and billing are managed: claude.ai for a Claude plan, the Claude Console for an API
     /// key or Console account. Null for a cloud provider (Bedrock, Vertex, Foundry), which bills through that provider.
@@ -72,14 +76,27 @@ public sealed partial class AccountViewModel(AppServices services) : ViewModelBa
         ? "Billing in the Claude Console, in your browser"
         : "Your plan and billing on claude.ai, in your browser";
 
-    /// <summary>The header's account button: the email, which opens the menu. The plan beside it opens billing.</summary>
+    /// <summary>The header's account button: the email, which opens the menu. The plan beside it opens its usage.</summary>
     public string HeaderName => IsSignedIn && HasBilling && PlanText is not null ? Email ?? "Signed in" : Summary;
 
-    /// <summary>The plan in the header, as a link to billing; null when there's no plan or nowhere to manage it.</summary>
+    /// <summary>The plan in the header, as a link; null when there's no plan or nowhere to manage it.</summary>
     public string? HeaderPlan => IsSignedIn && HasBilling ? PlanText : null;
+
+    /// <summary>
+    /// Where the header's plan goes: the plan's usage on claude.ai for a Claude account, the Console's billing
+    /// otherwise. The account menu's link still opens billing.
+    /// </summary>
+    public string? HeaderPlanUrl => BillingUrl == ClaudeBillingUrl ? ClaudeUsageUrl : BillingUrl;
+
+    public string HeaderPlanTip => HeaderPlanUrl == ClaudeUsageUrl ? "Your plan's usage on claude.ai, in your browser" : BillingTip;
+
+    public string HeaderPlanName => HeaderPlanUrl == ClaudeUsageUrl ? "Plan usage" : BillingText;
 
     [RelayCommand]
     private Task OpenBillingAsync() => BillingUrl is { } url ? services.Platform.OpenUrlAsync(url) : Task.CompletedTask;
+
+    [RelayCommand]
+    private Task OpenHeaderPlanAsync() => HeaderPlanUrl is { } url ? services.Platform.OpenUrlAsync(url) : Task.CompletedTask;
 
     /// <summary>Settings → Claude Code's account line.</summary>
     public string SettingsText => IsSignedIn

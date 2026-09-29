@@ -136,6 +136,17 @@ internal partial interface ITaskbarList3
     void SetOverlayIcon(nint hwnd, nint icon, string? description);
 }
 
+/// <summary>FLASHWINFO, for <see cref="WinRt.FlashWindowEx"/>.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct FlashWindowInfo
+{
+    public uint Size;
+    public nint Window;
+    public uint Flags;
+    public uint Count;
+    public uint Timeout;
+}
+
 /// <summary>An HSTRING, deleted on dispose.</summary>
 [SupportedOSPlatform("windows")]
 internal readonly unsafe struct HString : IDisposable
@@ -195,6 +206,19 @@ internal static unsafe partial class WinRt
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool DestroyIcon(nint icon);
+
+    /// <summary>FLASHW_STOP: back to normal.</summary>
+    public const uint FlashStop = 0;
+
+    /// <summary>FLASHW_TRAY: the taskbar button.</summary>
+    public const uint FlashTray = 2;
+
+    /// <summary>FLASHW_TIMERNOFG: until the window comes to the foreground.</summary>
+    public const uint FlashUntilForeground = 12;
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool FlashWindowEx(FlashWindowInfo* info);
 
     /// <summary>The activation factory of a WinRT class, as <typeparamref name="T"/>.</summary>
     public static T GetActivationFactory<T>(string className)

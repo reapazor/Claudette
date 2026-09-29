@@ -1,7 +1,7 @@
 ﻿"Claudette"
 [button] Claude's service status: Claude has an outage
 [button] Account: me@example.com
-[button] Plan and billing: Max plan
+[button] Plan usage: Max plan
 "Claude is having problems: Elevated errors on claude.ai, Claude Code, Claude Cowork and the Claude API (investigating)"
 [button] Status page
 [button] Dismiss

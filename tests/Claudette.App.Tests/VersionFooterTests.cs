@@ -23,11 +23,41 @@ public class VersionFooterTests
     {
         await using var h = new TabTestHarness(appVersion: new AppVersion(0, 1, 0));
         h.Services.BuildCommit = "842169b";
+        h.Services.BuildConfiguration = null;
         h.Services.IsSourceBuild = true;
         var settings = new SettingsViewModel(h.Services, null);
 
         Assert.Equal("Claudette 0.1.0 · 842169b", settings.VersionLabel);
         Assert.StartsWith("Claudette 0.1.0 (source build 842169b), built from this checkout.", settings.VersionTip, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Debug")]
+    [InlineData("Release")]
+    public async Task A_source_builds_tooltip_says_which_configuration_it_was_built_in(string configuration)
+    {
+        await using var h = new TabTestHarness(appVersion: new AppVersion(0, 1, 0));
+        h.Services.BuildCommit = "842169b";
+        h.Services.BuildConfiguration = configuration;
+        h.Services.IsSourceBuild = true;
+        var settings = new SettingsViewModel(h.Services, null);
+
+        Assert.StartsWith($"Claudette 0.1.0 (source build 842169b), a {configuration} build from this checkout.", settings.VersionTip, StringComparison.Ordinal);
+        Assert.Equal("Claudette 0.1.0 · 842169b", settings.VersionLabel);
+    }
+
+    [Fact]
+    public async Task The_configuration_is_the_one_the_app_was_built_in_and_only_source_builds_show_it()
+    {
+        await using var h = new TabTestHarness(appVersion: new AppVersion(0, 1, 0));
+#if DEBUG
+        Assert.Equal("Debug", h.Services.BuildConfiguration);
+#else
+        Assert.Equal("Release", h.Services.BuildConfiguration);
+#endif
+        var settings = new SettingsViewModel(h.Services, null);
+
+        Assert.DoesNotContain(h.Services.BuildConfiguration!, settings.VersionTip, StringComparison.Ordinal);
     }
 
     [Fact]

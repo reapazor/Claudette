@@ -1,6 +1,8 @@
 using Claudette.Core;
 using Claudette.Core.Auth;
+using Claudette.Core.Claude;
 using Claudette.Core.Credentials;
+using Claudette.Core.Diffs;
 using Claudette.Core.Git;
 using Claudette.Core.Installation;
 using Claudette.Core.Processes;
@@ -101,7 +103,8 @@ public sealed class AppServices : IAsyncDisposable
         Git = new GitWorkingTree(launcher, timeProvider, environment: UserEnvironment);
         Library = new LibraryService(this);
         ProtocolLog.DeleteOld(paths.ProtocolLogDirectory, timeProvider.GetUtcNow());
-        Notifications = new NotificationService(this, notifier ?? NullNotifier.Instance);
+        BeforeContentStore.DeleteOld(paths.BeforeContentDirectory, timeProvider.GetUtcNow());
+        Notifications =new NotificationService(this, notifier ?? NullNotifier.Instance);
         Tips = new ShortcutTips(Settings);
         Perforce = new PerforceService(this, credentials ?? new UnavailableCredentialStore());
         ProjectTools = new ProjectToolsService(this, systemProcesses, unrealRegistry ?? NoUnrealEngineRegistry.Instance, projectToolPaths ?? ProjectToolPaths.ForCurrentUser());
@@ -142,6 +145,12 @@ public sealed class AppServices : IAsyncDisposable
     /// <summary>The commit this Claudette was built from, shortened, or null when the build didn't record one.</summary>
     internal string? BuildCommit { get; set; }
 
+    /// <summary>The configuration this Claudette was built in (Debug, Release), as the .NET SDK records it.</summary>
+    internal string? BuildConfiguration { get; set; } = typeof(AppServices).Assembly
+        .GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), false)
+        .OfType<System.Reflection.AssemblyConfigurationAttribute>()
+        .FirstOrDefault()?.Configuration is { Length: > 0 } configuration ? configuration : null;
+
     /// <summary>
     /// Runs from a source build (DESIGN.md §9, "Working on Claudette"), set at launch: its version is the checkout's,
     /// so the commit tells it from the release.
@@ -149,7 +158,7 @@ public sealed class AppServices : IAsyncDisposable
     public bool IsSourceBuild { get; set; }
 
     /// <summary>This copy of Claudette, for the foot of the Settings sidebar and bug reports (DESIGN.md §14, "Version").</summary>
-    public AppBuild Build => new(AppVersion, IsSourceBuild ? AppInstallKind.SourceBuild : AppInstaller.Kind, BuildCommit);
+    public AppBuild Build => new(AppVersion, IsSourceBuild ? AppInstallKind.SourceBuild : AppInstaller.Kind, BuildCommit) { Configuration = BuildConfiguration };
 
     /// <summary>The version the running app was built with (<c>-p:Version=…</c> in packaging/), without build metadata.</summary>
     private static AppVersion BuiltVersion() =>
@@ -262,6 +271,16 @@ public sealed class AppServices : IAsyncDisposable
 
     /// <summary>Claude Code's config folder, from <c>claude auth status</c>: where its user settings are.</summary>
     public string? ClaudeConfigDirectory { get; set; }
+
+    /// <summary>Where an organization's <c>managed-settings.json</c> for Claude Code is. Null reads none: tests.</summary>
+    public string? ClaudeManagedSettingsDirectory { get; set; } = StartingPermissionMode.ManagedDirectory;
+
+    /// <summary>
+    /// What Claude Code's settings say about the permission mode a session in <paramref name="folder"/> starts in
+    /// (DESIGN.md §7, "Starting mode"); null reads only the user's and managed settings. Reads files.
+    /// </summary>
+    public StartingPermissionMode ReadStartingPermissionMode(string? folder) =>
+        StartingPermissionMode.Read(StartingPermissionMode.SettingsFiles(ClaudeManagedSettingsDirectory, ClaudeConfigDirectory, folder));
 
     /// <summary>For the working line's verbs (DESIGN.md §5). Tests give it a seed.</summary>
     public Random Random { get; set; } = Random.Shared;

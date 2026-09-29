@@ -1,6 +1,8 @@
 using System.Text.Json.Nodes;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
+using Claudette.Core.Diffs;
+using Claudette.Core.Settings;
 using Claudette.Platform.Processes;
 
 namespace Claudette.App.Tests;
@@ -55,6 +57,101 @@ public class SidePanelTests
     }
 
     [Fact]
+    public async Task A_large_file_changed_live_is_saved_for_when_the_tab_is_restored()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        var path = Path.Combine(h.WorkFolder, "big.cs");
+        await File.WriteAllTextAsync(path, LargeFile.Replace("line 0007", "line seven", StringComparison.Ordinal), TestContext.Current.CancellationToken);
+
+        // Live, Claude Code sends the whole file as it was, however large.
+        h.Transport.Emit(new JsonObject
+        {
+            ["type"] = "assistant",
+            ["message"] = new JsonObject { ["content"] = new JsonArray(new JsonObject { ["type"] = "tool_use", ["id"] = "e1", ["name"] = "Edit", ["input"] = LargeEditInput(path) }) },
+        });
+        h.Transport.Emit(new JsonObject
+        {
+            ["type"] = "user",
+            ["message"] = new JsonObject { ["content"] = new JsonArray(new JsonObject { ["type"] = "tool_result", ["tool_use_id"] = "e1", ["content"] = "The file has been updated." }) },
+            ["tool_use_result"] = LargeEditResult(path, LargeFile),
+        });
+
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the changed file");
+        Assert.Equal(("M", "+1 −1"), (tab.ChangedFiles[0].Status, tab.ChangedFiles[0].Stats));
+        Assert.True(File.Exists(Path.Combine(h.Services.Paths.BeforeContentDirectory, "e1.txt.gz")));
+    }
+
+    [Fact]
+    public async Task A_restored_tab_finds_the_large_file_its_transcript_leaves_out()
+    {
+        await using var h = new TabTestHarness();
+        var path = Path.Combine(h.WorkFolder, "big.cs");
+        await File.WriteAllTextAsync(path, LargeFile.Replace("line 0007", "line seven", StringComparison.Ordinal), TestContext.Current.CancellationToken);
+        new BeforeContentStore(h.Services.Paths.BeforeContentDirectory, h.Time).Save("e1", LargeFile);
+        // Claude Code writes originalFile to the transcript as null over 10,000 characters.
+        h.WriteTranscript("s1",
+            Wire.Entry("assistant", "2026-09-28T11:00:00Z", Wire.Message(new JsonObject { ["type"] = "tool_use", ["id"] = "e1", ["name"] = "Edit", ["input"] = LargeEditInput(path) })),
+            Wire.Entry("user", "2026-09-28T11:00:01Z", Wire.ResultMessage("e1", "The file has been updated."), LargeEditResult(path, null)));
+        h.Services.State.Tabs = [new TabState { Folder = h.WorkFolder, IsPinned = true, SessionId = "s1" }];
+
+        h.Shell.Restore(null);
+        var tab = h.Shell.AllTabs.Single();
+
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle && tab.ChangedFiles.Count == 1, "the changed file");
+        var row = tab.ChangedFiles[0];
+        Assert.Equal(("M", "+1 −1", LargeFile), (row.Status, row.Stats, row.Before));
+    }
+
+    /// <summary>A file of over 10,000 characters, as it was before Claude changed line 7.</summary>
+    private static readonly string LargeFile = string.Concat(Enumerable.Range(1, 400).Select(i => $"A line of a large file, line {i:D4}\n"));
+
+    private static JsonObject LargeEditInput(string path) =>
+        new() { ["file_path"] = path, ["old_string"] = "line 0007", ["new_string"] = "line seven" };
+
+    private static JsonObject LargeEditResult(string path, string? originalFile) => new()
+    {
+        ["filePath"] = path,
+        ["oldString"] = "line 0007",
+        ["newString"] = "line seven",
+        ["originalFile"] = originalFile,
+        ["structuredPatch"] = JsonNode.Parse("""[{"oldStart":7,"oldLines":1,"newStart":7,"newLines":1,"lines":["-A line of a large file, line 0007","+A line of a large file, line seven"]}]"""),
+        ["userModified"] = false,
+        ["replaceAll"] = false,
+    };
+
+    [Fact]
+    public async Task A_file_whose_before_is_unknown_opens_in_the_built_in_view_even_with_a_diff_tool()
+    {
+        await using var h = new TabTestHarness(s =>
+        {
+            s.DiffTool.Kind = "custom";
+            s.DiffTool.CustomCommand = "meld {left} {right}";
+        });
+        var tab = await h.OpenTabAsync();
+        var path = Path.Combine(h.WorkFolder, "big.cs");
+        await File.WriteAllTextAsync(path, "one\n2\n", TestContext.Current.CancellationToken);
+        var row = new ChangedFileRow { Path = path, DisplayPath = "big.cs", Status = "M", StatusText = "Modified", BeforeKnown = false };
+        Diffs.DiffSource? requested = null;
+        tab.DiffRequested += source => requested = source;
+
+        await tab.OpenFileCommand.ExecuteAsync(row);
+
+        Assert.NotNull(requested);
+        Assert.False(requested.BeforeKnown);
+        Assert.Null(requested.OpenInDiffTool);
+        Assert.StartsWith("what it held before Claude's first change isn't known", requested.BeforeLabel, StringComparison.Ordinal);
+
+        // The view shows the file as it is now, with nothing marked as changed.
+        var view = new Diffs.DiffWindowViewModel(requested, dark: false);
+        await TabTestHarness.Eventually(() => !view.IsLoading, "the file");
+        Assert.True(view.ShowWholeFile);
+        Assert.Equal("", view.Stats);
+        Assert.Equal(["one", "2"], view.InlineRows.Select(r => r.Text));
+        Assert.All(view.InlineRows, r => Assert.Equal(Core.Diffs.DiffOp.Context, r.Op));
+    }
+
+    [Fact]
     public async Task The_process_summary_counts_what_the_tab_started()
     {
         await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true);
@@ -68,6 +165,36 @@ public class SidePanelTests
         Assert.StartsWith("1 proc · ", tab.ProcessSummaryText, StringComparison.Ordinal);
         Assert.True(tab.HasBusyProcesses);
         Assert.Equal(["claude", "node"], tab.Processes.Select(p => p.Name));
+    }
+
+    [Fact]
+    public async Task The_header_totals_the_tabs_processes_while_the_monitor_is_on()
+    {
+        await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true);
+        var tab = await h.OpenTabAsync();
+        h.Trees.Trees[4242].Children.Add((5001, "node"));
+
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+
+        // claude's 1% and 100 MB with the child's 20% and 50 MB.
+        await TabTestHarness.Eventually(() => h.Shell.ProcessTotalsText == "21% CPU · 150 MB", "the header's total");
+        Assert.Equal($"Processes of every tab, Claude Code included\n{tab.DisplayName}: 1 proc · 21% CPU · 150 MB", h.Shell.ProcessTotalsTip);
+
+        // Off in Tab settings: nothing to add up, so the header shows nothing.
+        var previous = tab.State.Overrides;
+        tab.State.Overrides = new TabOverrides { ShowProcessMonitor = false };
+        await tab.ApplyOverridesAsync(previous);
+        Assert.Null(h.Shell.ProcessTotalsText);
+        Assert.Null(h.Shell.ProcessTotalsTip);
+
+        // Back on, then the tab closes.
+        previous = tab.State.Overrides;
+        tab.State.Overrides = new TabOverrides();
+        await tab.ApplyOverridesAsync(previous);
+        await TabTestHarness.Eventually(() => h.Shell.ProcessTotalsText is not null, "a sample");
+        h.Shell.CloseTabCommand.Execute(tab);
+        await h.Shell.Confirmation!.ConfirmCommand.ExecuteAsync(null);
+        await TabTestHarness.Eventually(() => h.Shell.ProcessTotalsText is null, "the closed tab to leave the total");
     }
 
     [Fact]

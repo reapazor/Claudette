@@ -38,8 +38,8 @@ internal sealed class ScriptedTransport : IClaudeTransport
         ["initialize"] = _ => new JsonObject
         {
             ["models"] = new JsonArray(
-                new JsonObject { ["value"] = "default", ["resolvedModel"] = "claude-opus-5-5", ["displayName"] = "Default (recommended)", ["supportsEffort"] = true, ["supportedEffortLevels"] = new JsonArray("low", "high") },
-                new JsonObject { ["value"] = "opus", ["resolvedModel"] = "claude-opus-5-5", ["displayName"] = "Opus", ["supportsEffort"] = true, ["supportedEffortLevels"] = new JsonArray("low", "high") },
+                new JsonObject { ["value"] = "default", ["resolvedModel"] = "claude-opus-5-5", ["displayName"] = "Default (recommended)", ["supportsEffort"] = true, ["supportedEffortLevels"] = new JsonArray("low", "high"), ["supportsAutoMode"] = true },
+                new JsonObject { ["value"] = "opus", ["resolvedModel"] = "claude-opus-5-5", ["displayName"] = "Opus", ["supportsEffort"] = true, ["supportedEffortLevels"] = new JsonArray("low", "high"), ["supportsAutoMode"] = true },
                 new JsonObject { ["value"] = "haiku", ["resolvedModel"] = "claude-haiku-4-5", ["displayName"] = "Haiku", ["supportsEffort"] = false }),
             ["current_permission_mode"] = "default",
         },
@@ -345,6 +345,8 @@ internal sealed class TabTestHarness : IAsyncDisposable
         Services.Notifications.UseBadge(Notifier);
         // The machine running the tests doesn't decide whether the Claude app is available (its ANTHROPIC_BASE_URL, say).
         Services.RemoteControl.EnvironmentVariable = _ => null;
+        // Nor do its organization's managed Claude Code settings (DESIGN.md §7, "Starting mode").
+        Services.ClaudeManagedSettingsDirectory = null;
         configure?.Invoke(Services.Settings);
         if (updater is not null)
         {

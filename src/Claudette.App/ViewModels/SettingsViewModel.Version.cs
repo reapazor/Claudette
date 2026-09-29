@@ -24,9 +24,14 @@ public sealed partial class SettingsViewModel
     /// <summary>"Claudette 0.1.0", or "Claudette 0.1.0 · 842169b" for a source build.</summary>
     public string VersionLabel => VersionCopied ? "Copied" : _services.Build.Label;
 
-    public string VersionTip => _services.Build.Kind == AppInstallKind.SourceBuild
-        ? $"Claudette {_services.Build.Description}, built from this checkout. Click to copy the versions for a bug report."
-        : $"Claudette {_services.Build.Description}. Click to copy the versions for a bug report.";
+    /// <summary>A source build also says which configuration it was built in: "…, a Debug build from this checkout."</summary>
+    public string VersionTip => _services.Build switch
+    {
+        { Kind: AppInstallKind.SourceBuild, Configuration: { } configuration } build =>
+            $"Claudette {build.Description}, a {configuration} build from this checkout. Click to copy the versions for a bug report.",
+        { Kind: AppInstallKind.SourceBuild } build => $"Claudette {build.Description}, built from this checkout. Click to copy the versions for a bug report.",
+        var build => $"Claudette {build.Description}. Click to copy the versions for a bug report.",
+    };
 
     /// <summary>Claudette's version, Claude Code's, the OS and the runtime: only versions, since it's meant to be posted.</summary>
     internal IReadOnlyList<string> VersionDetails() => _services.Build.Details(

@@ -205,7 +205,7 @@ public static class TranscriptReader
             return;
         }
         // A subagent's text from the "user" side is its prompt, which its Agent call already shows.
-        if (parentToolUseId is not null)
+        if (parentToolUseId is not null || TranscriptPrompts.IsCommandEcho(blocks))
         {
             return;
         }

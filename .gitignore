@@ -402,9 +402,14 @@ FodyWeavers.xsd
 *.msm
 *.msp
 
-# JetBrains Rider
+# JetBrains Rider, except the project icon (packaging/icon/build-icons.mjs draws it)
 *.sln.iml
-.idea/
+.idea/*
+!.idea/.idea.Claudette/
+.idea/.idea.Claudette/*
+!.idea/.idea.Claudette/.idea/
+.idea/.idea.Claudette/.idea/*
+!.idea/.idea.Claudette/.idea/icon.svg
 
 ##
 ## Visual studio for Mac
@@ -432,6 +437,8 @@ test-results/
 
 # Icon must end with two \r
 Icon
+# Without the \r it matches packaging/icon on case-insensitive file systems
+!/packaging/icon/
 
 
 # Thumbnails

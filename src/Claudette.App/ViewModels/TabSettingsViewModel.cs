@@ -50,7 +50,13 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
             levels.Add(effort);
         }
         EffortChoices = [new Choice(null, $"Default ({defaults.NewTabs.DefaultEffort ?? "model default"})"), .. levels.Select(e => new Choice(e, e))];
-        ModeChoices = [new Choice(null, $"Default ({PermissionModeInfo.Label(defaults.NewTabs.DefaultPermissionMode)})"), .. PermissionModeInfo.Choices.Select(m => new Choice(m.Value, m.Label))];
+        // Claude Code's default is known once the tab has started and read its settings files (DESIGN.md §7).
+        var defaultMode = defaults.NewTabs.DefaultPermissionMode ?? tab.ClaudeCodeStartingMode;
+        ModeChoices =
+        [
+            new Choice(null, $"Default ({(defaultMode is null ? "Claude Code's default" : PermissionModeInfo.Label(defaultMode))})"),
+            .. PermissionModeInfo.Choices.Select(m => new Choice(m.Value, m.Label)),
+        ];
         MonitorChoices = [new Choice(null, $"Default ({(defaults.Processes.ShowMonitor ? "on" : "off")})"), new Choice(On, "On"), new Choice(Off, "Off")];
 
         SelectedModel = ModelChoices.First(c => c.Value == overrides.Model);

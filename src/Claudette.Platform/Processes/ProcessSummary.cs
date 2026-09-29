@@ -34,12 +34,23 @@ public sealed record ProcessSummary(int Count, double CpuPercent, long MemoryByt
         return new ProcessSummary(count, cpu, memory);
     }
 
-    public override string ToString()
+    /// <summary>Several trees' summaries added up, such as every tab's for the header.</summary>
+    public static ProcessSummary Sum(IEnumerable<ProcessSummary> summaries)
     {
-        var procs = Count == 1 ? "1 proc" : $"{Count} procs";
-        var cpu = Math.Round(CpuPercent, MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture);
-        return $"{procs} · {cpu}% CPU · {FormatMemory(MemoryBytes)}";
+        ArgumentNullException.ThrowIfNull(summaries);
+        var total = Empty;
+        foreach (var summary in summaries)
+        {
+            total = new ProcessSummary(total.Count + summary.Count, total.CpuPercent + summary.CpuPercent, total.MemoryBytes + summary.MemoryBytes);
+        }
+        return total;
     }
+
+    /// <summary>The CPU and memory without the count, for example <c>42% CPU · 1.1 GB</c>.</summary>
+    public string UsageText =>
+        $"{Math.Round(CpuPercent, MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture)}% CPU · {FormatMemory(MemoryBytes)}";
+
+    public override string ToString() => $"{(Count == 1 ? "1 proc" : $"{Count} procs")} · {UsageText}";
 
     /// <summary>Whole megabytes under 1 GB, otherwise gigabytes with one decimal.</summary>
     public static string FormatMemory(long bytes)

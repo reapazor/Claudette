@@ -27,6 +27,20 @@ public class ClaudeSessionTests
     }
 
     [Fact]
+    public async Task Initialize_reads_which_models_support_auto_mode()
+    {
+        // Claude Code 2.1.284 sets supportsAutoMode on the models that support it and leaves it out for Haiku.
+        _transport.InitializeResponse["models"] = new JsonArray(
+            new JsonObject { ["value"] = "opus", ["displayName"] = "Opus", ["supportsAutoMode"] = true },
+            new JsonObject { ["value"] = "haiku", ["displayName"] = "Haiku" });
+        await using var session = new ClaudeSession(_transport, _time);
+
+        var result = await session.InitializeAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal([true, false], result.Models.Select(m => m.SupportsAutoMode));
+    }
+
+    [Fact]
     public async Task Sending_a_message_writes_a_user_line_and_starts_working()
     {
         await using var session = await StartAsync();

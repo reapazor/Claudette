@@ -10,7 +10,11 @@ public sealed record ModelInfo(
     string DisplayName,
     string? Description,
     bool SupportsEffort,
-    IReadOnlyList<string> SupportedEffortLevels);
+    IReadOnlyList<string> SupportedEffortLevels)
+{
+    /// <summary>Auto mode works with this model (DESIGN.md §7). Claude Code leaves the field out for one that it doesn't.</summary>
+    public bool SupportsAutoMode { get; init; }
+}
 
 /// <summary>A slash command, as <c>initialize</c> and <c>system/commands_changed</c> list them (DESIGN.md §5, "Composer").</summary>
 /// <param name="Name">Without the leading slash.</param>
@@ -52,7 +56,10 @@ public sealed record InitializeResult(
                 m.GetString("displayName") ?? m.GetString("value") ?? "",
                 m.GetString("description"),
                 m.GetBool("supportsEffort") ?? false,
-                m.GetStringList("supportedEffortLevels")))
+                m.GetStringList("supportedEffortLevels"))
+            {
+                SupportsAutoMode = m.GetBool("supportsAutoMode") ?? false,
+            })
             .Where(m => m.Value.Length > 0)
             .ToArray() ?? [];
 

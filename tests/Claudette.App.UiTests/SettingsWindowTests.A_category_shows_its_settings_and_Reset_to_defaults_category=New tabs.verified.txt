@@ -4,7 +4,7 @@
 "Default effort"
 [choice] "The model's default"
 "Default permission mode"
-[choice] "Claude Code's default"
+[choice] "Claude Code's default (Auto)"
 "Recent folders to keep"
 [button] (icon)
 [button] (icon)

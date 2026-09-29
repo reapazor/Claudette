@@ -90,6 +90,18 @@ public sealed class ChangedFilesTests : IDisposable
         Assert.True(Assert.Single(_files.Files).IsNew);
     }
 
+    [Fact]
+    public void An_edit_to_a_file_over_10000_characters_has_an_unknown_before_not_a_new_file()
+    {
+        // As Claude Code 2.1.284 writes it to the transcript: without the large file's content (DESIGN.md §8).
+        Use("t1", "Edit", PathOf("big.cs"));
+        _files.RecordToolResult("t1", false, JsonNode.Parse("""{"oldString":"a","newString":"b","originalFile":null,"structuredPatch":[],"contentNotInModelContext":true}"""));
+
+        var file = Assert.Single(_files.Files);
+        Assert.False(file.IsNew);
+        Assert.False(file.BeforeKnown);
+    }
+
     [Theory]
     [InlineData("""{"stdout":"","stderr":""}""")]
     [InlineData("\"The file was updated.\"")]

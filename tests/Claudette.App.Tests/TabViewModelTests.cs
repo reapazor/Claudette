@@ -32,6 +32,25 @@ public class TabViewModelTests
     }
 
     [Fact]
+    public async Task A_slash_command_gets_its_suffixes_in_a_block_before_it()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        tab.AddSuffixCommand.Execute(h.Services.Suffix("clarify"));
+
+        tab.ComposerText = "/review 42";
+        await tab.SendCommand.ExecuteAsync(null);
+
+        // After the command, Claude Code would take the suffix as the command's arguments (DESIGN.md §5, "Quick suffixes").
+        var sent = Assert.Single(h.Transport.Sent, m => m["type"]?.GetValue<string>() == "user");
+        var texts = sent["message"]!["content"]!.AsArray().Select(b => b!["text"]!.GetValue<string>());
+        Assert.Equal(["Ask clarifying questions before you start.", "/review 42"], texts);
+        var shown = Assert.IsType<UserMessageItem>(tab.Items[0]);
+        Assert.Equal("/review 42", shown.Text);
+        Assert.Equal("Ask clarifying questions before you start.", shown.SuffixText);
+    }
+
+    [Fact]
     public async Task The_first_prompt_names_the_tab()
     {
         await using var h = new TabTestHarness();

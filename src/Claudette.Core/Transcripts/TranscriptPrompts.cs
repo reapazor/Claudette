@@ -23,7 +23,7 @@ internal static class TranscriptPrompts
         {
             return null;
         }
-        if (blocks.OfType<JsonObject>().Any(b => b.GetString("type") == "tool_result"))
+        if (blocks.OfType<JsonObject>().Any(b => b.GetString("type") == "tool_result") || IsCommandEcho(blocks))
         {
             return null;
         }
@@ -46,6 +46,14 @@ internal static class TranscriptPrompts
         var stripped = StripReminders(text);
         return stripped.Length > 0 ? stripped : null;
     }
+
+    /// <summary>
+    /// A slash command's echo with blocks that were sent before the command, such as quick suffixes (DESIGN.md §5):
+    /// Claude Code keeps them ahead of the echo, which is the last text block.
+    /// </summary>
+    public static bool IsCommandEcho(JsonArray blocks) =>
+        blocks.OfType<JsonObject>().LastOrDefault(b => b.GetString("type") == "text")?.GetString("text")?.TrimStart()
+            .StartsWith("<command-", StringComparison.Ordinal) == true;
 
     /// <summary>Claude Code prepends <c>&lt;system-reminder&gt;</c> blocks to some prompts; they aren't what the user typed.</summary>
     public static string StripReminders(string text)

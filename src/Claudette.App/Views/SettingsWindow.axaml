@@ -570,6 +570,7 @@
           <CheckBox Content="A project action finishes" IsChecked="{Binding NotifyProjectActions}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Check-in notifications are in Check-ins." />
           <CheckBox Content="Show the number of tabs needing input on the Dock or taskbar icon" IsChecked="{Binding ShowBadge}" Margin="0,8,0,0" />
+          <CheckBox Content="Animate the Dock or taskbar icon while tabs are working" IsChecked="{Binding AnimateIcon}" />
           <Button Content="Reset to defaults" Command="{Binding ResetNotificationsCommand}" />
         </StackPanel>
 

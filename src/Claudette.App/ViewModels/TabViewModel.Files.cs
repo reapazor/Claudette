@@ -29,8 +29,14 @@ public sealed class ChangedFileRow
 
     public bool IsDeleted => Status == "D";
 
-    /// <summary>The "before" side: Claude's first change's <c>originalFile</c>, or null for a new file. Git rows load it from HEAD.</summary>
+    /// <summary>
+    /// The "before" side: the file before Claude's first change, or null for a new file or when it's unknown. Git rows
+    /// load it from HEAD.
+    /// </summary>
     public string? Before { get; init; }
+
+    /// <summary>False when what the file held before Claude's first change isn't known (DESIGN.md §8, "Before content").</summary>
+    public bool BeforeKnown { get; init; } = true;
 
     public bool FromGit { get; init; }
 }
@@ -47,7 +53,7 @@ public sealed partial class TabViewModel
         {
             if (_changes is null)
             {
-                _changes = new ChangedFiles(_services.Time);
+                _changes = new ChangedFiles(_services.Time) { Befores = new BeforeContentStore(_services.Paths.BeforeContentDirectory, _services.Time) };
                 _changes.Changed += QueueChangedFilesRefresh;
             }
             return _changes;
@@ -193,6 +199,7 @@ public sealed partial class TabViewModel
                     },
                     Stats = state.Added is { } a && state.Removed is { } r ? $"+{a} −{r}" : state.IsBinary ? "binary" : null,
                     Before = file.Before,
+                    BeforeKnown = file.BeforeKnown,
                 };
             }).ToList());
         }
@@ -249,15 +256,20 @@ public sealed partial class TabViewModel
             return;
         }
         var before = row.FromGit ? await _services.Git.GetHeadContentAsync(Folder, row.Path) : row.Before;
+        var beforeKnown = row.FromGit || row.BeforeKnown;
         DiffRequested?.Invoke(new DiffSource(
             row.Path,
             row.DisplayPath,
             before,
-            row.FromGit ? "compared with HEAD" : before is null ? "new in this session" : "compared with before Claude's first change in this session",
-            HasDiffTool ? () => OpenFileInDiffToolAsync(row) : null,
+            row.FromGit ? "compared with HEAD"
+                : !beforeKnown ? "what it held before Claude's first change isn't known, so there's nothing to compare it with"
+                : before is null ? "new in this session"
+                : "compared with before Claude's first change in this session",
+            HasDiffTool && beforeKnown ? () => OpenFileInDiffToolAsync(row) : null,
             () => OpenFileInEditorAsync(row),
             () => RevealFileAsync(row),
-            () => CopyFilePathAsync(row)));
+            () => CopyFilePathAsync(row),
+            beforeKnown));
     }
 
     /// <summary>
@@ -278,6 +290,7 @@ public sealed partial class TabViewModel
             Status = file.IsNew ? "A" : "M",
             StatusText = file.IsNew ? "Added" : "Modified",
             Before = file.Before,
+            BeforeKnown = file.BeforeKnown,
         });
     }
 
@@ -285,11 +298,17 @@ public sealed partial class TabViewModel
     [RelayCommand]
     private Task OpenFileAsync(ChangedFileRow? row) => HasDiffTool ? OpenFileInDiffToolAsync(row) : OpenFileDiffAsync(row);
 
+    /// <summary>A file whose "before" is unknown opens in the built-in view instead, which says so.</summary>
     [RelayCommand]
     private async Task OpenFileInDiffToolAsync(ChangedFileRow? row)
     {
         if (row is null || !HasDiffTool)
         {
+            return;
+        }
+        if (!row.FromGit && !row.BeforeKnown)
+        {
+            await OpenFileDiffAsync(row);
             return;
         }
         try

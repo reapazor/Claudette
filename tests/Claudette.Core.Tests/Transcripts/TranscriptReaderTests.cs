@@ -86,6 +86,19 @@ public class TranscriptReaderTests
     }
 
     [Fact]
+    public void A_slash_command_sent_with_a_suffix_is_not_a_prompt()
+    {
+        // As Claude Code 2.1.284 records a local command sent with a quick suffix in a block before it (DESIGN.md §5).
+        var transcript = TranscriptReader.Read(
+        [
+            """{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Ask clarifying questions."},{"type":"text","text":"<command-name>/compact</command-name>\n<command-message>compact</command-message>\n<command-args></command-args>"}]}}""",
+            """{"type":"user","message":{"role":"user","content":"<local-command-stdout>Compacted </local-command-stdout>"}}""",
+        ]);
+
+        Assert.Equal("Compacted", Assert.IsType<TranscriptNote>(Assert.Single(transcript.Items)).Text);
+    }
+
+    [Fact]
     public void A_background_task_notification_is_read_as_one_not_as_a_prompt()
     {
         // As Claude Code 2.1.284 records a background subagent finishing: a user turn it gave the model.

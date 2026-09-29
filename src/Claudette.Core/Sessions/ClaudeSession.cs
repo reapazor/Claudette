@@ -103,9 +103,13 @@ public sealed class ClaudeSession : IAsyncDisposable
         SendUserMessageAsync(text, [], cancellationToken);
 
     /// <summary>Sends a message with attached images (DESIGN.md §5, "Attachments").</summary>
-    public async ValueTask SendUserMessageAsync(string text, IReadOnlyList<MessageImage> images, CancellationToken cancellationToken = default)
+    public ValueTask SendUserMessageAsync(string text, IReadOnlyList<MessageImage> images, CancellationToken cancellationToken = default) =>
+        SendUserMessageAsync(text, images, null, cancellationToken);
+
+    /// <summary>Sends a message with attached images and quick suffixes (DESIGN.md §5, "Quick suffixes").</summary>
+    public async ValueTask SendUserMessageAsync(string text, IReadOnlyList<MessageImage> images, string? suffix, CancellationToken cancellationToken = default)
     {
-        await _transport.SendAsync(OutgoingMessages.UserMessage(text, images).ToJsonString(), cancellationToken).ConfigureAwait(false);
+        await _transport.SendAsync(OutgoingMessages.UserMessage(text, images, suffix).ToJsonString(), cancellationToken).ConfigureAwait(false);
         if (_state == SessionState.Idle)
         {
             SetState(SessionState.Working);

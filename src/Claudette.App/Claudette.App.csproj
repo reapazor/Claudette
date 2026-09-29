@@ -30,7 +30,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AvaloniaResource Include="Assets\**" />
+    <AvaloniaResource Include="Assets\**" Exclude="Assets\AppIcon\**" />
+    <!-- The icon's animation frames (AppIconAnimations), read without Avalonia so view model tests can use them. -->
+    <EmbeddedResource Include="Assets\AppIcon\*.png" LogicalName="AppIcon.%(Filename)%(Extension)" />
     <!-- Also a file next to the app: toasts from an unpackaged Claudette show it (WindowsAppIdentity). -->
     <Content Include="Assets\claudette.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

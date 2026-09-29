@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
+using Claudette.Core.Diffs;
 using Claudette.Core.Installation;
 using Claudette.Core.Processes;
 using Claudette.Core.Sessions;
@@ -148,6 +149,23 @@ public sealed class RealCliTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Auto_mode_starts_with_a_model_that_supports_it_and_falls_back_to_manual_otherwise()
+    {
+        // What a tab relies on when it starts in auto mode (DESIGN.md §7, "Starting mode").
+        await using (var sonnet = await StartAsync(permissionMode: "auto", model: "sonnet"))
+        {
+            Assert.Equal("auto", sonnet.PermissionMode);
+            Assert.Contains(sonnet.Initialization!.Models, m => m.SupportsAutoMode);
+        }
+
+        await using var haiku = await StartAsync(permissionMode: "auto");
+
+        Assert.Equal("default", haiku.PermissionMode);
+        Assert.Contains(haiku.Initialization!.Models, m => m.ResolvedModel?.StartsWith("claude-haiku", StringComparison.Ordinal) == true && !m.SupportsAutoMode);
+        await Assert.ThrowsAnyAsync<Exception>(() => haiku.SetPermissionModeAsync("auto", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task An_edit_reports_the_original_file()
     {
         await using var session = await StartAsync(permissionMode: "acceptEdits");
@@ -160,6 +178,67 @@ public sealed class RealCliTests : IAsyncLifetime
         var edit = seen.OfType<ToolResultsReceived>().Select(r => r.Message.ToolUseResult).Single(r => r?["oldString"] is not null)!;
         Assert.Equal("first line\nORIGINAL LINE\nlast line\n", edit["originalFile"]!.GetValue<string>());
         Assert.Contains("EDITED LINE", await File.ReadAllTextAsync(file, TestContext.Current.CancellationToken), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Claude Code sends a large file's whole <c>originalFile</c> live, but writes it to the transcript as null over
+    /// 10,000 characters; the changed files keep it for the replay (DESIGN.md §8, "Before content").
+    /// </summary>
+    [Fact]
+    public async Task A_large_original_file_comes_live_but_not_in_the_transcript_so_it_is_kept_for_replays()
+    {
+        var file = Path.Combine(Work, "large.txt");
+        var original = string.Concat(Enumerable.Range(1, 400).Select(i => $"\tfiller line {i:D4}, to take the file past 10,000 characters\n"))
+            + "ORIGINAL LINE\nlast line\n";
+        await File.WriteAllTextAsync(file, original, TestContext.Current.CancellationToken);
+        var befores = new BeforeContentStore(_root.Combine("before-content"), TimeProvider.System);
+        await using var session = await StartAsync(permissionMode: "acceptEdits");
+
+        await session.SendUserMessageAsync($"EDIT_FILE {file}", TestContext.Current.CancellationToken);
+        var (_, seen) = await session.ReadUntilAsync<TurnCompleted>();
+
+        var live = seen.Select(e => e switch
+        {
+            AssistantMessageReceived a => (Core.Protocol.ClaudeMessage)a.Message,
+            ToolResultsReceived r => r.Message,
+            _ => null,
+        }).OfType<Core.Protocol.ClaudeMessage>().ToArray();
+        var liveEdit = live.OfType<Core.Protocol.UserMessage>().Select(r => r.ToolUseResult).OfType<JsonObject>().Single(r => r["oldString"] is not null);
+        Assert.Equal(original, liveEdit["originalFile"]!.GetValue<string>());
+        var liveChanges = Replay(new ChangedFiles(TimeProvider.System) { Befores = befores }, live);
+        Assert.Equal(original, Assert.Single(liveChanges.Files).Before);
+
+        var transcript = await Core.Transcripts.TranscriptReader.ReadAsync(
+            Directory.EnumerateFiles(Path.Combine(Config, "projects"), "*.jsonl", SearchOption.AllDirectories).Single(), TestContext.Current.CancellationToken);
+        var saved = transcript.Items.OfType<Core.Transcripts.TranscriptMessage>().Select(m => m.Message).ToArray();
+        var savedEdit = saved.OfType<Core.Protocol.UserMessage>().Select(r => r.ToolUseResult).OfType<JsonObject>().Single(r => r["oldString"] is not null);
+        Assert.True(savedEdit.ContainsKey("originalFile"));
+        Assert.Null(savedEdit["originalFile"]);
+        var replayed = Assert.Single(Replay(new ChangedFiles(TimeProvider.System) { Befores = befores }, saved).Files);
+        Assert.True(replayed.BeforeKnown);
+        Assert.Equal(original, replayed.Before);
+
+        static ChangedFiles Replay(ChangedFiles files, IEnumerable<Core.Protocol.ClaudeMessage> messages)
+        {
+            foreach (var message in messages)
+            {
+                if (message is Core.Protocol.AssistantMessage assistant)
+                {
+                    foreach (var use in assistant.Content.OfType<Core.Protocol.ToolUseBlock>())
+                    {
+                        files.RecordToolUse(use.Id, use.Name, use.Input);
+                    }
+                }
+                else if (message is Core.Protocol.UserMessage user)
+                {
+                    foreach (var result in user.Content.OfType<Core.Protocol.ToolResultBlock>())
+                    {
+                        files.RecordToolResult(result.ToolUseId, result.IsError, user.ToolUseResult);
+                    }
+                }
+            }
+            return files;
+        }
     }
 
     [Fact]
@@ -285,6 +364,23 @@ public sealed class RealCliTests : IAsyncLifetime
         Assert.Equal("<version>", command.ArgumentHint);
         Assert.Contains(session.Initialization.Commands, c => c is { Name: "compact", IsBuiltIn: true });
         Assert.Contains("ship-it", started.Init.SlashCommands);
+    }
+
+    [Fact]
+    public async Task A_suffix_beside_a_slash_command_reaches_its_prompt_and_not_its_arguments()
+    {
+        Directory.CreateDirectory(Path.Combine(Work, ".claude", "commands"));
+        await File.WriteAllTextAsync(Path.Combine(Work, ".claude", "commands", "ship-it.md"), "Ship version $ARGUMENTS now.\n", TestContext.Current.CancellationToken);
+        await using var session = await StartAsync();
+
+        // As a tab sends a command with a quick suffix (DESIGN.md §5, "Quick suffixes"): in a block before the command.
+        await session.SendUserMessageAsync("/ship-it 1.2", [], "Ask clarifying questions first.", TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.False(done.Result.IsError);
+        var text = _api.Requests.Last(r => r.Reply == "text").LastUserText;
+        Assert.Contains("Ship version 1.2 now.", text, StringComparison.Ordinal);
+        Assert.Contains("Ask clarifying questions first.", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -543,7 +639,8 @@ public sealed class RealCliTests : IAsyncLifetime
                 || name is "CLAUDE_SESSION_INGRESS_TOKEN_FILE" or "CLAUDE_CODE_PROXY_RESOLVES_HOSTS" or "CLAUDE_CODE_CONTAINER_ID")
             .ToDictionary(name => name, _ => (string?)null);
 
-    private async Task<ClaudeSession> StartAsync(string? permissionMode = null, string? resume = null, IReadOnlyList<HookRegistration>? hooks = null, string? appendSystemPrompt = null, Dictionary<string, string?>? environment = null)
+    private async Task<ClaudeSession> StartAsync(string? permissionMode = null, string? resume = null, IReadOnlyList<HookRegistration>? hooks = null, string? appendSystemPrompt = null, Dictionary<string, string?>? environment = null,
+        string model = "claude-haiku-4-5")
     {
         Assert.SkipWhen(_factory is null, "Claude Code isn't installed.");
         var overrides = new Dictionary<string, string?>
@@ -562,7 +659,7 @@ public sealed class RealCliTests : IAsyncLifetime
         return await _factory!.StartAsync(new ClaudeLaunchOptions
         {
             WorkingDirectory = Work,
-            Model = "claude-haiku-4-5",
+            Model = model,
             PermissionMode = permissionMode,
             Resume = resume,
             Hooks = hooks ?? [],

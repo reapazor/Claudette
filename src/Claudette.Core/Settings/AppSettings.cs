@@ -69,6 +69,12 @@ public sealed class NotificationSettings
 
     /// <summary>The number of tabs needing input on the Dock icon or taskbar button.</summary>
     public bool Badge { get; set; } = true;
+
+    /// <summary>
+    /// The Dock icon or taskbar button moves while tabs work (DESIGN.md §10): the taskbar overlay's spark (Windows), or
+    /// Claudette typing, and waving while a tab needs input (macOS).
+    /// </summary>
+    public bool AnimateIcon { get; set; } = true;
 }
 
 /// <summary>How long to keep something: usage history (DESIGN.md §6) or library sessions (§9).</summary>

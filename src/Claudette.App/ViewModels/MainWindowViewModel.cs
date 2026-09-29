@@ -46,6 +46,14 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     /// <summary>The main UI, once Claude Code is installed and signed in.</summary>
     public ShellViewModel? Shell => _shell;
 
+    /// <summary>For tests: <paramref name="shell"/> is the main UI, as after signing in.</summary>
+    internal void UseShell(ShellViewModel shell)
+    {
+        _shell = shell;
+        CurrentPage = shell;
+        OnPropertyChanged(nameof(Shell));
+    }
+
     public AppServices Services => services;
 
     public Task StartAsync()

@@ -1,0 +1,228 @@
+// Draws Claudette's icon (DESIGN.md §2, "Packaging and signing"): Clawd, Claude Code's mascot, with hair on top, a
+// hair tie and a ponytail. Every size is drawn from the sprite below with a whole number of pixels per cell, so the
+// small sizes stay crisp. Writes:
+//   packaging/icon/claudette.svg              the icon as vectors, also Rider's project icon (.idea/.idea.Claudette/.idea/icon.svg)
+//   packaging/icon/claudette-1024.png         the macOS icon, on an ivory tile; build-dmg.sh scales it
+//   src/Claudette.App/Assets/claudette.ico    the window and executable icon
+//   packaging/windows/Assets/*.png            the MSIX logos, and the taskbar's unplated sizes
+//   src/Claudette.App/Assets/AppIcon/*.png    the animations' frames (DESIGN.md §10): the taskbar overlay's pulsing
+//                                             spark, and the Dock icon typing and waving (AppIconAnimations)
+// Run from anywhere: node packaging/icon/build-icons.mjs
+
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { crc32, deflateSync } from 'node:zlib';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
+
+// 12 cells square: 4 rows of hair over Clawd's 8-row body, with the ponytail's tail beside the head.
+const hair = [
+  '........HHH.',
+  '.......HHHHH',
+  '...HHHHKH.HH',
+  '..HHHHHHH.HH',
+];
+const legs = ['..O.O..O.O..', '..O.O..O.O..'];
+const pose = {
+  stand: ['..OOOOOOOO..', '..OEOOOOEO..', 'OOOOOOOOOOOO', 'OOOOOOOOOOOO', '..OOOOOOOO..', '..OOOOOOOO..', ...legs],
+  // Typing: the arms bob in turn.
+  typeLeft: ['..OOOOOOOO..', 'OOOEOOOOEO..', 'OOOOOOOOOO..', '..OOOOOOOOOO', '..OOOOOOOOOO', '..OOOOOOOO..', ...legs],
+  typeRight: ['..OOOOOOOO..', '..OEOOOOEOOO', '..OOOOOOOOOO', 'OOOOOOOOOO..', 'OOOOOOOOOO..', '..OOOOOOOO..', ...legs],
+  // Waving: the left arm up beside the head.
+  wave: ['OOOOOOOOOO..', 'OOOEOOOOEO..', '..OOOOOOOOOO', '..OOOOOOOOOO', '..OOOOOOOO..', '..OOOOOOOO..', ...legs],
+};
+const claudette = body => [...hair, body[0].slice(0, 11) + 'H', ...body.slice(1)];
+const sprite = claudette(pose.stand);
+
+const palette = {
+  O: '#D77757', // Claude Code's "claude" colour
+  E: '#141413',
+  H: '#A8492F',
+  K: '#B8336A',
+};
+const tile = '#F0EEE6'; // Claude's ivory, behind the macOS icon
+const cells = sprite.length;
+
+// Claude's spark for the taskbar overlay, in sizes to pulse through: 2 px a cell, on a dark disc ringed in white like
+// the count's red one, so it reads over the icon on a light or a dark taskbar.
+const spark = [
+  ['.X.', 'XXX', '.X.'],
+  ['X.X.X', '.XXX.', 'XXXXX', '.XXX.', 'X.X.X'],
+  ['X..X..X', '.X.X.X.', '..XXX..', 'XXXXXXX', '..XXX..', '.X.X.X.', 'X..X..X'],
+  ['X...X...X', '.X..X..X.', '..X.X.X..', '...XXX...', 'XXXXXXXXX', '...XXX...', '..X.X.X..', '.X..X..X.', 'X...X...X'],
+];
+const sparkColors = { X: palette.O, disc: '#141413', ring: '#FFFFFF' };
+
+// Pixels per cell at each size. At 24, 36 and 48, the taskbar at 100%, 150% and 200%, she fills the icon.
+const scale = { 16: 1, 20: 1, 24: 2, 30: 2, 32: 2, 36: 3, 40: 3, 44: 3, 48: 4, 50: 3, 64: 5, 128: 9, 150: 8, 256: 18 };
+
+// ── Drawing ──────────────────────────────────────────────────────────────
+const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+
+/** A transparent RGBA image. */
+const image = (width, height) => ({ width, height, data: Buffer.alloc(width * height * 4) });
+
+/** A sprite at `k` pixels per cell, its top-left corner at (x, y). */
+function drawSprite(img, k, x, y, rows = sprite, colors = palette) {
+  rows.forEach((row, cy) => [...row].forEach((ch, cx) => {
+    if (ch === '.') return;
+    const pixel = [...rgb(colors[ch]), 255];
+    for (let py = y + cy * k; py < y + (cy + 1) * k; py++) {
+      for (let px = x + cx * k; px < x + (cx + 1) * k; px++) {
+        img.data.set(pixel, (py * img.width + px) * 4);
+      }
+    }
+  }));
+}
+
+/** A rounded square, its edges antialiased from 4×4 samples a pixel. */
+function drawTile(img, x, y, size, radius, hex) {
+  const [r, g, b] = rgb(hex);
+  const n = 4;
+  for (let py = y; py < y + size; py++) {
+    for (let px = x; px < x + size; px++) {
+      let inside = 0;
+      for (let sy = 0; sy < n; sy++) {
+        for (let sx = 0; sx < n; sx++) {
+          const fx = px - x + (sx + 0.5) / n;
+          const fy = py - y + (sy + 0.5) / n;
+          const cx = Math.min(Math.max(fx, radius), size - radius);
+          const cy = Math.min(Math.max(fy, radius), size - radius);
+          if ((fx - cx) ** 2 + (fy - cy) ** 2 <= radius * radius) inside++;
+        }
+      }
+      if (inside > 0) img.data.set([r, g, b, Math.round((255 * inside) / (n * n))], (py * img.width + px) * 4);
+    }
+  }
+}
+
+/** The sprite centred in a transparent `width`×`height` image. */
+function icon(width, height = width) {
+  const k = scale[height];
+  const img = image(width, height);
+  drawSprite(img, k, Math.floor((width - cells * k) / 2), Math.floor((height - cells * k) / 2));
+  return img;
+}
+
+/**
+ * The macOS icon, or a frame of the Dock's animation: Apple's grid, an 824/1024 rounded square with the sprite at 58%
+ * of its width. The frames are drawn at 512, where the sprite is exactly half its size in the 1024 icon, so the Dock
+ * icon doesn't shift when an animation starts or stops.
+ */
+function macIcon(size = 1024, rows = sprite) {
+  const img = image(size, size);
+  const unit = size / 1024;
+  drawTile(img, 100 * unit, 100 * unit, 824 * unit, 185 * unit, tile);
+  const k = 40 * unit;
+  const at = size / 2 - (cells * k) / 2;
+  drawSprite(img, k, at, at, rows);
+  return img;
+}
+
+/** A frame of the taskbar overlay's spark: 32 px, as Windows wants overlays at twice their 16 px. */
+function sparkIcon(rows) {
+  const img = image(32, 32);
+  drawTile(img, 0, 0, 32, 16, sparkColors.ring);
+  drawTile(img, 2, 2, 28, 14, sparkColors.disc);
+  const at = 16 - rows.length;
+  drawSprite(img, 2, at, at, rows, sparkColors);
+  return img;
+}
+
+// ── Files ────────────────────────────────────────────────────────────────
+function png({ width, height, data }) {
+  const stride = width * 4;
+  const raw = Buffer.alloc((stride + 1) * height); // each row starts with filter type 0, none
+  for (let y = 0; y < height; y++) data.copy(raw, y * (stride + 1) + 1, y * stride, (y + 1) * stride);
+  const chunk = (type, body) => {
+    const out = Buffer.alloc(12 + body.length);
+    out.writeUInt32BE(body.length, 0);
+    out.write(type, 4, 'ascii');
+    body.copy(out, 8);
+    out.writeUInt32BE(crc32(out.subarray(4, 8 + body.length)), 8 + body.length);
+    return out;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8; // bits per channel
+  header[9] = 6; // RGBA
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('IDAT', deflateSync(raw, { level: 9 })),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+/** An .ico holding each image as a PNG, which Windows has read since Vista. */
+function ico(images) {
+  const header = Buffer.alloc(6 + 16 * images.length);
+  header.writeUInt16LE(1, 2); // an icon, not a cursor
+  header.writeUInt16LE(images.length, 4);
+  let offset = header.length;
+  const bodies = images.map((img, i) => {
+    const body = png(img);
+    const entry = 6 + 16 * i;
+    header[entry] = img.width % 256; // 0 means 256
+    header[entry + 1] = img.height % 256;
+    header.writeUInt16LE(1, entry + 4); // colour planes
+    header.writeUInt16LE(32, entry + 6); // bits per pixel
+    header.writeUInt32LE(body.length, entry + 8);
+    header.writeUInt32LE(offset, entry + 12);
+    offset += body.length;
+    return body;
+  });
+  return Buffer.concat([header, ...bodies]);
+}
+
+function svg() {
+  const byColor = new Map();
+  sprite.forEach((row, y) => {
+    for (let x = 0; x < row.length; ) {
+      let end = x + 1;
+      while (end < row.length && row[end] === row[x]) end++;
+      if (row[x] !== '.') {
+        const fill = palette[row[x]];
+        byColor.set(fill, [...(byColor.get(fill) ?? []), `<rect x="${x}" y="${y}" width="${end - x}" height="1"/>`]);
+      }
+      x = end;
+    }
+  });
+  const groups = [...byColor].map(([fill, rects]) => `  <g fill="${fill}">${rects.join('')}</g>`);
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${cells} ${cells}" shape-rendering="crispEdges">`,
+    '  <!-- Drawn by packaging/icon/build-icons.mjs; change the sprite there. -->',
+    ...groups,
+    '</svg>',
+    '',
+  ].join('\n');
+}
+
+function write(path, content) {
+  const full = join(root, path);
+  mkdirSync(dirname(full), { recursive: true });
+  writeFileSync(full, content);
+  console.log(`${path} (${content.length} bytes)`);
+}
+
+write('packaging/icon/claudette.svg', svg());
+write('.idea/.idea.Claudette/.idea/icon.svg', svg());
+write('packaging/icon/claudette-1024.png', png(macIcon()));
+write('src/Claudette.App/Assets/claudette.ico', ico([16, 20, 24, 32, 40, 48, 64, 128, 256].map(size => icon(size))));
+
+const assets = 'packaging/windows/Assets';
+for (const size of [16, 20, 24, 30, 32, 36, 40, 48, 64, 256]) {
+  write(`${assets}/Square44x44Logo.targetsize-${size}_altform-unplated.png`, png(icon(size)));
+}
+write(`${assets}/Square44x44Logo.png`, png(icon(44)));
+write(`${assets}/StoreLogo.png`, png(icon(50)));
+write(`${assets}/Square150x150Logo.png`, png(icon(150)));
+write(`${assets}/Wide310x150Logo.png`, png(icon(310, 150)));
+
+// The animations' frames, in the order AppIconAnimations shows them.
+const frames = 'src/Claudette.App/Assets/AppIcon';
+[spark[0], spark[1], spark[2], spark[3], spark[2], spark[1]].forEach((rows, i) => write(`${frames}/spark-${i}.png`, png(sparkIcon(rows))));
+[pose.typeLeft, pose.typeRight].forEach((body, i) => write(`${frames}/typing-${i}.png`, png(macIcon(512, claudette(body)))));
+[pose.wave, pose.stand].forEach((body, i) => write(`${frames}/waving-${i}.png`, png(macIcon(512, claudette(body)))));
