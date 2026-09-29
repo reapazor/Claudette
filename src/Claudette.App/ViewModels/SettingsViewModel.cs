@@ -172,6 +172,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Claude Code", "Sign in"),
         new("Claude Code", "Sign out"),
         new("Claude Code", "Path to claude"),
+        .. LoginShellSearchEntries(),
         new("New tabs", "Default model"),
         new("New tabs", "Default effort"),
         new("New tabs", "Default permission mode"),
@@ -362,6 +363,22 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public string InstalledText => _services.Install is { } install
         ? $"Claude Code {install.Version} at {install.Path}. Last tested with {ClaudeLocator.LastTestedVersion}{(install.Version > ClaudeLocator.LastTestedVersion ? " (this version is newer)" : "")}."
         : "Claude Code wasn't found.";
+
+    /// <summary>
+    /// Settings → Claude Code → <b>Use my login shell's environment</b> (DESIGN.md §13, "Login shell environment"). Turning
+    /// it on reads the login shell then, if this run hasn't yet; either way it applies to processes started after.
+    /// </summary>
+    public bool UseLoginShellEnvironment
+    {
+        get => _settings.ClaudeCode.UseLoginShellEnvironment;
+        set => Set(value, v => _settings.ClaudeCode.UseLoginShellEnvironment = v);
+    }
+
+    /// <summary>Only macOS and Linux have the setting: on Windows, apps get the user's full environment.</summary>
+    public static bool ShowLoginShellSetting => !OperatingSystem.IsWindows();
+
+    private static IEnumerable<SettingsSearchResult> LoginShellSearchEntries() =>
+        ShowLoginShellSetting ? [new("Claude Code", "Use my login shell's environment")] : [];
 
     /// <summary>Null (empty) finds Claude Code automatically. Takes effect the next time Claudette starts.</summary>
     public string ClaudePath
@@ -646,7 +663,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public IReadOnlyList<DiffToolOption> DiffToolOptions => _diffToolOptions ??=
     [
         new DiffToolOption("builtIn", null, "Built-in diff view"),
-        .. DiffToolDetector.Detect(FileProbe.Instance).Select(d => new DiffToolOption("preset", d.Preset.Id, $"{d.Preset.Name}  ({d.ExecutablePath})")),
+        .. DiffToolDetector.Detect(_services.UserEnvironment.Probe).Select(d => new DiffToolOption("preset", d.Preset.Id, $"{d.Preset.Name}  ({d.ExecutablePath})")),
         new DiffToolOption("custom", null, "Custom command…"),
     ];
 
@@ -708,7 +725,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             : new DiffToolChoice(DiffToolKind.Preset, settings.PresetId);
         try
         {
-            await new DiffToolLauncher(_services.Launcher, _services.Time).TestAsync(choice, Path.Combine(_services.Paths.DiffTempDirectory, "test"));
+            await new DiffToolLauncher(_services.Launcher, _services.Time, environment: _services.UserEnvironment).TestAsync(choice, Path.Combine(_services.Paths.DiffTempDirectory, "test"));
             DiffToolTestResult = "Opened a sample diff. If nothing appeared, check the command.";
         }
         catch (Exception ex)
@@ -1170,6 +1187,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public string InstalledVersionText => _services.InstalledClaudeVersion?.ToString() ?? "Not found";
 
+    /// <summary>Whether the login shell's environment is used, which shell and how long it took, or why not. Never values.</summary>
+    public string LoginShellText => _services.UserEnvironment.Describe();
+
     /// <summary>What Claude Code has sent this run that Claudette doesn't know, in words.</summary>
     public string DiagnosticsText => DiagnosticsReport(includeHeader: false);
 
@@ -1178,6 +1198,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(DiagnosticsText));
         OnPropertyChanged(nameof(InstalledVersionText));
+        OnPropertyChanged(nameof(LoginShellText));
     }
 
     [RelayCommand]
@@ -1194,6 +1215,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             lines.Add($"OS: {System.Runtime.InteropServices.RuntimeInformation.OSDescription} ({System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier})");
             lines.Add($"Claude Code: {InstalledVersionText}{(_services.Install is { } install ? $" at {install.Path}" : "")}");
             lines.Add($"Minimum supported Claude Code: {MinimumVersionText}");
+            lines.Add($"Login shell environment: {LoginShellText}");
             lines.Add($"Protocol logging: {(LogProtocol ? "on" : "off")}");
             lines.Add("");
         }

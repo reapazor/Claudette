@@ -12,7 +12,12 @@ public sealed record PerforceLoginResult(bool Succeeded, bool NeedsUserLogin, st
 /// Runs the <c>p4</c> commands of Perforce ticket handling (DESIGN.md §18) through <see cref="IProcessLauncher"/>,
 /// always in the tab's folder. Never throws for a missing <c>p4</c>, a timeout or an error: those come back as results.
 /// </summary>
-public sealed class PerforceClient(IProcessLauncher launcher, TimeProvider timeProvider, string executable = "p4")
+/// <param name="environment">
+/// The user environment <c>p4</c> runs with, and whose <c>PATH</c> it's found on (DESIGN.md §13): the same as Claude's
+/// own <c>p4</c> commands get, so <c>P4CONFIG</c>, <c>P4PORT</c> and the like set in a shell profile agree. Null:
+/// Claudette's own.
+/// </param>
+public sealed class PerforceClient(IProcessLauncher launcher, TimeProvider timeProvider, string executable = "p4", UserEnvironment? environment = null)
 {
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(20);
 
@@ -107,6 +112,10 @@ public sealed class PerforceClient(IProcessLauncher launcher, TimeProvider timeP
                 return null;
             }
             var spec = new ProcessStartSpec(executable, arguments) { WorkingDirectory = folder };
+            if (environment is not null)
+            {
+                spec = await environment.ApplyAsync(spec, cancellationToken).ConfigureAwait(false);
+            }
             return await ProcessRunner.RunAsync(launcher, spec, timeout ?? Timeout, timeProvider, cancellationToken, inputLine: inputLine).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is TimeoutException or Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)

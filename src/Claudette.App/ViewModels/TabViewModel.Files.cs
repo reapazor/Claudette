@@ -289,7 +289,7 @@ public sealed partial class TabViewModel
         try
         {
             var before = row.FromGit ? await _services.Git.GetHeadContentAsync(Folder, row.Path) : row.Before;
-            await new DiffToolLauncher(_services.Launcher, _services.Time).LaunchAsync(DiffTool, before, row.Path, DiffTempDirectory);
+            await new DiffToolLauncher(_services.Launcher, _services.Time, environment: _services.UserEnvironment).LaunchAsync(DiffTool, before, row.Path, DiffTempDirectory);
         }
         catch (Exception ex)
         {

@@ -19,11 +19,13 @@ public sealed record AuthStatus(
 
 /// <summary>Runs Claude Code's documented <c>auth</c> commands.</summary>
 /// <param name="environment">Added to the clean environment of each command. Tests use it for fake-claude's options.</param>
+/// <param name="userEnvironment">The user environment the commands start from (DESIGN.md §13). Null: Claudette's own.</param>
 public sealed class ClaudeAuth(
     string claudePath,
     IProcessLauncher launcher,
     TimeProvider timeProvider,
-    IReadOnlyDictionary<string, string?>? environment = null)
+    IReadOnlyDictionary<string, string?>? environment = null,
+    UserEnvironment? userEnvironment = null)
 {
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(30);
 
@@ -58,7 +60,7 @@ public sealed class ClaudeAuth(
     /// available, and the way to sign in with SSO.
     /// </summary>
     public ClaudeLogin StartLogin(SignInMethod method) =>
-        ClaudeLogin.Start(launcher, Spec(ClaudeLogin.Arguments(method)), LoginTimeout, timeProvider);
+        ClaudeLogin.Start(launcher, Spec(ClaudeLogin.Arguments(method), userEnvironment?.Current), LoginTimeout, timeProvider);
 
     public static bool TryParseStatus(string json, out AuthStatus status)
     {
@@ -88,9 +90,12 @@ public sealed class ClaudeAuth(
         return true;
     }
 
-    private Task<ProcessResult> RunAsync(IReadOnlyList<string> args, CancellationToken cancellationToken) =>
-        ProcessRunner.RunAsync(launcher, Spec(args), CommandTimeout, timeProvider, cancellationToken);
+    private async Task<ProcessResult> RunAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
+    {
+        var baseEnvironment = userEnvironment is null ? null : await userEnvironment.GetAsync(cancellationToken).ConfigureAwait(false);
+        return await ProcessRunner.RunAsync(launcher, Spec(args, baseEnvironment), CommandTimeout, timeProvider, cancellationToken).ConfigureAwait(false);
+    }
 
-    private ProcessStartSpec Spec(IReadOnlyList<string> args) =>
-        new(claudePath, args) { Environment = ClaudeEnvironment.Create(environment) };
+    private ProcessStartSpec Spec(IReadOnlyList<string> args, IReadOnlyDictionary<string, string>? baseEnvironment) =>
+        new(claudePath, args) { Environment = ClaudeEnvironment.From(baseEnvironment, environment) };
 }

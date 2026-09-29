@@ -165,6 +165,11 @@
               <ContentControl Content="{Binding SignIn}" IsVisible="{Binding HasSignIn}" HorizontalAlignment="Left" />
             </StackPanel>
           </Panel>
+          <!-- macOS and Linux only (DESIGN.md §13, "Login shell environment") -->
+          <CheckBox Content="Use my login shell's environment" IsChecked="{Binding UseLoginShellEnvironment}"
+                    IsVisible="{x:Static vm:SettingsViewModel.ShowLoginShellSetting}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0" IsVisible="{x:Static vm:SettingsViewModel.ShowLoginShellSetting}"
+                     Text="Claude and the tools Claudette runs get the PATH and variables your shell profile sets up, as in a terminal. Not needed when Claudette is started from a terminal. Applies to tabs started after the change." />
           <TextBlock Text="Path to claude" />
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
             <TextBox Text="{Binding ClaudePath}" PlaceholderText="Found automatically" />
@@ -571,11 +576,13 @@
 
           <!-- DESIGN.md §16, "Staying tolerant at runtime" -->
           <TextBlock Classes="section" Text="Diagnostics" Margin="0,8,0,0" />
-          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto" RowSpacing="6">
+          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
             <TextBlock Text="Claude Code" />
             <TextBlock Grid.Column="1" Text="{Binding InstalledVersionText}" />
             <TextBlock Grid.Row="1" Text="Minimum supported Claude Code version" TextWrapping="Wrap" />
             <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MinimumVersionText}" />
+            <TextBlock Grid.Row="2" Text="Login shell environment" TextWrapping="Wrap" />
+            <SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding LoginShellText}" TextWrapping="Wrap" />
           </Grid>
           <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6">
             <SelectableTextBlock Text="{Binding DiagnosticsText}" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" />

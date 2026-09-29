@@ -319,14 +319,15 @@ internal sealed class TabTestHarness : IAsyncDisposable
     /// <param name="dispatcher">The UI thread: an inline stand-in for view model tests, Avalonia's own for rendered UI tests.</param>
     /// <param name="appInstaller">Installs Claudette's own updates; by default none can be.</param>
     /// <param name="http">Answers Claudette's own web requests; by default every request fails, so nothing reaches the network.</param>
+    /// <param name="loginShell">Stands in for the user's login shell (DESIGN.md §13); by default none is read.</param>
     public TabTestHarness(Action<AppSettings>? configure = null, FakeClaudeUpdater? updater = null, IProcessLauncher? launcher = null, IUiDispatcher? dispatcher = null,
-        Core.Updates.IAppInstaller? appInstaller = null, HttpMessageHandler? http = null, Core.Updates.AppVersion? appVersion = null)
+        Core.Updates.IAppInstaller? appInstaller = null, HttpMessageHandler? http = null, Core.Updates.AppVersion? appVersion = null, ILoginShell? loginShell = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "work"));
         Directory.CreateDirectory(ProjectsDirectory);
         Trees = new FakeProcessTreeTracker(Time);
         Services = new AppServices(AppPaths.Under(_root), launcher ?? new ProcessLauncher(), Time, Platform, dispatcher ?? new InlineDispatcher(), processTrees: Trees, notifier: Notifier,
-            appInstaller: appInstaller, httpHandler: http ?? new OfflineHandler(), appVersion: appVersion);
+            appInstaller: appInstaller, httpHandler: http ?? new OfflineHandler(), appVersion: appVersion, loginShell: loginShell);
         Services.Notifications.UseBadge(Notifier);
         configure?.Invoke(Services.Settings);
         if (updater is not null)

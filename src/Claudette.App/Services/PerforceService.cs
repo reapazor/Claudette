@@ -23,7 +23,8 @@ public sealed class PerforceService(AppServices services, ICredentialStore crede
     /// <summary>The hook answers by itself this long before Claude Code would give up on it.</summary>
     public static readonly TimeSpan HookMargin = TimeSpan.FromSeconds(15);
 
-    public PerforceClient Client { get; } = new(services.Launcher, services.Time);
+    /// <summary>Runs <c>p4</c> with the user environment, as Claude's own <c>p4</c> commands get it (DESIGN.md §13).</summary>
+    public PerforceClient Client { get; } = new(services.Launcher, services.Time, environment: services.UserEnvironment);
 
     public PerforceLoginGate Gate { get; } = new();
 
@@ -57,8 +58,8 @@ public sealed class PerforceService(AppServices services, ICredentialStore crede
         }
     }
 
-    /// <summary>Finds P4V for <b>Open in P4V</b>. Tests replace it.</summary>
-    internal IFileProbe Probe { get; set; } = FileProbe.Instance;
+    /// <summary>Finds P4V for <b>Open in P4V</b>, on the user's <c>PATH</c>. Tests replace it.</summary>
+    internal IFileProbe Probe { get; set; } = services.UserEnvironment.Probe;
 
     /// <summary>The tab's folder, with Settings → Perforce's per-folder server and user, if any.</summary>
     public PerforceTarget TargetFor(string folder) =>
@@ -97,7 +98,7 @@ public sealed class PerforceService(AppServices services, ICredentialStore crede
         var spec = new ProcessStartSpec(FindP4V(), args) { WorkingDirectory = Directory.Exists(folder) ? folder : null, Detached = true };
         try
         {
-            _ = services.Launcher.Start(spec);
+            _ = services.Launcher.Start(services.UserEnvironment.Apply(spec));
         }
         catch (Win32Exception ex)
         {

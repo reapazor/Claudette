@@ -172,6 +172,13 @@ items:
     usedIn: tests/Claudette.IntegrationTests/RealCliTests.cs
     docs: https://code.claude.com/docs/en/env-vars
     test: RealCliTests
+  - id: "Bash tool environment comes from Claude Code's own environment"
+    kind: behavior
+    status: documented
+    usedIn: src/Claudette.Core/Processes/UserEnvironment.cs, src/Claudette.Platform/LoginShell/LoginShellReader.cs
+    docs: https://code.claude.com/docs/en/tools-reference
+    test: UserEnvironmentTests, LoginShellTests
+    fallback: Claude Code sources the shell startup file (~/.zshrc, ~/.bashrc or ~/.profile) only for aliases, functions and shell options ("What persists between commands"), so the PATH and variables its Bash commands get are the ones Claudette starts claude with. That is why Claudette gives claude the login shell's environment on macOS and Linux (DESIGN.md §13, "Login shell environment"). If Claude Code starts taking environment variables from the startup file itself, the login shell environment is redundant for the Bash tool but does no harm, and still matters for finding claude, git and p4.
 
   # --- Output messages ---------------------------------------------------------------------------------
   - id: "system/init"
