@@ -101,7 +101,7 @@ public sealed class UsagePollerTests : IAsyncDisposable
         _poller.Start();
         _time.Advance(TimeSpan.FromSeconds(30));
 
-        _poller.NotifyRateLimitEvent(UsageFixtures.RateLimitInfo());
+        _poller.NotifyRateLimitEvent(UsageFixtures.RateLimitInfo(session: 0.2));
 
         Assert.Equal(1, _source.Calls);
         Assert.Equal(2, _updates.Count);
@@ -109,7 +109,7 @@ public sealed class UsagePollerTests : IAsyncDisposable
         Assert.Same(_updates[^1], current);
         Assert.Equal(UsageSource.RateLimitEvent, current.Source);
         Assert.Equal(_time.GetUtcNow(), current.AsOf);
-        Assert.Equal(12, current.Session!.Percent);
+        Assert.Equal(20, current.Session!.Percent);
         Assert.Equal(57, current.WeeklyAll!.Percent);
         Assert.Equal("Fable", Assert.Single(current.WeeklyModels).Label);
     }
@@ -136,8 +136,8 @@ public sealed class UsagePollerTests : IAsyncDisposable
         Assert.Empty(_poller.Current!.WeeklyModels);
         Assert.Equal(2, _updates.Count);
 
-        _poller.NotifyRateLimitEvent(UsageFixtures.RateLimitInfo());
-        Assert.Equal(12, _poller.Current!.Session!.Percent);
+        _poller.NotifyRateLimitEvent(UsageFixtures.RateLimitInfo(session: 0.2));
+        Assert.Equal(20, _poller.Current!.Session!.Percent);
         Assert.Empty(_poller.Current.WeeklyModels);
 
         // It keeps trying on the normal schedule.
@@ -152,6 +152,63 @@ public sealed class UsagePollerTests : IAsyncDisposable
         Assert.True(_poller.ModelLimitsAvailable);
         Assert.Equal(UsageSource.GetUsage, _poller.Current!.Source);
         Assert.Single(_poller.Current.WeeklyModels);
+    }
+
+    [Fact]
+    public void A_stale_get_usage_answer_does_not_move_the_meters_back()
+    {
+        _poller.Start();
+        _time.Advance(TimeSpan.FromMinutes(1));
+        _poller.NotifyRateLimitEvent(UsageFixtures.RateLimitInfo(session: 0.9));
+
+        // Claude Code answers from its cached reading, still 13%.
+        _time.Advance(TimeSpan.FromMinutes(5));
+
+        Assert.Equal(2, _source.Calls);
+        var current = _poller.Current!;
+        Assert.Same(_updates[^1], current);
+        Assert.Equal(UsageSource.GetUsage, current.Source);
+        Assert.Equal(90, current.Session!.Percent);
+        Assert.Equal("Fable", Assert.Single(current.WeeklyModels).Label);
+    }
+
+    [Fact]
+    public void The_first_readings_merge_with_a_restored_sample()
+    {
+        var stored = UsageFixtures.Snapshot(UsageFixtures.RecordedAt.AddMinutes(-10), 90, weekly: 57, fable: 100) with { Source = UsageSource.Stored };
+        _poller.Restore(stored);
+        Assert.Same(stored, _poller.Current);
+        Assert.Empty(_updates);
+
+        _poller.Start();
+
+        var update = Assert.Single(_updates);
+        Assert.Equal(UsageSource.GetUsage, update.Source);
+        Assert.Equal(90, update.Session!.Percent);
+    }
+
+    [Fact]
+    public void A_failed_first_poll_does_not_publish_a_restored_sample()
+    {
+        _source.Respond = _ => throw new InvalidOperationException("gone");
+        var stored = UsageFixtures.Snapshot(UsageFixtures.RecordedAt.AddMinutes(-10), 90, fable: 100) with { Source = UsageSource.Stored };
+        _poller.Restore(stored);
+
+        _poller.Start();
+
+        Assert.Empty(_updates);
+        Assert.False(_poller.ModelLimitsAvailable);
+    }
+
+    [Fact]
+    public void Restore_is_ignored_once_there_is_a_reading()
+    {
+        _poller.Start();
+        var polled = _poller.Current;
+
+        _poller.Restore(UsageFixtures.Snapshot(UsageFixtures.RecordedAt, 90) with { Source = UsageSource.Stored });
+
+        Assert.Same(polled, _poller.Current);
     }
 
     [Fact]

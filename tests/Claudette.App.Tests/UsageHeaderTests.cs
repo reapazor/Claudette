@@ -50,6 +50,43 @@ public class UsageHeaderTests
     }
 
     [Fact]
+    public async Task A_stale_reading_does_not_take_the_meter_back_and_the_alert_follows_the_meter()
+    {
+        await using var h = new TabTestHarness();
+        await using var tracker = new UsageTracker(h.Services, new UsageStore(Path.Combine(h.Root, "usage.db"), h.Time));
+        using var header = new UsageViewModel(h.Services, tracker);
+        // Close enough that the projection doesn't alert too.
+        var resets = h.Time.GetUtcNow().AddMinutes(90);
+        var shown = new List<string>();
+        header.Session.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MeterViewModel.PercentText))
+            {
+                shown.Add(header.Session.PercentText);
+            }
+        };
+
+        tracker.OnRateLimitEvent(Event(0.70, resets, 0.40));
+        await TabTestHarness.Eventually(() => header.HasData, "the first reading");
+        h.Time.Advance(TimeSpan.FromMinutes(30));
+        tracker.OnRateLimitEvent(Event(0.756, resets, 0.40));
+        await TabTestHarness.Eventually(() => header.HasAlert, "the alert");
+        Assert.Equal("Session usage passed 75%", header.Alert!.Title);
+        Assert.Equal("You've used 76% of your session limit. It resets in 1h 00m.", header.Alert.Message);
+
+        // get_usage answering from Claude Code's cached reading, then the next real one.
+        h.Time.Advance(TimeSpan.FromMinutes(1));
+        tracker.OnRateLimitEvent(Event(0.70, resets, 0.40));
+        h.Time.Advance(TimeSpan.FromMinutes(29));
+        tracker.OnRateLimitEvent(Event(0.78, resets, 0.40));
+
+        await TabTestHarness.Eventually(() => header.Session.PercentText == "78%", "the next reading");
+        Assert.Equal(["70%", "76%", "78%"], shown);
+        Assert.Equal("Session usage passed 75%", header.Alert!.Title);
+        Assert.Equal("You've used 78% of your session limit. It resets in 30m.", header.Alert.Message);
+    }
+
+    [Fact]
     public async Task The_usage_panel_lists_every_past_session_a_page_at_a_time()
     {
         await using var h = new TabTestHarness();

@@ -10,6 +10,8 @@ namespace Claudette.Usage;
 /// <item>Polls <c>get_usage</c> on <see cref="Start"/>, then every 5 minutes after the last poll.</item>
 /// <item>After a turn, polls again, at most once a minute.</item>
 /// <item><c>rate_limit_event</c>s update the session and weekly readings at once, between polls.</item>
+/// <item>Every reading merges with the current ones (<see cref="UsageParser.Merge"/>), so a stale one doesn't move a
+/// meter back.</item>
 /// <item>If <c>get_usage</c> fails or changes shape, keeps going on <c>rate_limit_event</c>s and reports the
 /// model-specific limits as unavailable, unless the <c>/usage</c> fallback is on and works. It keeps trying
 /// <c>get_usage</c> on the normal schedule and recovers when it works again.</item>
@@ -114,6 +116,18 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
             {
                 return _pollDone.Task;
             }
+        }
+    }
+
+    /// <summary>
+    /// The latest stored sample, after a restart. The first readings merge with it, so a stale one doesn't move the
+    /// meters below what was shown before the restart. Not published, and ignored once there's a reading.
+    /// </summary>
+    public void Restore(UsageSnapshot snapshot)
+    {
+        lock (_lock)
+        {
+            _current ??= snapshot;
         }
     }
 
@@ -289,7 +303,7 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
             {
                 _modelLimitsAvailable = true;
             }
-            Publish(_ => snapshot);
+            Publish(current => UsageParser.Merge(current, snapshot));
             return;
         }
 
@@ -297,8 +311,9 @@ public sealed class UsagePoller : IDisposable, IAsyncDisposable
         {
             _modelLimitsAvailable = false;
         }
-        // Model readings from an earlier poll would go stale: drop them rather than show old numbers.
-        Publish(current => current is { WeeklyModels.Count: > 0 }
+        // Model readings from an earlier poll would go stale: drop them rather than show old numbers. A restored
+        // sample is only what the header shows until Claude Code reports, so it isn't published again.
+        Publish(current => current is { Source: not UsageSource.Stored, WeeklyModels.Count: > 0 }
             ? current with { Limits = [.. current.Limits.Where(l => l.Kind != LimitKind.WeeklyModel)] }
             : null);
     }

@@ -297,9 +297,79 @@ public sealed class UsageParserTests
 
         Assert.Equal(UsageSource.RateLimitEvent, merged.Source);
         Assert.Equal(Now.AddMinutes(1), merged.AsOf);
-        Assert.Equal(12, merged.Session!.Percent);
+        // The event's 12% is less than the poll's 13% for the same window, so the poll's stays.
+        Assert.Equal(13, merged.Session!.Percent);
         Assert.Equal(57, merged.WeeklyAll!.Percent);
-        Assert.Equal(previous.WeeklyModels, merged.WeeklyModels);
+        // Kept readings keep the time they were reported.
+        Assert.Equal(previous.WeeklyModels.Select(m => m with { ReportedAt = Now }), merged.WeeklyModels);
+    }
+
+    [Theory]
+    [InlineData(UsageSource.GetUsage)]
+    [InlineData(UsageSource.RateLimitEvent)]
+    public void A_lower_reading_for_the_same_window_is_stale(UsageSource source)
+    {
+        var previous = UsageFixtures.Snapshot(Now, 90, weekly: 92);
+        var update = UsageFixtures.Snapshot(Now.AddMinutes(5), 85, weekly: 92) with { Source = source };
+
+        var merged = UsageParser.Merge(previous, update);
+
+        Assert.Equal(source, merged.Source);
+        Assert.Equal(Now.AddMinutes(5), merged.AsOf);
+        Assert.Equal(new LimitReading(LimitKind.Session, "Session", 90, UsageFixtures.SessionResetsAt, null, false, Now), merged.Session);
+        Assert.Same(update.WeeklyAll, merged.WeeklyAll);
+    }
+
+    [Fact]
+    public void A_higher_reading_replaces_the_current_one()
+    {
+        var previous = UsageFixtures.Snapshot(Now, 85);
+        var update = UsageFixtures.Snapshot(Now.AddMinutes(5), 90);
+
+        Assert.Same(update, UsageParser.Merge(previous, update));
+    }
+
+    [Fact]
+    public void A_reading_for_an_earlier_window_is_stale_and_one_for_a_later_window_is_not()
+    {
+        var previous = UsageFixtures.Snapshot(Now, 3);
+        var earlier = UsageFixtures.Snapshot(Now.AddMinutes(5), 85, UsageFixtures.SessionResetsAt.AddHours(-5));
+        var later = UsageFixtures.Snapshot(Now.AddMinutes(5), 1, UsageFixtures.SessionResetsAt.AddHours(5));
+
+        Assert.Equal(3, UsageParser.Merge(previous, earlier).Session!.Percent);
+        Assert.Same(later, UsageParser.Merge(previous, later));
+    }
+
+    [Fact]
+    public void Reset_times_within_the_tolerance_are_the_same_window()
+    {
+        // /usage shows reset times to the minute.
+        var previous = UsageFixtures.Snapshot(Now, 90);
+        var update = UsageFixtures.Snapshot(Now.AddMinutes(5), 85, UsageFixtures.SessionResetsAt.AddMinutes(-1));
+
+        Assert.Equal(90, UsageParser.Merge(previous, update).Session!.Percent);
+    }
+
+    [Fact]
+    public void A_lower_reading_is_believed_once_the_current_one_is_an_hour_old()
+    {
+        var reported = UsageFixtures.Snapshot(Now, 90);
+        var stale = UsageParser.Merge(reported, UsageFixtures.Snapshot(Now.AddMinutes(40), 45));
+        Assert.Equal(90, stale.Session!.Percent);
+
+        // Its age counts from when it was reported, not from the merge that kept it.
+        var merged = UsageParser.Merge(stale, UsageFixtures.Snapshot(Now + UsageParser.StaleReadingAge, 45));
+
+        Assert.Equal(45, merged.Session!.Percent);
+    }
+
+    [Fact]
+    public void Readings_without_reset_times_replace_the_current_ones()
+    {
+        var previous = UsageFixtures.Snapshot(Now, 90);
+        var update = new UsageSnapshot([new LimitReading(LimitKind.Session, "Session", 85, null, null, false)], Now.AddMinutes(5), UsageSource.UsageCommand);
+
+        Assert.Same(update, UsageParser.Merge(previous, update));
     }
 
     [Fact]

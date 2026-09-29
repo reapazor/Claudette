@@ -212,7 +212,9 @@ public partial class ShellView : UserControl
     private void OnProjectMenuOpened(object? sender, EventArgs e) => ViewModel?.SelectedTab?.RefreshProjectCommand.Execute(null);
 
     /// <summary>An entry of the project's menu was picked: the menu closes, as a menu does.</summary>
-    private void OnProjectMenuItemPicked(object? sender, RoutedEventArgs e) => ProjectButton.Flyout?.Hide();
+    /// <summary>Closes the menu once the item has run its command, which a button does after raising Click.</summary>
+    private void OnProjectMenuItemPicked(object? sender, RoutedEventArgs e) =>
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => ProjectButton.Flyout?.Hide());
 
     protected override void OnDataContextChanged(EventArgs e)
     {

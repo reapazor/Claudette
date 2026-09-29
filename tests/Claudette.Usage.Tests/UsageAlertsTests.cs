@@ -159,6 +159,39 @@ public sealed class UsageAlertsTests
         Assert.Empty(Observe(80));
     }
 
+    [Fact]
+    public void The_message_rounds_the_percentage_as_the_meter_does()
+    {
+        Observe(10);
+
+        Assert.Equal("You've used 91% of your session limit. It resets in 2h 00m.", Assert.Single(Observe(90.6)).Message);
+    }
+
+    [Fact]
+    public void A_threshold_alert_refreshes_with_the_session_reading()
+    {
+        Observe(10);
+        var alert = Assert.Single(Observe(91));
+
+        var later = UsageAlerts.Refresh(alert, new LimitReading(LimitKind.Session, "Session", 94.2, WindowA, null, false), Now.AddMinutes(30));
+
+        Assert.Equal("Session usage passed 90%", later.Title);
+        Assert.Equal("You've used 94% of your session limit. It resets in 1h 30m.", later.Message);
+        Assert.Equal(90, later.Threshold);
+    }
+
+    [Fact]
+    public void Refresh_leaves_other_alerts_and_readings_below_the_threshold_alone()
+    {
+        Observe(10);
+        var threshold = Assert.Single(Observe(91));
+        var reset = Assert.Single(Observe(3, WindowB));
+        var newWindow = new LimitReading(LimitKind.Session, "Session", 3, WindowB, null, false);
+
+        Assert.Same(threshold, UsageAlerts.Refresh(threshold, newWindow, Now));
+        Assert.Same(reset, UsageAlerts.Refresh(reset, newWindow, Now));
+    }
+
     private IReadOnlyList<UsageAlert> Observe(double session, DateTimeOffset? resetsAt = null, BurnProjection? projection = null) =>
         _alerts.Observe(UsageFixtures.Snapshot(Now, session, resetsAt ?? WindowA), projection, 75, 90);
 }

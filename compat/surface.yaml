@@ -494,7 +494,7 @@ items:
     status: experimental
     usedIn: src/Claudette.Core/Sessions/UtilitySession.cs, src/Claudette.Usage/UsagePoller.cs, src/Claudette.App/Services/UsageTracker.cs
     test: UsagePollerTests
-    fallback: The SDK calls it usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET. Fall back to rate_limit_event, then parsing /usage (DESIGN.md §6).
+    fallback: The SDK calls it usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET. Fall back to rate_limit_event, then parsing /usage (DESIGN.md §6). When the usage endpoint fails it answers, unmarked, from a cached reading up to an hour old (2.1.284), so a reading lower than the current one for the same window is ignored for an hour (UsageParser.Merge).
   - id: "claude_authenticate"
     kind: control
     status: undocumented

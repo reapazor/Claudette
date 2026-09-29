@@ -44,15 +44,15 @@ const palette = {
 const tile = '#F0EEE6'; // Claude's ivory, behind the macOS icon
 const cells = sprite.length;
 
-// Claude's spark for the taskbar overlay, in sizes to pulse through: 2 px a cell, on a dark disc ringed in white like
-// the count's red one, so it reads over the icon on a light or a dark taskbar.
+// Claude's spark for the taskbar overlay, in sizes to pulse through: 2 px a cell, on a dark disc, so it reads over
+// Claudette, who is the same orange.
 const spark = [
   ['.X.', 'XXX', '.X.'],
   ['X.X.X', '.XXX.', 'XXXXX', '.XXX.', 'X.X.X'],
   ['X..X..X', '.X.X.X.', '..XXX..', 'XXXXXXX', '..XXX..', '.X.X.X.', 'X..X..X'],
   ['X...X...X', '.X..X..X.', '..X.X.X..', '...XXX...', 'XXXXXXXXX', '...XXX...', '..X.X.X..', '.X..X..X.', 'X...X...X'],
 ];
-const sparkColors = { X: palette.O, disc: '#141413', ring: '#FFFFFF' };
+const sparkColors = { X: palette.O, disc: '#141413' };
 
 // Pixels per cell at each size. At 24, 36 and 48, the taskbar at 100%, 150% and 200%, she fills the icon.
 const scale = { 16: 1, 20: 1, 24: 2, 30: 2, 32: 2, 36: 3, 40: 3, 44: 3, 48: 4, 50: 3, 64: 5, 128: 9, 150: 8, 256: 18 };
@@ -123,8 +123,7 @@ function macIcon(size = 1024, rows = sprite) {
 /** A frame of the taskbar overlay's spark: 32 px, as Windows wants overlays at twice their 16 px. */
 function sparkIcon(rows) {
   const img = image(32, 32);
-  drawTile(img, 0, 0, 32, 16, sparkColors.ring);
-  drawTile(img, 2, 2, 28, 14, sparkColors.disc);
+  drawTile(img, 0, 0, 32, 16, sparkColors.disc);
   const at = 16 - rows.length;
   drawSprite(img, 2, at, at, rows, sparkColors);
   return img;

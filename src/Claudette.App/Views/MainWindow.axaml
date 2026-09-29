@@ -123,22 +123,29 @@
                                    LineBrush="{DynamicResource MeterBrush}" ProjectionBrush="{DynamicResource MutedTextBrush}"
                                    WarnBrush="{DynamicResource MeterWarningBrush}" CriticalBrush="{DynamicResource MeterCriticalBrush}" />
 
-              <!-- Weekly limits, smaller -->
-              <ItemsControl Grid.Row="0" Grid.Column="2" ItemsSource="{Binding Usage.Weekly}" VerticalAlignment="Center">
+              <!-- Weekly limits, smaller: side by side, or stacked when the header is too narrow for that -->
+              <ItemsControl Name="WeeklyMeters" Grid.Row="0" Grid.Column="2" ItemsSource="{Binding Usage.Weekly}" VerticalAlignment="Center"
+                            Grid.IsSharedSizeScope="True">
                 <ItemsControl.ItemsPanel>
                   <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal" Spacing="14" />
+                    <controls:RowOrColumnPanel Spacing="14" RowSpacing="2" />
                   </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="vm:MeterViewModel">
-                    <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding Tooltip}">
-                      <TextBlock Classes="muted small" Text="{Binding Label}" VerticalAlignment="Center" />
-                      <ProgressBar Classes="meter" Width="60" Value="{Binding Percent}"
+                    <!-- The labels share a width, right-aligned, so stacked meters' bars line up -->
+                    <Grid ColumnSpacing="6" ToolTip.Tip="{Binding Tooltip}">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="WeeklyLabel" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Classes="muted small" Text="{Binding Label}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                      <ProgressBar Grid.Column="1" Classes="meter" Width="60" Value="{Binding Percent}"
                                    Classes.warning="{Binding IsWarning}" Classes.critical="{Binding IsCritical}" VerticalAlignment="Center" />
-                      <TextBlock Classes="small" Text="{Binding PercentText}" VerticalAlignment="Center"
+                      <TextBlock Grid.Column="2" Classes="small" Text="{Binding PercentText}" VerticalAlignment="Center"
                                  Classes.warning="{Binding IsWarning}" Classes.error="{Binding IsCritical}" />
-                    </StackPanel>
+                    </Grid>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>

@@ -32,8 +32,9 @@ public sealed class UsageTracker : IAsyncDisposable
         _pruneTimer = services.Time.CreateTimer(_ => Prune(), null, TimeSpan.Zero, TimeSpan.FromDays(1));
         if (Store.GetLatestSample() is { } latest)
         {
-            // The header shows the last known values straight away after a restart.
+            // The header shows the last known values straight away after a restart, and new readings merge with them.
             Current = latest.ToSnapshot();
+            _poller.Restore(Current);
         }
     }
 

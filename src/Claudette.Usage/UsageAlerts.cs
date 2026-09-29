@@ -10,7 +10,8 @@ public enum UsageAlertKind
 }
 
 /// <summary>Something worth an OS notification (DESIGN.md §6, "Alerts"; §10).</summary>
-public sealed record UsageAlert(UsageAlertKind Kind, string Title, string Message);
+/// <param name="Threshold">The level crossed, for <see cref="UsageAlertKind.ThresholdCrossed"/>.</param>
+public sealed record UsageAlert(UsageAlertKind Kind, string Title, string Message, double? Threshold = null);
 
 /// <summary>
 /// Decides when usage is worth an alert (DESIGN.md §6, "Alerts"). Feed it every snapshot; it remembers what it has
@@ -101,14 +102,24 @@ public sealed class UsageAlerts
     private static bool IsNewWindow(DateTimeOffset? previous, DateTimeOffset? current) =>
         previous is { } before && current is { } after && after - before > SameWindowTolerance;
 
+    /// <summary>
+    /// A threshold alert brought up to date with <paramref name="session"/>, so the line under the header says what the
+    /// meter says. Any other alert, or one for a window that has since reset, stays as it is.
+    /// </summary>
+    public static UsageAlert Refresh(UsageAlert alert, LimitReading session, DateTimeOffset now) =>
+        alert is { Kind: UsageAlertKind.ThresholdCrossed, Threshold: { } threshold } && session.Percent >= threshold
+            ? ThresholdAlert(session, threshold, now)
+            : alert;
+
     private static UsageAlert ThresholdAlert(LimitReading session, double threshold, DateTimeOffset now)
     {
         var title = string.Create(CultureInfo.InvariantCulture, $"Session usage passed {threshold:0.#}%");
-        var used = string.Create(CultureInfo.InvariantCulture, $"You've used {Math.Floor(session.Percent):0}% of your session limit.");
+        // Rounded as the meter rounds it.
+        var used = string.Create(CultureInfo.InvariantCulture, $"You've used {session.Percent:0}% of your session limit.");
         var message = session.ResetsAt is { } resetsAt && resetsAt > now
             ? $"{used} It resets in {BurnRate.FormatCountdown(resetsAt - now)}."
             : used;
-        return new UsageAlert(UsageAlertKind.ThresholdCrossed, title, message);
+        return new UsageAlert(UsageAlertKind.ThresholdCrossed, title, message, threshold);
     }
 
     private static UsageAlert ResetAlert(LimitReading reading)
@@ -122,6 +133,6 @@ public sealed class UsageAlerts
         return new UsageAlert(
             UsageAlertKind.LimitReset,
             $"{name} limit reset",
-            string.Create(CultureInfo.InvariantCulture, $"{name} usage is now {Math.Round(reading.Percent):0}%."));
+            string.Create(CultureInfo.InvariantCulture, $"{name} usage is now {reading.Percent:0}%."));
     }
 }

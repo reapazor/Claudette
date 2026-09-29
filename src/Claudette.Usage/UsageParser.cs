@@ -154,20 +154,80 @@ public static partial class UsageParser
     }
 
     /// <summary>
-    /// Combines a new snapshot with the current one. A <c>rate_limit_event</c> carries no model-specific limits, so it
-    /// replaces only the session and weekly readings it has, and keeps the rest; that way the model meters don't
-    /// disappear between polls. Any other source replaces everything.
+    /// How long a lower reading than the current one is taken as stale. When Anthropic's usage endpoint fails,
+    /// <c>get_usage</c> answers from Claude Code's cached reading without saying so, and Claude Code keeps that cache
+    /// for an hour.
+    /// </summary>
+    public static readonly TimeSpan StaleReadingAge = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Combines a new snapshot with the current one (DESIGN.md §6, "Sampling").
+    /// <list type="bullet">
+    /// <item>Within one window a limit's usage only rises. A reading lower than the current one for the same window, or
+    /// one for an earlier window, is stale, and the current one stays. Once the current one is
+    /// <see cref="StaleReadingAge"/> old, no cached reading can be older, so a lower one is believed: the limit really
+    /// went down, as after a plan change.</item>
+    /// <item>A <c>rate_limit_event</c> carries no model-specific limits, so it replaces only the session and weekly
+    /// readings it has, and keeps the rest; that way the model meters don't disappear between polls. Any other source
+    /// replaces the set of limits.</item>
+    /// </list>
+    /// Readings kept from <paramref name="previous"/> keep the time they were reported.
     /// </summary>
     public static UsageSnapshot Merge(UsageSnapshot? previous, UsageSnapshot update)
     {
-        if (previous is null || update.Source != UsageSource.RateLimitEvent)
+        if (previous is null)
         {
             return update;
         }
-        var replaced = update.Limits.Select(l => l.Kind).ToHashSet();
-        var kept = previous.Limits.Where(l => l.Kind == LimitKind.WeeklyModel || !replaced.Contains(l.Kind));
-        return update with { Limits = [.. update.Limits, .. kept] };
+        var limits = new List<LimitReading>();
+        var keptAny = false;
+        foreach (var reading in update.Limits)
+        {
+            var current = previous.Limits.FirstOrDefault(l => l.Kind == reading.Kind && l.Label.Equals(reading.Label, StringComparison.OrdinalIgnoreCase));
+            if (current is not null && IsStale(reading, current, current.ReportedAt ?? previous.AsOf, update.AsOf))
+            {
+                limits.Add(Kept(current, previous.AsOf));
+                keptAny = true;
+            }
+            else
+            {
+                limits.Add(reading);
+            }
+        }
+        if (update.Source == UsageSource.RateLimitEvent)
+        {
+            var replaced = update.Limits.Select(l => l.Kind).ToHashSet();
+            foreach (var other in previous.Limits.Where(l => l.Kind == LimitKind.WeeklyModel || !replaced.Contains(l.Kind)))
+            {
+                limits.Add(Kept(other, previous.AsOf));
+                keptAny = true;
+            }
+        }
+        return keptAny ? update with { Limits = limits } : update;
     }
+
+    /// <summary>Whether <paramref name="update"/> is older than <paramref name="current"/>, which was reported at <paramref name="reportedAt"/>.</summary>
+    private static bool IsStale(LimitReading update, LimitReading current, DateTimeOffset reportedAt, DateTimeOffset now)
+    {
+        if (now - reportedAt >= StaleReadingAge)
+        {
+            return false;
+        }
+        // Without both reset times the windows can't be told apart.
+        if (update.ResetsAt is not { } updateResets || current.ResetsAt is not { } currentResets)
+        {
+            return false;
+        }
+        if (updateResets - currentResets > UsageAlerts.SameWindowTolerance)
+        {
+            // A later window.
+            return false;
+        }
+        // An earlier window, or less of the same one.
+        return currentResets - updateResets > UsageAlerts.SameWindowTolerance || update.Percent < current.Percent;
+    }
+
+    private static LimitReading Kept(LimitReading reading, DateTimeOffset asOf) => reading with { ReportedAt = reading.ReportedAt ?? asOf };
 
     private static List<LimitReading> FromLimitsList(JsonObject rateLimits)
     {

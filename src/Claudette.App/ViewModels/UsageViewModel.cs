@@ -104,7 +104,10 @@ public sealed partial class UsageViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     public partial string? AsOfText { get; set; }
 
-    /// <summary>The latest usage alert, shown in the header until dismissed. OS notifications come in milestone 7.</summary>
+    /// <summary>
+    /// The latest usage alert, shown under the header until dismissed. A threshold alert's numbers follow the session
+    /// meter.
+    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAlert))]
     public partial UsageAlert? Alert { get; set; }
@@ -186,6 +189,11 @@ public sealed partial class UsageViewModel : ViewModelBase, IDisposable
             WindowStart = session.ResetsAt - SessionWindow;
             SessionPoints = _history.Select(p => new ChartPoint(p.Time, p.Percent)).Append(new ChartPoint(now, session.Percent)).ToArray();
             SessionProjection = ProjectionLine(projection, session.ResetsAt, now);
+            if (Alert is { } alert)
+            {
+                // The line under the header keeps saying what the meter says.
+                Alert = UsageAlerts.Refresh(alert, session, now);
+            }
         }
 
         var weekly = new List<LimitReading>();

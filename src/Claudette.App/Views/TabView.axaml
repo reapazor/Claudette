@@ -172,7 +172,8 @@
     </Style>
 
     <!-- Send and Stop. In the Claude style they're round, with an arrow for Send, as in the Claude apps, and a drawn
-         square for Stop: the ■ character sits off-center in a circle, by its font's ascent and descent. -->
+         square for Stop: the ■ character sits off-center in a circle, by its font's ascent and descent. The icons fill
+         the button and have no border, so nothing puts them off the middle (IconSendArrow in App.axaml says why). -->
     <Style Selector="Button.send">
       <Setter Property="Padding" Value="14,4" />
     </Style>
@@ -187,6 +188,7 @@
       <Setter Property="Width" Value="32" />
       <Setter Property="Height" Value="32" />
       <Setter Property="Padding" Value="0" />
+      <Setter Property="BorderThickness" Value="0" />
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
@@ -1008,12 +1010,15 @@
                       <ItemsControl ItemsSource="{Binding SuffixMenu}">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate DataType="vm:SuffixMenuItem">
+                            <!-- Picking a checked one takes it off the message -->
                             <Button Classes="flat row" ToolTip.Tip="{Binding Suffix.Text}" Click="OnSuffixPicked" HorizontalContentAlignment="Stretch"
-                                    Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).AddSuffixCommand}" CommandParameter="{Binding Suffix}">
-                              <Grid ColumnDefinitions="18,*,Auto" ColumnSpacing="6">
-                                <TextBlock Classes="muted small" Text="{Binding Number}" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1" Text="{Binding Suffix.Label}" />
-                                <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding Shortcut}" VerticalAlignment="Center" />
+                                    Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ToggleSuffixCommand}" CommandParameter="{Binding Suffix}">
+                              <Grid ColumnDefinitions="14,18,*,Auto" ColumnSpacing="6">
+                                <Path Data="{StaticResource IconCheck}" Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.4" StrokeLineCap="Round" StrokeJoin="Round"
+                                      Width="12" Height="12" Stretch="None" VerticalAlignment="Center" IsVisible="{Binding IsOn}" />
+                                <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding Number}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding Suffix.Label}" />
+                                <TextBlock Grid.Column="3" Classes="muted small" Text="{Binding Shortcut}" VerticalAlignment="Center" />
                               </Grid>
                             </Button>
                           </DataTemplate>
@@ -1243,13 +1248,13 @@
                 <Panel>
                   <TextBlock Classes="sendlabel" Text="Send" />
                   <Path Classes="sendarrow" Data="{StaticResource IconSendArrow}" Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8"
-                        StrokeLineCap="Round" StrokeJoin="Round" Width="14" Height="14" Stretch="None" />
+                        StrokeLineCap="Round" StrokeJoin="Round" Width="32" Height="32" Stretch="None" />
                 </Panel>
               </Button>
               <Button Classes="stop" Margin="6,0,0,0" ToolTip.Tip="Stop (Esc)" AutomationProperties.Name="Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsWorking}">
                 <Panel>
                   <TextBlock Classes="stoplabel" Text="■" />
-                  <Path Classes="stopsquare" Data="{StaticResource IconStop}" Fill="{Binding $parent[Button].Foreground}" Width="10" Height="10" Stretch="Uniform" />
+                  <Path Classes="stopsquare" Data="{StaticResource IconStopRound}" Fill="{Binding $parent[Button].Foreground}" Width="32" Height="32" Stretch="None" />
                 </Panel>
               </Button>
             </StackPanel>

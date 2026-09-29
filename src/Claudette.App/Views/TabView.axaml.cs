@@ -357,11 +357,7 @@ public partial class TabView : UserControl
     /// <summary>Closes the dropdown a picked item lives in.</summary>
     private void OnFlyoutItemPicked(object? sender, RoutedEventArgs e) => CloseFlyout(sender as Visual);
 
-    private void OnSuffixPicked(object? sender, RoutedEventArgs e)
-    {
-        CloseFlyout(sender as Visual);
-        Composer.Focus();
-    }
+    private void OnSuffixPicked(object? sender, RoutedEventArgs e) => CloseFlyout(sender as Visual, () => Composer.Focus());
 
     /// <summary>Focus goes into the menu, so its number keys work straight away.</summary>
     private void OnSuffixMenuOpened(object? sender, EventArgs e) =>
@@ -378,11 +374,20 @@ public partial class TabView : UserControl
         }
     }
 
-    private static void CloseFlyout(Visual? item)
+    /// <summary>
+    /// Closes the dropdown once the picked item has run its command. A button raises Click before it runs its command,
+    /// and closing the dropdown takes the item out of the view, so a command bound through <c>$parent[UserControl]</c>
+    /// would be gone by then.
+    /// </summary>
+    private static void CloseFlyout(Visual? item, Action? then = null)
     {
         if (item?.FindAncestorOfType<FlyoutPresenter>()?.Parent is Popup popup)
         {
-            popup.Close();
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                popup.Close();
+                then?.Invoke();
+            });
         }
     }
 }

@@ -99,7 +99,29 @@ public class ClaudeStyleTests
         Assert.Equal(32, send.Bounds.Width);
         Assert.Equal(32, send.Bounds.Height);
         Assert.Equal("Send", Avalonia.Automation.AutomationProperties.GetName(send));
+        AssertDrawnAboutTheMiddle(send);
+
+        // Stop too, while a turn runs.
+        tab.ComposerText = "And the first line?";
+        await tab.SendCommand.ExecuteAsync(null);
+        await UiText.SettleUntilAsync(window, () => RoundButton(window, "stop") is { IsEffectivelyVisible: true }, "Stop");
+        AssertDrawnAboutTheMiddle(RoundButton(window, "stop")!);
+        h.Transport.EmitTurn("It keeps it.");
+        await TabTestHarness.Eventually(() => !tab.IsWorking, "the reply");
         window.Close();
+    }
+
+    private static Button? RoundButton(Window window, string name) =>
+        window.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Classes.Contains(name));
+
+    // The icon fills the button and is drawn about its middle: one centered by layout is rounded to a whole pixel, which
+    // at 150% puts a 10 or 14 wide icon half a pixel off.
+    private static void AssertDrawnAboutTheMiddle(Button button)
+    {
+        var icon = button.GetVisualDescendants().OfType<Path>().Single(p => p.IsEffectivelyVisible);
+        Assert.Equal(new Point(0, 0), icon.TranslatePoint(new Point(0, 0), button));
+        Assert.Equal(button.Bounds.Size, icon.Bounds.Size);
+        Assert.Equal(new Point(16, 16), icon.Data!.Bounds.Center);
     }
 
     private static Border? Bubble(Window window) =>

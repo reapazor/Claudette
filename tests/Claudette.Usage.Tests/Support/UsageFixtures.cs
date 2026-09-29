@@ -17,8 +17,16 @@ internal static class UsageFixtures
 
     public static JsonObject GetUsage() => Json("get_usage.json");
 
-    /// <summary>The <c>rate_limit_info</c> of the recorded <c>rate_limit_event</c>.</summary>
-    public static JsonObject RateLimitInfo() => Json("rate_limit_event.json")["rate_limit_info"]!.AsObject();
+    /// <summary>The <c>rate_limit_info</c> of the recorded <c>rate_limit_event</c>, with another session utilization (0–1) if given.</summary>
+    public static JsonObject RateLimitInfo(double? session = null)
+    {
+        var info = Json("rate_limit_event.json")["rate_limit_info"]!.AsObject();
+        if (session is { } utilization)
+        {
+            info["unifiedWindows"]!["five_hour"]!["utilization"] = utilization;
+        }
+        return info;
+    }
 
     public static string UsageCommand() => File.ReadAllText(PathOf("usage_command.txt"));
 

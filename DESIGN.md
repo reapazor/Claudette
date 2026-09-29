@@ -471,6 +471,7 @@ Saved snippets of instructions that can be added to a message in one click, such
 
 - **Picking one.** A **Suffixes ▾** button next to the text box opens a dropdown of saved suffixes. `Ctrl/Cmd+Shift+S` opens it from the keyboard, and the first nine entries can be picked with `1`–`9`.
 - **Chips.** A picked suffix appears as a chip under the text box instead of being pasted into the text, so the message stays easy to edit. Several can be picked at once. Click a chip's `×` to remove it.
+- **Check marks.** The dropdown puts a check mark beside each suffix already on the message, kept or not. Picking a checked one (by click or its number) takes it off, like its chip's `×`.
 - **Sending.** When the message is sent, the suffixes are appended in the order shown, separated from the message by a blank line. The sent message in the conversation shows the full text, with the suffix part in a lighter style. Sending with only suffixes and no typed text is allowed.
 - **After a slash command.** Claude Code takes everything after a command's name as its arguments, so a message that starts with `/` gets its suffixes in a text block of their own before the command instead. A command that runs a prompt (a skill or a custom command) gets them alongside that prompt, and its arguments stay what was typed. A local command such as `/compact` or `/model` doesn't query the model, so its suffixes change nothing (checked against 2.1.284).
 - **Keeping one on.** Right-click a chip → **Keep on this tab** adds that suffix to every message in the tab until it's turned off. A kept chip is marked "(kept)". Kept suffixes are saved with the tab.
@@ -530,6 +531,7 @@ This is Claudette's main feature: knowing how fast you're using your plan's limi
   - Weekly limit across all models.
   - Each model-specific weekly limit the plan has (for example Fable).
   - Each shows % used and its reset day and time in a tooltip.
+  - They sit side by side. When the header is too narrow for that, they stack one above the other, with their bars lined up.
 
 ### Burn trendline
 
@@ -589,7 +591,7 @@ An OS notification (optional) when:
 - The projection says you'll hit the limit before it resets.
 - A limit resets.
 
-Each alert fires once per window. The first reading after a restart doesn't alert for levels that were already crossed. The alert also shows as a dismissible line under the header, and the OS notification is skipped while Claudette is in front ([§10](#10-notifications)).
+Each alert fires once per window. The first reading after a restart doesn't alert for levels that were already crossed. The alert also shows as a dismissible line under the header, and the OS notification is skipped while Claudette is in front ([§10](#10-notifications)). A threshold alert's line keeps up with the session meter (the percentage, rounded the same way, and the countdown), so the two never disagree.
 
 ### Data source
 
@@ -618,7 +620,8 @@ Token and context data are documented:
 - If `get_usage` fails or changes shape, Claudette falls back to `rate_limit_event`, and hides the model-specific meters unless the `/usage` fallback is turned on in Settings. It keeps trying `get_usage` on the normal schedule.
 - The `/usage` fallback sends `/usage` to the utility session as a message and reads the text it prints.
 - Reset times from the two sources differ by fractions of a second (`02:19:59.95` against `02:20:00`), so they're rounded to the second before being compared.
-- After a restart, the header shows the last stored sample (with "as of" its time) until the first poll.
+- **Stale readings.** When Anthropic's usage endpoint fails, `get_usage` answers from Claude Code's cached reading (`cachedUsageUtilization` in `~/.claude.json`, kept for an hour) and doesn't say so. Seen on 2.1.284: polls kept reporting 85% for 20 minutes while `rate_limit_event`s climbed to 90%, so the meter fell back after the 90% alert. Within one window a limit's usage only rises, so every reading, from any source, merges with the current one: a lower reading for the same window, or one for an earlier window, is stale, and the meter keeps the current value. Once the current value hasn't been reported for an hour (no cached reading is older), a lower one is believed, since the limit really went down, as after a plan change. Readings without a reset time replace the current one.
+- After a restart, the header shows the last stored sample (with "as of" its time) until the first poll, and the first readings merge with it the same way.
 
 **Extra data.** `get_usage` also reports what's contributing to usage, such as the share of requests at long context and the top skills and subagents over the last day and week. That could become a panel later; it's not in v1.
 

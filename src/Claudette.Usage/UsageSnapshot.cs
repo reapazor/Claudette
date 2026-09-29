@@ -19,7 +19,11 @@ public enum LimitKind
 /// <param name="ResetsAt">When the window resets, if known. Rounded to the second, so sources agree.</param>
 /// <param name="Severity">Claude Code's own rating (<c>normal</c> … <c>critical</c>), from <c>get_usage</c> only.</param>
 /// <param name="IsActive">Claude Code's <c>is_active</c> flag, from <c>get_usage</c> only.</param>
-public sealed record LimitReading(LimitKind Kind, string Label, double Percent, DateTimeOffset? ResetsAt, string? Severity, bool IsActive);
+/// <param name="ReportedAt">
+/// When a source last reported this value, for a reading kept from an earlier snapshot (see
+/// <see cref="UsageParser.Merge"/>). Null means the snapshot's own <see cref="UsageSnapshot.AsOf"/>.
+/// </param>
+public sealed record LimitReading(LimitKind Kind, string Label, double Percent, DateTimeOffset? ResetsAt, string? Severity, bool IsActive, DateTimeOffset? ReportedAt = null);
 
 /// <summary>Where a <see cref="UsageSnapshot"/> came from (DESIGN.md §6, "Data source").</summary>
 public enum UsageSource

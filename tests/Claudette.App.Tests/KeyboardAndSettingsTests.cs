@@ -164,10 +164,38 @@ public class KeyboardAndSettingsTests
         Assert.Equal([1, 2, 3, 4, 5], menu.Select(m => m.Number));
         Assert.Equal(Chord("Primary+Alt+P").Display(Shortcuts.IsMac), menu[1].Shortcut);
 
+        Assert.All(menu, m => Assert.False(m.IsOn));
+
         Assert.True(tab.PickSuffix(2));
         Assert.False(tab.PickSuffix(9));
 
         Assert.Equal("Plan only", Assert.Single(tab.Chips).Suffix.Label);
+        Assert.Equal([false, true, false, false, false], tab.SuffixMenu.Select(m => m.IsOn));
+    }
+
+    [Fact]
+    public async Task Picking_a_checked_suffix_takes_it_off_kept_or_not()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        var changed = new List<string?>();
+        tab.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        tab.ToggleSuffixCommand.Execute(h.Services.Suffix("clarify"));
+        Assert.True(tab.SuffixMenu.Single(m => m.Suffix.Id == "clarify").IsOn);
+        Assert.Contains(nameof(TabViewModel.SuffixMenu), changed);
+
+        tab.ToggleSuffixCommand.Execute(h.Services.Suffix("clarify"));
+        Assert.Empty(tab.Chips);
+        Assert.False(tab.SuffixMenu.Single(m => m.Suffix.Id == "clarify").IsOn);
+
+        // A kept one comes off the tab too.
+        Assert.True(tab.PickSuffix(1));
+        tab.ToggleKeepCommand.Execute(tab.Chips[0]);
+        Assert.Equal([tab.Chips[0].Suffix.Id], tab.State.KeptSuffixes);
+        Assert.True(tab.PickSuffix(1));
+        Assert.Empty(tab.Chips);
+        Assert.Empty(tab.State.KeptSuffixes);
     }
 
     // ---- Settings search (DESIGN.md §14) -------------------------------------------------------------------------

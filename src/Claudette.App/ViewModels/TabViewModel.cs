@@ -58,7 +58,8 @@ public sealed partial class SuffixChip(QuickSuffix suffix, bool isKept) : Observ
 /// <summary>An entry of the quick suffix menu (DESIGN.md §5).</summary>
 /// <param name="Number">1–9 for the first nine, which those keys pick while the menu is open.</param>
 /// <param name="Shortcut">The suffix's own shortcut, as it reads on this OS.</param>
-public sealed record SuffixMenuItem(QuickSuffix Suffix, int? Number, string? Shortcut);
+/// <param name="IsOn">The suffix is on the message, as a chip: the menu shows a check mark, and picking it takes it off.</param>
+public sealed record SuffixMenuItem(QuickSuffix Suffix, int? Number, string? Shortcut, bool IsOn);
 
 /// <summary>One row of the tab info card (DESIGN.md §4).</summary>
 public sealed record InfoRow(string Label, string Value);
@@ -107,6 +108,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _checkIns = new CheckInMonitor(services.Time, () => CheckInSettings, SendCheckInFromTimer, stuck => _services.Dispatcher.Post(() => IsPossiblyStuck = stuck));
         Status = TabStatus.NotStarted;
         _restoredTranscript = !isRestored;
+        // The suffix menu checks the suffixes on the message.
+        Chips.CollectionChanged += (_, _) => OnPropertyChanged(nameof(SuffixMenu));
         foreach (var id in state.KeptSuffixes)
         {
             if (services.Settings.QuickSuffixes.FirstOrDefault(s => s.Id == id) is { } kept)
@@ -752,21 +755,39 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     public IReadOnlyList<QuickSuffix> AvailableSuffixes => _services.Settings.QuickSuffixes;
 
-    /// <summary>The suffix menu: numbered 1–9 for picking from the keyboard, with each suffix's own shortcut (DESIGN.md §5).</summary>
+    /// <summary>
+    /// The suffix menu: numbered 1–9 for picking from the keyboard, with each suffix's own shortcut and a check mark on
+    /// those already on the message (DESIGN.md §5).
+    /// </summary>
     public IReadOnlyList<SuffixMenuItem> SuffixMenu => AvailableSuffixes
         .Select((suffix, index) => new SuffixMenuItem(suffix, index < 9 ? index + 1 : null,
-            KeyChord.TryParse(suffix.Shortcut, out var chord) ? chord.Display(Shortcuts.IsMac) : null))
+            KeyChord.TryParse(suffix.Shortcut, out var chord) ? chord.Display(Shortcuts.IsMac) : null,
+            Chips.Any(c => c.Suffix.Id == suffix.Id)))
         .ToArray();
 
-    /// <summary>Picks the <paramref name="number"/>th suffix (1–9) in the menu.</summary>
+    /// <summary>Picks the <paramref name="number"/>th suffix (1–9) in the menu, as a click on it does.</summary>
     public bool PickSuffix(int number)
     {
         if (number < 1 || number > Math.Min(9, AvailableSuffixes.Count))
         {
             return false;
         }
-        AddSuffix(AvailableSuffixes[number - 1]);
+        ToggleSuffix(AvailableSuffixes[number - 1]);
         return true;
+    }
+
+    /// <summary>A suffix picked in the menu: added as a chip, or taken off when it's already on, kept or not.</summary>
+    [RelayCommand]
+    private void ToggleSuffix(QuickSuffix? suffix)
+    {
+        if (suffix is not null && Chips.FirstOrDefault(c => c.Suffix.Id == suffix.Id) is { } chip)
+        {
+            RemoveChip(chip);
+        }
+        else
+        {
+            AddSuffix(suffix);
+        }
     }
 
     /// <summary><b>Edit suffixes…</b> in the suffix menu opens Settings → Quick suffixes.</summary>

@@ -154,6 +154,52 @@ public class MainWindowTests
         Assert.False(h.Services.State.DetailedUsageHeader);
     }
 
+    /// <summary>
+    /// The weekly meters sit side by side, and stack one above the other, with their bars lined up, when the header is
+    /// too narrow for that (DESIGN.md §6, "Header meters").
+    /// </summary>
+    [AvaloniaFact]
+    public async Task The_weekly_meters_stack_when_the_header_is_too_narrow_for_them_side_by_side()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var store = new UsageStore(Path.Combine(h.Root, "usage.db"), h.Time);
+        var reset = h.Time.GetUtcNow().AddHours(2);
+        Assert.True(store.AddSample(new UsageSnapshot(
+            [
+                new LimitReading(LimitKind.Session, "Session", 62, reset, null, true),
+                new LimitReading(LimitKind.WeeklyAll, "Weekly", 92, reset.AddDays(3), null, true),
+                new LimitReading(LimitKind.WeeklyModel, "Fable", 100, reset.AddDays(3), null, true),
+            ],
+            h.Time.GetUtcNow(),
+            UsageSource.GetUsage)));
+        await using var tracker = new UsageTracker(h.Services, store);
+        using var usage = new UsageViewModel(h.Services, tracker);
+        await TabTestHarness.Eventually(() => usage.Weekly.Count == 2, "the weekly meters");
+        var main = new MainWindowViewModel(h.Services) { CurrentPage = h.Shell, Usage = usage };
+        var window = new MainWindow { DataContext = main, Width = 1200, Height = 800 };
+        window.Show();
+        UiText.Settle(window);
+        var meters = window.GetVisualDescendants().OfType<ItemsControl>().Single(c => c.Name == "WeeklyMeters");
+        var panel = meters.GetVisualDescendants().OfType<RowOrColumnPanel>().Single();
+        var (weekly, fable) = (meters.GetVisualDescendants().OfType<ProgressBar>().First(), meters.GetVisualDescendants().OfType<ProgressBar>().Last());
+        Point At(Control c) => c.TranslatePoint(default, window)!.Value;
+
+        Assert.False(panel.IsStacked);
+        Assert.Equal(At(weekly).Y, At(fable).Y);
+        Assert.True(At(fable).X > At(weekly).X + weekly.Bounds.Width, "Fable's meter should be to the right of the weekly one");
+
+        // Too narrow for both on one line with the headless font, which is wider than a real one, but not for a column.
+        window.Width = 1000;
+        UiText.Settle(window);
+
+        Assert.True(panel.IsStacked);
+        Assert.Equal(At(weekly).X, At(fable).X);
+        Assert.True(At(fable).Y > At(weekly).Y + weekly.Bounds.Height, "Fable's meter should be under the weekly one");
+        var right = meters.GetVisualDescendants().OfType<TextBlock>().Max(t => t.TranslatePoint(new Point(t.Bounds.Width, 0), window)!.Value.X);
+        var chevron = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "UsageDetailsToggle");
+        Assert.True(right <= At(chevron).X, $"The meters end at {right}, past the chevron at {At(chevron).X}");
+    }
+
     [AvaloniaFact]
     public async Task Typing_in_the_composer_and_pressing_Enter_sends_the_message()
     {

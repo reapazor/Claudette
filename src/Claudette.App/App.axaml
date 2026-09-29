@@ -352,12 +352,16 @@
 
       <!-- Small vector icons, so they look the same on every platform. -->
       <StreamGeometry x:Key="IconClose">M2,2 L10,10 M10,2 L2,10</StreamGeometry>
-      <!-- A square, filled: Stop on a running project run in the sidebar (DESIGN.md §18), and the Claude style's round
-           Stop button (DESIGN.md §3). -->
+      <!-- A square, filled: Stop on a running project run in the sidebar (DESIGN.md §18). -->
       <StreamGeometry x:Key="IconStop">M2,2 L10,2 L10,10 L2,10 Z</StreamGeometry>
-      <!-- 14×14: the Claude style's round Send button (DESIGN.md §3). -->
-      <StreamGeometry x:Key="IconSendArrow">M7,12 L7,2.5 M2.5,6.5 L7,2 L11.5,6.5</StreamGeometry>
+      <!-- 32×32, the size of the Claude style's round Send and Stop buttons (DESIGN.md §3), so they're drawn about the
+           button's own middle. A smaller icon is centered by layout, which rounds it to a whole pixel: at 150% one 10 or
+           14 wide lands half a pixel off. The square's 12 is whole pixels at 100%, 150% and 200%. -->
+      <StreamGeometry x:Key="IconSendArrow">M16,21 L16,11.5 M11.5,15.5 L16,11 L20.5,15.5</StreamGeometry>
+      <StreamGeometry x:Key="IconStopRound">M10,10 L22,10 L22,22 L10,22 Z</StreamGeometry>
       <StreamGeometry x:Key="IconPlus">M6,1 L6,11 M1,6 L11,6</StreamGeometry>
+      <!-- A suffix on the message, in the suffix menu (DESIGN.md §5). -->
+      <StreamGeometry x:Key="IconCheck">M1.5,6.5 L4.5,9.5 L10.5,2.5</StreamGeometry>
       <StreamGeometry x:Key="IconPin">M4,1 L8,1 L8,5 L10,7 L6.5,7 L6,11 L5.5,7 L2,7 L4,5 Z</StreamGeometry>
       <StreamGeometry x:Key="IconSettings">M1,3 L11,3 M1,9 L11,9 M4,1 L4,5 M8,7 L8,11</StreamGeometry>
       <StreamGeometry x:Key="IconHistory">M6,1 A5,5 0 1 1 1.67,3.5 M1.2,1.2 L1.67,3.5 L4,3.2 M6,3.5 L6,6 L8,7.2</StreamGeometry>
