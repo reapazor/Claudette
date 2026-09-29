@@ -41,6 +41,7 @@ public sealed partial class SettingsViewModel
         Save();
         OnPropertyChanged(nameof(CheckForUpdates));
         OnPropertyChanged(nameof(ClaudePath));
+        OnPropertyChanged(nameof(UseLoginShellEnvironment));
     }
 
     /// <summary>New tabs → <b>Reset to defaults</b>. Favorites and recent folders are this machine's data, not settings.</summary>

@@ -163,6 +163,12 @@ public sealed class ClaudeCodeSettings
 
     /// <summary>Check for Claude Code updates at launch and every few hours (DESIGN.md §12).</summary>
     public bool CheckForUpdates { get; set; } = true;
+
+    /// <summary>
+    /// On macOS and Linux, give Claude and the tools Claudette runs the login shell's environment when Claudette wasn't
+    /// started from a terminal (DESIGN.md §13, "Login shell environment").
+    /// </summary>
+    public bool UseLoginShellEnvironment { get; set; } = true;
 }
 
 public sealed class NewTabSettings

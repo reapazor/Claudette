@@ -26,7 +26,11 @@ public sealed record GitChange(string Path, GitChangeKind Kind, string? OldPath,
 /// the user. Runs <c>git</c> from <c>PATH</c>. Every call has a timeout, and returns null or empty instead of throwing
 /// when git is missing, times out, or the folder isn't in a repository.
 /// </summary>
-public sealed class GitWorkingTree(IProcessLauncher launcher, TimeProvider timeProvider, string gitExecutable = "git")
+/// <param name="environment">
+/// The user environment git runs with, and whose <c>PATH</c> it's found on (DESIGN.md §13), so git and its helpers
+/// (Git LFS, credential helpers) are the ones a terminal would use. Null: Claudette's own.
+/// </param>
+public sealed class GitWorkingTree(IProcessLauncher launcher, TimeProvider timeProvider, string gitExecutable = "git", UserEnvironment? environment = null)
 {
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
 
@@ -157,6 +161,10 @@ public sealed class GitWorkingTree(IProcessLauncher launcher, TimeProvider timeP
                 return null;
             }
             var spec = new ProcessStartSpec(gitExecutable, ["-c", "core.quotepath=false", .. arguments]) { WorkingDirectory = workingDirectory };
+            if (environment is not null)
+            {
+                spec = await environment.ApplyAsync(spec, cancellationToken).ConfigureAwait(false);
+            }
             return await ProcessRunner.RunAsync(launcher, spec, Timeout, timeProvider, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is TimeoutException or Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)

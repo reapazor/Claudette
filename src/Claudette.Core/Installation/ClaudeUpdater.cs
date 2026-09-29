@@ -39,13 +39,17 @@ public interface IClaudeUpdater
 /// folder of Claudette's rather than whatever folder Claudette was started from.
 /// </param>
 /// <param name="environmentOverrides">Applied on top of the cleaned environment (DESIGN.md §13) of every command.</param>
+/// <param name="userEnvironment">
+/// The user environment every command starts from, Homebrew and WinGet too (DESIGN.md §13). Null: Claudette's own.
+/// </param>
 public sealed class ClaudeUpdater(
     string claudePath,
     string workingDirectory,
     IProcessLauncher launcher,
     TimeProvider timeProvider,
     IFileProbe? probe = null,
-    IReadOnlyDictionary<string, string?>? environmentOverrides = null)
+    IReadOnlyDictionary<string, string?>? environmentOverrides = null,
+    UserEnvironment? userEnvironment = null)
     : IClaudeUpdater
 {
     private static readonly TimeSpan VersionTimeout = TimeSpan.FromSeconds(20);
@@ -134,11 +138,12 @@ public sealed class ClaudeUpdater(
         }
     }
 
-    private Task<ProcessResult> RunAsync(ProcessStartSpec spec, TimeSpan timeout, CancellationToken cancellationToken, Action<string>? onLine = null)
+    private async Task<ProcessResult> RunAsync(ProcessStartSpec spec, TimeSpan timeout, CancellationToken cancellationToken, Action<string>? onLine = null)
     {
         Directory.CreateDirectory(workingDirectory);
-        var ready = spec with { WorkingDirectory = workingDirectory, Environment = ClaudeEnvironment.Create(environmentOverrides) };
-        return ProcessRunner.RunAsync(launcher, ready, timeout, timeProvider, cancellationToken, onLine);
+        var baseEnvironment = userEnvironment is null ? null : await userEnvironment.GetAsync(cancellationToken).ConfigureAwait(false);
+        var ready = spec with { WorkingDirectory = workingDirectory, Environment = ClaudeEnvironment.From(baseEnvironment, environmentOverrides) };
+        return await ProcessRunner.RunAsync(launcher, ready, timeout, timeProvider, cancellationToken, onLine).ConfigureAwait(false);
     }
 
     private static bool IsRunFailure(Exception ex) =>

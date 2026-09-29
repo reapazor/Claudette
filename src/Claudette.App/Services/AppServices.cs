@@ -42,6 +42,10 @@ public sealed class AppServices : IAsyncDisposable
     /// <param name="appInstaller">Installs Claudette's own updates (DESIGN.md §2, "Updating Claudette"). Null can't.</param>
     /// <param name="httpHandler">Sends Claudette's own web requests: the update check and download. Tests pass a fake.</param>
     /// <param name="appVersion">This Claudette's version; by default, the one it was built with.</param>
+    /// <param name="loginShell">
+    /// Reads the login shell's environment for the user's processes (DESIGN.md §13, "Login shell environment"). Null
+    /// never reads one: tests.
+    /// </param>
     public AppServices(
         AppPaths paths,
         IProcessLauncher launcher,
@@ -54,7 +58,8 @@ public sealed class AppServices : IAsyncDisposable
         ICredentialStore? credentials = null,
         IAppInstaller? appInstaller = null,
         HttpMessageHandler? httpHandler = null,
-        AppVersion? appVersion = null)
+        AppVersion? appVersion = null,
+        ILoginShell? loginShell = null)
     {
         AppInstaller = appInstaller ?? new NoAppInstaller();
         AppVersion = appVersion ?? BuiltVersion();
@@ -69,20 +74,23 @@ public sealed class AppServices : IAsyncDisposable
         Dispatcher = dispatcher;
         Loggers = loggerFactory ?? NullLoggerFactory.Instance;
         ProcessTrees = processTrees;
-        Locator = new ClaudeLocator(launcher, timeProvider);
         _settingsStore = new JsonFileStore<AppSettings>(paths.SettingsFile, Loggers.CreateLogger("Settings"));
         _stateStore = new JsonFileStore<AppState>(paths.StateFile, Loggers.CreateLogger("State"));
         Settings = _settingsStore.Load();
         State = _stateStore.Load();
-        Git = new GitWorkingTree(launcher, timeProvider);
+        UserEnvironment = new UserEnvironment(loginShell, () => Settings.ClaudeCode.UseLoginShellEnvironment, Loggers.CreateLogger("LoginShell"));
+        Locator = new ClaudeLocator(launcher, timeProvider, UserEnvironment);
+        Git = new GitWorkingTree(launcher, timeProvider, environment: UserEnvironment);
         Library = new LibraryService(this);
         ProtocolLog.DeleteOld(paths.ProtocolLogDirectory, timeProvider.GetUtcNow());
         Notifications = new NotificationService(this, notifier ?? NullNotifier.Instance);
         Tips = new ShortcutTips(Settings);
         Perforce = new PerforceService(this, credentials ?? new UnavailableCredentialStore());
-        UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time);
+        UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time, UserEnvironment.Probe, userEnvironment: UserEnvironment);
         SettingsChanged += (_, _) =>
         {
+            // Turning Use my login shell's environment on reads it now, if this run hasn't yet.
+            UserEnvironment.Start();
             Library.OnSettingsChanged();
             ClaudeUpdates?.OnSettingsChanged();
             Notifications.OnSettingsChanged();
@@ -147,6 +155,12 @@ public sealed class AppServices : IAsyncDisposable
 
     /// <summary>Starts processes (DESIGN.md §15): <c>claude</c>, git, diff tools.</summary>
     public IProcessLauncher Launcher => _launcher;
+
+    /// <summary>
+    /// The environment of the user's processes, <c>claude</c>, git, <c>p4</c> and diff tools, with the login shell's
+    /// merged in when it's used (DESIGN.md §13, "Login shell environment"). The app starts reading it at launch.
+    /// </summary>
+    public UserEnvironment UserEnvironment { get; }
 
     public IPlatformServices Platform { get; }
 
@@ -217,8 +231,8 @@ public sealed class AppServices : IAsyncDisposable
     public void UseInstall(ClaudeInstall install)
     {
         Install = install;
-        Sessions = new ClaudeSessionFactory(install.Path, _launcher, Time, Loggers, Diagnostics);
-        Auth = new ClaudeAuth(install.Path, _launcher, Time);
+        Sessions = new ClaudeSessionFactory(install.Path, _launcher, Time, Loggers, Diagnostics, UserEnvironment);
+        Auth = new ClaudeAuth(install.Path, _launcher, Time, userEnvironment: UserEnvironment);
         ClaudeUpdates = new ClaudeUpdateService(this, CreateUpdater(install.Path), install.Version);
     }
 

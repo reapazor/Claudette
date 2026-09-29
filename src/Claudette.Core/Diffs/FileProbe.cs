@@ -13,16 +13,22 @@ public interface IFileProbe
 }
 
 /// <summary>The real file system and environment.</summary>
-public sealed class FileProbe : IFileProbe
+/// <param name="pathVariable">
+/// The <c>PATH</c> to search. By default, Claudette's own; the user environment's probe searches the one the user's
+/// processes get, which can come from the login shell (DESIGN.md §13, "Login shell environment").
+/// </param>
+public sealed class FileProbe(Func<string?>? pathVariable = null) : IFileProbe
 {
     public static FileProbe Instance { get; } = new();
 
     public bool FileExists(string path) => File.Exists(path);
 
-    public string? FindOnPath(string fileName)
+    public string? FindOnPath(string fileName) => FindIn(pathVariable is null ? Environment.GetEnvironmentVariable("PATH") : pathVariable(), fileName);
+
+    /// <summary>The full path of <paramref name="fileName"/> in the first folder of <paramref name="pathValue"/> that has it, or null.</summary>
+    public static string? FindIn(string? pathValue, string fileName)
     {
-        var path = Environment.GetEnvironmentVariable("PATH") ?? "";
-        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var directory in (pathValue ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             try
             {

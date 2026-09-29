@@ -30,7 +30,7 @@ Claudette does not replace Claude Code. It runs the real `claude` CLI as a child
 | Markdown | LiveMarkdown.Avalonia | For assistant messages. Built for streaming: text is appended as it arrives instead of re-rendering the whole message. Includes syntax-highlighted code blocks. (Markdown.Avalonia only had an alpha for Avalonia 12.) |
 | Diffs | Claudette's own line diff and diff view, highlighted with TextMateSharp | The TextMate grammars and themes LiveMarkdown already ships for code blocks. AvaloniaEdit was the plan, but a read-only diff doesn't need an editor. |
 | Usage history | SQLite (Microsoft.Data.Sqlite) | [§6](#usage-history) |
-| Dependency | Claude Code CLI | Must already be installed. Claudette finds `claude` on `PATH` (or a path set in Settings), checks its version on launch against a minimum supported version, and shows a setup screen if it is missing or too old. Sign-in is handled inside Claudette (see [§11](#11-sign-in)). |
+| Dependency | Claude Code CLI | Must already be installed. Claudette finds `claude` on `PATH` (on macOS and Linux, the login shell's `PATH`, [§13](#login-shell-environment)) or at a path set in Settings, checks its version on launch against a minimum supported version, and shows a setup screen if it is missing or too old. Sign-in is handled inside Claudette (see [§11](#11-sign-in)). |
 | Packaging | Windows: MSIX. macOS: signed, notarized `.app` in a `.dmg`. | [Below](#packaging-and-signing). |
 
 ### Packaging and signing
@@ -615,7 +615,7 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 
 - In Settings → Diff tool, the user chooses how diffs open: **Built-in** (the default), a **preset**, or a **custom command**.
 - Once a tool is set, **Open in diff tool** appears on every changed file. Double-clicking a file in the changed files panel uses the external tool instead of the built-in view, and a single click only selects it; the built-in view stays in the file's menu.
-- **Presets** are found automatically: Claudette looks in each tool's standard install locations and on `PATH`, and a preset only appears if its tool is found.
+- **Presets** are found automatically: Claudette looks in each tool's standard install locations and on `PATH` (the login shell's, [§13](#login-shell-environment)), and a preset only appears if its tool is found.
 
   | Tool | Windows | macOS |
   |---|---|---|
@@ -827,7 +827,7 @@ Claude Code keeps its own credentials. Claudette never reads or stores them; it 
   - It opens the browser itself, at the address that finishes on its own, and prints the other one: `If the browser didn't open, visit: <url>`, then `Paste code here if prompted >`. Claudette takes the first web address in its output, with terminal escape codes removed.
   - **Open browser again** and **Enter a code instead** open that printed address, whose page shows a code, and show the code field. The code field writes the code to the command's input, which reads one `code#state` per line. A line without both halves gets *"Invalid code. Please make sure the full code was copied."* on its error output, which Claudette shows while the command keeps waiting.
   - It exits with 0 and prints `Login successful.` once signed in, and exits with 1 and prints `Login failed: …` (or the organization's message) if not. Claudette goes by the exit code, and `claude auth status` then has the last word.
-  - It's started through `IProcessLauncher` with `ClaudeEnvironment.Create`, like every `claude`, and stopped after 10 minutes.
+  - It's started through `IProcessLauncher` with an environment from `ClaudeEnvironment`, like every `claude` ([§13](#login-shell-environment)), and stopped after 10 minutes.
 - While it waits, Claudette shows *"Finish signing in in your browser"* and stays responsive. The screen has:
   - **Open browser again**, which reopens the same URL, in case the browser didn't open or the tab was closed.
   - **Enter a code instead**, as described above.
@@ -929,9 +929,9 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 │  Claude Code updates         │                                  │  Credential store │
 │  Source builds: copies, new  │                                  │  Update installers│
 │   builds, restart snapshots  │                                  │  (MSIX, .app)     │
-│  Claudette releases, updates │                                  └───────────────────┘
-│  Git: identity, working tree │
-│  Auth, install checks        │
+│  Claudette releases, updates │                                  │  Login shell's    │
+│  Git: identity, working tree │                                  │   environment     │
+│  Auth, install checks        │                                  └───────────────────┘
 │  Perforce: tickets, CLs      │
 │  Settings, state, sync       │
 └───────────────┬──────────────┘
@@ -943,7 +943,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 
 - **Claudette.Core** has no UI dependencies, so it can be unit tested and could be reused by another front end. External diff tools live here rather than in Platform: they only look for files and start processes through `IProcessLauncher`. So does running a source build from a copy and restarting it into new builds ([§9](#working-on-claudette)), which is plain file copying and process starting on every OS.
 - **Claudette.Usage** holds the usage engine, with no UI: parsing, the SQLite history, the burn rate and projection, alerts and the polling schedule.
-- **Claudette.Platform** holds the OS-specific code: the process monitor, notifications with the Dock and taskbar badge ([§10](#10-notifications)), the OS credential store for a stored Perforce password ([§18](#perforce-ticket-handling)), and the installers for Claudette's own updates: the MSIX update through `PackageManager` on Windows, and swapping `Claudette.app` on macOS ([§2](#updating-claudette)). Their interfaces, `ICredentialStore` and `IAppInstaller`, are in Core, with the release feed and the downloader.
+- **Claudette.Platform** holds the OS-specific code: the process monitor, notifications with the Dock and taskbar badge ([§10](#10-notifications)), the OS credential store for a stored Perforce password ([§18](#perforce-ticket-handling)), the installers for Claudette's own updates: the MSIX update through `PackageManager` on Windows, and swapping `Claudette.app` on macOS ([§2](#updating-claudette)), and reading the login shell's environment ([below](#login-shell-environment)). Their interfaces, `ICredentialStore`, `IAppInstaller` and `ILoginShell`, are in Core, with the release feed, the downloader and `UserEnvironment`.
   - `ClaudeSession` owns one `claude` process. It turns the output stream into typed events (`AssistantDelta`, `ToolUse`, `ToolResult`, `PermissionRequest`, `TurnCompleted`, `TitleChanged`, `UsageUpdated`, `RateLimit`, `AuthRequired`, `Exited`…), and exposes commands such as `SendAsync`, `InterruptAsync`, `RespondToPermissionAsync`, `SetModelAsync`, `SetEffortAsync` and `SetPermissionModeAsync`.
 - **Threading.** Each session reads its process on a background task. Events go to the UI thread through a channel, and streaming text is batched so the UI isn't updated for every token.
 - **Resilience.** If a process exits unexpectedly, the tab shows an error with a **Restart** button that resumes the same session ID.
@@ -974,6 +974,7 @@ claude -p --input-format stream-json --output-format stream-json --verbose
   - Claudette removes exactly those variables. The full list is `ClaudeEnvironment.SessionVariables`, tracked in `compat/surface.yaml`.
   - It doesn't strip by prefix, because variables like `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_USE_BEDROCK` are user configuration.
   - The real-CLI tests run from inside Claude Code confirmed that the list is enough.
+  - The environment it removes them from is the user environment, which on macOS and Linux can hold the login shell's variables ([below](#login-shell-environment)).
 
 **Startup.** The first thing Claudette sends is an `initialize` control request. The reply contains:
 
@@ -1071,6 +1072,34 @@ The conversation view and diff view use these instead of parsing the tool result
 - Watch for changes daily ([§16](#16-tracking-claude-code-changes)).
 - **Fallback:** if the wire protocol changes too often, swap in a small Node sidecar that runs the official TypeScript Agent SDK and relays to Claudette over a local pipe. This means shipping Node.
 
+### Login shell environment
+
+An app started from the Dock, Finder or a desktop launcher gets a minimal environment: on macOS its `PATH` is `/usr/bin:/bin:/usr/sbin:/sbin`. Homebrew's `PATH`, nvm, pyenv and the like are usually set in `~/.zprofile` or `~/.bashrc`. Claude Code's Bash tool sources the shell's startup file for aliases and functions, but environment variables come from Claude Code's own environment ([tools reference](https://code.claude.com/docs/en/tools-reference#what-persists-between-commands)). So Claude's commands in such a Claudette couldn't find `node`, `dotnet` or Homebrew's tools, which work in a terminal `claude`. Claudette reads the login shell's environment, as VS Code does.
+
+- **When.** On macOS and Linux, when **Use my login shell's environment** is on (Settings → Claude Code, on by default) and Claudette wasn't started from a terminal. Windows apps get the user's full environment, so Windows never needs it.
+  - **Started from a terminal** means `TERM` is set or Claudette has a controlling terminal (`/dev/tty` opens). Its environment came from a shell then, `dotnet run` included. An app started from the Dock, Finder, `open` or a desktop launcher has neither.
+  - Either one is enough. `TERM` without a terminal is left by a terminal that has closed, or by a desktop session started with `startx`, whose environment came from a login shell. And an interactive shell run while Claudette has a terminal would take that terminal over (bash opens `/dev/tty` for job control).
+- **How.** `LoginShellReader` (Claudette.Platform, behind `ILoginShell` in Core) runs the shell once per run:
+  - `$SHELL`, or `/bin/zsh` on macOS and `/bin/bash` on Linux.
+  - As a login, interactive shell: `-i -l -c` for bash, zsh, sh, dash, ksh, mksh and yash; `-l -i -c` for fish; `-i -c` for tcsh and csh. Other shells (nushell, xonsh, PowerShell) aren't run, and Diagnostics says so.
+  - The command prints the environment between random markers, so anything the rc files print is ignored. It prints it twice: `/usr/bin/env -0`, NUL-separated so values with line breaks stay whole, then plain `/usr/bin/env` for an `env` without `-0`, read a line at a time.
+  - It starts in the home folder, with Claudette's own environment minus Claude Code's session variables, plus `CLAUDETTE_RESOLVING_ENVIRONMENT=1`. An rc file can check that to skip slow or interactive setup, as with VS Code's `VSCODE_RESOLVING_ENVIRONMENT`.
+  - Through `IProcessLauncher`, with a 10-second timeout on the injected `TimeProvider`. A shell that times out is stopped. On a timeout or a failure Claudette logs a warning and carries on with its own environment.
+- **Not holding up the window.** Reading starts in the background at launch. The first `claude` start waits for it, up to the timeout: in practice the locator's `claude --version`, before the utility session and the first tab.
+- **The merge** (`UserEnvironment`, Core): Claudette's own environment with the login shell's on top, so the shell's values win. Except:
+  - `CLAUDETTE_*` variables always come from Claudette's own environment.
+  - Claude Code's session variables are never taken from the shell. `ClaudeEnvironment` strips them for `claude` anyway.
+  - The shell's bookkeeping about itself (`_`, `PWD`, `OLDPWD`, `SHLVL`) is left out.
+  - For `claude`, `ClaudeEnvironment` then removes the session variables and applies the changes for that launch on top.
+- **What gets it.** Every `claude` (tabs, the utility session, `--version`, `doctor`, `update` and `auth`), and the other programs Claudette runs for the user: git, `p4` and P4V, diff tools and Homebrew.
+  - `claude` and the diff tool presets are looked for on the login shell's `PATH`. A bare program name (`git`, `p4`, a custom diff command's program) is found on it too, since .NET would search Claudette's own.
+  - That way `p4` sees the same `P4CONFIG` and `P4PORT` as Claude's own `p4` commands ([§18](#perforce-ticket-handling)), and git finds Git LFS and credential helpers installed with Homebrew.
+  - Claudette's own helpers keep Claudette's environment: `ps`, `notify-send`, `secret-tool`, the update installers and restarting Claudette. They're at fixed paths and don't depend on the user's setup.
+- **The setting** applies to processes started after the change. Turning it on reads the login shell then, if this run hasn't yet. Turning it off gives new processes Claudette's own environment. The `claude` found at launch stays until the next start.
+- **Diagnostics** (Settings → Advanced) say whether it was used, which shell, how long it took and the names of the variables it added or changed. Otherwise they say why not: turned off, started from a terminal, Windows, or the shell timed out, failed or isn't supported. Never a variable's value, since those can be secrets.
+
+> **Not yet tested on a real machine:** a Claudette started from the Dock on macOS, or from a desktop launcher on Linux. The tests run real bash and dash (and zsh and fish where installed) with a made-up home folder.
+
 ## 14. Settings
 
 A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where it is also **Settings…** in the app menu. It follows each platform's conventions:
@@ -1087,7 +1116,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | General | Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. Claudette's version and updates: check for updates automatically (on by default), include pre-releases (off), **Check now**, and the update's actions. See [Updating Claudette](#updating-claudette). |
 | Sessions | Also restore unpinned tabs on launch (off by default; pinned tabs are always restored). Session library folder (with **Browse…** and **Move library…**, which copies existing sessions to the new folder). Sync new tabs to the session library (off by default; each tab can be switched with **Sync to other machines** in its menu). Name for this machine, as shown in History. How long to keep sessions in the library. Sync Claudette's settings through the library (off by default). See [§9](#session-library-sync-across-machines) and [Settings sync](#settings-sync-optional). |
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
-| Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. |
+| Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. Use my login shell's environment (macOS and Linux only, on by default; [§13](#login-shell-environment)). |
 | New tabs | Default model, effort level and permission mode. The model and effort lists are what Claude Code offered in its last `initialize` reply on this machine (the models and each one's effort levels, kept with the machine's state), with a built-in list only until a session has started; Tab settings… lists them the same way. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (**Add folder…**, **Move up**, **Move down**, **Remove**), in the order the new tab picker shows them. See [Opening a tab](#opening-a-tab). |
 | Appearance | Theme: follow system, light or dark. Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. Show fun words while Claude works (on by default; [Working line](#working-line)). |
 | Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
@@ -1130,7 +1159,7 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 **Sync settings through the session library** (Settings → Sessions, off by default) keeps Claudette's settings the same on every machine that uses the same library folder ([§9](#session-library-sync-across-machines)).
 
 - **What syncs:** appearance, new-tab defaults, usage thresholds, check-ins, quick suffixes, notifications, keyboard shortcuts and process monitor options.
-- **What stays on each machine:** the path to `claude`, this machine's name, the library folder itself, the diff tool (program paths differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
+- **What stays on each machine:** the path to `claude`, the login shell setting, this machine's name, the library folder itself, the diff tool (program paths differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
 - The synced settings are stored as one file in the library. Each setting keeps the time it was last changed, and the newest change wins, so edits on two machines don't overwrite each other wholesale.
 - The first time sync is turned on and the library already has settings from another machine, Claudette asks: **Use synced settings** or **Replace them with this machine's**.
 - Turning sync off keeps the current values on this machine and stops syncing.
@@ -1247,6 +1276,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 | Hook callbacks | `HookCallbackTests` (protocol), `PerforceIntegrationTests` (`fake-claude`'s `RUN_BASH`), and `RealCliTests` against the real CLI |
 | Perforce | A pretend `p4` (`tests/Claudette.Core.Tests/Support/FakeP4.cs`, also compiled into the App tests), `Perforce*Tests` in the Core and App tests, and a shell-script `p4` for a real pipe in `PerforceIntegrationTests`. Credential stores: `CredentialStoreTests`. |
 | Real-CLI checks of subagents and stopping one | `RealCliTests`, with the mock's `SUBAGENTS` and `LONG_AGENT` scripts; the `12-subagents` fixture was recorded from `SUBAGENTS` |
+| Login shell environment | `LoginShellTests` in `tests/Claudette.Platform.Tests/LoginShell/`: reading the output, the terminal rule, timeouts and failures with a fake launcher and `FakeTimeProvider`, and real bash, dash, zsh and fish (each where installed) with a made-up `HOME`, never the user's rc files. `UserEnvironmentTests` in Core (the merge, waiting, and the callers) and `LoginShellSettingsTests` in the App tests. |
 
 ## 16. Tracking Claude Code Changes
 
@@ -1314,7 +1344,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
 - A line that fails to parse never ends a session. It's logged, and Claudette moves on.
 - With protocol logging on, a skipped message appears in the conversation as a collapsed *"Unsupported message from Claude Code"* row that shows the raw JSON.
 - Features are detected with the `capabilities` list from `system/init`, not by comparing version numbers.
-- Settings → Advanced has a **Diagnostics** page. It shows the Claude Code version and counts of unknown messages and fields seen, and has **Copy diagnostics** for bug reports.
+- Settings → Advanced has a **Diagnostics** page. It shows the Claude Code version, counts of unknown messages and fields seen, and whether the login shell's environment was used ([§13](#login-shell-environment)), and has **Copy diagnostics** for bug reports.
 
 ### Handling a report
 
@@ -1431,7 +1461,8 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Updating Claudette ([§2](#updating-claudette)).** An installed Claudette checks its GitHub releases, downloads the package for its platform, checks it, and restarts into it with every tab as it was, through the source builds' handover. Settings → General has the version, the checks and pre-releases.
     - **Per-tab sync ([§9](#session-library-sync-across-machines)).** Syncing to the session library is opt-in per tab: **Sync to other machines** in the tab menu and **Tab settings…**, a sync icon on the tab's row, and **Sync new tabs to the session library** in Settings → Sessions (off by default). Sessions opened from the library keep syncing; a tab that doesn't sync writes nothing to the library and ignores leases.
     - **Working line ([§5](#working-line)).** A twinkling glyph, a fun verb, the turn's time and tokens above the composer while Claude works, with Claude Code's `spinnerVerbs`, and **Show fun words while Claude works** in Settings → Appearance.
-    - **Still to verify:** installing an update on a real Windows and Mac, which needs signed packages from a published release.
+    - **Login shell environment ([§13](#login-shell-environment)).** On macOS and Linux, a Claudette not started from a terminal reads the login shell's environment once in the background, and `claude`, git, `p4`, diff tools and Homebrew start with it merged in. **Use my login shell's environment** in Settings → Claude Code (on by default), and a Diagnostics line saying which shell was used, or why not.
+    - **Still to verify:** installing an update on a real Windows and Mac, which needs signed packages from a published release; the login shell's environment in a Claudette started from the Dock on macOS and from a desktop launcher on Linux.
 13. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features
