@@ -1,5 +1,6 @@
 using Claudette.Core;
 using Claudette.Core.Auth;
+using Claudette.Core.Credentials;
 using Claudette.Core.Git;
 using Claudette.Core.Installation;
 using Claudette.Core.Processes;
@@ -36,6 +37,7 @@ public sealed class AppServices : IAsyncDisposable
     /// be the matching <see cref="Claudette.Platform.Processes.TrackingProcessLauncher"/>. Null in tests.
     /// </param>
     /// <param name="notifier">Shows OS notifications (DESIGN.md §10). Null shows none.</param>
+    /// <param name="credentials">The OS credential store, for stored Perforce passwords (DESIGN.md §18). Null has none.</param>
     public AppServices(
         AppPaths paths,
         IProcessLauncher launcher,
@@ -44,7 +46,8 @@ public sealed class AppServices : IAsyncDisposable
         IUiDispatcher dispatcher,
         ILoggerFactory? loggerFactory = null,
         IProcessTreeTracker? processTrees = null,
-        INotifier? notifier = null)
+        INotifier? notifier = null,
+        ICredentialStore? credentials = null)
     {
         Paths = paths;
         _launcher = launcher;
@@ -63,6 +66,7 @@ public sealed class AppServices : IAsyncDisposable
         ProtocolLog.DeleteOld(paths.ProtocolLogDirectory, timeProvider.GetUtcNow());
         Notifications = new NotificationService(this, notifier ?? NullNotifier.Instance);
         Tips = new ShortcutTips(Settings);
+        Perforce = new PerforceService(this, credentials ?? new UnavailableCredentialStore());
         UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time);
         SettingsChanged += (_, _) =>
         {
@@ -78,6 +82,9 @@ public sealed class AppServices : IAsyncDisposable
 
     /// <summary>OS notifications and the Dock/taskbar badge (DESIGN.md §10).</summary>
     public NotificationService Notifications { get; }
+
+    /// <summary>Perforce ticket handling and changelists, shared by the tabs (DESIGN.md §18).</summary>
+    public PerforceService Perforce { get; }
 
     /// <summary>Makes the updater for a <c>claude</c> path (DESIGN.md §12). Tests replace it.</summary>
     internal Func<string, IClaudeUpdater> UpdaterFactory { get; set; }

@@ -162,7 +162,7 @@ internal sealed class ScriptedSessionFactory(ScriptedTransport transport, TimePr
         }
         transport.RestartIfExited();
         var session = new ClaudeSession(transport, time);
-        await session.InitializeAsync(cancellationToken);
+        await session.InitializeAsync(options.Hooks, cancellationToken);
         return session;
     }
 }

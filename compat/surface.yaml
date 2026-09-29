@@ -992,3 +992,84 @@ items:
     usedIn: src/Claudette.App/Services/ClaudeUpdateService.cs
     test: ClaudeUpdateTests
     fallback: The update dialog's "What's new" link. If the file moves in the anthropics/claude-code repository, point the link at the repository's releases page.
+
+  # --- Hook callbacks (DESIGN.md §13) and Perforce ticket handling (DESIGN.md §18) -----------------------
+  - id: "--append-system-prompt"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: HookCallbackTests, PerforceTabTests
+  - id: "hooks"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/HookCallbacks.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: HookCallbackTests, RealCliTests
+    fallback: "The initialize request's hooks field, as the Python Agent SDK sends it: {\"PreToolUse\": [{\"matcher\": \"Bash\", \"hookCallbackIds\": [\"hook_0\"], \"timeout\": 300}]}. The SDK option it carries (HookCallbackMatcher, with a timeout in seconds) is documented; the wire names aren't. If Claude Code stops calling back, the Perforce ticket is still renewed ahead of time, and by recovery after a p4 command fails."
+  - id: "hookCallbackIds"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/HookCallbacks.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: HookCallbackTests, RealCliTests
+    fallback: See hooks.
+  - id: "hook_callback"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, tools/Claudette.FakeClaude/Program.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: HookCallbackTests, FakeClaudeTests, RealCliTests
+    fallback: "What Claude Code sends for a registered hook: {subtype: hook_callback, callback_id, input, tool_use_id}, answered with a control_response whose response is the hook's output. Claude Code logs an error answer and runs the tool anyway. See hooks for what happens without it."
+  - id: "callback_id"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: HookCallbackTests, RealCliTests
+    fallback: See hook_callback. An unknown id gets an error answer.
+  - id: "hook_event_name"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/HookCallbacks.cs
+    docs: https://code.claude.com/docs/en/hooks
+    test: HookCallbackTests
+  - id: "tool_input"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/HookCallbacks.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    docs: https://code.claude.com/docs/en/hooks
+    test: HookCallbackTests, PerforceTabTests, RealCliTests
+  - id: "`continue`"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/HookCallbacks.cs
+    docs: https://code.claude.com/docs/en/hooks
+    test: HookCallbackTests, RealCliTests
+  - id: "PreToolUse hook did not respond before its timeout"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.App/Services/PerforceService.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    docs: https://code.claude.com/docs/en/hooks
+    test: RealCliTests
+    fallback: "In 2.1.284 a hook_callback that isn't answered within its timeout gets a control_cancel_request, and the tool call isn't run (its result is this error). So the Perforce hook answers by itself 15 seconds before its 5-minute timeout, even with a password prompt still open; recovery then renews the login and asks Claude to retry. If Claude Code instead ran the tool after a timeout, nothing would need to change."
+  - id: "BashOutput"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Perforce/BashCommandLog.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: PerforceTabTests
+    fallback: "The Bash tool_use_result's stdout and stderr, read for p4 output (changelists, an expired session). Without them the tool_result text is used, which holds the same output."
+  - id: "BashInput"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Perforce/BashCommandLog.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: PerforceTabTests
+  - id: "control_cancel_request for hook_callback"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: HookCallbackTests
+    fallback: Sent when the turn is interrupted or the hook times out. Without it, a hook callback that's still waiting finishes and its answer is ignored.

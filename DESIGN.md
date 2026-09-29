@@ -118,7 +118,7 @@ The visual reference is Claude Code's own Visual Studio Code extension:
   - The full folder path and git branch.
   - Model and effort.
   - When the session started (for a resumed session, its transcript's first entry; saved with the tab), tokens used and context %.
-  - Later features add rows here, for example the Perforce changelist ([§18](#perforce-changelist-in-the-tab-title)).
+  - Later features add rows here: the Perforce login and changelist ([§18](#perforce-ticket-handling)), for example.
   - The same card opens from an **ⓘ** button in the composer bar, for the selected tab.
 - **Token stats per tab.** Each tab keeps a running count of the tokens it has used:
   - Input, output, cache write and cache read tokens, split by model when the session used more than one.
@@ -147,7 +147,7 @@ The visual reference is Claude Code's own Visual Studio Code extension:
 The tabs are listed in a sidebar on the left of the window, rather than a strip across the top, so long session names, a status line and many tabs all fit.
 
 - **A tab's row** has two lines:
-  - The status icon, a pin icon if pinned, a gear while a process it started is busy ([Process monitor](#process-monitor)), and the name, cut short with an ellipsis if it doesn't fit.
+  - The status icon, a pin icon if pinned, a gear while a process it started is busy ([Process monitor](#process-monitor)), and the name, cut short with an ellipsis if it doesn't fit. With **Show changelist on tabs** on, a `CL 12345` badge sits at the end of the line ([§18](#perforce-changelist-in-the-tab-title)).
   - The model and effort, or instead what needs attention: *Needs your input*, the error, or *Possibly stuck* when check-ins get no reply ([§5](#check-ins-on-long-turns)).
   - The close button shows on hover and on the selected tab. Hovering the row shows the tab info card; double-clicking renames it.
 - **Top:** **New tab**, which opens the picker ([Opening a tab](#opening-a-tab)), and the button that collapses the sidebar.
@@ -688,7 +688,7 @@ Clicking a notification brings Claudette to the front and goes to the relevant t
 
 - **What each one says.** Tab notifications carry the tab's name as their title:
   - **Finished:** the first line of Claude's reply. Only a turn that ends normally counts; one you stopped, or that ended with an error, doesn't.
-  - **Needs input:** what's waiting, such as *"Allow this command? npm test"*, *"Claude has a question: Which database?"* or *"Claude has a plan for you to review."*
+  - **Needs input:** what's waiting, such as *"Allow this command? npm test"*, *"Claude has a question: Which database?"* or *"Claude has a plan for you to review."* Perforce uses it too ([§18](#perforce-ticket-handling)): *"Perforce needs your password to log in as matt @ ssl:perforce:1666."*, or *"Perforce needs you to log in: run p4 login in a terminal, or log in with P4V."*
   - **Errors:** *"Claude Code stopped unexpectedly (exit code 3)."*, or why it couldn't start.
   - **Check-ins:** Settings → Check-ins → **Notify me when a check-in is sent** (off by default), which Tab settings can override ([§5](#check-ins-on-long-turns)).
 - **Skipping.** App-wide notifications (usage alerts, sign-in, updates) are skipped while Claudette is focused, because the header, the sign-in banner or the sign-in screen already shows them. Usage alerts also keep their line under the header.
@@ -833,11 +833,12 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 │  SessionLibrary, leases      │                                  │   badge           │
 │  Diffs: line diff, changed   │                                  │  Jump list, one   │
 │   files, external diff tools │                                  │   instance        │
-│  Claude Code updates         │                                  └───────────────────┘
-│  Source builds: copies, new  │
+│  Claude Code updates         │                                  │  Credential store │
+│  Source builds: copies, new  │                                  └───────────────────┘
 │   builds, restart snapshots  │
 │  Git: identity, working tree │
 │  Auth, install checks        │
+│  Perforce: tickets, CLs      │
 │  Settings, state, sync       │
 └───────────────┬──────────────┘
                 │ stdin/stdout (JSON lines)
@@ -848,7 +849,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 
 - **Claudette.Core** has no UI dependencies, so it can be unit tested and could be reused by another front end. External diff tools live here rather than in Platform: they only look for files and start processes through `IProcessLauncher`. So does running a source build from a copy and restarting it into new builds ([§9](#working-on-claudette)), which is plain file copying and process starting on every OS.
 - **Claudette.Usage** holds the usage engine, with no UI: parsing, the SQLite history, the burn rate and projection, alerts and the polling schedule.
-- **Claudette.Platform** holds the OS-specific code: the process monitor, and notifications with the Dock and taskbar badge ([§10](#10-notifications)).
+- **Claudette.Platform** holds the OS-specific code: the process monitor, notifications with the Dock and taskbar badge ([§10](#10-notifications)), and the OS credential store for a stored Perforce password ([§18](#perforce-ticket-handling)). The credential store's interface, `ICredentialStore`, is in Core.
   - `ClaudeSession` owns one `claude` process. It turns the output stream into typed events (`AssistantDelta`, `ToolUse`, `ToolResult`, `PermissionRequest`, `TurnCompleted`, `TitleChanged`, `UsageUpdated`, `RateLimit`, `AuthRequired`, `Exited`…), and exposes commands such as `SendAsync`, `InterruptAsync`, `RespondToPermissionAsync`, `SetModelAsync`, `SetEffortAsync` and `SetPermissionModeAsync`.
 - **Threading.** Each session reads its process on a background task. Events go to the UI thread through a channel, and streaming text is batched so the UI isn't updated for every token.
 - **Resilience.** If a process exits unexpectedly, the tab shows an error with a **Restart** button that resumes the same session ID.
@@ -869,6 +870,7 @@ claude -p --input-format stream-json --output-format stream-json --verbose
           --thinking-display summarized --forward-subagent-text
           --model <model> --effort <level> --permission-mode <mode>
           [--resume <session-id or transcript path>]
+          [--append-system-prompt <the Perforce workspace note, §18>]
 ```
 
 - `--permission-prompt-tool stdio` sends permission prompts to Claudette as control requests. The TypeScript SDK passes this flag when a `canUseTool` callback is set.
@@ -905,6 +907,7 @@ The `system/init` message that follows gives `session_id`, `model`, `permissionM
 | Receive output | JSON lines on stdout: `system/init`, `system/status`, `assistant`, `user` (tool results, with `tool_use_result`), `stream_event` (partial text), `result`, `rate_limit_event`, `auth_status`, `permission_denied`, `api_retry`, `conversation_reset`, `task_started` / `task_notification`, `thinking_tokens` | Yes |
 | Stop the current turn | `interrupt`. The reply lists `still_queued` messages; the turn ends with a `result` of `error_during_execution` / `aborted_streaming`. SIGINT is a fallback. Never SIGTERM: it leaves the turn unfinished with no result. | Yes |
 | Permission prompts | Incoming `can_use_tool`; reply allow, allow with `updatedPermissions`, or deny with a message ([§7](#7-permission-prompts)) | Behavior yes, wire format no |
+| Hook callbacks | `hooks` in `initialize`; incoming `hook_callback`, answered with the hook's output (below) | Behavior yes, wire format no |
 | Change model | `set_model` with `model`. Applied in place, even mid-turn, and the conversation is kept. Claude Code also emits a `user` message containing `<local-command-stdout>Set model to …</local-command-stdout>`, which Claudette shows as a small system note. | Yes |
 | Change effort | `apply_flag_settings` with `settings: { effortLevel }`. Applies from the next request, which carries `output_config.effort`. | Yes |
 | Change permission mode | `set_permission_mode` with `mode`; also reported as a `system/status` message | Yes |
@@ -917,6 +920,29 @@ The `system/init` message that follows gives `session_id`, `model`, `permissionM
 | Feature detection | The `capabilities` array on `system/init`. Check this instead of comparing version numbers. | Yes |
 
 Every **No** row has a fallback, listed in its section, and is marked `undocumented` in `compat/surface.yaml` ([§16](#16-tracking-claude-code-changes)).
+
+**Hook callbacks.** Claudette can register hooks that Claude Code calls back over the control protocol, the way the Agent SDKs register hook callbacks. Perforce ticket handling uses a PreToolUse hook for Bash ([§18](#perforce-ticket-handling)). The registration rides on `initialize`, numbered as the Python Agent SDK numbers them, with the timeout in seconds:
+
+```
+→ {"type":"control_request","request_id":"req_1","request":{"subtype":"initialize",
+     "hooks":{"PreToolUse":[{"matcher":"Bash","hookCallbackIds":["hook_0"],"timeout":300}]}}}
+← {"type":"control_request","request_id":"<uuid>","request":{"subtype":"hook_callback","callback_id":"hook_0",
+     "input":{"session_id":…,"transcript_path":…,"cwd":…,"prompt_id":…,"permission_mode":"default",
+              "hook_event_name":"PreToolUse","tool_name":"Bash",
+              "tool_input":{"command":"p4 info","description":…},"tool_use_id":"toolu_…"},
+     "tool_use_id":"toolu_…"}}
+→ {"type":"control_response","response":{"subtype":"success","request_id":"<uuid>","response":{"continue":true}}}
+```
+
+Confirmed against Claude Code 2.1.284 with the mock Messages API (2026-09-29):
+
+- The callback comes before the permission check: the `can_use_tool` request follows the hook's answer, and waits for it.
+- `{"continue": true}` and `{}` both let the tool run, and the permission prompt still happens. The hook output is the documented hook JSON ([hooks](https://code.claude.com/docs/en/hooks)); Claudette never sends a decision or changed input.
+- An error answer is logged on standard error, and the tool runs as if there were no hook.
+- A hook that isn't answered within its `timeout` gets a `control_cancel_request`, and **the tool isn't run**: its result is an error, *"PreToolUse hook did not respond before its timeout (host client may be unreachable). The tool call was not executed…"*.
+- Interrupting the turn while a hook waits also sends a `control_cancel_request` for it, and the tool call is rejected.
+
+`ClaudeSession` runs each callback off the read loop and answers with its output; an unknown callback or a failing one gets an error answer, and a withdrawn one is cancelled and not answered. The initialize request still sends `"hooks": null` when there are none.
 
 **Messages sent while Claude is working.**
 
@@ -975,6 +1001,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Diff tool | Built-in, a preset or a custom command, with **Test**. See [§8](#external-diff-tool). |
 | Notifications | On/off for each type in [§10](#10-notifications). Dock/taskbar badge on/off. |
 | Keyboard | List of shortcuts, each one rebindable ([below](#keyboard-shortcuts)). |
+| Perforce | Off by default. Keep Perforce logins fresh. Password source. Renew-before time. Tickets for all hosts. Show changelist on tabs. The stored password (**Save** / **Forget**). Per-folder server and user. See [§18](#perforce-ticket-handling). |
 | Advanced | Protocol logging and **Open log folder**. **Diagnostics** page ([§16](#staying-tolerant-at-runtime)). Extra command-line arguments passed to `claude`. Minimum supported Claude Code version (read-only). |
 
 ### Keyboard shortcuts
@@ -1006,7 +1033,7 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 **Sync settings through the session library** (Settings → Sessions, off by default) keeps Claudette's settings the same on every machine that uses the same library folder ([§9](#session-library-sync-across-machines)).
 
 - **What syncs:** appearance, new-tab defaults, usage thresholds, check-ins, quick suffixes, notifications, keyboard shortcuts and process monitor options.
-- **What stays on each machine:** the path to `claude`, this machine's name, the library folder itself, the diff tool (program paths differ between machines), recent and favorite folders, folder mappings, pinned tabs, and window sizes and positions. The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
+- **What stays on each machine:** the path to `claude`, this machine's name, the library folder itself, the diff tool (program paths differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
 - The synced settings are stored as one file in the library. Each setting keeps the time it was last changed, and the newest change wins, so edits on two machines don't overwrite each other wholesale.
 - The first time sync is turned on and the library already has settings from another machine, Claudette asks: **Use synced settings** or **Replace them with this machine's**.
 - Turning sync off keeps the current values on this machine and stops syncing.
@@ -1119,6 +1146,8 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 | History, library, leases, settings sync, diffs, git | `tests/Claudette.Core.Tests/{History,Library,Settings,Diffs,Git}`. Git tests use the real `git` in a temporary repo and skip without it. |
 | Real-CLI checks of questions and plans | `RealCliTests`, with the mock's `ASK_QUESTION` and `EXIT_PLAN` scripts |
 | Real-CLI checks of attachments, `@` mentions and slash commands | `RealCliTests`; the mock records the images that reach it, with a PNG's size |
+| Hook callbacks | `HookCallbackTests` (protocol), `PerforceIntegrationTests` (`fake-claude`'s `RUN_BASH`), and `RealCliTests` against the real CLI |
+| Perforce | A pretend `p4` (`tests/Claudette.Core.Tests/Support/FakeP4.cs`, also compiled into the App tests), `Perforce*Tests` in the Core and App tests, and a shell-script `p4` for a real pipe in `PerforceIntegrationTests`. Credential stores: `CredentialStoreTests`. |
 
 ## 16. Tracking Claude Code Changes
 
@@ -1288,7 +1317,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
 
 ## 18. Future Features
 
-Planned for after v1. Each needs a fuller design before it's built.
+Features beyond v1. The two Perforce features below are built; the others are planned, and each needs a fuller design before it's built.
 
 ### Perforce ticket handling
 
@@ -1300,50 +1329,74 @@ Planned for after v1. Each needs a fuller design before it's built.
 
 **The goal.** Claudette keeps each Perforce tab logged in, so Claude can query and use Perforce without stopping. Claude never sees the password.
 
+**Turning it on.** Settings → Perforce → **Keep Perforce logins fresh**, off by default. It applies to tabs started after the change. The code is in `Claudette.Core/Perforce` (the `p4` runner, the ticket keeper, the changelist tracker), `TabViewModel.Perforce.cs` and `Services/PerforceService.cs`.
+
 **Detecting a Perforce workspace.**
 
-- When a tab opens, Claudette runs `p4 -ztag info` in the tab's folder. Perforce resolves the server, user and workspace from its usual sources (`P4CONFIG` files, `p4 set`, `P4ENVIRO`, environment variables), the same way Claude's own `p4` commands will.
+- Before a tab starts its `claude`, Claudette runs `p4 -ztag info` in the tab's folder, with `p4 set -q P4PORT` and `p4 set -q P4LOGINSSO`. Perforce resolves the server, user and workspace from its usual sources (`P4CONFIG` files, `p4 set`, `P4ENVIRO`, environment variables), the same way Claude's own `p4` commands will. The output is read tolerantly: unknown fields are ignored.
+- The folder is a Perforce workspace when `p4` answers, the client exists (not `*unknown*`) and the folder is under the client's root. Detection holds up the tab's start, so it gives up after 10 seconds; a missing `p4` or an unreachable server just means no Perforce handling.
+- The server Claudette shows and logs in to is the P4PORT `p4 set` resolves in the folder. The server's own `serverAddress` from `p4 info` can differ (behind a proxy or broker, or `ssl:1666` with no host), so it's only shown when no P4PORT is set; then `-p` is left out of Claudette's commands and `p4` uses its default, as Claude's do.
 - If it is a Perforce workspace:
-  - The tab's tooltip shows the server, user and ticket status, for example *"Perforce: matt @ ssl:perforce:1666, ticket expires in 11h"*.
-  - Claudette adds a short note to the session with `--append-system-prompt`: this folder is a Perforce workspace, with its server, user and workspace name, and Claudette keeps the login fresh. That way Claude knows to use `p4` rather than assuming git.
+  - The tab info card shows a **Perforce** row, for example *"matt @ ssl:perforce:1666, ticket expires in 11h"*. Other states read "ticket expired", "not logged in", "server unreachable", "log in yourself (single sign-on or a second factor)", and a failed login adds its reason.
+  - Claudette adds a short note to the session with `--append-system-prompt`: the folder is in a Perforce workspace, with its server, user, workspace name and root; use `p4` for source control rather than assuming git; the app keeps the login fresh, so never run `p4 login` or pass a password; and after an expired-session error, wait for the renewal message and retry.
+  - The session registers the PreToolUse hook below.
 
-**Keeping the ticket fresh.**
+**Keeping the ticket fresh.** A ticket keeper per tab (`PerforceTicketKeeper`) does this, on the injected clock.
 
-- **Ahead of time.** `p4 login -s` reports whether the ticket is valid and when it expires. Claudette checks when a tab starts, before each turn in a Perforce tab, and every 15 minutes. When the ticket has expired, or less than 30 minutes are left (configurable), Claudette logs in again.
-- **Just in time.** Claudette registers a `PreToolUse` hook for Bash commands that start with `p4`. It does this through the hooks field of the `initialize` request, the same way the Agent SDK registers hook callbacks, and Claude Code calls back with a `hook_callback` control request. Before the command runs, Claudette makes sure the ticket is valid. The hook never changes the command; it only lets it continue.
-- **Recovery.** If a `p4` command still fails with an expired-session or "P4PASSWD invalid or unset" error (visible in the Bash `tool_use_result`), Claudette logs in again. It then sends a mid-turn message: *"Perforce login renewed. Retry the last p4 command."*
+- **Ahead of time.** `p4 -ztag login -s` reports whether the ticket is valid and how long it has left (`TicketExpiration`, in seconds; the plain *"User matt ticket expires in 11 hours 59 minutes."* is read too). Claudette checks when the tab's session starts, when each turn starts (alongside the message, not holding it up), and every 15 minutes. When the ticket has expired, doesn't exist, or has less than 30 minutes left (Settings → Perforce), Claudette logs in again.
+- **Just in time.** Claudette registers a `PreToolUse` hook for Bash through the `hooks` field of the `initialize` request, with a 5-minute timeout, and Claude Code calls back with a `hook_callback` control request before each Bash command ([§13](#integration-with-claude-code), "Hook callbacks").
+  - Only commands that run `p4` are checked, anywhere in the command line (`cd src && p4 edit …` counts); the hook answers the others straight away.
+  - A check from the last 5 minutes that found more than the renew-before time left is trusted, so a turn full of `p4` commands doesn't run `p4 login -s` before each one.
+  - The hook never changes the command: it always answers `{"continue": true}`, so permission prompts work as before.
+  - A hook that times out stops the command without running it (confirmed against 2.1.284). So when a login is still waiting on the user, the hook answers by itself 15 seconds before its timeout, and the command runs and fails; recovery then takes over.
+- **Recovery.** If a `p4` command still fails with an expired-session or *"Perforce password (P4PASSWD) invalid or unset."* error (in the Bash tool result's text, `stdout` or `stderr`), Claudette logs in again. It then sends a mid-turn message, the way a message queued during a tool call is sent: *"Perforce login renewed. Retry the last p4 command."* The conversation shows a note saying so.
+  - At most one such message per turn, so a command failing for another reason (another user or server on its command line, say) can't loop.
+  - If the login can't happen yet (a prompt still open, single sign-on), a note says so, and the message goes once the ticket is valid again, if the turn is still running.
+- **One login at a time.** A tab's checks and logins are shared: whoever arrives while one runs waits for it. Logins for the same server and user are serialized across tabs, and a tab re-checks after waiting, so tabs in one workspace log in once.
+- **After a failure.** When a login fails or the prompt is cancelled, hooks, recovery and the 15-minute check don't try again for 5 minutes. A new turn does.
 
 **Logging in.**
 
-- Claudette runs `p4 -p <server> -u <user> login` and writes the password to the command's standard input. The password never goes on the command line, where other processes and the process monitor could see it.
+- Claudette runs `p4 -p <server> -u <user> login` in the tab's folder and writes the password to the command's standard input, then closes it. The password never goes on the command line, where other processes and the process monitor could see it, and it's never logged. (`-p` is left out when no P4PORT is set; see above.)
+- *"User matt logged in."* is success. When Perforce refuses a password (*"Password invalid."*) and the source can ask again, the prompt shows the reason, up to three tries.
 - Optional setting: request a ticket valid on all hosts (`login -a`).
 - Perforce writes the ticket to its own tickets file (`P4TICKETS`) as usual; Claudette doesn't touch that file.
 
 **Where the password comes from** (Settings → Perforce → Password source):
 
-1. **Stored by Claudette** (recommended): saved in the OS credential store (Windows Credential Manager, macOS Keychain, Secret Service on Linux) under the server and user. It's never written to `settings.json`, never synced ([§14](#settings-sync-optional)), and never logged.
-2. **Perforce's own configuration**: `P4PASSWD` from the `P4CONFIG` file, `p4 set` or the environment. Claudette only reads it. Settings notes that these sources store the password in plain text.
-3. **Ask each time**: when a login is needed, Claudette sends a notification and shows a password prompt, and stores nothing. The `p4` command waits in the hook until the user answers or the hook times out.
+1. **Stored by Claudette** (recommended, and the default): saved in the OS credential store under `perforce/<server>/<user>`. It's never written to `settings.json`, never synced ([§14](#settings-sync-optional)), and never logged. The stores are in `Claudette.Platform/Credentials`, behind `ICredentialStore` in Core:
+   - **Windows:** Credential Manager, a generic credential named `Claudette/perforce/…`, kept for this user on this machine (`CRED_PERSIST_LOCAL_MACHINE`, so it doesn't roam), through `CredReadW`, `CredWriteW` and `CredDeleteW`.
+   - **macOS:** the Keychain, a generic password with service `Claudette`, through Security.framework's `SecItemAdd`, `SecItemCopyMatching` and `SecItemDelete`.
+   - **Linux:** the Secret Service through `secret-tool`, with the secret on its standard input. Without `secret-tool`, Settings says to install it (the `libsecret-tools` package), and passwords can only be asked for.
+   - When nothing is stored yet, or Perforce refuses the stored password, the tab asks, with **Save it in <store>** ticked; the password is saved once the login has worked. Settings → Perforce can also save or forget a password for a server and user, filled in from the workspaces the tabs found.
+2. **Perforce's own configuration**: `P4PASSWD` from the `P4CONFIG` file, `p4 set` or the environment. Claudette only reads it, with `p4 set -q P4PASSWD` in the tab's folder, and passes it to `p4 login` on standard input. Settings notes that these sources store the password in plain text. If it isn't set, or Perforce refuses it, the tab says so and Claudette doesn't ask for another.
+3. **Ask each time**: when a login is needed, the tab shows a password prompt (**Log in** / **Cancel**) and stores nothing. The tab shows "Needs input" and counts in the Dock/taskbar badge, and a notification goes out if the user isn't looking ([§10](#10-notifications)). A `p4` command waits in the hook until the user answers or the hook is about to time out.
 
-**Settings → Perforce** (off by default): turn ticket handling on or off, password source, renew-before-expiry time, all-hosts tickets, and per-folder overrides for server and user.
+**Settings → Perforce** (off by default): turn ticket handling on or off, password source (with the plain-text note for Perforce's configuration), renew-before-expiry time in minutes, all-hosts tickets, **Show changelist on tabs**, the stored password (**Save password** / **Forget password**), and per-folder overrides for server and user (the deepest folder containing the tab's wins). **Reset to defaults** keeps the per-folder overrides and stored passwords. None of it syncs between machines.
 
-**Not covered.** Servers that sign in through SSO (`P4LOGINSSO`) or multi-factor authentication. For those, Claudette sends a notification asking the user to log in themselves (in a terminal or P4V), then checks again.
+**Not covered.** Servers that sign in through SSO (`P4LOGINSSO` set, or the server requiring it) or multi-factor authentication. For those, Claudette doesn't try a password: it adds a note to the conversation and sends a notification, *"Perforce needs you to log in: run p4 login in a terminal, or log in with P4V."*, then checks every minute until the ticket is valid.
+
+**Testing.** No test uses a real Perforce server. A pretend `p4` (`FakeP4`) answers `info`, `set`, `login -s` and `login` from test state, and a shell-script `p4` checks the password crossing a real pipe. The Linux credential store is tested with `secret-tool` faked; the Windows store round-trips for real on Windows, and the macOS one builds its Keychain queries on macOS (the round trip runs only with `CLAUDETTE_TEST_KEYCHAIN=1`, since a locked keychain would ask).
+
+> **Not yet tried for real:** a real Perforce server, P4V, single sign-on, and the Windows and macOS credential stores in the running app.
 
 ### Perforce changelist in the tab title
 
-When Claude is working in a specific Perforce changelist, Claudette shows its number. It's always a row in the tab info card ([§4](#4-tabs--sessions)), and optionally (a setting) a badge on the tab itself, for example *"fix login bug · CL 12345"*.
+When Claude is working in a specific Perforce changelist, Claudette shows its number. It's always a row in the tab info card ([§4](#4-tabs--sessions)), and optionally (a setting) a badge on the tab itself, for example *"fix login bug · CL 12345"*. It works in every tab, whether or not ticket handling is on, since it only reads Claude's Bash calls (`ChangelistTracker` in Core).
 
-- **Detecting the changelist.** Claudette watches the tab's Bash tool calls and their results:
-  - Commands that name a changelist: `p4 edit -c 12345`, `p4 add -c`, `p4 reopen -c`, `p4 shelve -c`, `p4 change -o 12345`, `p4 submit -c`.
-  - Output that creates one: *"Change 12345 created."*
+- **Detecting the changelist.** Claudette watches the tab's Bash tool calls and their results, subagents' too, but only commands that run `p4`:
+  - Commands that name a changelist with `-c` (as `-c 12345` or `-c12345`): `p4 edit`, `add`, `delete`, `reopen`, `shelve`, `unshelve`, `submit`, `integrate`, `copy`, `merge`, `move`, `rename`, `undo`, `lock` and `resolve`. Also `p4 change -o 12345` and `p4 change 12345`. A `-c` before the subcommand is the client, not a changelist.
+  - Output that creates or updates one: *"Change 12345 created."* (or *"… created with 2 open file(s)."*), *"Change 12345 updated."*
   - The most recently used changelist wins. The default changelist isn't shown.
+  - A command that failed doesn't count for the changelist it names (it may not exist), but its output still counts.
 - **Showing it.**
-  - A "Perforce changelist" row in the tab info card.
-  - If **Show changelist on tabs** is on (Settings → Perforce), also a `CL 12345` badge after the tab name. The badge is separate from the name, so renaming the tab doesn't drop it.
-  - Several changelists in one session: the latest is shown, and the info card lists them all.
-- **Actions** (on the info card row or the badge): copy the number, or open it in P4V (`p4v -cmd "open changelist 12345"`).
-- **Saved with the tab**, so a restored tab shows it again.
-- **Resetting it.** When the changelist is submitted (*"Change 12345 submitted."*) or deleted, the badge changes to "submitted" or goes away.
+  - A "Changelist" row in the tab info card: *"CL 12345"*, then *"earlier: CL 12001 · submitted, …"* when the session used several.
+  - If **Show changelist on tabs** is on (Settings → Perforce, off by default), also a `CL 12345` badge at the end of the tab's name line in the sidebar. The badge is separate from the name, so renaming the tab doesn't drop it.
+- **Actions.** Clicking the badge offers **Copy changelist number** and **Open in P4V**; the ⓘ info card in the composer bar lists every changelist with **Copy** and **Open in P4V**. P4V opens with `p4v -p <server> -u <user> -c <workspace> -cmd "open changelist 12345"`, found on the PATH or where its installers put it.
+- **Saved with the tab** (its `changelists` in `state.json`, and in restart snapshots), so a restored tab shows it again.
+- **Resetting it.**
+  - When the changelist is submitted (*"Change 12345 submitted."*), the badge says `CL 12345 · submitted`. A submit that renumbers it (*"Change 12345 renamed change 12350 and submitted."*) shows the new number.
+  - When it's deleted (*"Change 12345 deleted."*), the badge goes away, even if an older changelist is still pending, and the info card no longer lists it. Using another changelist brings the badge back.
 
 ### Agent map
 

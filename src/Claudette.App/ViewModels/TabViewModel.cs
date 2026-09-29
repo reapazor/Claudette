@@ -260,6 +260,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 rows.Add(new InfoRow("Context", $"{ContextText} ({context})"));
             }
+            AddPerforceRows(rows);
             rows.Add(new InfoRow("Status", StatusTip));
             return rows;
         }
@@ -720,6 +721,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _conversation.ExpandThinking = _services.Settings.Appearance.ExpandThinking;
         _conversation.ShowUnsupportedMessages = _services.Settings.Advanced.LogProtocol;
         UpdateSampler();
+        OnPerforceSettingsChanged();
     }
 
     // ---- Restarting into a new build (DESIGN.md §9, "Working on Claudette") -------------------------------
@@ -910,7 +912,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         var settings = _services.Settings;
         try
         {
-            var session = await sessions.StartAsync(new ClaudeLaunchOptions
+            var session = await sessions.StartAsync(await WithPerforceAsync(new ClaudeLaunchOptions
             {
                 WorkingDirectory = Folder,
                 Resume = resume,
@@ -920,7 +922,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 PermissionMode = State.Overrides.PermissionMode ?? settings.NewTabs.DefaultPermissionMode,
                 AdditionalArguments = settings.Advanced.ExtraArguments.Split(' ', StringSplitOptions.RemoveEmptyEntries),
                 ProtocolLogPath = _services.ProtocolLogPath(FolderName),
-            });
+            }));
             _session = session;
             _services.RememberModels(session.Initialization?.Models);
             State.SessionStartedAt ??= _services.Time.GetUtcNow();
@@ -1185,6 +1187,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             RecordFileChanges(sessionEvent);
             TrackReplies(sessionEvent);
             ObserveForComposer(sessionEvent);
+            OnPerforceSessionEvent(sessionEvent);
             switch (sessionEvent)
             {
                 case StateChanged { State: SessionState.Working }:
@@ -1445,6 +1448,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     {
         _checkIns.Dispose();
         _services.Notifications.ClearTab(Id);
+        StopPerforce();
         ReleaseLease();
         await StopSessionAsync(killProcesses);
         CleanUpDiffFiles();
