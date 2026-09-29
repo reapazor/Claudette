@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input.Platform;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 
@@ -48,6 +49,18 @@ public sealed class AvaloniaPlatformServices(Func<TopLevel?> topLevel) : IPlatfo
         if (topLevel() is { } top && File.Exists(path))
         {
             await top.Launcher.LaunchFileInfoAsync(new FileInfo(path));
+        }
+    }
+
+    public IReadOnlyList<string> InstalledFonts()
+    {
+        try
+        {
+            return [.. FontManager.Current.SystemFonts.Select(f => f.Name).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)];
+        }
+        catch (Exception)
+        {
+            return [];
         }
     }
 

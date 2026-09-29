@@ -8,7 +8,8 @@
              xmlns:controls="using:Claudette.App.Controls"
              x:Class="Claudette.App.Views.TabView"
              x:DataType="vm:TabViewModel"
-             FontSize="{DynamicResource ConversationFontSize}">
+             FontSize="{DynamicResource ConversationFontSize}"
+             FontFamily="{DynamicResource ConversationFont}">
 
   <UserControl.Styles>
     <Style Selector="Border.diffline.added">
@@ -317,7 +318,7 @@
     <!-- Skipped by Claudette, shown while protocol logging is on (DESIGN.md §16) -->
     <DataTemplate DataType="conv:UnsupportedMessageItem">
       <Expander Header="{Binding Title}" IsExpanded="{Binding IsExpanded}" Padding="8,4">
-        <SelectableTextBlock Text="{Binding Json}" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
+        <SelectableTextBlock Text="{Binding Json}" FontFamily="{DynamicResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
       </Expander>
     </DataTemplate>
 

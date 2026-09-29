@@ -184,6 +184,12 @@ public sealed class AppearanceSettings
 
     public double CodeFontSize { get; set; } = 13;
 
+    /// <summary>The conversation's font family, or null for Claudette's own (DESIGN.md §14, "Appearance").</summary>
+    public string? ConversationFont { get; set; }
+
+    /// <summary>The font family for code, commands and diffs, or null for the default monospace fonts.</summary>
+    public string? CodeFont { get; set; }
+
     public bool ExpandThinking { get; set; }
 }
 

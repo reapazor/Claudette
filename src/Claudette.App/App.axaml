@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Claudette.App.ViewModels"
              xmlns:views="using:Claudette.App.Views"
+             xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
              x:Class="Claudette.App.App"
              Name="Claudette"
              RequestedThemeVariant="Default">
@@ -25,6 +26,20 @@
   <Application.Styles>
     <FluentTheme />
     <StyleInclude Source="avares://LiveMarkdown.Avalonia/Styles.axaml" />
+    <!-- LiveMarkdown brings its own fonts (Arial for text, Consolas for code); use the conversation's and code's from
+         Settings → Appearance instead. Later styles win, so these follow the include. -->
+    <Style Selector="md|MarkdownTextBlock">
+      <Setter Property="FontFamily" Value="{DynamicResource ConversationFont}" />
+    </Style>
+    <Style Selector="md|CodeBlock">
+      <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+    </Style>
+    <Style Selector="md|CodeBlock md|MarkdownTextBlock">
+      <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+    </Style>
+    <Style Selector="md|CodeInline">
+      <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+    </Style>
 
     <Style Selector="Border.card">
       <Setter Property="Background" Value="{DynamicResource CardBrush}" />
@@ -181,7 +196,9 @@
         <ResourceInclude Source="avares://LiveMarkdown.Avalonia/Defaults.axaml" />
       </ResourceDictionary.MergedDictionaries>
 
+      <!-- Updated from Settings → Appearance. -->
       <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Menlo, monospace</FontFamily>
+      <FontFamily x:Key="ConversationFont">$Default</FontFamily>
       <!-- The page's background: none, except under Mica (MainWindow sets it then). -->
       <SolidColorBrush x:Key="PageBackgroundBrush" Color="Transparent" />
       <!-- Updated from Settings → Appearance. -->

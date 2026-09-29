@@ -1,4 +1,5 @@
 using Claudette.App.Services;
+using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -28,12 +29,23 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
         var overrides = tab.State.Overrides;
         var defaults = services.Settings;
 
-        ModelChoices = [new Choice(null, $"Default ({defaults.NewTabs.DefaultModel ?? "Claude Code's default"})"), .. tab.Models.Select(m => new Choice(m.Value, m.DisplayName))];
+        // What the tab's Claude Code offers, else what Claude Code last offered on this machine (DESIGN.md §14).
+        IReadOnlyList<ModelInfo> models = tab.Models.Count > 0 ? tab.Models : services.State.KnownModels;
+        ModelChoices = [new Choice(null, $"Default ({defaults.NewTabs.DefaultModel ?? "Claude Code's default"})"), .. models.Select(m => new Choice(m.Value, m.DisplayName))];
         if (overrides.Model is { } model && ModelChoices.All(c => c.Value != model))
         {
             ModelChoices = [.. ModelChoices, new Choice(model, model)];
         }
-        EffortChoices = [new Choice(null, $"Default ({defaults.NewTabs.DefaultEffort ?? "model default"})"), .. new[] { "low", "medium", "high", "xhigh", "max" }.Select(e => new Choice(e, e))];
+        var levels = models.SelectMany(m => m.SupportedEffortLevels).Distinct(StringComparer.Ordinal).ToList();
+        if (levels.Count == 0)
+        {
+            levels = ["low", "medium", "high", "xhigh", "max"];
+        }
+        if (overrides.Effort is { } effort && !levels.Contains(effort))
+        {
+            levels.Add(effort);
+        }
+        EffortChoices = [new Choice(null, $"Default ({defaults.NewTabs.DefaultEffort ?? "model default"})"), .. levels.Select(e => new Choice(e, e))];
         ModeChoices = [new Choice(null, $"Default ({PermissionModeInfo.Label(defaults.NewTabs.DefaultPermissionMode)})"), .. PermissionModeInfo.Choices.Select(m => new Choice(m.Value, m.Label))];
         MonitorChoices = [new Choice(null, $"Default ({(defaults.Processes.ShowMonitor ? "on" : "off")})"), new Choice(On, "On"), new Choice(Off, "Off")];
 

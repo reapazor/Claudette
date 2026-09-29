@@ -137,6 +137,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         {
             ShortcutRows.Add(new ShortcutRow(command, _settings.Keyboard));
         }
+        LoadFavorites();
         SelectedCategory = AllCategories[0];
     }
 
@@ -168,9 +169,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("New tabs", "Default permission mode"),
         new("New tabs", "Recent folders to keep"),
         new("New tabs", "Clear recent folders"),
+        new("New tabs", "Favorite folders"),
         new("Appearance", "Theme"),
         new("Appearance", "Conversation font size"),
         new("Appearance", "Code font size"),
+        new("Appearance", "Conversation font"),
+        new("Appearance", "Code font"),
         new("Appearance", "Show thinking expanded"),
         new("Usage", "Warn at (% of session used)"),
         new("Usage", "Alert at (% of session used)"),
@@ -337,11 +341,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     // ---- New tabs ----------------------------------------------------------------------------------------------
 
-    public IReadOnlyList<Choice> ModelChoices { get; } =
-        [new(null, "Claude Code's default"), new("opus", "Opus"), new("sonnet", "Sonnet"), new("haiku", "Haiku"), new("fable", "Fable")];
+    public IReadOnlyList<Choice> ModelChoices => field ??= BuildModelChoices();
 
-    public IReadOnlyList<Choice> EffortChoices { get; } =
-        [new(null, "The model's default"), new("low", "low"), new("medium", "medium"), new("high", "high"), new("xhigh", "xhigh"), new("max", "max")];
+    public IReadOnlyList<Choice> EffortChoices => field ??= BuildEffortChoices();
 
     public IReadOnlyList<Choice> ModeChoices { get; } =
         [new(null, "Claude Code's default"), .. PermissionModeInfo.Choices.Select(m => new Choice(m.Value, m.Label))];

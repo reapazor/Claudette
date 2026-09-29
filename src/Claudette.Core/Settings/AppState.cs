@@ -54,6 +54,12 @@ public sealed class AppState
     /// </summary>
     public bool RestartOnNewBuild { get; set; }
 
+    /// <summary>
+    /// The models the installed Claude Code last offered, with their effort levels, so Settings lists what Claude Code
+    /// has rather than a fixed list (DESIGN.md §14). Kept per machine, since Claude Code's version differs between them.
+    /// </summary>
+    public List<ModelInfo> KnownModels { get; set; } = [];
+
     /// <summary>The main window's position and size when Claudette last closed on this machine (DESIGN.md §14).</summary>
     public WindowPlacement? Window { get; set; }
 

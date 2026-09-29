@@ -217,7 +217,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     {
         TabStatus.NotStarted => "Not started yet",
         TabStatus.Starting => "Starting…",
-        TabStatus.Working => "Working",
+        TabStatus.Working => IsPossiblyStuck ? "Possibly stuck: no reply to two check-ins" : "Working",
         TabStatus.NeedsInput => "Needs your input",
         TabStatus.Unread => "Finished while in the background",
         TabStatus.Error => IsFolderMissing ? "Its folder no longer exists" : ErrorMessage ?? "Claude Code stopped with an error",
@@ -294,7 +294,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    /// <summary>Two check-ins in a row got no reply (DESIGN.md §5, "Check-ins on long turns"); shown on the tab's row.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RowDetail), nameof(StatusTip), nameof(InfoRows))]
     public partial bool IsPossiblyStuck { get; set; }
 
     // ---- Model, effort and mode (DESIGN.md §5, "Model & effort") ------------------------------------------
@@ -321,7 +323,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// The second line of the tab's row in the sidebar (DESIGN.md §4): the model and effort, or what needs attention
     /// when the tab is waiting on the user or has failed.
     /// </summary>
-    public string RowDetail => Status is TabStatus.NeedsInput or TabStatus.Error ? StatusTip : ModelBadge;
+    public string RowDetail => Status is TabStatus.NeedsInput or TabStatus.Error ? StatusTip
+        : Status == TabStatus.Working && IsPossiblyStuck ? "Possibly stuck"
+        : ModelBadge;
 
     /// <summary>What went wrong when the tab is in the Error status, shown on its row and info card (DESIGN.md §4).</summary>
     [ObservableProperty]
@@ -468,6 +472,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 Effort = null;
                 State.Overrides.Effort = null;
             }
+            OnPropertyChanged(nameof(HasOverrides));
             _services.SaveState();
         }
         catch (Exception ex)
@@ -491,6 +496,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             await _session.SetEffortAsync(level);
             Effort = level;
             State.Overrides.Effort = level;
+            OnPropertyChanged(nameof(HasOverrides));
             _services.SaveState();
         }
         catch (Exception ex)
@@ -895,6 +901,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 ProtocolLogPath = _services.ProtocolLogPath(FolderName),
             });
             _session = session;
+            _services.RememberModels(session.Initialization?.Models);
             State.SessionStartedAt ??= _services.Time.GetUtcNow();
             // The installed version is what just started; system/init confirms it with the first turn.
             SetRunningVersion(_services.InstalledClaudeVersion);
@@ -1337,9 +1344,13 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         await EnsureStartedAsync();
     }
 
+    /// <summary>The tab has its own settings: its menu marks <b>Tab settings…</b> with a dot (DESIGN.md §14).</summary>
+    public bool HasOverrides => State.Overrides.HasAny;
+
     /// <summary>Applies changed per-tab overrides to the running session.</summary>
     public async Task ApplyOverridesAsync(TabOverrides previous)
     {
+        OnPropertyChanged(nameof(HasOverrides));
         _services.SaveState();
         UpdateSampler();
         if (_session is null)

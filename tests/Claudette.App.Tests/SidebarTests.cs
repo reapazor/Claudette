@@ -109,6 +109,12 @@ public class SidebarTests
         tab.Effort = "high";
         Assert.EndsWith("High", tab.RowDetail, StringComparison.Ordinal);
         Assert.Contains(nameof(TabViewModel.RowDetail), changed);
+
+        // Check-ins that got no reply (DESIGN.md §5).
+        changed.Clear();
+        tab.IsPossiblyStuck = true;
+        Assert.Equal("Possibly stuck", tab.RowDetail);
+        Assert.Contains(nameof(TabViewModel.RowDetail), changed);
     }
 
     [Fact]

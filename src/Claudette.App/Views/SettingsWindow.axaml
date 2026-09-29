@@ -125,6 +125,7 @@
             <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseClaudePathCommand}" />
           </Grid>
           <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Leave empty to find Claude Code automatically. A change takes effect the next time Claudette starts." />
+          <Button Content="Reset to defaults" Command="{Binding ResetClaudeCodeCommand}" />
         </StackPanel>
 
         <!-- New tabs -->
@@ -141,21 +142,54 @@
             <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="1" Maximum="100" Increment="1" FormatString="0" Value="{Binding RecentFolderLimit}" />
           </Grid>
           <Button Content="Clear recent folders" Command="{Binding ClearRecentFoldersCommand}" />
-          <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Favorites are kept. Manage favorites by right-clicking a folder in the new tab picker." />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,-6,0,0" Text="Favorites are kept." />
+
+          <!-- Favorite folders: always at the top of the new tab picker (DESIGN.md §4) -->
+          <TextBlock Text="Favorite folders" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <TextBlock Classes="muted small" Text="None yet. Add one here, or right-click a folder in the new tab picker." IsVisible="{Binding !HasFavorites}" TextWrapping="Wrap" />
+          <ItemsControl ItemsSource="{Binding Favorites}" IsVisible="{Binding HasFavorites}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:FavoriteFolderRow">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4" Margin="0,2">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Name}" />
+                    <TextBlock Classes="muted small" Text="{Binding Path}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
+                  </StackPanel>
+                  <Button Grid.Column="1" Classes="flat" Content="↑" ToolTip.Tip="Move up" AutomationProperties.Name="Move up"
+                          Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).MoveFavoriteUpCommand}" CommandParameter="{Binding}" />
+                  <Button Grid.Column="2" Classes="flat" Content="↓" ToolTip.Tip="Move down" AutomationProperties.Name="Move down"
+                          Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).MoveFavoriteDownCommand}" CommandParameter="{Binding}" />
+                  <Button Grid.Column="3" Classes="flat" Content="Remove"
+                          Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).RemoveFavoriteCommand}" CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Button Content="Add folder…" Command="{Binding AddFavoriteCommand}" />
+          <Button Content="Reset to defaults" Command="{Binding ResetNewTabsCommand}" Margin="0,8,0,0" />
         </StackPanel>
 
         <!-- Appearance -->
         <StackPanel Spacing="12" IsVisible="{Binding IsAppearance}">
           <TextBlock Classes="section" Text="Appearance" />
-          <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+          <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
             <TextBlock Classes="label" Text="Theme" />
             <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" />
-            <TextBlock Grid.Row="1" Classes="label" Text="Conversation font size" />
-            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="9" Maximum="28" Increment="1" FormatString="0" Value="{Binding ConversationFontSize}" />
-            <TextBlock Grid.Row="2" Classes="label" Text="Code font size" />
-            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="8" Maximum="28" Increment="1" FormatString="0" Value="{Binding CodeFontSize}" />
+            <TextBlock Grid.Row="1" Classes="label" Text="Conversation font" />
+            <AutoCompleteBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding InstalledFonts}" Text="{Binding ConversationFont}" FilterMode="ContainsOrdinal"
+                             PlaceholderText="Claudette's default" MinimumPrefixLength="0" AutomationProperties.Name="Conversation font" />
+            <TextBlock Grid.Row="2" Classes="label" Text="Conversation font size" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="9" Maximum="28" Increment="1" FormatString="0" Value="{Binding ConversationFontSize}" />
+            <TextBlock Grid.Row="3" Classes="label" Text="Code font" />
+            <AutoCompleteBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding InstalledFonts}" Text="{Binding CodeFont}" FilterMode="ContainsOrdinal"
+                             PlaceholderText="Cascadia Mono, Consolas or Menlo" MinimumPrefixLength="0" AutomationProperties.Name="Code font" />
+            <TextBlock Grid.Row="4" Classes="label" Text="Code font size" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1" Minimum="8" Maximum="28" Increment="1" FormatString="0" Value="{Binding CodeFontSize}" />
           </Grid>
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,-4,0,0"
+                     Text="Leave a font empty for the default. A font that isn't installed on this machine falls back to the default." />
           <CheckBox Content="Show thinking expanded" IsChecked="{Binding ExpandThinking}" />
+          <Button Content="Reset to defaults" Command="{Binding ResetAppearanceCommand}" />
         </StackPanel>
 
         <!-- Sessions -->
@@ -205,6 +239,7 @@
               </StackPanel>
             </StackPanel>
           </Border>
+          <Button Content="Reset to defaults" Command="{Binding ResetSessionsCommand}" ToolTip.Tip="The library folder and settings sync stay as they are" />
         </StackPanel>
 
         <!-- Diff tool (DESIGN.md §8, "External diff tool") -->
@@ -224,6 +259,7 @@
             <Button Content="Test" Command="{Binding TestDiffToolCommand}" />
             <TextBlock Classes="muted small" Text="{Binding DiffToolTestResult}" VerticalAlignment="Center" TextWrapping="Wrap" />
           </StackPanel>
+          <Button Content="Reset to defaults" Command="{Binding ResetDiffToolCommand}" />
         </StackPanel>
 
         <!-- Processes (DESIGN.md §4, "Process monitor") -->
@@ -408,6 +444,7 @@
             <Button Content="Open log folder" Command="{Binding OpenLogFolderCommand}" />
             <Button Content="Open data folder" Command="{Binding OpenDataFolderCommand}" />
           </StackPanel>
+          <Button Content="Reset to defaults" Command="{Binding ResetAdvancedCommand}" />
 
           <!-- DESIGN.md §16, "Staying tolerant at runtime" -->
           <TextBlock Classes="section" Text="Diagnostics" Margin="0,8,0,0" />

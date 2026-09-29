@@ -16,6 +16,9 @@ public interface IPlatformServices
 
     /// <summary>Opens a file in the app the OS uses for it, for example the user's editor (DESIGN.md §8).</summary>
     Task OpenFileAsync(string path);
+
+    /// <summary>The font families installed on this machine, for Settings → Appearance. Empty when unknown.</summary>
+    IReadOnlyList<string> InstalledFonts() => [];
 }
 
 /// <summary>Runs work on the UI thread.</summary>

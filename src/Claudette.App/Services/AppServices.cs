@@ -181,6 +181,20 @@ public sealed class AppServices : IAsyncDisposable
     public string? ProtocolLogPath(string label) =>
         Settings.Advanced.LogProtocol ? Path.Combine(Paths.ProtocolLogDirectory, ProtocolLog.FileName(Time.GetUtcNow(), label)) : null;
 
+    /// <summary>
+    /// Keeps the models a session's <c>initialize</c> reply offered, for the model and effort lists in Settings and Tab
+    /// settings (DESIGN.md §14). Claude Code's own "default" entry isn't a model to pick.
+    /// </summary>
+    public void RememberModels(IReadOnlyList<ModelInfo>? models)
+    {
+        var offered = models?.Where(m => m.Value != "default").ToList() ?? [];
+        if (offered.Count > 0 && !offered.SequenceEqual(State.KnownModels, ModelInfoComparer.Instance))
+        {
+            State.KnownModels = offered;
+            SaveState();
+        }
+    }
+
     /// <summary>For tests: sessions come from <paramref name="factory"/> instead of a real <c>claude</c>.</summary>
     internal void UseSessionFactory(IClaudeSessionFactory factory) => Sessions = factory;
 
@@ -352,4 +366,16 @@ public sealed class AppServices : IAsyncDisposable
             }
         });
     }
+}
+
+/// <summary>Compares models by what Settings shows of them: the id, name and effort levels.</summary>
+internal sealed class ModelInfoComparer : IEqualityComparer<ModelInfo>
+{
+    public static readonly ModelInfoComparer Instance = new();
+
+    public bool Equals(ModelInfo? x, ModelInfo? y) =>
+        ReferenceEquals(x, y) || x is not null && y is not null && x.Value == y.Value && x.DisplayName == y.DisplayName
+            && x.SupportsEffort == y.SupportsEffort && x.SupportedEffortLevels.SequenceEqual(y.SupportedEffortLevels);
+
+    public int GetHashCode(ModelInfo obj) => HashCode.Combine(obj.Value, obj.DisplayName);
 }
