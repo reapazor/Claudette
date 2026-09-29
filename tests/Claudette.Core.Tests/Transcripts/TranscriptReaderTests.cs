@@ -87,7 +87,7 @@ public class TranscriptReaderTests
             In src/.</result>
             <usage><subagent_tokens>1020</subagent_tokens><tool_uses>1</tool_uses><duration_ms>207</duration_ms></usage>
             </task-notification>
-            """;
+            """.ReplaceLineEndings("\n"); // a raw string takes the source file's line endings, which are CRLF in a Windows checkout
         var line = new System.Text.Json.Nodes.JsonObject
         {
             ["type"] = "user",
