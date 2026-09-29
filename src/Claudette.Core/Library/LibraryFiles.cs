@@ -21,7 +21,12 @@ internal static class LibraryFiles
     /// another process can keep writing it.
     /// </summary>
     /// <returns>True when the file was copied.</returns>
-    public static async Task<bool> CopyIfChangedAsync(string source, string target, CancellationToken cancellationToken)
+    public static Task<bool> CopyIfChangedAsync(string source, string target, CancellationToken cancellationToken) =>
+        CopyAsync(source, target, force: false, cancellationToken);
+
+    /// <inheritdoc cref="CopyIfChangedAsync"/>
+    /// <param name="force">Copies the file even when the target looks unchanged (<b>Sync now</b>, DESIGN.md §9).</param>
+    public static async Task<bool> CopyAsync(string source, string target, bool force, CancellationToken cancellationToken)
     {
         var from = new FileInfo(source);
         if (!from.Exists)
@@ -30,7 +35,7 @@ internal static class LibraryFiles
         }
         // Taken before copying: if the source changes meanwhile, the next copy sees a different time and copies again.
         var lastWrite = from.LastWriteTimeUtc;
-        if (IsSame(from.Length, lastWrite, new FileInfo(target)))
+        if (!force && IsSame(from.Length, lastWrite, new FileInfo(target)))
         {
             return false;
         }

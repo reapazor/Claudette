@@ -217,8 +217,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     // ---- Status (DESIGN.md §4, "Status icon") ------------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StatusGlyph), nameof(StatusTip), nameof(InfoRows), nameof(IsWorking), nameof(NeedsInput), nameof(IsBusyStatus), nameof(IsAlertStatus), nameof(IsErrorStatus), nameof(IsUnread), nameof(RowDetail), nameof(ShowTaskBadge))]
-    [NotifyCanExecuteChangedFor(nameof(StopCommand), nameof(SendCommand), nameof(RestartCommand), nameof(CompactCommand))]
+    [NotifyPropertyChangedFor(nameof(StatusGlyph), nameof(StatusTip), nameof(InfoRows), nameof(IsWorking), nameof(NeedsInput), nameof(IsBusyStatus), nameof(IsAlertStatus), nameof(IsErrorStatus), nameof(IsUnread), nameof(RowDetail), nameof(ShowTaskBadge), nameof(CanSyncNow), nameof(SyncNowTip))]
+    [NotifyCanExecuteChangedFor(nameof(StopCommand), nameof(SendCommand), nameof(RestartCommand), nameof(CompactCommand), nameof(SyncNowCommand))]
     public partial TabStatus Status { get; set; }
 
     public bool IsWorking => Status is TabStatus.Working or TabStatus.NeedsInput;

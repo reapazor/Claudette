@@ -50,16 +50,21 @@ public sealed class SessionLibrary(string libraryFolder, TimeProvider time)
     /// </summary>
     /// <param name="transcriptPath">Claude Code's <c>&lt;session-id&gt;.jsonl</c>.</param>
     /// <param name="subagentsDirectory">Claude Code's <c>&lt;session-id&gt;/subagents</c> folder, if there is one.</param>
-    public async Task SaveAsync(SessionRecord record, string transcriptPath, string? subagentsDirectory, CancellationToken cancellationToken = default)
+    public Task SaveAsync(SessionRecord record, string transcriptPath, string? subagentsDirectory, CancellationToken cancellationToken = default) =>
+        SaveAsync(record, transcriptPath, subagentsDirectory, force: false, cancellationToken);
+
+    /// <inheritdoc cref="SaveAsync(SessionRecord, string, string?, CancellationToken)"/>
+    /// <param name="force">Copies every file again, even ones that look unchanged: <b>Sync now</b> (DESIGN.md §9, "Writing").</param>
+    public async Task SaveAsync(SessionRecord record, string transcriptPath, string? subagentsDirectory, bool force, CancellationToken cancellationToken = default)
     {
         var folder = GetSessionFolder(record.SessionId);
         // Serialized first: the caller may change the record while the files copy.
         var json = JsonSerializer.Serialize(record, Json);
 
-        await LibraryFiles.CopyIfChangedAsync(transcriptPath, Path.Combine(folder, TranscriptName(record.SessionId)), cancellationToken).ConfigureAwait(false);
+        await LibraryFiles.CopyAsync(transcriptPath, Path.Combine(folder, TranscriptName(record.SessionId)), force, cancellationToken).ConfigureAwait(false);
         if (subagentsDirectory is not null && Directory.Exists(subagentsDirectory))
         {
-            await CopyTranscriptsAsync(subagentsDirectory, Path.Combine(folder, SubagentsFolderName), cancellationToken).ConfigureAwait(false);
+            await CopyTranscriptsAsync(subagentsDirectory, Path.Combine(folder, SubagentsFolderName), force, cancellationToken).ConfigureAwait(false);
         }
         await LibraryFiles.WriteTextAsync(Path.Combine(folder, RecordFileName), json, cancellationToken).ConfigureAwait(false);
     }
@@ -120,7 +125,7 @@ public sealed class SessionLibrary(string libraryFolder, TimeProvider time)
         var subagents = Path.Combine(folder, SubagentsFolderName);
         if (Directory.Exists(subagents))
         {
-            await CopyTranscriptsAsync(subagents, Path.Combine(localSessionsFolder, sessionId, SubagentsFolderName), cancellationToken).ConfigureAwait(false);
+            await CopyTranscriptsAsync(subagents, Path.Combine(localSessionsFolder, sessionId, SubagentsFolderName), force: false, cancellationToken).ConfigureAwait(false);
         }
         return target;
     }
@@ -142,7 +147,7 @@ public sealed class SessionLibrary(string libraryFolder, TimeProvider time)
         var subagents = Path.Combine(Path.GetDirectoryName(transcript)!, sessionId, SubagentsFolderName);
         if (Directory.Exists(subagents))
         {
-            await CopyTranscriptsAsync(subagents, Path.Combine(localSessionsFolder, sessionId, SubagentsFolderName), cancellationToken).ConfigureAwait(false);
+            await CopyTranscriptsAsync(subagents, Path.Combine(localSessionsFolder, sessionId, SubagentsFolderName), force: false, cancellationToken).ConfigureAwait(false);
         }
         return target;
     }
@@ -328,11 +333,11 @@ public sealed class SessionLibrary(string libraryFolder, TimeProvider time)
         }
     }
 
-    private static async Task CopyTranscriptsAsync(string fromFolder, string toFolder, CancellationToken cancellationToken)
+    private static async Task CopyTranscriptsAsync(string fromFolder, string toFolder, bool force, CancellationToken cancellationToken)
     {
         foreach (var file in Directory.GetFiles(fromFolder, "*" + TranscriptExtension).Where(IsTranscript))
         {
-            await LibraryFiles.CopyIfChangedAsync(file, Path.Combine(toFolder, Path.GetFileName(file)), cancellationToken).ConfigureAwait(false);
+            await LibraryFiles.CopyAsync(file, Path.Combine(toFolder, Path.GetFileName(file)), force, cancellationToken).ConfigureAwait(false);
         }
     }
 

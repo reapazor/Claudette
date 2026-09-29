@@ -9,6 +9,26 @@ using Microsoft.Extensions.Logging;
 
 namespace Claudette.App.Services;
 
+/// <summary>How <see cref="LibraryService.CopyToLibraryAsync"/> went, for <b>Sync now</b> to report (DESIGN.md §9).</summary>
+public abstract record LibraryCopyResult
+{
+    private LibraryCopyResult()
+    {
+    }
+
+    /// <summary>The transcript, the subagent transcripts and the record are in the library.</summary>
+    public sealed record Copied : LibraryCopyResult;
+
+    /// <summary>The tab stopped syncing before the copy began, so nothing was written.</summary>
+    public sealed record NotSyncing : LibraryCopyResult;
+
+    /// <summary>This machine has no transcript for the session: Claude Code cleaned it up, or it was never written.</summary>
+    public sealed record NoTranscript : LibraryCopyResult;
+
+    /// <summary>Writing to the library failed, for example because its folder isn't available.</summary>
+    public sealed record Failed(string Reason) : LibraryCopyResult;
+}
+
 /// <summary>
 /// The session library (DESIGN.md §9): copies the transcript and record of each tab that syncs into the library folder
 /// after its turns, keeps a lease on those sessions so two machines don't write the same one, and syncs Claudette's
@@ -101,20 +121,25 @@ public sealed class LibraryService : IDisposable
 
     /// <summary>
     /// Copies a tab's session into the library in the background, and takes its lease (DESIGN.md §9, "Writing"): after
-    /// each turn of a tab that syncs, and when a tab starts syncing. Never throws.
+    /// each turn of a tab that syncs, when a tab starts syncing, and for <b>Sync now</b>. Never throws.
     /// </summary>
     /// <param name="stillSyncing">
     /// Asked after the settle delay and again before the lease is taken, so a tab that stopped syncing meanwhile writes
     /// nothing and doesn't take its lease back.
     /// </param>
-    public async Task CopyToLibraryAsync(SessionRecord record, string? localCopy, Func<bool> stillSyncing)
+    /// <param name="force">Copies every file again, even ones that look unchanged (<b>Sync now</b>).</param>
+    public async Task<LibraryCopyResult> CopyToLibraryAsync(SessionRecord record, string? localCopy, Func<bool> stillSyncing, bool force = false)
     {
         try
         {
             await Task.Delay(SettleDelay, _services.Time).ConfigureAwait(false);
-            if (!stillSyncing() || FindTranscript(record.SessionId, localCopy) is not { } transcript)
+            if (!stillSyncing())
             {
-                return;
+                return new LibraryCopyResult.NotSyncing();
+            }
+            if (FindTranscript(record.SessionId, localCopy) is not { } transcript)
+            {
+                return new LibraryCopyResult.NoTranscript();
             }
             record.Machine = MachineName;
             if (record.Folder is { } folder)
@@ -126,15 +151,17 @@ public sealed class LibraryService : IDisposable
                 }
             }
             var subagents = Path.Combine(Path.GetDirectoryName(transcript)!, record.SessionId, SessionLibrary.SubagentsFolderName);
-            await Library.SaveAsync(record, transcript, subagents).ConfigureAwait(false);
+            await Library.SaveAsync(record, transcript, subagents, force).ConfigureAwait(false);
             if (stillSyncing())
             {
                 Leases.Acquire(record.SessionId, Library.GetSessionFolder(record.SessionId));
             }
+            return new LibraryCopyResult.Copied();
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Couldn't copy session {SessionId} to the library.", record.SessionId);
+            return new LibraryCopyResult.Failed(ex.Message);
         }
     }
 

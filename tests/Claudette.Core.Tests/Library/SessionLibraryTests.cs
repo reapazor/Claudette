@@ -109,6 +109,35 @@ public sealed class SessionLibraryTests : IDisposable
     }
 
     [Fact]
+    public async Task A_forced_save_copies_every_file_again_even_ones_that_look_unchanged()
+    {
+        var (transcript, subagents) = LocalSession();
+        await _library.SaveAsync(Record(), transcript, subagents, Ct);
+        var folder = _library.GetSessionFolder(Id);
+        var copy = Path.Combine(folder, $"{Id}.jsonl");
+        var agentCopy = Path.Combine(folder, "subagents", "agent-a1.jsonl");
+        // Changed in the library, but with the same length and last-write time: an ordinary save leaves them.
+        ReplaceKeepingTime(copy, "{\"type\":\"xxxx\"}\n");
+        ReplaceKeepingTime(agentCopy, "{\"type\":\"xxxxxxxxx\"}\n");
+        await _library.SaveAsync(Record(), transcript, subagents, Ct);
+        Assert.Equal("{\"type\":\"xxxx\"}\n", File.ReadAllText(copy));
+
+        await _library.SaveAsync(Record(), transcript, subagents, force: true, Ct);
+
+        Assert.Equal(File.ReadAllText(transcript), File.ReadAllText(copy));
+        Assert.Equal("{\"type\":\"assistant\"}\n", File.ReadAllText(agentCopy));
+        Assert.Equal(File.GetLastWriteTimeUtc(transcript), File.GetLastWriteTimeUtc(copy));
+        Assert.DoesNotContain(FilesInLibrary(), f => f.EndsWith(".tmp", StringComparison.Ordinal));
+
+        static void ReplaceKeepingTime(string path, string text)
+        {
+            var time = File.GetLastWriteTimeUtc(path);
+            File.WriteAllText(path, text);
+            File.SetLastWriteTimeUtc(path, time);
+        }
+    }
+
+    [Fact]
     public async Task Save_rejects_an_id_that_is_not_a_folder_name()
     {
         var (transcript, _) = LocalSession();

@@ -340,20 +340,27 @@ public class MainWindowTests
         menu.Open(icon.FindAncestorOfType<Button>()!);
         UiText.Settle(window);
         var item = menu.Items.OfType<MenuItem>().Single(m => m.Header as string == "Sync to other machines");
+        var syncNow = menu.Items.OfType<MenuItem>().Single(m => m.Header as string == "Sync now");
         Assert.False(icon.IsEffectivelyVisible);
         Assert.False(item.IsChecked);
+        Assert.False(syncNow.IsVisible);
 
         ClickMenuItem(window, item);
 
         Assert.True(tab.SyncToLibrary);
         Assert.True(item.IsChecked);
         Assert.True(icon.IsEffectivelyVisible);
+        // Sync now comes with syncing, disabled until there's a session to copy, with the reason as its tip.
+        Assert.True(syncNow.IsVisible);
+        Assert.False(syncNow.IsEffectivelyEnabled);
+        Assert.Equal(tab.SyncNowTip, ToolTip.GetTip(syncNow));
 
         ClickMenuItem(window, item);
 
         Assert.False(tab.SyncToLibrary);
         Assert.False(item.IsChecked);
         Assert.False(icon.IsEffectivelyVisible);
+        Assert.False(syncNow.IsVisible);
 
         // Another machine has the session open, so it can't sync from here too: the item unticks again.
         tab.State.SessionId = "held-1";

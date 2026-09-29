@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Claudette.App.Conversation;
+using Claudette.App.Services;
 using Claudette.Core.Library;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
@@ -66,7 +67,60 @@ public sealed partial class TabViewModel
     private void SyncChanged()
     {
         OnPropertyChanged(nameof(SyncToLibrary));
+        OnSyncNowChanged();
         _services.SaveState();
+    }
+
+    /// <summary>
+    /// <b>Sync now</b> can run: the tab syncs, has a session of its own, and Claude Code isn't writing its transcript. A
+    /// copy that hasn't had its first turn still has the original's id, so it waits for its own.
+    /// </summary>
+    public bool CanSyncNow => State.SyncToLibrary && State.SessionId is not null && !IsWorking && !IsReadOnly && !State.ForkOnNextStart && !_forkAwaitingId;
+
+    /// <summary><b>Sync now</b>'s tip: what it does, or why it's disabled.</summary>
+    public string SyncNowTip =>
+        IsReadOnly ? $"This session continued on {TakenOverBy}"
+        : IsWorking ? "Claude is working: the session is copied when the turn ends"
+        : State.SessionId is null || State.ForkOnNextStart || _forkAwaitingId ? "There's nothing to copy until the first message"
+        : "Copy this session to the session library now, without waiting for the next turn";
+
+    /// <summary>
+    /// <b>Sync now</b> in the tab's menu: copies the session to the library straight away, every file again, rather than
+    /// waiting for the next turn (DESIGN.md §9, "Writing"). It catches the library up after a copy that failed while its
+    /// folder was unavailable, or a rename since the last turn, and says in the conversation how it went.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanSyncNow))]
+    private async Task SyncNowAsync()
+    {
+        var sessionId = State.SessionId!;
+        var library = _services.Library;
+        // Leases are only refreshed once a minute: another machine may have taken the session over since, and copying
+        // from here would overwrite what it wrote.
+        if (library.Library.GetTranscriptPath(sessionId) is not null && library.CheckLease(sessionId) is LeaseStatus.HeldByOther other)
+        {
+            await OnTakenOverAsync(other.Machine);
+            return;
+        }
+        var result = await library.CopyToLibraryAsync(LibraryRecord(), State.TranscriptPath, () => State.SyncToLibrary && !IsReadOnly, force: true);
+        switch (result)
+        {
+            case LibraryCopyResult.Copied:
+                _conversation.AddNote("Copied this session to the session library.");
+                break;
+            case LibraryCopyResult.NoTranscript:
+                _conversation.AddNote("Couldn't copy this session to the session library: its transcript isn't on this machine.", NoteKind.Warning);
+                break;
+            case LibraryCopyResult.Failed failed:
+                _conversation.AddNote($"Couldn't copy this session to the session library: {failed.Reason}", NoteKind.Warning);
+                break;
+        }
+    }
+
+    private void OnSyncNowChanged()
+    {
+        OnPropertyChanged(nameof(CanSyncNow));
+        OnPropertyChanged(nameof(SyncNowTip));
+        SyncNowCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>
@@ -88,8 +142,8 @@ public sealed partial class TabViewModel
     /// never write the same session (DESIGN.md §9, "One machine at a time").
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsReadOnly))]
-    [NotifyCanExecuteChangedFor(nameof(SendCommand))]
+    [NotifyPropertyChangedFor(nameof(IsReadOnly), nameof(CanSyncNow), nameof(SyncNowTip))]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand), nameof(SyncNowCommand))]
     public partial string? TakenOverBy { get; set; }
 
     public bool IsReadOnly => TakenOverBy is not null;

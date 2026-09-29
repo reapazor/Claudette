@@ -239,6 +239,9 @@
                                   <!-- The item ticks itself as it's clicked, then runs the command, so the binding stays one-way -->
                                   <MenuItem Header="Sync to other machines" ToggleType="CheckBox" IsChecked="{Binding SyncToLibrary, Mode=OneWay}"
                                             Command="{Binding ToggleSyncToLibraryCommand}" />
+                                  <!-- Copies to the library now, rather than after the next turn (DESIGN.md §9); disabled while Claude writes -->
+                                  <MenuItem Header="Sync now" Command="{Binding SyncNowCommand}" IsVisible="{Binding SyncToLibrary}"
+                                            ToolTip.Tip="{Binding SyncNowTip}" ToolTip.ShowOnDisabled="True" />
                                   <!-- Remote Control (DESIGN.md §18): disabled, with the reason as its tip, when the account can't use it -->
                                   <MenuItem Header="Connect to the Claude app" ToggleType="CheckBox" IsChecked="{Binding RemoteControl, Mode=OneWay}"
                                             Command="{Binding ToggleRemoteControlCommand}" ToolTip.Tip="{Binding RemoteControlTip}" ToolTip.ShowOnDisabled="True" />
@@ -355,6 +358,8 @@
                               <MenuItem Header="{Binding PinMenuText}" Command="{Binding TogglePinCommand}" />
                               <MenuItem Header="Sync to other machines" ToggleType="CheckBox" IsChecked="{Binding SyncToLibrary, Mode=OneWay}"
                                         Command="{Binding ToggleSyncToLibraryCommand}" />
+                              <MenuItem Header="Sync now" Command="{Binding SyncNowCommand}" IsVisible="{Binding SyncToLibrary}"
+                                        ToolTip.Tip="{Binding SyncNowTip}" ToolTip.ShowOnDisabled="True" />
                               <MenuItem Header="Connect to the Claude app" ToggleType="CheckBox" IsChecked="{Binding RemoteControl, Mode=OneWay}"
                                         Command="{Binding ToggleRemoteControlCommand}" ToolTip.Tip="{Binding RemoteControlTip}" ToolTip.ShowOnDisabled="True" />
                               <MenuItem Header="Open in the Claude app" Command="{Binding OpenInClaudeAppCommand}" IsVisible="{Binding HasRemoteUrl}" />

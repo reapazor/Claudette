@@ -483,6 +483,151 @@ public class LibraryAndHistoryTests
         Assert.Equal([true, false], restarted.Shell.AllTabs.Select(t => t.SyncToLibrary));
     }
 
+    // ---- Sync now (DESIGN.md §9, "Which tabs sync") -----------------------------------------------------------------
+
+    [Fact]
+    public async Task Sync_now_copies_the_session_straight_away_every_file_again_and_says_so()
+    {
+        await using var h = new TabTestHarness(s => s.Sessions.SyncNewTabs = true);
+        var tab = await h.OpenTabAsync();
+        h.WriteTranscript("s1", UserLine("s1", "hello", h.WorkFolder));
+        h.Transport.EmitTurn();
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(TimeSpan.FromSeconds(1));
+            return h.Services.Library.CheckLease("s1") is LeaseStatus.Mine;
+        }, "the library copy");
+        // Renamed since the turn, and the library's transcript changed without its size or time changing, so an
+        // ordinary copy would skip it.
+        tab.State.UserName = "Login fix";
+        var copy = h.Services.Library.Library.GetTranscriptPath("s1")!;
+        var source = await File.ReadAllTextAsync(copy, TestContext.Current.CancellationToken);
+        var copyTime = File.GetLastWriteTimeUtc(copy);
+        await File.WriteAllTextAsync(copy, new string('x', source.Length), TestContext.Current.CancellationToken);
+        File.SetLastWriteTimeUtc(copy, copyTime);
+        Assert.True(tab.SyncNowCommand.CanExecute(null));
+
+        await SyncNowAsync(h, tab);
+
+        Assert.Equal(source, await File.ReadAllTextAsync(copy, TestContext.Current.CancellationToken));
+        Assert.Equal("Login fix", Assert.Single(h.Services.Library.Library.List()).Record.Name);
+        Assert.IsType<LeaseStatus.Mine>(h.Services.Library.CheckLease("s1"));
+        Assert.Contains(Notes(tab), n => n is { Text: "Copied this session to the session library.", Kind: Conversation.NoteKind.Info });
+    }
+
+    [Fact]
+    public async Task Sync_now_is_only_there_for_a_tab_that_syncs_with_a_session_Claude_is_not_writing()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        Assert.False(tab.SyncNowCommand.CanExecute(null));
+
+        tab.SetSyncToLibrary(true);
+
+        // Nothing to copy until the first message.
+        Assert.False(tab.SyncNowCommand.CanExecute(null));
+        Assert.Contains("nothing to copy", tab.SyncNowTip, StringComparison.Ordinal);
+
+        h.WriteTranscript("s1", UserLine("s1", "long job", h.WorkFolder));
+        tab.ComposerText = "long job";
+        await tab.SendCommand.ExecuteAsync(null);
+        h.Transport.Emit("""{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-5-5"}""");
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Working, "working");
+
+        // Never while Claude Code is writing the transcript: the turn's end copies it anyway.
+        Assert.False(tab.SyncNowCommand.CanExecute(null));
+        Assert.Contains("when the turn ends", tab.SyncNowTip, StringComparison.Ordinal);
+
+        h.Transport.EmitTurn();
+
+        await TabTestHarness.Eventually(() => tab.SyncNowCommand.CanExecute(null), "Sync now after the turn");
+        Assert.Contains("without waiting", tab.SyncNowTip, StringComparison.Ordinal);
+
+        await tab.OnTakenOverAsync("LAPTOP-02");
+
+        Assert.False(tab.SyncNowCommand.CanExecute(null));
+        Assert.Contains("LAPTOP-02", tab.SyncNowTip, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Sync_now_writes_nothing_to_a_session_another_machine_took_over_and_the_tab_becomes_read_only()
+    {
+        await using var h = new TabTestHarness(s => s.Sessions.SyncNewTabs = true);
+        var tab = await h.OpenTabAsync();
+        var transcript = h.WriteTranscript("s1", UserLine("s1", "hello", h.WorkFolder));
+        h.Transport.EmitTurn();
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(TimeSpan.FromSeconds(1));
+            return h.Services.Library.CheckLease("s1") is LeaseStatus.Mine;
+        }, "the library copy");
+        // Taken over since the last lease refresh, which hasn't noticed yet.
+        await HoldLeaseAsync(h, "s1", "LAPTOP-02");
+        await File.AppendAllTextAsync(transcript, UserLine("s1", "written here", h.WorkFolder) + "\n", TestContext.Current.CancellationToken);
+
+        await SyncNowAsync(h, tab);
+
+        Assert.Equal("LAPTOP-02", tab.TakenOverBy);
+        await SettleAsync(h);
+        Assert.DoesNotContain("written here", await File.ReadAllTextAsync(h.Services.Library.Library.GetTranscriptPath("s1")!, TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        Assert.IsType<LeaseStatus.HeldByOther>(h.Services.Library.CheckLease("s1"));
+        Assert.DoesNotContain(Notes(tab), n => n.Text.StartsWith("Copied", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Sync_now_says_why_when_the_library_folder_is_not_available()
+    {
+        await using var h = new TabTestHarness(s => s.Sessions.SyncNewTabs = true);
+        var tab = await h.OpenTabAsync();
+        h.WriteTranscript("s1", UserLine("s1", "hello", h.WorkFolder));
+        h.Transport.EmitTurn();
+        await TabTestHarness.Eventually(() => tab.State.Tokens.Total == 120, "the turn to finish");
+        await SettleAsync(h);
+        // A file where the library's folder should be, as when a sync client's drive isn't mounted.
+        var blocked = Path.Combine(h.Root, "not-a-folder");
+        await File.WriteAllTextAsync(blocked, "", TestContext.Current.CancellationToken);
+        h.Services.Settings.Sessions.LibraryFolder = blocked;
+        h.Services.Library.OnSettingsChanged();
+
+        await SyncNowAsync(h, tab);
+
+        var note = Assert.Single(Notes(tab), n => n.Text.StartsWith("Couldn't copy this session to the session library: ", StringComparison.Ordinal));
+        Assert.Equal(Conversation.NoteKind.Warning, note.Kind);
+        Assert.True(tab.SyncToLibrary);
+    }
+
+    [Fact]
+    public async Task Sync_now_says_so_when_this_machine_no_longer_has_the_transcript()
+    {
+        await using var h = new TabTestHarness(s => s.Sessions.SyncNewTabs = true);
+        var tab = await h.OpenTabAsync();
+        // The turn's own copy finds no transcript and gives up quietly.
+        h.Transport.EmitTurn();
+        await TabTestHarness.Eventually(() => tab.State.Tokens.Total == 120, "the turn to finish");
+        await SettleAsync(h);
+
+        await SyncNowAsync(h, tab);
+
+        var note = Assert.Single(Notes(tab), n => n.Text.StartsWith("Couldn't copy", StringComparison.Ordinal));
+        Assert.Equal("Couldn't copy this session to the session library: its transcript isn't on this machine.", note.Text);
+        Assert.Equal(Conversation.NoteKind.Warning, note.Kind);
+        Assert.Empty(h.Services.Library.Library.List());
+    }
+
+    /// <summary>Runs <b>Sync now</b> to the end, moving the clock past the settle delay it waits.</summary>
+    private static async Task SyncNowAsync(TabTestHarness h, TabViewModel tab)
+    {
+        var sync = tab.SyncNowCommand.ExecuteAsync(null);
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(TimeSpan.FromSeconds(1));
+            return sync.IsCompleted;
+        }, "Sync now");
+        await sync;
+    }
+
+    private static Conversation.NoteItem[] Notes(TabViewModel tab) => InlineDispatcher.Read(() => tab.Items.OfType<Conversation.NoteItem>().ToArray());
+
     /// <summary>Gives a copy that would follow a turn every chance to: past the settle delay, with time for background work.</summary>
     private static async Task SettleAsync(TabTestHarness h)
     {
