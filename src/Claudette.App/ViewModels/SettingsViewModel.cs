@@ -161,9 +161,16 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         {
             SelectedCategory = category;
         }
-        if (opening?.StartNewAction == true)
+        if (opening?.StartNew == true)
         {
-            Project?.StartNewAction();
+            if (IsLinksPage)
+            {
+                Project?.StartNewLink();
+            }
+            else if (IsActionsPage)
+            {
+                Project?.StartNewAction();
+            }
         }
         FillPerforceLogin();
         // Signing in from this window can make the Claude app available, or not (DESIGN.md §18).

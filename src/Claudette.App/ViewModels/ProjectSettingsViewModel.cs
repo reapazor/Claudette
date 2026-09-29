@@ -9,8 +9,8 @@ namespace Claudette.App.ViewModels;
 /// The selected tab's project in Settings (DESIGN.md §14, "The project's pages"): its <b>Links</b> and <b>Actions</b>,
 /// from the folder's <c>claudette.json</c> and <c>claudette.local.json</c>, and its <b>Tools</b>, this machine's choices
 /// for the project in <c>state.json</c>. Like the rest of Settings, each change is saved as it's made: a file is
-/// rewritten after each add, edit, removal or move, and every tab in the folder reads it again, so the sidebar's Links
-/// and the menus follow. Dispose it with the window.
+/// rewritten after each add, edit, removal or move, and every tab in the folder reads it again, so the project's menu
+/// follows. Dispose it with the window.
 /// </summary>
 public sealed partial class ProjectSettingsViewModel : ViewModelBase, IDisposable
 {

@@ -11,6 +11,36 @@ namespace Claudette.App.Tests;
 public class SidePanelTests
 {
     [Fact]
+    public async Task Resizing_the_side_panel_resizes_every_tabs_within_limits_and_is_saved()
+    {
+        await using var h = new TabTestHarness();
+        h.Services.State.Tabs = [new TabState { Folder = h.WorkFolder, IsPinned = true }, new TabState { Folder = h.WorkFolder, IsPinned = true }];
+        h.Shell.Restore(null);
+        var (first, second) = (h.Shell.AllTabs.First(), h.Shell.AllTabs.Last());
+        Assert.Equal(ShellViewModel.DefaultSidePanelWidth, second.SidePanelWidth);
+        var changed = new List<string?>();
+        second.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        first.ResizeSidePanel(40);
+        Assert.Equal(ShellViewModel.MinSidePanelWidth, second.SidePanelWidth);
+        first.ResizeSidePanel(5000);
+        Assert.Equal(ShellViewModel.MaxSidePanelWidth, second.SidePanelWidth);
+        Assert.Contains(nameof(TabViewModel.SidePanelWidth), changed);
+
+        // Kept when the drag ends, for every tab and the next launch.
+        first.ResizeSidePanel(480);
+        Assert.Null(h.Services.State.SidePanelWidth);
+        first.SaveSidePanelWidth();
+        Assert.Equal(480, h.Services.State.SidePanelWidth);
+        Assert.Equal(480, new ShellViewModel(h.Services, () => { }).SidePanelWidth);
+
+        // Double-clicking the edge.
+        second.ResetSidePanelWidth();
+        Assert.Equal(ShellViewModel.DefaultSidePanelWidth, first.SidePanelWidth);
+        Assert.Equal(ShellViewModel.DefaultSidePanelWidth, h.Services.State.SidePanelWidth);
+    }
+
+    [Fact]
     public async Task A_new_file_from_Write_shows_as_added()
     {
         await using var h = new TabTestHarness();

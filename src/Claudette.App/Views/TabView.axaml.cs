@@ -18,6 +18,13 @@ public partial class TabView : UserControl
     private const double StickToBottomThreshold = 40;
     private bool _stickToBottom = true;
 
+    /// <summary>The conversation keeps at least this much room beside the side panel, however wide it was dragged.</summary>
+    private const double MinConversationWidth = 360;
+
+    /// <summary>Where a drag of the side panel's edge started, and the width then; null when not resizing.</summary>
+    private double? _resizeFrom;
+    private double _resizeStartWidth;
+
     public TabView()
     {
         InitializeComponent();
@@ -28,9 +35,50 @@ public partial class TabView : UserControl
         // Copy on a code block goes through the tab and says "Copied" (DESIGN.md §5, "Copy and times").
         CodeBlockCopy.Attach(this);
         WireComposerAssist();
+        SidePanelEdge.PointerPressed += OnSidePanelEdgePressed;
+        SidePanelEdge.PointerMoved += OnSidePanelEdgeMoved;
+        SidePanelEdge.PointerReleased += (_, e) => EndSidePanelResize(e.Pointer);
+        SidePanelEdge.PointerCaptureLost += (_, _) => EndSidePanelResize(null);
+        SidePanelEdge.DoubleTapped += (_, _) => ViewModel?.ResetSidePanelWidth();
+        SizeChanged += (_, e) => SidePanel.MaxWidth = Math.Max(ShellViewModel.MinSidePanelWidth, e.NewSize.Width - MinConversationWidth);
     }
 
     private TabViewModel? ViewModel => DataContext as TabViewModel;
+
+    // ---- Resizing the side panel (DESIGN.md §3) -------------------------------------------------------------------
+
+    private void OnSidePanelEdgePressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (ViewModel is null || !e.GetCurrentPoint(SidePanelEdge).Properties.IsLeftButtonPressed || e.ClickCount > 1)
+        {
+            return;
+        }
+        // Measured against the whole view, which doesn't move as the edge does, from the width it shows.
+        _resizeFrom = e.GetPosition(this).X;
+        _resizeStartWidth = SidePanel.Bounds.Width;
+        e.Pointer.Capture(SidePanelEdge);
+        e.Handled = true;
+    }
+
+    /// <summary>The panel is on the right, so dragging its edge left widens it.</summary>
+    private void OnSidePanelEdgeMoved(object? sender, PointerEventArgs e)
+    {
+        if (_resizeFrom is { } from)
+        {
+            ViewModel?.ResizeSidePanel(Math.Min(_resizeStartWidth + from - e.GetPosition(this).X, SidePanel.MaxWidth));
+        }
+    }
+
+    private void EndSidePanelResize(IPointer? pointer)
+    {
+        if (_resizeFrom is null)
+        {
+            return;
+        }
+        _resizeFrom = null;
+        pointer?.Capture(null);
+        ViewModel?.SaveSidePanelWidth();
+    }
 
     /// <summary>The Perforce password prompt opened: type straight into it.</summary>
     private void OnPerforcePasswordAttached(object? sender, VisualTreeAttachmentEventArgs e)

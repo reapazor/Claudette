@@ -98,6 +98,23 @@ public sealed partial class TabViewModel
     [RelayCommand]
     private void ToggleSidePanel() => IsSidePanelOpen = !IsSidePanelOpen;
 
+    /// <summary>The side panel's width: the same for every tab, set by dragging its edge (DESIGN.md §3).</summary>
+    public double SidePanelWidth => _shell.SidePanelWidth;
+
+    /// <summary>Dragging the side panel's edge. <see cref="SaveSidePanelWidth"/> keeps the result when the drag ends.</summary>
+    public void ResizeSidePanel(double width) => _shell.ResizeSidePanel(width);
+
+    public void SaveSidePanelWidth() => _shell.SaveSidePanelWidth();
+
+    /// <summary>Double-clicking the edge.</summary>
+    public void ResetSidePanelWidth()
+    {
+        _shell.ResizeSidePanel(ShellViewModel.DefaultSidePanelWidth);
+        _shell.SaveSidePanelWidth();
+    }
+
+    internal void OnSidePanelWidthChanged() => OnPropertyChanged(nameof(SidePanelWidth));
+
     [RelayCommand]
     private void ShowFilesPage()
     {

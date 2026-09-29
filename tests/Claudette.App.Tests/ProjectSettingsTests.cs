@@ -179,7 +179,7 @@ public class ProjectSettingsTests
             """);
         Write(local, """{ "links": [ { "url": "https://mine.example" } ], "extra": 1 }""");
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => h.Shell.Links.Count == 2, "the sidebar's links");
+        await TabTestHarness.Eventually(() => tab.Links.Count == 2, "the tab's links");
         using var settings = await OpenSettingsAsync(h);
         var project = settings.Project!;
 
@@ -211,8 +211,8 @@ public class ProjectSettingsTests
         Assert.Equal(3, root["actions"]![0]!["os"]!.AsArray().Count);
         Assert.Equal("https://example.com/claudette.schema.json", root["$schema"]!.GetValue<string>());
         Assert.DoesNotContain("The team's links", File.ReadAllText(shared), StringComparison.Ordinal);
-        // The sidebar picks it up, as it does after the actions editor saves.
-        await TabTestHarness.Eventually(() => h.Shell.Links.Select(l => l.Name).SequenceEqual(["Board", "Pull request", "https://mine.example"]), "the new link in the sidebar");
+        // The project's menu picks it up, as it does after the actions editor saves.
+        await TabTestHarness.Eventually(() => tab.Links.Select(l => l.Name).SequenceEqual(["Board", "Pull request", "https://mine.example"]), "the new link in the menu");
         Assert.Equal("No git branch", InlineDispatcher.Read(() => tab.Links[1].Problem));
 
         // Edit: the entry's other fields are kept, and it stays in its file.
@@ -244,7 +244,7 @@ public class ProjectSettingsTests
         Assert.Empty(root["links"]!.AsArray());
         Assert.Equal(1, root["extra"]!.GetValue<int>());
         Assert.Null(project.LinksError);
-        await TabTestHarness.Eventually(() => h.Shell.Links.Select(l => l.Name).SequenceEqual(["Pull request", "Sprint board"]), "the sidebar after the changes");
+        await TabTestHarness.Eventually(() => tab.Links.Select(l => l.Name).SequenceEqual(["Pull request", "Sprint board"]), "the menu after the changes");
     }
 
     [Theory]
@@ -257,7 +257,7 @@ public class ProjectSettingsTests
     [InlineData("https://swarm.example/changes/{changelist}", null)]
     [InlineData("http://docs.example/{folderName}/", null)]
     [InlineData("mailto:team@example.com", null)]
-    public async Task A_links_address_is_checked_as_the_sidebar_opens_links(string url, string? problem)
+    public async Task A_links_address_is_checked_as_the_menu_opens_links(string url, string? problem)
     {
         await using var h = new TabTestHarness();
         await h.OpenTabAsync();
@@ -431,7 +431,7 @@ public class ProjectSettingsTests
 
         Assert.Same(tab, h.Shell.SelectedTab);
         Assert.NotNull(opening);
-        Assert.Equal((SettingsViewModel.ActionsPage, true), (opening.Category, opening.StartNewAction));
+        Assert.Equal((SettingsViewModel.ActionsPage, true), (opening.Category, opening.StartNew));
         Assert.Same(tab, opening.Project!.Tab);
         using var settings = new SettingsViewModel(h.Services, null, opening: opening);
         Assert.True(settings.IsActionsPage);
@@ -453,8 +453,42 @@ public class ProjectSettingsTests
         var written = Read(Path.Combine(h.WorkFolder, ProjectFile.SharedName));
         Assert.Equal("https://example.com/board", written["links"]![0]!["url"]!.GetValue<string>());
         Assert.Equal(("Serve", "npm run dev", "launch"), (written["actions"]![0]!["name"]!.GetValue<string>(), written["actions"]![0]!["command"]!.GetValue<string>(), written["actions"]![0]!["mode"]!.GetValue<string>()));
-        await TabTestHarness.Eventually(() => tab.ProjectButtonText == "Actions" && sibling.ProjectActions.Count == 1, "both tabs");
+        await TabTestHarness.Eventually(() => tab.ProjectActions.Count == 1 && sibling.ProjectActions.Count == 1, "both tabs");
         Assert.Equal(ProjectActionKind.Launch, sibling.ProjectActions.Single().Kind);
+    }
+
+    [Fact]
+    public async Task Add_a_link_from_the_menu_opens_Settings_on_the_Links_page_with_the_dialog_that_asks_for_the_file()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        SettingsOpening? opening = null;
+        h.Shell.ShowSettingsWindow = o =>
+        {
+            opening = o;
+            return Task.CompletedTask;
+        };
+
+        // A folder with no project has the entry too: the project's row is there for every tab.
+        Assert.Same(tab.AddProjectLinkCommand, InlineDispatcher.Read(() => tab.ProjectMenu.Single(e => e.Label == "Add a link…")).Command);
+        await tab.AddProjectLinkCommand.ExecuteAsync(null);
+
+        Assert.NotNull(opening);
+        Assert.Equal((SettingsViewModel.LinksPage, true), (opening.Category, opening.StartNew));
+        using var settings = new SettingsViewModel(h.Services, null, opening: opening);
+        Assert.True(settings.IsLinksPage);
+        var editor = Assert.IsType<ProjectLinkEditorViewModel>(settings.Project!.Editor);
+        Assert.Equal("Add a link", editor.Title);
+        Assert.True(editor.AsksForFile);
+        Assert.True(editor.SaveToLocal);
+        editor.Name = "Board";
+        editor.Url = "https://example.com/board";
+        editor.SaveCommand.Execute(null);
+
+        Assert.Null(settings.Project.Editor);
+        Assert.Equal("Board", settings.Project.SelectedLink!.Name);
+        Assert.Equal(["Board"], Names(Read(Path.Combine(h.WorkFolder, ProjectFile.LocalName)), "links"));
+        await TabTestHarness.Eventually(() => tab.Links.Select(l => l.Name).SequenceEqual(["Board"]), "the new link in the menu");
     }
 
     [Fact]
@@ -476,7 +510,7 @@ public class ProjectSettingsTests
         Assert.Equal("Project actions are in Settings → NightOwl → Actions.", tabSettings.ProjectActionsText);
         await tabSettings.OpenProjectActionsCommand.ExecuteAsync(null);
 
-        Assert.Equal((SettingsViewModel.ActionsPage, false), (opening!.Category, opening.StartNewAction));
+        Assert.Equal((SettingsViewModel.ActionsPage, false), (opening!.Category, opening.StartNew));
         Assert.Same(tab, opening.Project!.Tab);
         // Tab settings stays open behind the window, with nothing applied yet.
         Assert.Same(tabSettings, h.Shell.TabSettings);

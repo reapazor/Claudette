@@ -26,6 +26,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         _onAuthenticationRequired = onAuthenticationRequired;
         IsSidebarCollapsed = services.State.SidebarCollapsed;
         SidebarWidth = Math.Clamp(services.State.SidebarWidth ?? DefaultSidebarWidth, MinSidebarWidth, MaxSidebarWidth);
+        SidePanelWidth = Math.Clamp(services.State.SidePanelWidth ?? DefaultSidePanelWidth, MinSidePanelWidth, MaxSidePanelWidth);
         _services.Notifications.SelectedTabId = () => SelectedTab?.Id;
         IsCompact = services.Settings.Appearance.Density == Density.Compact;
         IsClaudeStyle = services.Settings.Appearance.Style == AppStyle.Claude;
@@ -180,13 +181,9 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         if (oldValue is not null)
         {
             oldValue.IsSelected = false;
-            oldValue.PropertyChanged -= OnSelectedTabPropertyChanged;
         }
-        OnPropertyChanged(nameof(Links));
-        OnPropertyChanged(nameof(HasLinks));
         if (newValue is not null)
         {
-            newValue.PropertyChanged += OnSelectedTabPropertyChanged;
             newValue.IsSelected = true;
             if (_services.Notifications.IsAppActive)
             {
@@ -920,6 +917,33 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         _services.SaveState();
     }
 
+    // ---- Side panel (DESIGN.md §3): one width for every tab's -----------------------------------------------
+
+    public const double DefaultSidePanelWidth = 340;
+    public const double MinSidePanelWidth = 260;
+    public const double MaxSidePanelWidth = 900;
+
+    /// <summary>The side panel's width, as the user dragged it. Each tab's view also keeps room for its conversation.</summary>
+    [ObservableProperty]
+    public partial double SidePanelWidth { get; private set; } = DefaultSidePanelWidth;
+
+    partial void OnSidePanelWidthChanged(double value)
+    {
+        foreach (var tab in AllTabs)
+        {
+            tab.OnSidePanelWidthChanged();
+        }
+    }
+
+    /// <summary>Dragging the side panel's edge. <see cref="SaveSidePanelWidth"/> keeps the result when the drag ends.</summary>
+    public void ResizeSidePanel(double width) => SidePanelWidth = Math.Clamp(width, MinSidePanelWidth, MaxSidePanelWidth);
+
+    public void SaveSidePanelWidth()
+    {
+        _services.State.SidePanelWidth = SidePanelWidth;
+        _services.SaveState();
+    }
+
     // ---- Settings -------------------------------------------------------------------------------------------
 
     [RelayCommand]
@@ -930,22 +954,22 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     /// <summary>
     /// Opens Settings at one of <paramref name="tab"/>'s project pages (DESIGN.md §14, "The project's pages"): Actions for
-    /// <b>Add an action…</b>, with a new action started. The Settings window follows the selected tab, so the tab is
-    /// selected first when it isn't.
+    /// <b>Add an action…</b> and Links for <b>Add a link…</b>, with a new one started. The Settings window follows the
+    /// selected tab, so the tab is selected first when it isn't.
     /// </summary>
-    internal Task OpenProjectSettingsAsync(TabViewModel tab, string page, bool startNewAction = false)
+    internal Task OpenProjectSettingsAsync(TabViewModel tab, string page, bool startNew = false)
     {
         if (!ReferenceEquals(SelectedTab, tab) && AllTabs.Contains(tab))
         {
             SelectedTab = tab;
         }
-        return ShowSettingsAsync(page, tab, startNewAction);
+        return ShowSettingsAsync(page, tab, startNew);
     }
 
     /// <summary>The window gets the project pages of the tab selected as it opens; with no tab, there are none.</summary>
-    private Task ShowSettingsAsync(string? category, TabViewModel? tab, bool startNewAction = false) =>
+    private Task ShowSettingsAsync(string? category, TabViewModel? tab, bool startNew = false) =>
         ShowSettingsWindow is { } show
-            ? show(new SettingsOpening(category, tab is null ? null : new ProjectSettingsViewModel(_services, tab, this), startNewAction))
+            ? show(new SettingsOpening(category, tab is null ? null : new ProjectSettingsViewModel(_services, tab, this), startNew))
             : Task.CompletedTask;
 
     [RelayCommand]
@@ -965,40 +989,6 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         foreach (var tab in AllTabs.Where(t => FolderHistory.SamePath(t.Folder, folder)))
         {
             tab.ReloadCustomActions();
-        }
-    }
-
-    // ---- Links (DESIGN.md §18, "Links"): the selected tab's, in the sidebar ------------------------------------------
-
-    /// <summary>The selected tab's links, from its folder's claudette.json and claudette.local.json.</summary>
-    public IReadOnlyList<Core.ProjectTools.ResolvedLink> Links => SelectedTab?.Links ?? [];
-
-    public bool HasLinks => SelectedTab?.HasLinks == true;
-
-    /// <summary>The Links section is folded to its heading. Remembered on this machine.</summary>
-    public bool IsLinksCollapsed => _services.State.LinksCollapsed;
-
-    public bool IsLinksExpanded => !IsLinksCollapsed;
-
-    [RelayCommand]
-    private void ToggleLinks()
-    {
-        _services.State.LinksCollapsed = !_services.State.LinksCollapsed;
-        _services.SaveState();
-        OnPropertyChanged(nameof(IsLinksCollapsed));
-        OnPropertyChanged(nameof(IsLinksExpanded));
-    }
-
-    [RelayCommand]
-    private Task OpenLinkAsync(Core.ProjectTools.ResolvedLink? link) =>
-        link is { Url: { } url } ? _services.Platform.OpenUrlAsync(url) : Task.CompletedTask;
-
-    private void OnSelectedTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName is nameof(TabViewModel.Links) or nameof(TabViewModel.HasLinks) or null or "")
-        {
-            OnPropertyChanged(nameof(Links));
-            OnPropertyChanged(nameof(HasLinks));
         }
     }
 

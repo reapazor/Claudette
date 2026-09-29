@@ -37,7 +37,7 @@ public static partial class ProjectLinks
             : new ResolvedLink(link.Name, filled, null, link.Scope);
 
     /// <summary>
-    /// Why an address typed into Settings' Links page can't be saved, by the rules the sidebar opens links with: only
+    /// Why an address typed into Settings' Links page can't be saved, by the rules the project's menu opens links with: only
     /// https, http and mailto, a full address, and only the known placeholders. Null when it's fine.
     /// </summary>
     public static string? Validate(string url)

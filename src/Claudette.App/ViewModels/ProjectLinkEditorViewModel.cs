@@ -6,8 +6,8 @@ namespace Claudette.App.ViewModels;
 
 /// <summary>
 /// The small dialog for one link on Settings' Links page (DESIGN.md §18, "Links"): its name and address, and for a new
-/// one, which file it goes in. The address is checked as the sidebar checks it: only https, http and mailto, and only
-/// the placeholders it fills in. It hands back what was typed and changes nothing itself.
+/// one, which file it goes in. The address is checked as the project's menu checks it: only https, http and mailto, and
+/// only the placeholders it fills in. It hands back what was typed and changes nothing itself.
 /// </summary>
 public sealed partial class ProjectLinkEditorViewModel : ViewModelBase
 {
@@ -39,7 +39,7 @@ public sealed partial class ProjectLinkEditorViewModel : ViewModelBase
 
     public string Title => AsksForFile ? "Add a link" : "Edit link";
 
-    /// <summary>What the sidebar shows; empty shows the address.</summary>
+    /// <summary>What the project's menu shows; empty shows the address.</summary>
     [ObservableProperty]
     public partial string Name { get; set; }
 

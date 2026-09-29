@@ -13,7 +13,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace Claudette.App.ViewModels;
 
-/// <summary>What an entry of the project menus is.</summary>
+/// <summary>What an entry of the project's menu is.</summary>
 public enum ProjectMenuKind
 {
     /// <summary>A label, such as "Editor configuration".</summary>
@@ -23,16 +23,13 @@ public enum ProjectMenuKind
     /// <summary>One of a set of choices, such as DebugGame: a radio item.</summary>
     Option,
     Separator,
-    /// <summary>Something about the menu itself: Show output…, Add an action…, Refresh.</summary>
+    /// <summary>Something about the menu itself: Show output…, Add an action…, Add a link…, Refresh.</summary>
     Command,
     /// <summary>A link from the folder's project files, opened in the browser.</summary>
     Link,
 }
 
-/// <summary>
-/// One entry of the project menus (DESIGN.md §18, "Project tools"): the menu of the project's row at the sidebar's foot
-/// and the project's submenu in the sidebar's tab menu list the same entries.
-/// </summary>
+/// <summary>One entry of the menu of the project's row at the sidebar's foot (DESIGN.md §18, "Project tools").</summary>
 public sealed class ProjectMenuEntry
 {
     public required ProjectMenuKind Kind { get; init; }
@@ -59,12 +56,6 @@ public sealed class ProjectMenuEntry
     public bool IsButton => Kind is ProjectMenuKind.Action or ProjectMenuKind.Option or ProjectMenuKind.Command or ProjectMenuKind.Link;
 
     public bool IsLink => Kind == ProjectMenuKind.Link;
-
-    /// <summary>For a menu item: a label can't be clicked.</summary>
-    public bool IsMenuEnabled => IsEnabled && Kind != ProjectMenuKind.Header;
-
-    /// <summary>For a menu item: <c>-</c> makes a separator.</summary>
-    public string MenuHeader => IsSeparator ? "-" : Label;
 
     /// <summary>A radio mark for choices in the project's menu, and an arrow for links.</summary>
     public string Mark => Kind switch
@@ -108,28 +99,26 @@ public sealed partial class TabViewModel
     partial void OnProjectChanged(ProjectInfo? value) => ProjectToolsChanged();
 
     /// <summary>
-    /// The sidebar shows the project's row, and the tab's menu has a project submenu: a detected project, custom
-    /// actions, or a claudette.json whose entries were skipped (the menu says why).
+    /// The side panel has a Project page, and the project's menu <b>Show output…</b>: a detected project, custom
+    /// actions, or a claudette.json whose entries were skipped (the menu says why). The sidebar's project row shows
+    /// either way.
     /// </summary>
     public bool HasProjectTools => Project is not null || _customActions.Count > 0 || _projectFile.Problems.Count > 0;
 
-    /// <summary>Custom actions, but no project: the menus call it "Actions".</summary>
-    public bool HasOnlyCustomActions => Project is null && HasProjectTools;
-
-    /// <summary>The sidebar's tab menu offers <b>Add an action…</b> by itself until the folder has project tools.</summary>
-    public bool OffersFirstProjectAction => !HasProjectTools;
-
-    /// <summary>"NightOwl · UE 5.4", "Actions", or while a job runs, its name: "Build editor…".</summary>
+    /// <summary>
+    /// "NightOwl · UE 5.4", the folder's name when no project was recognized, or while a job runs, its name:
+    /// "Build editor…".
+    /// </summary>
     public string ProjectButtonText =>
         RunningProjectRun is { } running ? $"{running.Name}…"
         : Project is { } project ? project.ShortVersion is { } version ? $"{project.Name} · {version}" : project.Name
-        : "Actions";
+        : FolderName;
 
     public string ProjectButtonTip
     {
         get
         {
-            var name = Project is { } project ? $"{project.Name} ({project.KindName})" : "This folder's actions";
+            var name = Project is { } project ? $"{project.Name} ({project.KindName})" : Folder;
             var main = MainProjectAction is { } action && _services.Tips.Text(KeyboardShortcuts.RunProjectAction) is { } shortcut
                 ? $". {shortcut}: {action.Label}"
                 : "";
@@ -137,14 +126,11 @@ public sealed partial class TabViewModel
         }
     }
 
-    /// <summary>The project's submenu in the sidebar's tab menu: named after the project.</summary>
-    public string ProjectMenuTitle => Project is { } project ? project.ShortVersion is { } version ? $"{project.Name} ({version})" : project.Name : "Actions";
+    /// <summary>The project menu's header: the project and its kind, or the folder's name.</summary>
+    public string ProjectHeaderTitle => Project is { } project ? $"{project.Name} · {project.KindName}" : FolderName;
 
-    /// <summary>The project menu's header: the project and its kind.</summary>
-    public string ProjectHeaderTitle => Project is { } project ? $"{project.Name} · {project.KindName}" : "Actions for this folder";
-
-    /// <summary>The engine's version, folder and kind, or what's wrong.</summary>
-    public IReadOnlyList<string> ProjectHeaderLines => Project?.HeaderLines ?? [];
+    /// <summary>The engine's version, folder and kind, or what's wrong; without a project, the folder.</summary>
+    public IReadOnlyList<string> ProjectHeaderLines => Project?.HeaderLines ?? [Folder];
 
     public string? ProjectProblem => Project?.Problem;
 
@@ -166,7 +152,7 @@ public sealed partial class TabViewModel
         Changelists.Current?.Number.ToString(CultureInfo.InvariantCulture),
         FolderName);
 
-    /// <summary>A link from the Links section or the project's menu: opened in the browser, when it's allowed to open.</summary>
+    /// <summary>A link from the project's menu: opened in the browser, when it's allowed to open.</summary>
     [RelayCommand]
     private Task OpenProjectLinkAsync(ResolvedLink? link) =>
         link is { Url: { } url } ? _services.Platform.OpenUrlAsync(url) : Task.CompletedTask;
@@ -176,7 +162,7 @@ public sealed partial class TabViewModel
     /// <summary>The project's actions and the folder's own, for the Project page's buttons.</summary>
     public IReadOnlyList<ProjectAction> ProjectActions => [.. Project?.Actions.Select(ForJob) ?? [], .. _customActions.Select(c => ForJob(c.Action))];
 
-    /// <summary>The project row's menu and the tab menu's project submenu.</summary>
+    /// <summary>The project row's menu.</summary>
     public IReadOnlyList<ProjectMenuEntry> ProjectMenu => BuildProjectMenu();
 
     public ProjectAction? MainProjectAction => Project?.MainAction ?? _customActions.Select(c => c.Action).FirstOrDefault();
@@ -321,11 +307,8 @@ public sealed partial class TabViewModel
     private void ProjectToolsChanged()
     {
         OnPropertyChanged(nameof(HasProjectTools));
-        OnPropertyChanged(nameof(HasOnlyCustomActions));
-        OnPropertyChanged(nameof(OffersFirstProjectAction));
         OnPropertyChanged(nameof(ProjectButtonText));
         OnPropertyChanged(nameof(ProjectButtonTip));
-        OnPropertyChanged(nameof(ProjectMenuTitle));
         OnPropertyChanged(nameof(ProjectHeaderTitle));
         OnPropertyChanged(nameof(ProjectHeaderLines));
         OnPropertyChanged(nameof(ProjectProblem));
@@ -423,8 +406,13 @@ public sealed partial class TabViewModel
             }));
         }
         Separator();
-        entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = "Show output…", Tip = "The Project page of the side panel", Command = OpenProjectPageCommand });
+        // Without project tools there's no Project page to show, and no job to have output.
+        if (HasProjectTools)
+        {
+            entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = "Show output…", Tip = "The Project page of the side panel", Command = OpenProjectPageCommand });
+        }
         entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = "Add an action…", Tip = "A command of your own for this folder", Command = AddProjectActionCommand });
+        entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = "Add a link…", Tip = "A web page of your own for this folder", Command = AddProjectLinkCommand });
         entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = "Refresh", Tip = "Look for the project and its files again", Command = RefreshProjectCommand });
         return entries;
     }
@@ -492,7 +480,14 @@ public sealed partial class TabViewModel
     /// dialog asks which file the action goes in, then it joins the end of that file's <c>actions</c>.
     /// </summary>
     [RelayCommand]
-    private Task AddProjectAction() => _shell.OpenProjectSettingsAsync(this, SettingsViewModel.ActionsPage, startNewAction: true);
+    private Task AddProjectAction() => _shell.OpenProjectSettingsAsync(this, SettingsViewModel.ActionsPage, startNew: true);
+
+    /// <summary>
+    /// <b>Add a link…</b>: Settings opens on this tab's Links page (DESIGN.md §14) with a new link started. Its dialog
+    /// asks which file the link goes in.
+    /// </summary>
+    [RelayCommand]
+    private Task AddProjectLink() => _shell.OpenProjectSettingsAsync(this, SettingsViewModel.LinksPage, startNew: true);
 
     /// <summary>A folder's project files changed through the in-app editor, here or in another tab in the same folder.</summary>
     internal void ReloadCustomActions() => _ = RefreshProjectFileAsync();

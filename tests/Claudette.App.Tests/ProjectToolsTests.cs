@@ -56,9 +56,7 @@ public class ProjectToolsTests
         var tab = await OpenWithProjectAsync(h);
 
         Assert.True(tab.HasProjectTools);
-        Assert.False(tab.OffersFirstProjectAction);
         Assert.Equal("NightOwl · UE 5.4", tab.ProjectButtonText);
-        Assert.Equal("NightOwl (UE 5.4)", tab.ProjectMenuTitle);
         Assert.Equal("NightOwl · Unreal Engine", tab.ProjectHeaderTitle);
         Assert.Equal(["Unreal Engine 5.4.2 · engine in a parent folder", h.Root], tab.ProjectHeaderLines);
         Assert.Contains(tab.ProjectDetails, d => d.Label == "Project" && d.Value == uproject);
@@ -66,16 +64,22 @@ public class ProjectToolsTests
     }
 
     [Fact]
-    public async Task Without_a_project_or_actions_there_is_no_chip_and_the_tab_menu_offers_the_first_action()
+    public async Task Without_a_project_or_actions_the_row_is_named_after_the_folder_and_offers_the_first_action_and_link()
     {
         await using var h = new TabTestHarness();
 
         var tab = await h.OpenTabAsync();
 
         Assert.False(tab.HasProjectTools);
-        Assert.True(tab.OffersFirstProjectAction);
         Assert.Null(tab.Project);
         Assert.DoesNotContain(tab.InfoRows, r => r.Label == "Project");
+        // The sidebar's row is there all the same, for adding actions and links: named after the folder, which it shows.
+        Assert.Equal(tab.FolderName, tab.ProjectButtonText);
+        Assert.StartsWith(tab.Folder, tab.ProjectButtonTip, StringComparison.Ordinal);
+        Assert.Equal(tab.FolderName, tab.ProjectHeaderTitle);
+        Assert.Equal([tab.Folder], tab.ProjectHeaderLines);
+        // No Show output…: without project tools there's no Project page.
+        Assert.Equal(["Add an action…", "Add a link…", "Refresh"], InlineDispatcher.Read(() => tab.ProjectMenu.Select(e => e.Label).ToArray()));
     }
 
     [Fact]
@@ -92,12 +96,12 @@ public class ProjectToolsTests
             "Launch editor", "Generate project files", "Build editor", "Build and launch", "Open solution", "Open latest log", "Clean intermediates…", "Kill all Unreal editors…",
             "-", "Editor configuration", "Development", "DebugGame",
             "-", "Choose another engine folder…",
-            "-", "Show output…", "Add an action…", "Refresh",
+            "-", "Show output…", "Add an action…", "Add a link…", "Refresh",
         ], menu);
         Assert.True(Entry(tab, "Development").IsChecked);
         Assert.True(Entry(tab, "Development").IsOption);
         Assert.True(Entry(tab, "Editor configuration").IsHeader);
-        Assert.False(Entry(tab, "Editor configuration").IsMenuEnabled);
+        Assert.False(Entry(tab, "Editor configuration").IsButton);
     }
 
     [Fact]
@@ -533,7 +537,7 @@ public class ProjectToolsTests
     // ---- Custom actions (claudette.json and claudette.local.json) ----------------------------------------------------------
 
     [Fact]
-    public async Task Custom_actions_alone_show_the_chip_and_run_through_the_shell_in_their_folder()
+    public async Task Custom_actions_alone_are_named_after_the_folder_and_run_through_the_shell_in_their_folder()
     {
         var launcher = new FakeLauncher();
         await using var h = new TabTestHarness(launcher: launcher);
@@ -543,10 +547,10 @@ public class ProjectToolsTests
         var tab = await h.OpenTabAsync();
         await TabTestHarness.Eventually(() => tab.HasProjectTools, "the actions");
 
-        Assert.True(tab.HasOnlyCustomActions);
-        Assert.Equal("Actions", tab.ProjectButtonText);
-        Assert.Equal("Actions", tab.ProjectMenuTitle);
-        Assert.Equal(["Run tests", "-", "Show output…", "Add an action…", "Refresh"], tab.ProjectMenu.Select(e => e.IsSeparator ? "-" : e.Label));
+        Assert.Null(tab.Project);
+        Assert.Equal(tab.FolderName, tab.ProjectButtonText);
+        Assert.Equal(tab.FolderName, tab.ProjectHeaderTitle);
+        Assert.Equal(["Run tests", "-", "Show output…", "Add an action…", "Add a link…", "Refresh"], tab.ProjectMenu.Select(e => e.IsSeparator ? "-" : e.Label));
         Assert.Equal("Run tests", tab.MainProjectAction!.Label);
 
         // The local file is the user's own: it runs without asking.
@@ -608,7 +612,7 @@ public class ProjectToolsTests
     // ---- Links --------------------------------------------------------------------------------------------------------------
 
     [Fact]
-    public async Task Links_follow_the_selected_tab_and_open_only_when_allowed()
+    public async Task Links_are_in_the_projects_menu_and_open_only_when_allowed()
     {
         await using var h = new TabTestHarness();
         Directory.CreateDirectory(Path.Combine(h.WorkFolder, ".git"));
@@ -621,31 +625,23 @@ public class ProjectToolsTests
             ] }
             """);
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => h.Shell.HasLinks, "the links");
+        await TabTestHarness.Eventually(() => tab.HasLinks, "the links");
 
-        var links = h.Shell.Links;
-        Assert.Equal("https://github.com/org/repo/compare/owl%2Feyes?expand=1", links[0].Url);
-        Assert.Equal("No Perforce changelist", links[1].Problem);
-        Assert.False(links[2].IsEnabled);
+        // Links alone aren't project tools, but the row is there for every tab, named after the folder.
         Assert.False(tab.HasProjectTools);
-        await h.Shell.OpenLinkCommand.ExecuteAsync(links[0]);
-        await h.Shell.OpenLinkCommand.ExecuteAsync(links[2]);
+        Assert.Equal(tab.FolderName, tab.ProjectButtonText);
+        var menu = InlineDispatcher.Read(() => tab.ProjectMenu.ToArray());
+        Assert.Equal(["Links", "Pull request", "Changelist", "Local file", "-", "Add an action…", "Add a link…", "Refresh"], menu.Select(e => e.IsSeparator ? "-" : e.Label));
+        var links = menu.Where(e => e.IsLink).ToArray();
+        Assert.Equal("https://github.com/org/repo/compare/owl%2Feyes?expand=1", Assert.IsType<ResolvedLink>(links[0].Parameter).Url);
+        Assert.Equal(("↗", true), (links[0].Mark, links[0].IsEnabled));
+        Assert.Equal("No Perforce changelist", Assert.IsType<ResolvedLink>(links[1].Parameter).Problem);
+        Assert.False(links[1].IsEnabled);
+        Assert.False(links[2].IsEnabled);
+
+        await tab.OpenProjectLinkCommand.ExecuteAsync(links[0].Parameter);
+        await tab.OpenProjectLinkCommand.ExecuteAsync(links[2].Parameter);
         Assert.Equal(["https://github.com/org/repo/compare/owl%2Feyes?expand=1"], h.Platform.OpenedUrls);
-
-        // Another tab, in a folder without links: the section goes. (Its folder is gone, so it doesn't start a session.)
-        var other = new TabViewModel(h.Services, h.Shell, new TabState { Folder = Path.Combine(h.Root, "elsewhere") }, isRestored: false);
-        var group = new TabGroupViewModel(other.Folder, 1, isCollapsed: false);
-        group.Tabs.Add(other);
-        h.Shell.Groups.Add(group);
-        h.Shell.SelectedTab = other;
-        Assert.False(h.Shell.HasLinks);
-        Assert.Empty(h.Shell.Links);
-        h.Shell.SelectedTab = tab;
-        Assert.True(h.Shell.HasLinks);
-
-        Assert.False(h.Shell.IsLinksCollapsed);
-        h.Shell.ToggleLinksCommand.Execute(null);
-        Assert.True(h.Services.State.LinksCollapsed);
     }
 
     // ---- The engine folder --------------------------------------------------------------------------------------------------------

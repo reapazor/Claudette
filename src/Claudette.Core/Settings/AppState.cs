@@ -34,6 +34,9 @@ public sealed class AppState
     /// <summary>The sidebar's width as the user dragged it, or null for the default.</summary>
     public double? SidebarWidth { get; set; }
 
+    /// <summary>The side panel's width as the user dragged it, or null for the default (DESIGN.md §3). One for every tab.</summary>
+    public double? SidePanelWidth { get; set; }
+
     /// <summary>
     /// The usage header is drawn taller, with charts of the session and the week (DESIGN.md §6, "Detailed header").
     /// Its chevron and Settings → Appearance both set it. Kept per machine, like the sidebar's collapsed state.
@@ -84,9 +87,6 @@ public sealed class AppState
     /// differ between machines.
     /// </summary>
     public ProjectToolState ProjectTools { get; set; } = new();
-
-    /// <summary>The sidebar's Links section is collapsed (DESIGN.md §18, "Links").</summary>
-    public bool LinksCollapsed { get; set; }
 
     /// <summary>
     /// The service status banner the user dismissed: hidden until a different incident arrives or things get worse

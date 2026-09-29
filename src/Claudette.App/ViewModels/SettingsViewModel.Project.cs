@@ -4,10 +4,11 @@ namespace Claudette.App.ViewModels;
 
 /// <summary>
 /// Where the Settings window opens (DESIGN.md §14): a category or one of the project pages, the project pages of the
-/// tab that was selected, and whether to start a new action straight away (<b>Add an action…</b>).
+/// tab that was selected, and whether to start a new entry on that page straight away (<b>Add an action…</b> on
+/// Actions, <b>Add a link…</b> on Links).
 /// </summary>
 /// <param name="Project">The selected tab's pages; null with no tab open, and the group is hidden.</param>
-public sealed record SettingsOpening(string? Category = null, ProjectSettingsViewModel? Project = null, bool StartNewAction = false);
+public sealed record SettingsOpening(string? Category = null, ProjectSettingsViewModel? Project = null, bool StartNew = false);
 
 /// <summary>
 /// The group below the categories in Settings' sidebar (DESIGN.md §14, "The project's pages"): the selected tab's

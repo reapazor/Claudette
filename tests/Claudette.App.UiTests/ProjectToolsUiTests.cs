@@ -13,8 +13,8 @@ using Claudette.Core.Settings;
 namespace Claudette.App.UiTests;
 
 /// <summary>
-/// Project tools rendered (DESIGN.md §18): the chip in the composer bar, its menu, the tab menu's submenu, the Links
-/// section, and the runs under a tab's row in the sidebar.
+/// Project tools rendered (DESIGN.md §18): the project's row at the sidebar's foot and its menu, with the folder's
+/// links, and the runs under a tab's row in the sidebar.
 /// </summary>
 public class ProjectToolsUiTests
 {
@@ -45,24 +45,12 @@ public class ProjectToolsUiTests
         Assert.Equal("Generate project files first", ToolTip.GetTip(openSolution));
         flyout.Hide();
 
-        // The tab's menu in the sidebar has the same entries, in a submenu named after the project.
+        // The tab's menu leaves the project to the row: it has no project entries.
         var row = window.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("tab") && b.DataContext == tab);
-        var contextMenu = row.ContextMenu!;
-        contextMenu.Open(row);
-        UiText.Settle(window);
-        var submenu = contextMenu.Items.OfType<MenuItem>().Single(m => m.Header as string == "NightOwl (UE 5.4)");
-        Assert.True(submenu.IsVisible);
-        Assert.False(contextMenu.Items.OfType<MenuItem>().Single(m => m.Header as string == "Add an action…").IsVisible);
-        submenu.IsSubMenuOpen = true;
-        UiText.Settle(window);
-        var items = Enumerable.Range(0, submenu.ItemCount).Select(i => submenu.ContainerFromIndex(i)).OfType<MenuItem>().ToList();
-        Assert.Equal(tab.ProjectMenu.Count, items.Count);
-        Assert.Equal("Launch editor", items[0].Header);
-        Assert.True(items[0].IsEffectivelyEnabled);
-        Assert.False(items.Single(i => i.Header as string == "Open solution").IsEnabled);
-        Assert.Equal(MenuItemToggleType.Radio, items.Single(i => i.Header as string == "DebugGame").ToggleType);
-        Assert.Contains(items, i => i.Header as string == "-");
-        contextMenu.Close();
+        var headers = row.ContextMenu!.Items.OfType<MenuItem>().Select(m => m.Header as string).ToList();
+        Assert.Contains("Tab settings…", headers);
+        Assert.DoesNotContain("NightOwl (UE 5.4)", headers);
+        Assert.DoesNotContain("Add an action…", headers);
 
         // Verify resumes off the UI thread, so it comes last.
         await Verify(shown);
@@ -127,7 +115,7 @@ public class ProjectToolsUiTests
     }
 
     [AvaloniaFact]
-    public async Task The_Links_section_shows_the_selected_tabs_links_and_follows_the_selection()
+    public async Task A_folder_with_no_project_has_the_row_named_after_it_and_its_menu_lists_the_links()
     {
         await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
         File.WriteAllText(Path.Combine(h.WorkFolder, Core.ProjectTools.ProjectFile.SharedName), """
@@ -138,30 +126,31 @@ public class ProjectToolsUiTests
             """);
         var tab = await h.OpenTabAsync();
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
-        await UiText.SettleUntilAsync(window, () => h.Shell.HasLinks, "the links");
-        var section = window.GetVisualDescendants().OfType<Control>().Single(c => c.Name == "LinksSection");
+        await UiText.SettleUntilAsync(window, () => tab.HasLinks, "the links");
 
-        Assert.True(section.IsEffectivelyVisible);
-        var shown = UiText.Describe(section);
-        var buttons = section.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible).ToList();
+        // No provider recognized a project, and there are no actions: the row is there all the same, named after the folder.
+        Assert.Null(tab.Project);
+        var button = window.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Project tools");
+        Assert.True(button.IsEffectivelyVisible);
+        Assert.Equal($"[button] Project tools: {tab.FolderName}", UiText.Describe(button).Trim());
+        Assert.StartsWith(tab.Folder, ToolTip.GetTip(button) as string, StringComparison.Ordinal);
+
+        var flyout = Assert.IsType<Flyout>(button.Flyout);
+        flyout.ShowAt(button);
+        UiText.Settle(window);
+        var menu = Assert.IsAssignableFrom<Control>(flyout.Content);
+        await UiText.SettleUntilAsync(window, () => menu.IsEffectivelyVisible, "the menu");
+        var shown = UiText.Describe(menu, (h.WorkFolder, "{folder}"), (tab.FolderName, "{folderName}"));
+        var buttons = menu.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible).ToList();
         var board = buttons.Single(b => UiText.Describe(b).Contains("Board", StringComparison.Ordinal));
         Assert.True(board.IsEffectivelyEnabled);
         Assert.Equal("https://example.atlassian.net/jira/software/projects/ABC/boards/1", ToolTip.GetTip(board));
         var pullRequest = buttons.Single(b => UiText.Describe(b).Contains("Pull request", StringComparison.Ordinal));
         Assert.False(pullRequest.IsEffectivelyEnabled);
         Assert.Equal("No git branch", ToolTip.GetTip(pullRequest));
-
-        // Another tab, whose folder has no links (and is gone, so it starts no session): the section goes.
-        var other = new TabViewModel(h.Services, h.Shell, new TabState { Folder = Path.Combine(h.Root, "elsewhere") }, isRestored: false);
-        var group = new TabGroupViewModel(other.Folder, 1, isCollapsed: false);
-        group.Tabs.Add(other);
-        h.Shell.Groups.Add(group);
-        h.Shell.SelectedTab = other;
-        UiText.Settle(window);
-        Assert.False(section.IsEffectivelyVisible);
-
-        h.Shell.SelectedTab = tab;
-        await UiText.SettleUntilAsync(window, () => section.IsEffectivelyVisible, "the links again");
+        // No Project page without project tools, so nothing to show the output of.
+        Assert.DoesNotContain(buttons, b => UiText.Describe(b).Contains("Show output…", StringComparison.Ordinal));
+        flyout.Hide();
 
         await Verify(shown);
     }

@@ -16,7 +16,7 @@ public sealed record ProjectLinkRow(JsonNode? Raw, ProjectLink? Link, string? Pr
 {
     public string Name => Link?.Name ?? "(can't be read)";
 
-    /// <summary>The name as written: empty when the entry has none, and the sidebar shows the address.</summary>
+    /// <summary>The name as written: empty when the entry has none, and the project's menu shows the address.</summary>
     public string GivenName => LenientJson.String(Raw, "name")?.Trim() ?? "";
 
     /// <summary>The address as written, placeholders and all.</summary>
@@ -27,7 +27,7 @@ public sealed record ProjectLinkRow(JsonNode? Raw, ProjectLink? Link, string? Pr
 
     public bool CanEdit => Link is not null;
 
-    /// <summary>Why the sidebar won't open it (its scheme, a placeholder it doesn't know), or why it can't be read.</summary>
+    /// <summary>Why the project's menu won't open it (its scheme, a placeholder it doesn't know), or why it can't be read.</summary>
     public string? Warning => Link is { } link ? ProjectLinks.Validate(link.Url) : Problem;
 
     public bool HasWarning => Warning is not null;
@@ -44,8 +44,8 @@ public sealed record ProjectLinkRow(JsonNode? Raw, ProjectLink? Link, string? Pr
 }
 
 /// <summary>
-/// Settings → the tab's project → <b>Links</b> (DESIGN.md §14, §18): the links of both files in the order the sidebar
-/// shows them, the shared file's first. Each can be added, edited, removed or moved within its file, and the file is
+/// Settings → the tab's project → <b>Links</b> (DESIGN.md §14, §18): the links of both files in the order the project's
+/// menu shows them, the shared file's first. Each can be added, edited, removed or moved within its file, and the file is
 /// saved at once. Only <c>links</c> is rewritten; a file that isn't valid JSON is left alone.
 /// </summary>
 public sealed partial class ProjectSettingsViewModel
@@ -108,6 +108,9 @@ public sealed partial class ProjectSettingsViewModel
         MoveLinkUpCommand.NotifyCanExecuteChanged();
         MoveLinkDownCommand.NotifyCanExecuteChanged();
     }
+
+    /// <summary><b>Add a link…</b> from the project's menu: the same dialog as <b>Add…</b>.</summary>
+    internal void StartNewLink() => AddLink();
 
     /// <summary><b>Add…</b>: the link dialog, which asks which file it goes in (just the user's by default).</summary>
     [RelayCommand]

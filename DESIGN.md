@@ -142,6 +142,8 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
 2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder, and under a tab's row, the runs of its project actions ([§18](#project-tools)). **New tab** is at its top; the selected tab's project and **Links** ([§18](#project-tools)), **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
 3. **Conversation.** The selected tab's conversation. See [§5](#5-conversation-view).
 4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), its project's tools and their output when it has any ([§18](#project-tools)), and optionally its running processes ([§4](#process-monitor)).
+   - Its pages are tabs along its top, over a divider, as in VS Code's panel: the page showing is in full text with an accent line under it, the others muted. A page's tab shows a busy dot while it has something running.
+   - **Resizing.** Drag its left edge to make it wider or narrower (260 to 900 pixels; 340 by default), leaving the conversation at least 360. Double-click the edge for the default width. The width is the same for every tab, and remembered.
 5. **Composer.** Where you type to the selected tab, plus the Stop button and per-tab controls.
 
 ### Visual style

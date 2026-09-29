@@ -227,6 +227,35 @@
     <Style Selector="Border.composer.dropping">
       <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
     </Style>
+    <!-- The side panel's pages (DESIGN.md §3), as tabs over a divider: the page showing in full text with an accent line
+         under it, over the divider, and the others muted. -->
+    <Style Selector="Border.pagetabs">
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="Padding" Value="6,4,6,0" />
+    </Style>
+    <Style Selector="Button.pagetab">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0,0,0,2" />
+      <Setter Property="CornerRadius" Value="4,4,0,0" />
+      <Setter Property="Padding" Value="8,6,8,6" />
+      <Setter Property="Margin" Value="0,0,0,-1" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector=".compact Button.pagetab">
+      <Setter Property="Padding" Value="8,3,8,4" />
+    </Style>
+    <Style Selector="Button.pagetab.selected">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.pagetab:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.pagetab:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.pagetab.selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
+    </Style>
     <!-- A project job's output (DESIGN.md §18): dense lines, like a terminal -->
     <Style Selector="ListBox#ProjectOutputList ListBoxItem">
       <Setter Property="Padding" Value="4,0" />
@@ -562,36 +591,39 @@
   <Grid RowDefinitions="*,Auto" ColumnDefinitions="*,Auto">
 
     <!-- Side panel (DESIGN.md §3): changed files, agents, the project's tools and, when the monitor is on, processes -->
-    <Border Grid.Column="1" Grid.RowSpan="2" Width="340" IsVisible="{Binding IsSidePanelOpen}"
+    <Border x:Name="SidePanel" Grid.Column="1" Grid.RowSpan="2" Width="{Binding SidePanelWidth}" IsVisible="{Binding IsSidePanelOpen}"
             BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1,0,0,0" Background="{DynamicResource SubtleBrush}">
       <DockPanel>
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="8,6">
-          <Button Classes="flat" Command="{Binding ShowFilesPageCommand}">
-            <TextBlock Text="Changed files" FontWeight="{Binding IsFilesPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
-          </Button>
-          <!-- Agents (DESIGN.md §18); a busy dot while a subagent runs -->
-          <Button Grid.Column="1" Classes="flat" Command="{Binding ShowAgentsPageCommand}" ToolTip.Tip="{Binding AgentsHeader}">
-            <StackPanel Orientation="Horizontal" Spacing="4">
-              <TextBlock Text="Agents" FontWeight="{Binding IsAgentsPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
-              <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding HasActiveAgents}" />
-            </StackPanel>
-          </Button>
-          <!-- Project tools (DESIGN.md §18); a busy dot while a job runs -->
-          <Button Grid.Column="2" Classes="flat" Command="{Binding ShowProjectPageCommand}" IsVisible="{Binding HasProjectTools}" ToolTip.Tip="{Binding ProjectHeaderTitle}">
-            <StackPanel Orientation="Horizontal" Spacing="4">
-              <TextBlock Text="Project" FontWeight="{Binding IsProjectPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
-              <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding IsProjectJobRunning}" />
-            </StackPanel>
-          </Button>
-          <Button Grid.Column="3" Classes="flat" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding IsProcessMonitorOn}">
-            <TextBlock Text="Processes" FontWeight="{Binding IsProcessesPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
-          </Button>
-          <Button Grid.Column="5" Classes="flat" Padding="6" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
-            <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
-          </Button>
-        </Grid>
+        <!-- The pages, as tabs: the one showing in full text over an accent line, the others muted -->
+        <Border DockPanel.Dock="Top" Classes="pagetabs">
+          <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+            <Button Classes="pagetab" Classes.selected="{Binding IsFilesPage}" Command="{Binding ShowFilesPageCommand}">
+              <TextBlock Text="Changed files" Classes.muted="{Binding !IsFilesPage}" />
+            </Button>
+            <!-- Agents (DESIGN.md §18); a busy dot while a subagent runs -->
+            <Button Grid.Column="1" Classes="pagetab" Classes.selected="{Binding IsAgentsPage}" Command="{Binding ShowAgentsPageCommand}" ToolTip.Tip="{Binding AgentsHeader}">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Text="Agents" Classes.muted="{Binding !IsAgentsPage}" />
+                <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding HasActiveAgents}" />
+              </StackPanel>
+            </Button>
+            <!-- Project tools (DESIGN.md §18); a busy dot while a job runs -->
+            <Button Grid.Column="2" Classes="pagetab" Classes.selected="{Binding IsProjectPage}" Command="{Binding ShowProjectPageCommand}" IsVisible="{Binding HasProjectTools}" ToolTip.Tip="{Binding ProjectHeaderTitle}">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Text="Project" Classes.muted="{Binding !IsProjectPage}" />
+                <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding IsProjectJobRunning}" />
+              </StackPanel>
+            </Button>
+            <Button Grid.Column="3" Classes="pagetab" Classes.selected="{Binding IsProcessesPage}" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding IsProcessMonitorOn}">
+              <TextBlock Text="Processes" Classes.muted="{Binding !IsProcessesPage}" />
+            </Button>
+            <Button Grid.Column="5" Classes="flat" Padding="6" VerticalAlignment="Center" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
+              <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
+            </Button>
+          </Grid>
+        </Border>
 
-        <Panel>
+        <Panel Margin="0,8,0,0">
           <!-- Changed files (DESIGN.md §8) -->
           <DockPanel IsVisible="{Binding IsFilesPage}">
             <StackPanel DockPanel.Dock="Top" Margin="12,0,12,6" Spacing="4">
@@ -747,6 +779,10 @@
         </Panel>
       </DockPanel>
     </Border>
+
+    <!-- Drag the side panel's edge to resize it; double-click for the default width. -->
+    <Border x:Name="SidePanelEdge" Grid.Column="1" Grid.RowSpan="2" Width="6" Margin="-3,0,0,0" HorizontalAlignment="Left" Background="Transparent"
+            Cursor="SizeWestEast" ZIndex="1" IsVisible="{Binding IsSidePanelOpen}" />
 
     <!-- Conversation -->
     <Grid Grid.Row="0">

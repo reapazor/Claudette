@@ -723,7 +723,7 @@
             <TextBlock Classes="section" Text="Links" />
             <TextBlock Classes="muted small" Text="{Binding ForTabText, FallbackValue=''}" TextWrapping="Wrap" Margin="0,-10,0,0" />
             <TextBlock Classes="muted small" TextWrapping="Wrap"
-                       Text="Web links for this project, in the sidebar above History and in the project's menus; a click opens one in the browser. Shared links are in claudette.json, committed with the project; yours alone are in claudette.local.json. Changes are saved as you make them, and saving rewrites the file, so comments in it are dropped." />
+                       Text="Web links for this project, in the project's menu in the sidebar; a click opens one in the browser. Shared links are in claudette.json, committed with the project; yours alone are in claudette.local.json. Changes are saved as you make them, and saving rewrites the file, so comments in it are dropped." />
             <ItemsControl ItemsSource="{Binding LinkFileErrors}" IsVisible="{Binding HasLinkFileErrors}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="x:String">
@@ -764,7 +764,7 @@
             <TextBlock Classes="section" Text="Actions" />
             <TextBlock Classes="muted small" Text="{Binding ForTabText, FallbackValue=''}" TextWrapping="Wrap" Margin="0,-10,0,0" />
             <TextBlock Classes="muted small" TextWrapping="Wrap"
-                       Text="Commands of your own for this folder, in the project's menu in the sidebar, the tab's menu and on the Project page. Changes are saved as you make them." />
+                       Text="Commands of your own for this folder, in the project's menu in the sidebar and on the Project page. Changes are saved as you make them." />
             <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectActionFiles}" SelectedItem="{Binding SelectedProjectActionFile}"
                       AutomationProperties.Name="Project actions file" />
             <TextBlock Classes="muted small" Text="{Binding ProjectActionsNote}" TextWrapping="Wrap" Margin="0,-4,0,0" />
