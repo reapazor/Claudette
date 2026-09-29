@@ -13,8 +13,11 @@
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="Margin" Value="0,0,0,8" />
     </Style>
+    <!-- A setting's name beside its control: a long one wraps rather than being cut off, whatever the OS's font -->
     <Style Selector="TextBlock.label">
       <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,0,12,0" />
     </Style>
   </Window.Styles>
 
@@ -214,7 +217,7 @@
         <!-- New tabs -->
         <StackPanel Spacing="12" IsVisible="{Binding IsNewTabs}">
           <TextBlock Classes="section" Text="New tabs" />
-          <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10">
+          <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10">
             <TextBlock Classes="label" Text="Default model" />
             <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ModelChoices}" SelectedItem="{Binding DefaultModel}" />
             <TextBlock Grid.Row="1" Classes="label" Text="Default effort" />
@@ -426,7 +429,7 @@
           <TextBlock Classes="muted small" TextWrapping="Wrap"
                      Text="See the processes each tab has started (test runs, dev servers, builds, MCP servers) with their CPU and memory use. When a tab closes, the processes it started are stopped too." />
           <CheckBox Content="Show the process monitor" IsChecked="{Binding ShowProcessMonitor}" />
-          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto" IsEnabled="{Binding ShowProcessMonitor}">
+          <Grid ColumnDefinitions="260,*" RowDefinitions="Auto" IsEnabled="{Binding ShowProcessMonitor}">
             <TextBlock Classes="label" Text="Refresh the panel every (seconds)" />
             <NumericUpDown Grid.Column="1" Minimum="1" Maximum="60" Increment="1" FormatString="0" Value="{Binding ProcessRefreshSeconds}" />
           </Grid>
@@ -479,7 +482,7 @@
           <TextBlock Classes="muted small" TextWrapping="Wrap"
                      Text="During a long turn, Claudette can ask Claude how it's going, so a stuck tab doesn't burn usage unnoticed. Set a time to 0 to turn that trigger off." />
           <CheckBox Content="Check in on long turns" IsChecked="{Binding CheckInsEnabled}" />
-          <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto" RowSpacing="10" IsEnabled="{Binding CheckInsEnabled}">
+          <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,Auto" RowSpacing="10" IsEnabled="{Binding CheckInsEnabled}">
             <TextBlock Classes="label" Text="After the turn has run (minutes)" />
             <NumericUpDown Grid.Column="1" Minimum="0" Maximum="600" Increment="1" FormatString="0" Value="{Binding CheckInRunTime}" />
             <TextBlock Grid.Row="1" Classes="label" Text="After no output for (minutes)" />
