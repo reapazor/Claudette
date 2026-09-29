@@ -191,6 +191,70 @@ public sealed class RealCliTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_attached_image_reaches_the_api()
+    {
+        await using var session = await StartAsync();
+        // A 1×1 PNG: small enough that Claude Code passes it on as it is.
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+
+        await session.SendUserMessageAsync("hello, what is in this image?", [new Core.Protocol.MessageImage("image/png", png)], TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.False(done.Result.IsError);
+        var request = _api.Requests.Last(r => r.Reply == "text");
+        var image = Assert.Single(request.LastUserImages!);
+        Assert.Equal("image/png", image.MediaType);
+        Assert.Equal(1, image.Width);
+        Assert.Contains("what is in this image?", request.LastUserText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Claude_code_scales_a_large_image_down_itself()
+    {
+        await using var session = await StartAsync();
+
+        // Claudette relies on this rather than resizing images itself (DESIGN.md §5, "Attachments").
+        await session.SendUserMessageAsync("hello, a big one", [new Core.Protocol.MessageImage("image/png", Gradient(3000, 2000))], TestContext.Current.CancellationToken);
+        await session.ReadUntilAsync<TurnCompleted>();
+
+        var image = Assert.Single(_api.Requests.Last(r => r.Reply == "text").LastUserImages!);
+        Assert.True(image.Width <= 2000 && image.Height <= 2000, $"Expected at most 2000 px, got {image.Width}×{image.Height}.");
+    }
+
+    [Fact]
+    public async Task An_at_mention_is_read_by_claude_code()
+    {
+        await using var session = await StartAsync();
+        await File.WriteAllTextAsync(Path.Combine(Work, "mentioned.txt"), "MENTIONED FILE CONTENT\n", TestContext.Current.CancellationToken);
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+
+        // With an image too: Claude Code only expands mentions in the last block, so the text must come after it.
+        await session.SendUserMessageAsync("hello, see @mentioned.txt", [new Core.Protocol.MessageImage("image/png", png)], TestContext.Current.CancellationToken);
+        await session.ReadUntilAsync<TurnCompleted>();
+
+        var request = _api.Requests.Last(r => r.Reply == "text");
+        Assert.Contains("MENTIONED FILE CONTENT", request.LastUserText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Initialize_and_init_list_the_slash_commands()
+    {
+        Directory.CreateDirectory(Path.Combine(Work, ".claude", "commands"));
+        await File.WriteAllTextAsync(Path.Combine(Work, ".claude", "commands", "ship-it.md"), "---\ndescription: Ship the change\nargument-hint: <version>\n---\nShip $ARGUMENTS\n", TestContext.Current.CancellationToken);
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("hello", TestContext.Current.CancellationToken);
+        var (started, _) = await session.ReadUntilAsync<TurnStarted>();
+        await session.ReadUntilAsync<TurnCompleted>();
+
+        var command = Assert.Single(session.Initialization!.Commands, c => c.Name == "ship-it");
+        Assert.StartsWith("Ship the change", command.Description, StringComparison.Ordinal);
+        Assert.Equal("<version>", command.ArgumentHint);
+        Assert.Contains(session.Initialization.Commands, c => c is { Name: "compact", IsBuiltIn: true });
+        Assert.Contains("ship-it", started.Init.SlashCommands);
+    }
+
+    [Fact]
     public async Task Context_usage_is_reported()
     {
         await using var session = await StartAsync();
@@ -222,6 +286,64 @@ public sealed class RealCliTests : IAsyncLifetime
 
         Assert.Equal(sessionId, resumed.SessionId);
         Assert.True(File.Exists(Path.Combine(library, $"{sessionId}.jsonl")), "The continued transcript should be written next to the resumed file (DESIGN.md §9).");
+    }
+
+    /// <summary>An RGB PNG with a gradient, which compresses well, so a big one stays small.</summary>
+    private static byte[] Gradient(int width, int height)
+    {
+        var rows = new byte[(width * 3 + 1) * height];
+        for (var y = 0; y < height; y++)
+        {
+            var row = y * (width * 3 + 1);
+            for (var x = 0; x < width; x++)
+            {
+                rows[row + 1 + x * 3] = (byte)x;
+                rows[row + 2 + x * 3] = (byte)y;
+                rows[row + 3 + x * 3] = 128;
+            }
+        }
+        using var compressed = new MemoryStream();
+        using (var zlib = new System.IO.Compression.ZLibStream(compressed, System.IO.Compression.CompressionLevel.Fastest))
+        {
+            zlib.Write(rows);
+        }
+        var header = new byte[13];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(header, width);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(header.AsSpan(4), height);
+        header[8] = 8; // bits per channel
+        header[9] = 2; // RGB
+        using var png = new MemoryStream();
+        png.Write([0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A]);
+        Chunk(png, "IHDR", header);
+        Chunk(png, "IDAT", compressed.ToArray());
+        Chunk(png, "IEND", []);
+        return png.ToArray();
+
+        static void Chunk(Stream stream, string type, byte[] data)
+        {
+            var length = new byte[4];
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(length, data.Length);
+            stream.Write(length);
+            var typed = System.Text.Encoding.ASCII.GetBytes(type).Concat(data).ToArray();
+            stream.Write(typed);
+            var crc = new byte[4];
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(crc, Crc32(typed));
+            stream.Write(crc);
+        }
+
+        static uint Crc32(byte[] data)
+        {
+            var crc = 0xFFFFFFFFu;
+            foreach (var b in data)
+            {
+                crc ^= b;
+                for (var k = 0; k < 8; k++)
+                {
+                    crc = (crc & 1) != 0 ? 0xEDB88320u ^ (crc >> 1) : crc >> 1;
+                }
+            }
+            return ~crc;
+        }
     }
 
     private async Task<ClaudeSession> StartAsync(string? permissionMode = null, string? resume = null)
