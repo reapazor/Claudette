@@ -15,6 +15,7 @@
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Claudette.FakeClaude/Claudette.FakeClaude.csproj" />
+    <Project Path="tools/Claudette.Fixtures/Claudette.Fixtures.csproj" />
     <Project Path="tools/Claudette.MockApi/Claudette.MockApi.csproj" />
   </Folder>
   <Folder Name="/Solution Items/">

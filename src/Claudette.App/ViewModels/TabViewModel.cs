@@ -550,6 +550,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// <summary><c>get_context_usage</c> failed for this session, so the context indicator is estimated from each call.</summary>
     private bool _contextUsageUnavailable;
 
+    /// <summary>When Claude Code compacts by itself, from <c>autocompact_state</c>, for the estimate's warning.</summary>
+    private AutocompactStateMessage? _autocompact;
+
     /// <summary>A call finished mid-turn: the token count moves on before the result gives the turn's totals.</summary>
     private void OnCallUsage()
     {
@@ -570,9 +573,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             return;
         }
+        var tokens = _callUsage.ContextTokens ?? 0;
+        var compacts = _autocompact is { Enabled: true, Threshold: { } threshold } ? $" · auto-compacts at {threshold:N0}" : "";
         ContextText = $"Context {percentage:0}%";
-        ContextDetail = $"about {_callUsage.ContextTokens:N0} of {window:N0} tokens, estimated from the last call";
-        IsContextHigh = percentage >= 80;
+        ContextDetail = $"about {tokens:N0} of {window:N0} tokens, estimated from the last call{compacts}";
+        IsContextHigh = _autocompact is { Enabled: true, Threshold: { } limit } ? tokens >= limit * 0.9 : percentage >= 80;
     }
 
     private void RefreshTokens()
@@ -1187,6 +1192,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     break;
                 case TextDelta or ThinkingDelta or ToolResultsReceived:
                     _checkIns.OutputSeen();
+                    break;
+                case AutocompactStateChanged autocompact:
+                    _autocompact = autocompact.State;
                     break;
                 case PermissionRequested requested:
                     _pendingPermissions++;

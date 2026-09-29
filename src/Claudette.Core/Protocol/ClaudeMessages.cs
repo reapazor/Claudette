@@ -105,5 +105,14 @@ public sealed record ControlCancelRequestMessage(string RequestId, JsonObject Ra
 /// <summary>The conversation was replaced without ending the session, for example by <c>/clear</c> (DESIGN.md §13).</summary>
 public sealed record ConversationResetMessage(string? NewConversationId, string? Trigger, JsonObject Raw) : ClaudeMessage("conversation_reset", Raw);
 
+/// <summary>
+/// When Claude Code compacts the conversation by itself (<b>undocumented</b>): sent at the start of each turn, with the
+/// context window it works to and the token count that triggers compaction (DESIGN.md §6, "Per-tab context").
+/// </summary>
+public sealed record AutocompactStateMessage(bool Enabled, long? EffectiveWindow, long? Threshold, JsonObject Raw) : ClaudeMessage("autocompact_state", Raw);
+
+/// <summary>A type Claudette knows about and deliberately skips, such as <c>active_goal</c>. Not counted as unknown.</summary>
+public sealed record IgnoredMessage(string MessageType, JsonObject Raw) : ClaudeMessage(MessageType, Raw);
+
 /// <summary>A message type Claudette doesn't know yet. Skipped, and counted for diagnostics (DESIGN.md §16).</summary>
 public sealed record UnknownMessage(string MessageType, JsonObject Raw) : ClaudeMessage(MessageType, Raw);

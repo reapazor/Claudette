@@ -321,6 +321,13 @@ public sealed class ClaudeSession : IAsyncDisposable
                 Publish(new ConversationReset(reset.Trigger));
                 break;
 
+            case AutocompactStateMessage autocompact:
+                Publish(new AutocompactStateChanged(autocompact));
+                break;
+
+            case IgnoredMessage:
+                break;
+
             case UnknownMessage unknown:
                 Interlocked.Increment(ref _unknownMessageCount);
                 _diagnostics?.RecordUnknownMessage(unknown.MessageType);

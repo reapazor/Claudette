@@ -35,6 +35,7 @@ public sealed record RecordedRequest(
 /// <item><c>SLOW</c>: text streamed in small chunks over about 20 seconds.</item>
 /// <item><c>ASK_QUESTION</c>: an AskUserQuestion tool call ("Which database?": Postgres or SQLite), then done.</item>
 /// <item><c>EXIT_PLAN</c>: an ExitPlanMode tool call with a two-step plan, then done. Needs plan mode.</item>
+/// <item><c>API_ERROR</c>: the first two requests fail with 529 "overloaded", so Claude Code retries; then <c>pong</c>.</item>
 /// <item>Requests with no tools that mention "title": <c>{"title": "Mock session title"}</c>.</item>
 /// <item>Anything else: <c>pong</c>.</item>
 /// </list>
@@ -45,6 +46,7 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
     private readonly WebApplication _app;
     private readonly ConcurrentQueue<RecordedRequest> _requests = new();
     private int _counter;
+    private int _apiErrors;
 
     private MockAnthropicApi(WebApplication app)
     {
@@ -104,6 +106,15 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
             Record(request.Method, path, body, "not_found");
             context.Response.StatusCode = 404;
             await context.Response.WriteAsJsonAsync(new { type = "error", error = new { type = "not_found_error", message = "mock: not implemented" } });
+            return;
+        }
+
+        // API_ERROR: overloaded twice, so Claude Code reports its retries (system/api_retry), then a normal reply.
+        if (LastUserText(body).Text.Contains("API_ERROR", StringComparison.Ordinal) && Interlocked.Increment(ref _apiErrors) <= 2)
+        {
+            Record(request.Method, path, body, "overloaded");
+            context.Response.StatusCode = 529;
+            await context.Response.WriteAsJsonAsync(new { type = "error", error = new { type = "overloaded_error", message = "mock: overloaded" } });
             return;
         }
 

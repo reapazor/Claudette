@@ -113,6 +113,14 @@ public class TabViewModelTests
         Assert.Equal("50k tok", tab.TokensShort);
         Assert.Equal("about 50,000 of 200,000 tokens, estimated from the last call", tab.ContextDetail);
         Assert.False(tab.IsContextHigh);
+
+        // Claude Code says when it compacts by itself: near that, the indicator warns.
+        tab.ComposerText = "more";
+        await tab.SendCommand.ExecuteAsync(null);
+        h.Transport.Emit("""{"type":"autocompact_state","value":{"enabled":true,"effective_window":180000,"threshold":52000,"enforced":true,"source":"auto"},"session_id":"s1"}""");
+        h.Transport.Emit("""{"type":"assistant","message":{"id":"m2","model":"claude-opus-5-5","content":[{"type":"text","text":"b"}],"usage":{"input_tokens":1000,"output_tokens":100,"cache_read_input_tokens":48900}}}""");
+        await TabTestHarness.Eventually(() => tab.IsContextHigh, "the warning");
+        Assert.EndsWith("auto-compacts at 52,000", tab.ContextDetail, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -28,6 +28,21 @@ public class MessageParserTests
         }
     }
 
+    [Theory]
+    [MemberData(nameof(Fixtures))]
+    public void Recorded_fields_are_all_known_to_diagnostics(string fixture)
+    {
+        // Diagnostics counts fields the tested version didn't have (DESIGN.md §16), so it must know all of these.
+        var diagnostics = new ProtocolDiagnostics();
+        foreach (var line in ProtocolFixture.Load(fixture).OutputLines)
+        {
+            MessageParser.TryParse(line, out var message, out _);
+            diagnostics.RecordFields(message!);
+        }
+
+        Assert.Empty(diagnostics.Snapshot().UnknownFields);
+    }
+
     [Fact]
     public void Reads_system_init()
     {
