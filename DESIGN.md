@@ -733,11 +733,12 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 │  ClaudeSession (1 per tab)   │  │  UsagePoller (sampling)    │  │  Process monitor  │
 │   ├ process + stdio          │  │  UsageStore (SQLite)       │  │  (Job Objects,    │
 │   ├ protocol reader/writer   │  │  BurnRate (projection)     │  │   /proc, ps)      │
-│   └ typed event stream       │  │  UsageAlerts               │  │  Later:           │
-│  TranscriptReader, History   │  └────────────────────────────┘  │  Notifications    │
-│  SessionLibrary, leases      │                                  │  Dock/taskbar     │
-│  Diffs: line diff, changed   │                                  │  Window chrome    │
-│   files, external diff tools │                                  └───────────────────┘
+│   └ typed event stream       │  │  UsageAlerts               │  │  Notifications,   │
+│  TranscriptReader, History   │  └────────────────────────────┘  │   Dock/taskbar    │
+│  SessionLibrary, leases      │                                  │   badge           │
+│  Diffs: line diff, changed   │                                  │  Jump list, one   │
+│   files, external diff tools │                                  │   instance        │
+│  Claude Code updates         │                                  └───────────────────┘
 │  Git: identity, working tree │
 │  Auth, install checks        │
 │  Settings, state, sync       │
@@ -1118,11 +1119,9 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
    - **Composer:** check-ins and quick suffixes.
    - **Keyboard shortcuts** for tabs and settings.
    - **Deferred to later milestones:**
-     - Dragging tabs to reorder. Move left/right is in the tab menu for now.
-     - The Settings search box.
-     - Per-suffix shortcuts and number keys in the suffix menu.
+     - Dragging tabs to reorder, the Settings search box, and per-suffix shortcuts and number keys in the suffix menu: built in milestone 7.
      - The "this session window" token split, which needs milestone 5's usage data.
-     - OS notifications for check-ins (milestone 7).
+     - OS notifications for check-ins: built in milestone 7.
 4. **Permissions.** ✅ Built 2026-09-28.
    - **Prompts:** inline prompts with the tool's input and a diff preview for edits.
      - **Always allow** shows the exact rule and lets you edit it; the menu offers **Allow for this session only**.
@@ -1132,7 +1131,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
    - **Mode picker:** the permission mode picker, with a confirmation and warning style for Bypass.
    - **Keyboard and notes:** Ctrl/Cmd+Enter and Ctrl/Cmd+Backspace answer prompts, and notes appear for denials Claude Code made by itself.
    - **Deferred:**
-     - The OS notification for a waiting prompt (milestone 7).
+     - The OS notification for a waiting prompt: built in milestone 7.
      - Switching into Bypass mid-session works only for tabs started in Bypass mode ([§7](#7-permission-prompts)).
 5. **Usage.** ✅ Built 2026-09-28.
    - **Header:** meters, countdowns and the sparkline with projection.
@@ -1140,7 +1139,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
    - **History and panel:** the SQLite usage history with retention and **Clear usage history**, and the Usage panel.
    - **Alerts:** shown in the header.
    - **Per tab:** each tab's "this session window" tokens and per-turn chart, and **Compact**.
-   - **Deferred:** OS notifications for alerts (milestone 7).
+   - **Deferred:** OS notifications for alerts, built in milestone 7.
 6. **History, sync & diffs.** ✅ Built 2026-09-28.
    - **History:** History (Ctrl/Cmd+Shift+H, or from the new-tab picker).
    - **Session library:**
@@ -1154,7 +1153,29 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
      - Running the macOS and Linux process code for real (it compiles and its parsers are tested).
      - Resuming a transcript recorded on the other OS ([§9](#session-library-sync-across-machines)).
      - **Choose folder…** and **Unpin and close** for a restored tab whose folder is gone; it still shows a note.
-7. **Polish & ship.** Notifications, Claude Code update handling, keyboard shortcuts, platform chrome, packaging and signing for Windows and macOS.
+7. **Polish & ship.** ✅ Built 2026-09-29.
+   - **Claude Code updates ([§12](#12-claude-code-updates)):**
+     - Checks with `claude --version`, `claude doctor` and Homebrew or WinGet, at launch and every 4 hours.
+     - The header badge and its dialog, **Update now** for each install method, and **Update on next launch** for WinGet.
+     - The tab note for an older version, and **Update now** on the too-old setup screen.
+   - **Notifications ([§10](#10-notifications)):** every type, with its setting, click routing and the Dock/taskbar badge, on Windows, macOS and Linux.
+   - **Keyboard ([§14](#keyboard-shortcuts)):** Settings → Keyboard with rebindable, synced shortcuts, per-suffix shortcuts, and 1–9 in the suffix menu.
+   - **Settings:** the search box, and the Notifications and Keyboard categories.
+   - **Platform chrome ([§2](#2-platform--tech-stack), [§4](#opening-a-tab)):**
+     - Mica on Windows 11.
+     - The macOS menu bar (Settings…, File with Open Recent) and Dock menu, and the Windows jump list.
+     - One running instance, which takes later launches' `--folder`.
+     - Folders dropped on the tab strip open tabs.
+     - Dragging tabs and groups.
+   - **Packaging ([§2](#packaging-and-signing)):** MSIX, and a signed, notarized `.dmg`, built by `package.yml`, with a placeholder icon.
+   - **Still to verify on real machines** (CI builds and runs the platform tests on Windows and macOS, but nothing there is looked at or clicked):
+     - Showing and clicking toasts and macOS notifications, and both badges.
+     - Mica, the jump list, and the macOS menus and Dock menu.
+     - Homebrew and WinGet updates.
+     - Installing the MSIX and `.dmg`, and signing and notarization, which need the certificates.
+   - **Deferred:**
+     - A macOS-style theme ([§2](#2-platform--tech-stack)). macOS uses the Fluent theme for now; this needs a design decision.
+     - The replacement for the placeholder icon.
 8. **Later.** The features in [§18](#18-future-features), in an order decided after v1 ships.
 
 ## 18. Future Features
