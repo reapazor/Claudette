@@ -1,0 +1,15 @@
+﻿[button] Changed Files
+[button] Agents
+[button] Close side panel
+"2 files changed · 1 reviewed"
+[button] Refresh
+[x] Reviewed
+"M"
+"auth.cs"
+"auth.cs"
+"+1 −1"
+[ ] Reviewed
+"M"
+"login.cs"
+"login.cs"
+"+1 −1"

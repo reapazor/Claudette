@@ -186,6 +186,9 @@ public sealed class ChangedFiles
         Changed?.Invoke();
     }
 
+    /// <summary>The changed file at <paramref name="path"/>, or null when Claude hasn't changed it in this session.</summary>
+    public ChangedFile? Find(string path) => _byPath.GetValueOrDefault(Normalize(path));
+
     /// <summary>Compares a changed file with what's on disk now.</summary>
     public ChangedFileState Inspect(ChangedFile file)
     {
@@ -282,7 +285,7 @@ public sealed class ChangedFiles
         };
     }
 
-    private static string Normalize(string path)
+    internal static string Normalize(string path)
     {
         try
         {

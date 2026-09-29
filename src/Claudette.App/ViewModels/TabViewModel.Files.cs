@@ -10,7 +10,7 @@ using CommunityToolkit.Mvvm.Input;
 namespace Claudette.App.ViewModels;
 
 /// <summary>One file in the Changed files panel (DESIGN.md §8).</summary>
-public sealed class ChangedFileRow
+public sealed partial class ChangedFileRow : ObservableObject
 {
     public required string Path { get; init; }
 
@@ -39,12 +39,26 @@ public sealed class ChangedFileRow
     public bool BeforeKnown { get; init; } = true;
 
     public bool FromGit { get; init; }
+
+    /// <summary>
+    /// The id of Claude's latest change to the file when the row was made, or null when Claude hasn't changed it: what
+    /// the row's checkbox marks as reviewed.
+    /// </summary>
+    public string? LatestChange { get; set; }
+
+    /// <summary>The user marked the file as reviewed, and Claude hasn't changed it since (DESIGN.md §8, "Reviewed").</summary>
+    [ObservableProperty]
+    public partial bool IsReviewed { get; set; }
 }
 
 /// <summary>The tab's changed files and diffs (DESIGN.md §8).</summary>
 public sealed partial class TabViewModel
 {
     private ChangedFiles? _changes;
+    private ReviewedFiles? _reviewed;
+    /// <summary>Writes the library record once the ticking stops, for a tab that syncs.</summary>
+    private ITimer? _reviewSync;
+    private bool _reviewSyncStopped;
     private bool _refreshQueued;
 
     private ChangedFiles Changes
@@ -59,6 +73,9 @@ public sealed partial class TabViewModel
             return _changes;
         }
     }
+
+    /// <summary>The files marked as reviewed, kept in the tab's state (DESIGN.md §8, "Reviewed").</summary>
+    private ReviewedFiles Reviewed => _reviewed ??= new ReviewedFiles(State.ReviewedFiles);
 
     /// <summary>
     /// The side panel: Changed files, Agents, Project when the tab has project tools, and Processes when the monitor is
@@ -220,24 +237,117 @@ public sealed partial class TabViewModel
                 };
             }).ToList());
         }
+        // Marks on files Claude has changed since are forgotten (DESIGN.md §8, "Reviewed").
+        if (Reviewed.Prune(Changes))
+        {
+            _services.SaveState();
+        }
+        foreach (var row in rows)
+        {
+            var claudeChanges = Changes.Find(row.Path);
+            row.LatestChange = ReviewedFiles.LatestChange(claudeChanges);
+            row.IsReviewed = Reviewed.IsReviewed(row.Path, claudeChanges);
+        }
         ChangedFiles.Clear();
         foreach (var row in rows)
         {
             ChangedFiles.Add(row);
         }
-        ChangedFilesSummary = rows.Count switch
+        UpdateChangedFilesSummary();
+        OnPropertyChanged(nameof(IsGitRepository));
+    }
+
+    /// <summary>For example "5 files changed · 2 reviewed".</summary>
+    private void UpdateChangedFilesSummary()
+    {
+        var summary = ChangedFiles.Count switch
         {
             0 => ShowGitChanges ? "No changes in the working tree" : "No changes yet",
             1 => "1 file changed",
-            _ => $"{rows.Count} files changed",
+            var count => $"{count} files changed",
         };
-        OnPropertyChanged(nameof(IsGitRepository));
+        var reviewed = ChangedFiles.Count(r => r.IsReviewed);
+        ChangedFilesSummary = reviewed > 0 ? $"{summary} · {reviewed} reviewed" : summary;
     }
 
     private static string Relative(string path, string folder)
     {
         var relative = Path.GetRelativePath(folder, path);
         return (relative.StartsWith("..", StringComparison.Ordinal) ? path : relative).Replace('\\', '/');
+    }
+
+    // ---- Reviewed (DESIGN.md §8) -----------------------------------------------------------------------------------
+
+    /// <summary>A row's checkbox: marks the file as reviewed, or clears the mark.</summary>
+    [RelayCommand]
+    private void ToggleFileReviewed(ChangedFileRow? row)
+    {
+        if (row is not null)
+        {
+            SetFileReviewed(row.Path, !row.IsReviewed, row.LatestChange);
+        }
+    }
+
+    /// <summary>
+    /// Marks a file as reviewed as of Claude's change <paramref name="change"/> to it, or clears its mark. It stays
+    /// reviewed until Claude changes it again, so marking a change older than Claude's latest leaves it unreviewed.
+    /// </summary>
+    private void SetFileReviewed(string path, bool reviewed, string? change)
+    {
+        if (reviewed)
+        {
+            Reviewed.Mark(path, change);
+        }
+        else
+        {
+            Reviewed.Unmark(path);
+        }
+        foreach (var row in ChangedFiles)
+        {
+            row.IsReviewed = Reviewed.IsReviewed(row.Path, Changes.Find(row.Path));
+        }
+        UpdateChangedFilesSummary();
+        _services.SaveState();
+        QueueReviewSync();
+    }
+
+    /// <summary>How long a tab that syncs waits after a tick before writing its record, so ticking several files writes it once.</summary>
+    internal static readonly TimeSpan ReviewSyncDelay = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Brings the library's record up to date with the marks, for a tab that syncs (DESIGN.md §9, "Writing"). The
+    /// transcript is only copied again if it changed. While a turn runs, the copy as it ends carries them instead.
+    /// </summary>
+    private void QueueReviewSync()
+    {
+        if (!State.SyncToLibrary || _reviewSyncStopped)
+        {
+            return;
+        }
+        _reviewSync?.Dispose();
+        ITimer? timer = null;
+        timer = _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() =>
+        {
+            if (timer is null || !ReferenceEquals(_reviewSync, timer))
+            {
+                return;
+            }
+            _reviewSync = null;
+            timer.Dispose();
+            if (CanSyncNow && !_reviewSyncStopped)
+            {
+                CopyToLibrary();
+            }
+        }), null, ReviewSyncDelay, Timeout.InfiniteTimeSpan);
+        _reviewSync = timer;
+    }
+
+    /// <summary>The tab is closing: a diff view still open can mark files, but nothing more is written to the library.</summary>
+    private void StopReviewSync()
+    {
+        _reviewSyncStopped = true;
+        _reviewSync?.Dispose();
+        _reviewSync = null;
     }
 
     // ---- Opening diffs (DESIGN.md §8) ------------------------------------------------------------------------------
@@ -286,7 +396,11 @@ public sealed partial class TabViewModel
             () => OpenFileInEditorAsync(row),
             () => RevealFileAsync(row),
             () => CopyFilePathAsync(row),
-            beforeKnown));
+            beforeKnown,
+            new DiffReview(
+                () => ReviewedFiles.LatestChange(Changes.Find(row.Path)),
+                () => Reviewed.IsReviewed(row.Path, Changes.Find(row.Path)),
+                change => SetFileReviewed(row.Path, reviewed: true, change))));
     }
 
     /// <summary>

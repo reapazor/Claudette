@@ -39,7 +39,10 @@ public sealed record RecordedImage(string MediaType, int Bytes, int? Width, int?
 /// <item><c>RUN_BASH &lt;command&gt;</c>: a Bash tool call, then done.</item>
 /// <item><c>SLOW</c>: text streamed in small chunks over about 20 seconds.</item>
 /// <item><c>ASK_QUESTION</c>: an AskUserQuestion tool call ("Which database?": Postgres or SQLite), then done.</item>
-/// <item><c>EXIT_PLAN</c>: an ExitPlanMode tool call with a two-step plan, then done. Needs plan mode.</item>
+/// <item>
+/// <c>EXIT_PLAN</c>: a Write of a two-step plan to the plan file Claude Code names, then an ExitPlanMode tool call,
+/// then done. Needs plan mode.
+/// </item>
 /// <item><c>API_ERROR</c>: the first two requests fail with 529 "overloaded", so Claude Code retries; then <c>pong</c>.</item>
 /// <item>
 /// <c>SUBAGENTS</c>: two subagents in parallel, in the foreground. "Touch a marker file" runs
@@ -55,6 +58,9 @@ public sealed record RecordedImage(string MediaType, int Bytes, int? Width, int?
 /// </summary>
 public sealed partial class MockAnthropicApi : IAsyncDisposable
 {
+    /// <summary>The plan <c>EXIT_PLAN</c> writes.</summary>
+    private const string PlanText = "1. Read the code\n2. Fix the bug";
+
     private readonly WebApplication _app;
     private readonly ConcurrentQueue<RecordedRequest> _requests = new();
     private int _counter;
@@ -268,6 +274,21 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
                 return new Plan("tool-edit", [ToolUse("Edit", new JsonObject { ["file_path"] = filePath, ["old_string"] = "ORIGINAL LINE", ["new_string"] = "EDITED LINE" })]);
             }
         }
+        // EXIT_PLAN writes the plan to the file Claude Code's plan mode reminder names, as a model does, then calls
+        // ExitPlanMode, which reads the plan from that file (2.1.285 drops a plan passed as input). With no plan file
+        // named, the plan goes in the input.
+        if (prompt.Contains("EXIT_PLAN", StringComparison.Ordinal) && tools.Contains("ExitPlanMode"))
+        {
+            var planFile = PlanFilePattern().Match(string.Join("\n", messages.Select(MessageText)));
+            if (planFile.Success && toolRounds == 0)
+            {
+                return new Plan("tool-plan-file", [ToolUse("Write", new JsonObject { ["file_path"] = planFile.Groups[1].Value, ["content"] = PlanText })]);
+            }
+            if (toolRounds == (planFile.Success ? 1 : 0))
+            {
+                return new Plan("tool-plan", [ToolUse("ExitPlanMode", planFile.Success ? [] : new JsonObject { ["plan"] = PlanText })]);
+            }
+        }
 
         if (hasToolResult)
         {
@@ -317,10 +338,6 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
                     new JsonObject { ["label"] = "SQLite", ["description"] = "A single file" }),
             };
             return new Plan("tool-ask", [ToolUse("AskUserQuestion", new JsonObject { ["questions"] = new JsonArray(question) })]);
-        }
-        if (text.Contains("EXIT_PLAN", StringComparison.Ordinal) && tools.Contains("ExitPlanMode"))
-        {
-            return new Plan("tool-plan", [ToolUse("ExitPlanMode", new JsonObject { ["plan"] = "1. Read the code\n2. Fix the bug" })]);
         }
         if (text.Contains("SLOW", StringComparison.Ordinal))
         {
@@ -422,4 +439,8 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
 
     [GeneratedRegex(@"AGENT_REPLY (.+)")]
     private static partial Regex AgentReplyPattern();
+
+    /// <summary>Where the plan mode reminder asks for the plan: "You should create your plan at &lt;path&gt; using the Write tool."</summary>
+    [GeneratedRegex(@"create your plan at (.+?\.md) using the Write tool")]
+    private static partial Regex PlanFilePattern();
 }

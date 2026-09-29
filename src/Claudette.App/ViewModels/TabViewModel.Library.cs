@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Claudette.App.Conversation;
 using Claudette.App.Services;
+using Claudette.Core.Diffs;
 using Claudette.Core.Library;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
@@ -176,6 +177,7 @@ public sealed partial class TabViewModel
         Folder = Folder,
         FirstPrompt = _firstPrompt,
         ClaudeCodeVersion = _session?.ClaudeCodeVersion,
+        ReviewedFiles = ReviewedFiles.ToRecord(State.ReviewedFiles, Folder),
     };
 
     /// <summary>

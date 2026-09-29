@@ -3,6 +3,7 @@ using System.Text.Json;
 using Avalonia.Media;
 using Claudette.App.Services;
 using Claudette.Core.Development;
+using Claudette.Core.Diffs;
 using Claudette.Core.Git;
 using Claudette.Core.Library;
 using Claudette.Core.Settings;
@@ -548,6 +549,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             {
                 state.Tokens = record.Tokens;
             }
+            // Found in this machine's copy of the folder; a copy has the same changes, so keeps them too (DESIGN.md §8).
+            state.ReviewedFiles = ReviewedFiles.FromRecord(record.ReviewedFiles, state.Folder);
         }
         return state;
     }

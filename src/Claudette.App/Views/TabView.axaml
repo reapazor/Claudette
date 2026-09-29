@@ -256,6 +256,17 @@
     <Style Selector="Button.pagetab.selected /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
     </Style>
+    <!-- Changed files (DESIGN.md §8, "Reviewed"): a small box before each file, and a reviewed file drawn faintly -->
+    <Style Selector="CheckBox.reviewed">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0,0,6,0" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+    </Style>
+    <Style Selector="Grid.changedfile.reviewed > TextBlock, Grid.changedfile.reviewed > StackPanel">
+      <Setter Property="Opacity" Value="0.5" />
+    </Style>
     <!-- A project job's output (DESIGN.md §18): dense lines, like a terminal -->
     <Style Selector="ListBox#ProjectOutputList ListBoxItem">
       <Setter Property="Padding" Value="4,0" />
@@ -642,13 +653,17 @@
                      SelectionChanged="OnChangedFileSelected" DoubleTapped="OnChangedFileDoubleTapped" KeyDown="OnChangedFileKeyDown">
               <ListBox.ItemTemplate>
                 <DataTemplate DataType="vm:ChangedFileRow">
-                  <Grid ColumnDefinitions="18,*,Auto" ToolTip.Tip="{Binding StatusText}" Background="Transparent">
-                    <TextBlock Classes="mono" FontWeight="SemiBold" Text="{Binding Status}" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsDeleted}" />
-                    <StackPanel Grid.Column="1">
+                  <Grid Classes="changedfile" Classes.reviewed="{Binding IsReviewed}" ColumnDefinitions="Auto,18,*,Auto" ToolTip.Tip="{Binding StatusText}" Background="Transparent">
+                    <!-- DESIGN.md §8, "Reviewed": unticks when Claude changes the file again -->
+                    <CheckBox Classes="reviewed" IsChecked="{Binding IsReviewed, Mode=OneWay}"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ToggleFileReviewedCommand}" CommandParameter="{Binding}"
+                              AutomationProperties.Name="Reviewed" ToolTip.Tip="Reviewed. Unticks when Claude changes the file again." />
+                    <TextBlock Grid.Column="1" Classes="mono" FontWeight="SemiBold" Text="{Binding Status}" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsDeleted}" />
+                    <StackPanel Grid.Column="2">
                       <TextBlock Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
                       <TextBlock Classes="muted small" Text="{Binding DisplayPath}" TextTrimming="PathSegmentEllipsis" />
                     </StackPanel>
-                    <TextBlock Grid.Column="2" Classes="mono small muted" Text="{Binding Stats}" VerticalAlignment="Top" Margin="6,2,0,0" />
+                    <TextBlock Grid.Column="3" Classes="mono small muted" Text="{Binding Stats}" VerticalAlignment="Top" Margin="6,2,0,0" />
                     <Grid.ContextMenu>
                       <ContextMenu>
                         <MenuItem Header="Open diff" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenFileDiffCommand}" CommandParameter="{Binding}" />

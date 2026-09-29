@@ -55,6 +55,15 @@
               </MenuFlyout>
             </Button.Flyout>
           </Button>
+          <!-- DESIGN.md §8, "Reviewed": ticks the file in Changed files and closes the view -->
+          <Button x:Name="ReviewedButton" Classes="accent" Command="{Binding MarkReviewedCommand}" IsVisible="{Binding CanMarkReviewed}"
+                  ToolTip.Tip="Mark this file as reviewed and close the diff. It stays reviewed until Claude changes it again.">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Path Data="{StaticResource IconCheck}" Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.5" Width="10" Height="10" Stretch="Uniform"
+                    VerticalAlignment="Center" IsVisible="{Binding IsReviewed}" />
+              <TextBlock Text="Reviewed" />
+            </StackPanel>
+          </Button>
         </StackPanel>
         <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Classes="muted small" TextTrimming="PathSegmentEllipsis">
           <Run Text="{Binding DisplayPath}" />

@@ -750,6 +750,12 @@ A tab starts in auto mode, like a Claude Code session in a terminal or VS Code, 
   - It covers the whole repository, not only the tab's folder.
   - Untracked files count as added.
   - Git runs with `--no-optional-locks`, so refreshing never takes git's index lock.
+- **Reviewed.** Each file in the panel has a box to tick once you've reviewed it, in both views. A file has one reviewed state, so ticking it in one view ticks it in the other.
+  - A reviewed file is drawn faintly, and the panel's summary counts them: *"5 files changed · 2 reviewed"*.
+  - It stays reviewed until Claude changes the file again with Edit, Write, MultiEdit or NotebookEdit. Changes you make, or commands make, don't untick it, so a file only you changed (in working tree vs HEAD) stays reviewed until Claude changes it.
+  - The built-in diff view has a **Reviewed** button, which ticks the file and closes the view. It marks the version the view showed: if Claude changed the file while the view was open, the file stays unreviewed. The button shows a check when the file is already reviewed.
+  - A tick remembers Claude's latest change to the file by its tool call's id. The id is the same when a transcript is replayed, so ticks survive restoring the tab and opening the session on another machine.
+  - Ticks are saved with the tab ([§9](#restore-on-launch)), and in the session record of a tab that syncs, with paths relative to the session's folder ([§9](#session-library-sync-across-machines)). **Start a new session** clears them.
 - **Before content.** Claude Code reports it. The result of every Edit and Write tool call (the `tool_use_result` field on the `user` message that carries the tool result) includes:
   - `originalFile`: the file's full content before the change, or `null` for a new file.
   - `structuredPatch`: the change as diff hunks.
@@ -800,6 +806,7 @@ A tab starts in auto mode, like a Claude Code session in a terminal or VS Code, 
   - Folder, name, pinned state, whether it syncs, and group order.
   - Session ID, model, effort and per-tab overrides.
   - Suffixes kept on the tab, and token stats.
+  - The changed files ticked as reviewed ([§8](#8-file-changes--diff-view)).
 - Tabs come back in the same order and resume their sessions, with the earlier conversation loaded so you can scroll back.
 - **Starting fast.** Restored tabs don't start their `claude` process until you first select them or send them a message. Launching with many pinned tabs is quick, and tabs you don't touch use no resources.
 - **Old sessions.** Claude Code deletes local transcripts after 30 days by default. A pinned tab you haven't used in a while could lose its transcript, so Claudette resumes from its session library copy, which isn't affected by that cleanup. Only a tab that syncs, or once did, has a library copy. If there is one, it's used whether or not the tab syncs now. If neither copy exists, the tab says so and waits: **Start a new session** starts one in the same folder, keeping the tab's name, pinned state, overrides and suffixes, and **Unpin and close** (**Close tab**) closes it. It doesn't start a new session by itself.
@@ -818,6 +825,7 @@ A tab starts in auto mode, like a Claude Code session in a terminal or VS Code, 
   - Claudette's session library (below), which can include sessions from other machines.
 - **Merging the sources.** A session in both is one entry: the library adds its name and, when another machine used it more recently, that machine. A session only in the library (from another machine, or older than Claude Code's cleanup) opens through "Restoring on another machine" below, and so does a session in both that another machine carried on since this machine's copy: the library's copy is the newer one.
 - Opening a session applies its record's per-tab overrides (model, effort, mode, check-ins, process monitor). Records written before overrides were kept apply their model and effort.
+- It also brings back the record's reviewed files ([§8](#8-file-changes--diff-view)), found in this machine's copy of the session's folder. **Open a copy** keeps them too, since the copy has the same changes.
 - **Speed.** History reads every transcript line by line, skipping lines cheaply before parsing them, and caches each file by size and date, so opening it again only reads what changed.
 
 ### Session library (sync across machines)
@@ -841,7 +849,7 @@ Claudette keeps its own **session library** in a folder the user chooses (Settin
 
 **What's in the library.** One folder per session holding:
 
-- A **session record** (JSON): the tab name, model, effort, per-tab overrides, token stats, which machine last used it and when, and the project identity (below).
+- A **session record** (JSON): the tab name, model, effort, per-tab overrides, token stats, which machine last used it and when, the project identity (below), and the changed files ticked as reviewed ([§8](#8-file-changes--diff-view)). Their paths are relative to the session's folder, since that folder's path differs between machines; a file with no relative path from there, such as one on another drive, is left out.
 - A **copy of Claude Code's transcript** (`.jsonl`), plus subagent transcripts.
 
 Claude Code's credentials and settings are never copied.
@@ -851,6 +859,7 @@ Claude Code's credentials and settings are never copied.
 - For a tab that syncs, Claudette copies the transcript into the library after each turn finishes, never while Claude Code is writing it. It waits a second after the turn's result, so Claude Code has finished writing. Turning sync on, and **Sync now**, wait the same second.
 - Each file is written to a temporary name, then renamed, so a sync client never uploads a half-written file. The record is written last, so a record in the library means its transcript is there too.
 - A file that hasn't changed (same size, and a modified time within 2 seconds, since some synced drives store coarse times) isn't copied again, except by **Sync now**.
+- Ticking a changed file as reviewed ([§8](#8-file-changes--diff-view)) copies the session 2 seconds after the last tick, so ticking several files writes the record once. Only the record has changed, so the transcript isn't copied again. During a turn, the copy as the turn ends carries the ticks.
 - Library copies aren't affected by Claude Code's own cleanup of local transcripts (30 days by default), so the library also works as a longer-term archive for the sessions that sync. It has its own retention setting.
 
 **Restoring on another machine.**
@@ -908,7 +917,7 @@ Claudette can host the Claude Code session that works on Claudette's own source.
   - **Restart when idle**, while a tab is working: it waits until no tab is starting, working or waiting on the user.
   - **Restart into new builds by itself when no tab is working**, remembered on this machine. With it on, a Claude Code session that rebuilds Claudette sees the restart as soon as its turn ends.
 - **What's kept:**
-  - Every open tab, pinned or not, in order, with its session, name, overrides, whether it syncs, kept suffixes and token stats.
+  - Every open tab, pinned or not, in order, with its session, name, overrides, whether it syncs, kept suffixes, token stats and reviewed files.
   - The message typed in each tab, with its one-off suffixes and attached images.
   - The selected tab, and the window's position and size.
   - Tabs whose Claude Code was running start again straight away and resume their sessions. The others start when selected, as on launch.
@@ -1697,6 +1706,8 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Claudette's icon, and the icon while tabs work ([§2](#packaging-and-signing), [§10](#10-notifications)).** ✅ Built 2026-09-29. A female Clawd, with a ponytail, replaced the placeholder icon, drawn by `packaging/icon/build-icons.mjs`, which also writes Rider's project icon. While tabs work, the Windows taskbar overlay pulses Claude's spark (the count of tabs needing input comes first) and the macOS Dock icon shows Claudette typing, then waving while a tab needs input; the taskbar button flashes when a tab needs input while Claudette is in the background. Settings → Notifications → **Animate the Dock or taskbar icon while tabs are working**.
       - **Still to verify on real machines:** the spark, the count taking its place and the flash on the Windows taskbar, installed and unpackaged; the Dock animation and the icon coming back on macOS.
     - **Sync now ([§9](#session-library-sync-across-machines)).** A tab that syncs has **Sync now** in its menu, which copies its session to the library straight away, every file again, and says in the conversation how it went; it checks the lease first ([issue #16](https://github.com/reapazor/Claudette/issues/16)). ✅ Built 2026-09-29.
+    - **Reviewed files ([§8](#8-file-changes--diff-view)).** A box on each changed file ticks it as reviewed, in both views, until Claude changes the file again; reviewed files are drawn faintly and counted in the panel's summary. The built-in diff view's **Reviewed** button ticks the file and closes the view. Ticks are saved with the tab and synced through the session record. ✅ Built 2026-09-29.
+      - **Still to verify:** how the box and the faint rows look on real Windows, macOS and Linux desktops, in both styles and themes; so far they've only been rendered headlessly.
 16. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features
