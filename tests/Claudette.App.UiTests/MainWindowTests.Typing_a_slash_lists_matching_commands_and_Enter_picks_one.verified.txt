@@ -1,0 +1,8 @@
+﻿"Commands"
+[button] (parts below)
+  "/review"
+  "<pr>"
+  "Review a pull request"
+[button] (parts below)
+  "/release-notes"
+  "View release notes"

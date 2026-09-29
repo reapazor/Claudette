@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -106,6 +107,42 @@ public class MainWindowTests
         Assert.True(h.Shell.IsSidebarCollapsed);
         var sidebar = window.GetVisualDescendants().OfType<Control>().Single(c => c.Name == "Sidebar");
         await Verify(UiText.Describe(sidebar, (h.Root, "{root}")));
+    }
+
+    [AvaloniaFact]
+    public async Task Typing_a_slash_lists_matching_commands_and_Enter_picks_one()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var initialize = h.Transport.Answers["initialize"];
+        h.Transport.Answers["initialize"] = request =>
+        {
+            var answer = initialize(request)!;
+            answer["commands"] = new JsonArray(
+                new JsonObject { ["name"] = "compact", ["description"] = "Clear the conversation but keep a summary", ["argumentHint"] = "" },
+                new JsonObject { ["name"] = "review", ["description"] = "Review a pull request", ["argumentHint"] = "<pr>" },
+                new JsonObject { ["name"] = "release-notes", ["description"] = "View release notes", ["argumentHint"] = "" });
+            return answer;
+        };
+        await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        var composer = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "Composer");
+
+        composer.Focus();
+        window.KeyTextInput("/re");
+        UiText.Settle(window);
+        var popup = window.GetVisualDescendants().OfType<Popup>().Single(p => p.Name == "CompletionPopup");
+        Assert.True(popup.IsOpen);
+        var listed = UiText.Describe(popup.Child!);
+
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        UiText.Settle(window);
+
+        Assert.StartsWith("/review", composer.Text, StringComparison.Ordinal);
+        Assert.False(popup.IsOpen);
+        // Picking a command doesn't send it.
+        Assert.DoesNotContain(h.Transport.Sent, m => m["type"]?.GetValue<string>() == "user");
+        await Verify(listed);
     }
 
     private static void Click(Window window, Control target)
