@@ -127,6 +127,12 @@ public sealed class UsageSettings
     /// <summary>If <c>get_usage</c> stops working, read model-specific limits from <c>/usage</c> text instead.</summary>
     public bool UseUsageCommandFallback { get; set; }
 
+    /// <summary>
+    /// When a usage limit stops a task, continue it once the limit resets (DESIGN.md §6, "Continuing after a limit
+    /// resets"). Each tab can override it.
+    /// </summary>
+    public bool ContinueAfterLimitReset { get; set; } = true;
+
     public RetentionPeriod KeepHistory { get; set; } = RetentionPeriod.OneMonth;
 }
 

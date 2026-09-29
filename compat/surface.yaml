@@ -252,9 +252,9 @@ items:
   - id: "rate_limit_event"
     kind: message
     status: documented
-    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.Usage/UsageParser.cs
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.Usage/UsageParser.cs, src/Claudette.Core/Sessions/AutoContinueMonitor.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: UsageParserTests, UsageHeaderTests
+    test: UsageParserTests, UsageHeaderTests, AutoContinueMonitorTests
   - id: "auth_status"
     kind: message
     status: documented
@@ -296,9 +296,41 @@ items:
   - id: "api_error_status"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Status/ApiTrouble.cs
+    usedIn: src/Claudette.Core/Status/ApiTrouble.cs, src/Claudette.Core/Sessions/AutoContinueMonitor.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: ServiceStatusTests
+    test: ServiceStatusTests, AutoContinueMonitorTests
+  # A turn stopped at a plan usage limit, continued once the limit resets (DESIGN.md §6, "Continuing after a limit resets").
+  - id: "rate_limit_info.status"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/AutoContinueMonitor.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AutoContinueMonitorTests, AutoContinueTests
+  - id: "resetsAt"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/AutoContinueMonitor.cs, src/Claudette.Usage/UsageParser.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AutoContinueMonitorTests, UsageParserTests
+  - id: "errorCode"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/AutoContinueMonitor.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AutoContinueMonitorTests
+  - id: "terminal_reason"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/AutoContinueMonitor.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AutoContinueMonitorTests, RealCliTests
+  - id: "autoContinueAtUsageLimit"
+    kind: behavior
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/AutoContinueMonitor.cs
+    docs: https://code.claude.com/docs/en/interactive-mode
+    test: AutoContinueMonitorTests
+    fallback: Claude Code waits for a usage limit to reset and continues the task by itself only in interactive sessions; -p runs like Claudette's don't get the wait, so Claudette does it, with the same prompt ("Continue from where you left off."). If a later Claude Code continues by itself in -p too, the turn it starts ends Claudette's wait, as any turn that starts does, so the task isn't continued twice.
   - id: "parent_tool_use_id"
     kind: field
     status: documented
@@ -815,10 +847,10 @@ items:
   - id: "rateLimitType"
     kind: field
     status: undocumented
-    usedIn: src/Claudette.Usage/UsageParser.cs
+    usedIn: src/Claudette.Usage/UsageParser.cs, src/Claudette.Core/Sessions/AutoContinueMonitor.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: UsageParserTests
-    fallback: Only needed when unifiedWindows is missing (five_hour = session, seven_day = weekly). Without it, such an event is ignored and get_usage still supplies the readings.
+    test: UsageParserTests, AutoContinueMonitorTests
+    fallback: Only needed when unifiedWindows is missing (five_hour = session, seven_day = weekly). Without it, such an event is ignored and get_usage still supplies the readings. On a rejected event it also names the limit that stopped a turn (five_hour, seven_day, seven_day_opus, seven_day_sonnet); without it the bar says "usage limit".
   - id: "/usage"
     kind: command
     status: documented

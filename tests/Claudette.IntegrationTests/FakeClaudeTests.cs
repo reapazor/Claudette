@@ -51,6 +51,30 @@ public sealed class FakeClaudeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_turn_stopped_at_the_limit_waits_for_the_reset()
+    {
+        await using var session = await StartAsync();
+        var sent = new List<string>();
+        using var monitor = new AutoContinueMonitor(TimeProvider.System, () => true, sent.Add, () => { });
+
+        // DESIGN.md §6, "Continuing after a limit resets": the rejection and the failed turn, read off the process.
+        await session.SendUserMessageAsync("LIMIT 30", TestContext.Current.CancellationToken);
+        var (done, seen) = await session.ReadUntilAsync<TurnCompleted>();
+        foreach (var rateLimit in seen.OfType<RateLimitUpdated>())
+        {
+            monitor.RateLimit(rateLimit.Message.Info);
+        }
+        monitor.TurnEnded(done.Result);
+
+        Assert.True(done.Result.IsError);
+        var wait = Assert.IsType<LimitWait>(monitor.Wait);
+        Assert.True(wait.WillContinue);
+        Assert.Equal("session limit", wait.LimitName);
+        Assert.InRange(wait.ResetsAt - TimeProvider.System.GetUtcNow(), TimeSpan.FromMinutes(29), TimeSpan.FromMinutes(31));
+        Assert.Empty(sent);
+    }
+
+    [Fact]
     public async Task A_message_with_images_is_accepted()
     {
         await using var session = await StartAsync();

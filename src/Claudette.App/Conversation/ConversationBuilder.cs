@@ -90,8 +90,8 @@ public sealed class ConversationBuilder
         init => _tasks = value;
     }
 
-    public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null) =>
-        AddUser(new UserMessageItem(text, suffixText, isCheckIn) { Images = images ?? [] }, Now());
+    public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null, bool isAutoContinue = false) =>
+        AddUser(new UserMessageItem(text, suffixText, isCheckIn, isAutoContinue) { Images = images ?? [] }, Now());
 
     /// <summary>A prompt from a transcript, sent at <paramref name="sentAt"/>: null when its entry has no time.</summary>
     public UserMessageItem ReplayUserMessage(string text, IReadOnlyList<MessageImage> images, DateTimeOffset? sentAt) =>

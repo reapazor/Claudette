@@ -198,6 +198,7 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
   - Later features add rows here: the Perforce login and changelist ([§18](#perforce-ticket-handling)), the **Project** the tab's folder holds and whether Claude was told about it ([§18](#project-tools)), and the **Claude app** connection: connected at the session's address, connecting, or why not ([§18](#remote-control-the-claude-app)), for example.
   - **Agents**, while the tab has subagents: how many are running or waiting on you, or how they ended ([§18](#agent-map)).
   - **Running tasks**, while Claude Code has work going in the background: one line each, such as *Shell command: Start the dev server*, up to four and then *and 2 more* ([§5](#running-tasks)).
+  - **Usage limit**, while a usage limit has stopped the tab's task: when it resets, and whether the task continues then ([§6](#continuing-after-a-limit-resets)).
   - The same card opens from an **ⓘ** button in the composer bar, for the selected tab.
 - **Token stats per tab.** Each tab keeps a running count of the tokens it has used:
   - Input, output, cache write and cache read tokens, split by model when the session used more than one.
@@ -233,7 +234,7 @@ The tabs are listed in a sidebar on the left of the window, rather than a strip 
 
 - **A tab's row** has two lines:
   - The status icon, a pin icon if pinned, a sync icon if it syncs to the session library (muted, with the tip *"Synced to the session library"*), a phone icon while it's connected to the Claude app (*"Connected to the Claude app"*, dimmed while it connects or reconnects, and fainter still once it's switched off and waiting to disconnect; [§18](#remote-control-the-claude-app)), a gear while a process it started is busy ([Process monitor](#process-monitor)), a small count of its running tasks once its turn is over (*"2 tasks still running"*, [§5](#running-tasks)), and the name, cut short with an ellipsis if it doesn't fit. With **Show changelist on tabs** on, a `CL 12345` badge sits at the end of the line ([§18](#perforce-changelist-in-the-tab-title)).
-  - The model and effort, or instead what needs attention: *Needs your input*, the error, or *Possibly stuck* when check-ins get no reply ([§5](#check-ins-on-long-turns)).
+  - The model and effort, or instead what needs attention: *Needs your input*, the error, or *Possibly stuck* when check-ins get no reply ([§5](#check-ins-on-long-turns)). While a usage limit has stopped the tab's task and it will continue when the limit resets, *Usage limit · continues at 15:45* ([§6](#continuing-after-a-limit-resets)).
   - **Context ring.** A small ring at the end of the row, level with the second line and under the close button, fills up with the tab's context window ([§6](#per-tab-context)).
     - It's muted, amber when the context indicator warns (near auto-compact), and red from 95%.
     - Its tip is the composer bar's context text and detail, for example *"Context 75% (150,000 of 200,000 tokens · auto-compacts at 160,000)"*.
@@ -600,6 +601,30 @@ An OS notification (optional) when:
 - A limit resets.
 
 Each alert fires once per window. The first reading after a restart doesn't alert for levels that were already crossed. The alert also shows as a dismissible line under the header, and the OS notification is skipped while Claudette is in front ([§10](#10-notifications)). A threshold alert's line keeps up with the session meter (the percentage, rounded the same way, and the countdown), so the two never disagree.
+
+### Continuing after a limit resets
+
+When a plan usage limit stops Claude mid-task, the tab waits for the limit to reset and then continues the task, so work left running overnight or over lunch picks up again in the new session window. It's on by default: Settings → Usage → **Continue tasks when a usage limit resets** turns it off everywhere, and each tab can turn it on or off for itself in **Tab settings…** ([§14](#per-tab-overrides)).
+
+Claude Code does the same in its own terminal (`autoContinueAtUsageLimit`, since 2.1.234), but not in `-p` runs such as Claudette's, so Claudette does it. It follows Claude Code's rules where they apply.
+
+- **Noticing.** A turn stopped at the limit ends with an error (`result` with `is_error`, and `api_error_status` 429 or none), and Claude Code sends a `rate_limit_event` with `status: rejected` and `resetsAt`, in either order. Its `rateLimitType` names the limit (session, weekly, Opus or Sonnet), as Claude Code's own message does (*"You've hit your session limit · resets 3:45pm"*, which still shows as the turn's error). Not a limit that waiting fixes:
+  - A rejection with an `errorCode`, such as `credits_required`: the account needs usage credits.
+  - A turn that ended any other way: stopped by the user, out of turns or budget, or a server error.
+  - A rejection the turn got past, for example on extra usage.
+- **Continuing.** A minute after the reset, the tab sends *"Continue from where you left off."*, the prompt Claude Code uses. It appears as a user message labeled *"Automatic continue after the usage limit reset"*, as a check-in is labeled ([§5](#check-ins-on-long-turns)). It doesn't resend the user's last message. The continued turn is like any other: it still asks for permissions, so it can stop on a prompt while the user is away.
+- **While it waits.**
+  - A bar over the composer says so: *"You've hit your session limit. The task continues by itself when it resets, at 15:45."*, with **Don't continue**.
+  - The tab's row shows *Usage limit · continues at 15:45* in place of the model ([§4](#sidebar)), and its info card has a **Usage limit** row with the bar's text.
+  - A day other than today reads *"on Mon at 09:00"*.
+- **When it doesn't continue by itself** the bar says why, with **Continue when it resets** (or **Continue**, once it has) and a close button:
+  - Turned off, in Settings or for the tab: *"You've hit your session limit. It resets at 15:45."*
+  - **Don't continue**, for that reset. Hitting the limit again before it resets doesn't start another wait; the next window starts fresh.
+  - The reset is more than a day away, as a weekly limit's can be.
+  - Three continues in a row each ran straight into the limit again. Like Claude Code, it waits again at most twice, then stops (Claude Code says *"Automatic continue stopped after repeated usage-limit hits"*). A continue that gets going, or a message from the user, starts the count again.
+  - The limit reset more than 30 minutes before Claudette noticed, because the computer slept through it or Claudette wasn't running: *"Your session limit reset at 15:45 while this computer was asleep or Claudette was closed, so the task didn't continue by itself."* Claude Code also waits for the user after a long sleep.
+- **Ending the wait.** Any turn that starts ends it: the user sent a message, or something else started one. Turning the setting off or on while a tab waits changes that wait straight away.
+- **Saved with the tab**, so a restart, including one into a new build ([§9](#working-on-claudette)), keeps waiting. A restored tab that hasn't started is started to continue.
 
 ### Data source
 
@@ -1218,6 +1243,7 @@ The `system/init` message that follows gives `session_id`, `model`, `permissionM
 | Stop a background task | `stop_task` with `task_id` | Yes |
 | Stop one subagent | `stop_task` with the subagent's task id, in the foreground too ([§18](#agent-map)) | **No** (documented for background tasks) |
 | Plan usage limits | `get_usage` ([§6](#data-source)) | **No** (marked experimental) |
+| A turn stopped at a usage limit | A `rate_limit_event` with `status: rejected`, `resetsAt` and no `errorCode`, and a `result` with `is_error` and `api_error_status` 429 ([§6](#continuing-after-a-limit-resets)) | Yes (`rateLimitType`, which only names the limit, no) |
 | Sign-in | `claude_authenticate`, `claude_oauth_wait_for_completion`, `claude_oauth_callback` ([§11](#signing-in)) | **No** |
 | Session title | `generate_session_title`, `rename_session` (below) | **No** |
 | Remote Control | `remote_control` with `enabled` and `name`; `system/bridge_state` reports the connection, and `system/worker_shutting_down` its end ([§18](#remote-control-the-claude-app)) | **No** (`worker_shutting_down` yes) |
@@ -1329,7 +1355,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. Use my login shell's environment (macOS and Linux only, on by default; [§13](#login-shell-environment)). **Claude app (Remote Control)**: Connect new tabs to the Claude app (off by default; each tab has its own switch), with what it does, the privacy note and how to get pushes on the phone, and Keep this computer awake while tabs are connected (on by default). Disabled, with the reason, when the account can't use it ([§18](#remote-control-the-claude-app)). |
 | New tabs | Default model, effort level and permission mode. The permission mode is **Claude Code's default** unless chosen, named with the mode it gives, usually Auto ([Starting mode](#starting-mode)). The model and effort lists are what Claude Code offered in its last `initialize` reply on this machine (the models and each one's effort levels, kept with the machine's state), with a built-in list only until a session has started; Tab settings… lists them the same way. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (**Add folder…**, **Move up**, **Move down**, **Remove**), in the order the new tab picker shows them. See [Opening a tab](#opening-a-tab). |
 | Appearance | Theme: follow system, light or dark. Style: Standard (the default) or Claude, the Claude apps' look ([Visual style](#visual-style)). Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. Show fun words while Claude works, and show what Claude is doing while it works (both on by default; [Working line](#working-line)). **Detailed usage header** (off by default): the same switch as the header's chevron, kept on this machine rather than synced ([Detailed header](#detailed-header)). Show context on tab rows (on by default; [§4](#sidebar)). **Density**: Comfortable (the default) or Compact, which tightens the conversation's spacing, message and card padding and tool rows, the sidebar's rows, and the composer's padding. It applies at once and syncs with the other Appearance settings. |
-| Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
+| Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Continue tasks when a usage limit resets (on by default; each tab can override it; [Continuing after a limit resets](#continuing-after-a-limit-resets)). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
 | Quick suffixes | The list of suffixes: label, text and optional shortcut. Add, edit, reorder, delete. See [§5](#quick-suffixes). |
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
 | Diff tool | Built-in, a preset or a custom command, with **Test**. See [§8](#external-diff-tool). |
@@ -1374,7 +1400,7 @@ The foot of the Settings sidebar shows which Claudette this is, on every page: "
 
 ### Per-tab overrides
 
-Some settings can be changed for a single tab from the tab's right-click menu, under **Tab settings…**: model, effort level, permission mode, the process monitor ([§4](#process-monitor)), and the check-in settings. The folder's custom project actions belong to the folder, not the tab, so they're edited in Settings, on the tab's **Actions** page ([above](#the-projects-pages)); **Tab settings…** says so and has **Open**. A tab with overrides shows a small dot next to its settings entry, and **Use defaults** clears them. Overrides are saved with the tab.
+Some settings can be changed for a single tab from the tab's right-click menu, under **Tab settings…**: model, effort level, permission mode, the process monitor ([§4](#process-monitor)), **Auto-continue** (continuing a task when a usage limit resets: Default, On or Off; [§6](#continuing-after-a-limit-resets)), and the check-in settings. The folder's custom project actions belong to the folder, not the tab, so they're edited in Settings, on the tab's **Actions** page ([above](#the-projects-pages)); **Tab settings…** says so and has **Open**. A tab with overrides shows a small dot next to its settings entry, and **Use defaults** clears them. Overrides are saved with the tab.
 
 **Tab settings…** also has **Sync to other machines** ([§9](#session-library-sync-across-machines)) and **Connect to the Claude app** ([§18](#remote-control-the-claude-app)), the same switches as the tab menu's. Neither is an override: the new-tab settings only apply when a tab opens, **Use defaults** leaves them as they are, and they don't count toward the dot.
 
@@ -1388,7 +1414,7 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 
 **Sync settings through the session library** (Settings → Sessions, off by default) keeps Claudette's settings the same on every machine that uses the same library folder ([§9](#session-library-sync-across-machines)).
 
-- **What syncs:** appearance, new-tab defaults, usage thresholds, check-ins, quick suffixes, notifications, keyboard shortcuts and process monitor options.
+- **What syncs:** appearance, new-tab defaults, usage settings (thresholds, and continuing when a limit resets), check-ins, quick suffixes, notifications, keyboard shortcuts and process monitor options.
 - **What stays on each machine:** whether Claudette starts at login (the OS keeps it, [§9](#starting-at-login)), the path to `claude`, the login shell setting, the Claude app settings, this machine's name, the library folder itself, the diff tool and Settings → Project tools (program paths and installed IDEs differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, the sidebar's and the usage header's collapsed or detailed state, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
 - The synced settings are stored as one file in the library. Each setting keeps the time it was last changed, and the newest change wins, so edits on two machines don't overwrite each other wholesale.
 - The first time sync is turned on and the library already has settings from another machine, Claudette asks: **Use synced settings** or **Replace them with this machine's**.
@@ -1492,7 +1518,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 | Fake transport and replay transport | `tests/Claudette.Core.Tests/Support/` |
 | Protocol fixtures | `tests/Claudette.Core.Tests/Fixtures/protocol/2.1.284/`: `01`–`06` and `signed-out` from the spikes, `07`–`11` from `ProtocolRecordingTests`, and `12-subagents` recorded from the mock's `SUBAGENTS` |
 | Record mode | `tools/Claudette.Fixtures/` (`ProtocolFixtureWriter`: a protocol log to a cleaned fixture), used by `ProtocolRecordingTests` and `LiveTests` |
-| `fake-claude` | `tools/Claudette.FakeClaude/`. Scripted by the prompt (`ASK_PERMISSION`, `SLOW`, `CRASH`, `SPAWN`, `SILENT`, `HANG`, `AUTH_FAIL`, `RUN_BASH`, `SUBAGENTS`) and by environment variables, rather than scenario files; see the header of its `Program.cs`. Its sign-in (`auth login`, `auth logout`, the sign-in control requests) is kept in a file in `CLAUDE_CONFIG_DIR`, so a sign-in sticks. Its reply to a message with images names their media types. |
+| `fake-claude` | `tools/Claudette.FakeClaude/`. Scripted by the prompt (`ASK_PERMISSION`, `SLOW`, `CRASH`, `SPAWN`, `SILENT`, `HANG`, `AUTH_FAIL`, `LIMIT`, `RUN_BASH`, `SUBAGENTS`) and by environment variables, rather than scenario files; see the header of its `Program.cs`. Its sign-in (`auth login`, `auth logout`, the sign-in control requests) is kept in a file in `CLAUDE_CONFIG_DIR`, so a sign-in sticks. Its reply to a message with images names their media types. |
 | Mock Messages API | `tools/Claudette.MockApi/`. Runs in-process in tests, or on its own with `dotnet run`. |
 | Tests against `fake-claude` and the real CLI | `tests/Claudette.IntegrationTests/`. The real-CLI tests are tagged `RealCli`. |
 | View model tests | `tests/Claudette.App.Tests/`. `Support/TabTestHarness.cs` gives a tab a scripted Claude Code connection, a fake clock, a temporary data folder and a fake process tracker. |
@@ -1742,6 +1768,8 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
       - **Still to verify:** how the box and the faint rows look on real Windows, macOS and Linux desktops, in both styles and themes; so far they've only been rendered headlessly.
     - **Starting at login ([§9](#starting-at-login)).** Settings → General → **Start Claudette when I log in** starts Claudette minimized at login: the MSIX through its startup task, other Windows builds through the Run key, a LaunchAgent on macOS and an XDG autostart file on Linux. The entry prefers an installed release to other builds, and those to source builds; a source build hands over to the MSIX, whose task only the MSIX can turn on. ✅ Built 2026-09-29.
       - **Still to verify on real machines:** the MSIX's startup task, its activation and the handover to it; the LaunchAgent on macOS; and the minimized start on real Windows, macOS and Linux desktops.
+    - **Continuing after a limit resets ([§6](#continuing-after-a-limit-resets)).** When a plan usage limit stops a task, the tab waits for the reset and sends *"Continue from where you left off."*, as Claude Code does in its terminal but not in `-p` runs. A bar over the composer says when, with **Don't continue**; the tab's row and info card say so too. It holds for a reset more than a day away, after three continues in a row that hit the limit again, and for a reset missed by more than 30 minutes (asleep, or Claudette closed), offering **Continue when it resets** or **Continue**. On by default in Settings → Usage, with **Auto-continue** per tab in **Tab settings…**; the wait is saved with the tab. ✅ Built 2026-09-29.
+      - **Still to verify** against a real subscription at its limit: the order of the rejected `rate_limit_event` and the failed `result` (either works), `api_error_status` 429 and `terminal_reason` `api_error` on the result, and `rateLimitType` naming the weekly, Opus and Sonnet limits. So far it has been tested against messages shaped from the SDK reference and others' reports; no fixture has been recorded at a real limit.
 16. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features

@@ -1,0 +1,9 @@
+﻿Continuing:
+"You've hit your session limit. The task continues by itself when it resets, at 14:00."
+[button] Don't continue
+
+
+After Don't continue:
+"You've hit your session limit. It resets at 14:00."
+[button] Continue when it resets
+[button] Close

@@ -58,11 +58,13 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
             .. PermissionModeInfo.Choices.Select(m => new Choice(m.Value, m.Label)),
         ];
         MonitorChoices = [new Choice(null, $"Default ({(defaults.Processes.ShowMonitor ? "on" : "off")})"), new Choice(On, "On"), new Choice(Off, "Off")];
+        AutoContinueChoices = [new Choice(null, $"Default ({(defaults.Usage.ContinueAfterLimitReset ? "on" : "off")})"), new Choice(On, "On"), new Choice(Off, "Off")];
 
         SelectedModel = ModelChoices.First(c => c.Value == overrides.Model);
         SelectedEffort = EffortChoices.FirstOrDefault(c => c.Value == overrides.Effort) ?? EffortChoices[0];
         SelectedMode = ModeChoices.FirstOrDefault(c => c.Value == overrides.PermissionMode) ?? ModeChoices[0];
         SelectedMonitor = MonitorChoices.First(c => c.Value == overrides.ShowProcessMonitor switch { true => On, false => Off, null => null });
+        SelectedAutoContinue = AutoContinueChoices.First(c => c.Value == overrides.ContinueAfterLimitReset switch { true => On, false => Off, null => null });
 
         var checkIns = overrides.CheckIns ?? defaults.CheckIns;
         UseCustomCheckIns = overrides.CheckIns is not null;
@@ -91,6 +93,12 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     public partial Choice SelectedMonitor { get; set; }
+
+    /// <summary>Continuing a task a usage limit stopped, once it resets (DESIGN.md §6, "Continuing after a limit resets").</summary>
+    public IReadOnlyList<Choice> AutoContinueChoices { get; }
+
+    [ObservableProperty]
+    public partial Choice SelectedAutoContinue { get; set; }
 
     [ObservableProperty]
     public partial Choice SelectedModel { get; set; }
@@ -161,6 +169,7 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
             Effort = SelectedEffort.Value,
             PermissionMode = SelectedMode.Value,
             ShowProcessMonitor = SelectedMonitor.Value switch { On => true, Off => false, _ => null },
+            ContinueAfterLimitReset = SelectedAutoContinue.Value switch { On => true, Off => false, _ => null },
             CheckIns = UseCustomCheckIns
                 ? new CheckInSettings
                 {
@@ -185,6 +194,7 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
         SelectedEffort = EffortChoices[0];
         SelectedMode = ModeChoices[0];
         SelectedMonitor = MonitorChoices[0];
+        SelectedAutoContinue = AutoContinueChoices[0];
         UseCustomCheckIns = false;
     }
 

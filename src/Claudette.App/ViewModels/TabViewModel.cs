@@ -106,6 +106,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         // A prompt the phone answered is withdrawn by Claude Code (DESIGN.md §18, "Remote Control").
         _conversation.WithdrawnOutcome = WithdrawnPromptOutcome;
         _checkIns = new CheckInMonitor(services.Time, () => CheckInSettings, SendCheckInFromTimer, stuck => _services.Dispatcher.Post(() => IsPossiblyStuck = stuck));
+        _autoContinue = CreateAutoContinue();
         Status = TabStatus.NotStarted;
         _restoredTranscript = !isRestored;
         // The suffix menu checks the suffixes on the message.
@@ -118,6 +119,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             }
         }
         RefreshTokens();
+        RestoreLimitWait();
         // Project tools (DESIGN.md §18): the project and the folder's own actions and links, as soon as they're read.
         _ = RefreshProjectAsync();
     }
@@ -301,6 +303,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             AddProjectRows(rows);
             AddPerforceRows(rows);
             AddRemoteControlRows(rows);
+            AddLimitWaitRows(rows);
             rows.Add(new InfoRow("Status", StatusTip));
             return rows;
         }
@@ -368,11 +371,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     /// <summary>
     /// The second line of the tab's row in the sidebar (DESIGN.md §4): the model and effort, or what needs attention
-    /// when the tab is waiting on the user or has failed.
+    /// when the tab is waiting on the user or has failed, or when it continues after a usage limit resets.
     /// </summary>
     public string RowDetail => Status is TabStatus.NeedsInput or TabStatus.Error ? StatusTip
         : Status == TabStatus.Working && IsPossiblyStuck ? "Possibly stuck"
-        : ModelBadge;
+        : LimitWaitRowDetail ?? ModelBadge;
 
     /// <summary>What went wrong when the tab is in the Error status, shown on its row and info card (DESIGN.md §4).</summary>
     [ObservableProperty]
@@ -843,6 +846,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _conversation.ShowUnsupportedMessages = _services.Settings.Advanced.LogProtocol;
         OnPropertyChanged(nameof(ShowContextRing));
         UpdateSampler();
+        _autoContinue.SettingsChanged();
         OnPerforceSettingsChanged();
         OnProjectToolSettingsChanged();
     }
@@ -891,6 +895,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             Chips.Remove(chip);
         }
         var images = TakeAttachments();
+        _autoContinue.UserSent();
         _conversation.AddUserMessage(text, suffixText, images: images);
         _firstPrompt ??= text.Length > 0 ? text : suffixText;
         await SendRawAsync(text, images, suffixText);
@@ -1458,6 +1463,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 case StateChanged { State: SessionState.Working }:
                     _checkIns.TurnStarted();
+                    _autoContinue.TurnStarted();
                     UpdateStatus();
                     break;
                 case StateChanged:
@@ -1507,9 +1513,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     break;
                 case RateLimitUpdated rateLimit:
                     _services.Usage?.OnRateLimitEvent(rateLimit.Message);
+                    _autoContinue.RateLimit(rateLimit.Message.Info);
                     break;
                 case TurnCompleted completed:
                     _checkIns.TurnEnded();
+                    _autoContinue.TurnEnded(completed.Result);
                     State.SessionId = completed.Result.SessionId ?? State.SessionId;
                     State.Tokens.Add(completed.Result);
                     _callUsage.TurnEnded(completed.Result);
@@ -1644,6 +1652,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(HasOverrides));
         _services.SaveState();
         UpdateSampler();
+        _autoContinue.SettingsChanged();
         if (_session is null)
         {
             return;
@@ -1729,6 +1738,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     public async ValueTask CloseAsync(bool killProcesses)
     {
         _checkIns.Dispose();
+        _autoContinue.Dispose();
         foreach (var timer in _copied.Values)
         {
             timer.Dispose();

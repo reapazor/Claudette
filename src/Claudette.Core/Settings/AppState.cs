@@ -166,6 +166,12 @@ public sealed class TabState
 
     /// <summary>The changed files the user marked as reviewed (DESIGN.md §8, "Reviewed"), by full path.</summary>
     public List<Diffs.ReviewedFile> ReviewedFiles { get; set; } = [];
+
+    /// <summary>
+    /// A usage limit stopped the tab's last turn, and it waits for the limit to reset (DESIGN.md §6, "Continuing after a
+    /// limit resets"), so a restart keeps waiting.
+    /// </summary>
+    public LimitWait? LimitWait { get; set; }
 }
 
 /// <summary>Per-tab settings that replace the defaults (DESIGN.md §14, "Per-tab overrides"). Null means "use the default".</summary>
@@ -182,7 +188,14 @@ public sealed class TabOverrides
     /// <summary>The process monitor for this tab (DESIGN.md §4), or null for Settings → Processes.</summary>
     public bool? ShowProcessMonitor { get; set; }
 
-    public bool HasAny => Model is not null || Effort is not null || PermissionMode is not null || CheckIns is not null || ShowProcessMonitor is not null;
+    /// <summary>
+    /// Continue a task a usage limit stopped once the limit resets (DESIGN.md §6, "Continuing after a limit resets"), or
+    /// null for Settings → Usage.
+    /// </summary>
+    public bool? ContinueAfterLimitReset { get; set; }
+
+    public bool HasAny => Model is not null || Effort is not null || PermissionMode is not null || CheckIns is not null || ShowProcessMonitor is not null
+        || ContinueAfterLimitReset is not null;
 }
 
 public sealed class RecentFolder

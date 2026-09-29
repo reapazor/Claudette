@@ -301,7 +301,7 @@
       <Panel Classes="message">
         <Border Classes="usermessage">
           <StackPanel Spacing="4">
-            <TextBlock Classes="muted small" Text="Automatic check-in" IsVisible="{Binding IsCheckIn}" />
+            <TextBlock Classes="muted small" Text="{Binding AutomaticLabel}" IsVisible="{Binding AutomaticLabel, Converter={x:Static ObjectConverters.IsNotNull}}" />
             <!-- Attached images (DESIGN.md §5, "Attachments") -->
             <ItemsControl ItemsSource="{Binding Images}" IsVisible="{Binding HasImages}">
               <ItemsControl.ItemsPanel>
@@ -912,6 +912,20 @@
           <TextBlock Classes="warning" TextWrapping="Wrap" VerticalAlignment="Center"
                      Text="Claude hasn't answered two check-ins. It may be stuck." />
           <Button Grid.Column="1" Content="Stop" Command="{Binding StopCommand}" />
+        </Grid>
+      </Border>
+
+      <!-- A usage limit stopped the task: it continues when the limit resets (DESIGN.md §6, "Continuing after a limit resets") -->
+      <Border Classes="codeblock" IsVisible="{Binding HasLimitWait}">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+          <TextBlock TextWrapping="Wrap" VerticalAlignment="Center" Text="{Binding LimitWaitText}" />
+          <Button Grid.Column="1" Content="Don't continue" Command="{Binding DontContinueCommand}" IsVisible="{Binding WillContinueAfterLimit}"
+                  ToolTip.Tip="Leave the task stopped. Send a message to go on yourself." />
+          <Button Grid.Column="1" Content="{Binding ContinueAfterLimitText}" Command="{Binding ContinueAfterLimitCommand}" IsVisible="{Binding CanContinueAfterLimit}" />
+          <Button Grid.Column="2" Classes="flat" Padding="4" ToolTip.Tip="Close" AutomationProperties.Name="Close" VerticalAlignment="Center"
+                  Command="{Binding DismissLimitWaitCommand}" IsVisible="{Binding CanContinueAfterLimit}">
+            <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="7" Height="7" Stretch="Uniform" />
+          </Button>
         </Grid>
       </Border>
 

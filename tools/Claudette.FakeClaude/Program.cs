@@ -36,6 +36,8 @@
 //                    status and ends the turn
 //   HANG             goes quiet and ignores everything until interrupted (a stuck turn)
 //   AUTH_FAIL        answers like a signed-out Claude Code: an assistant message with error "authentication_failed"
+//   LIMIT [minutes]  a turn stopped at the session limit, which resets in that many minutes (default 2): a rejected
+//                    rate_limit_event, an assistant message with error "rate_limit" and a 429 result (DESIGN.md §6)
 //   anything else    replies "pong: <prompt>" (or, while signed out, as AUTH_FAIL does)
 // A message with images (content blocks) is read as its text plus "[images: image/png, …]", so the reply says what
 // arrived.
@@ -401,6 +403,32 @@ internal sealed class FakeSession(string version, string permissionMode)
                         ["is_api_error_message"] = true,
                     });
                     await WriteAsync(new JsonObject { ["type"] = "result", ["subtype"] = "success", ["is_error"] = true, ["result"] = text, ["terminal_reason"] = "api_error", ["session_id"] = _sessionId });
+                }
+                else if (prompt.StartsWith("LIMIT", StringComparison.Ordinal))
+                {
+                    // A turn stopped at the plan's session limit (DESIGN.md §6, "Continuing after a limit resets").
+                    var minutes = prompt.Split(' ', StringSplitOptions.RemoveEmptyEntries) is [_, var m, ..] && int.TryParse(m, out var n) ? n : 2;
+                    var resets = DateTimeOffset.UtcNow.AddMinutes(minutes);
+                    var text = $"You've hit your session limit · resets {resets.ToLocalTime():t}";
+                    await WriteAsync(new JsonObject
+                    {
+                        ["type"] = "rate_limit_event",
+                        ["rate_limit_info"] = new JsonObject
+                        {
+                            ["status"] = "rejected", ["resetsAt"] = resets.ToUnixTimeSeconds(), ["rateLimitType"] = "five_hour",
+                            ["overageStatus"] = "rejected", ["isUsingOverage"] = false,
+                        },
+                        ["session_id"] = _sessionId,
+                    });
+                    await WriteAsync(new JsonObject
+                    {
+                        ["type"] = "assistant",
+                        ["message"] = new JsonObject { ["id"] = "msg_fake", ["model"] = "<synthetic>", ["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text }) },
+                        ["parent_tool_use_id"] = null,
+                        ["error"] = "rate_limit",
+                        ["is_api_error_message"] = true,
+                    });
+                    await WriteAsync(new JsonObject { ["type"] = "result", ["subtype"] = "success", ["is_error"] = true, ["result"] = text, ["api_error_status"] = 429, ["terminal_reason"] = "api_error", ["session_id"] = _sessionId });
                 }
                 else if (prompt.StartsWith("CRASH", StringComparison.Ordinal))
                 {

@@ -248,6 +248,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         new("Usage", "Burn rate window (minutes)"),
         new("Usage", "Show model-specific weekly limits"),
         new("Usage", "Read model limits from /usage"),
+        new("Usage", "Continue tasks when a usage limit resets"),
         new("Usage", "Keep usage history"),
         new("Usage", "Clear usage history"),
         new("Quick suffixes", "Add suffix"),
@@ -1036,6 +1037,13 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         set => Set(value, v => _settings.Usage.UseUsageCommandFallback = v);
     }
 
+    /// <summary>DESIGN.md §6, "Continuing after a limit resets". Each tab can override it in Tab settings.</summary>
+    public bool ContinueAfterLimitReset
+    {
+        get => _settings.Usage.ContinueAfterLimitReset;
+        set => Set(value, v => _settings.Usage.ContinueAfterLimitReset = v);
+    }
+
     public IReadOnlyList<RetentionChoice> HistoryRetentionChoices { get; } =
         [.. Enum.GetValues<RetentionPeriod>().Select(p => new RetentionChoice(p))];
 
@@ -1086,6 +1094,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(BurnRateWindowMinutes));
         OnPropertyChanged(nameof(ShowModelMeters));
         OnPropertyChanged(nameof(UseUsageCommandFallback));
+        OnPropertyChanged(nameof(ContinueAfterLimitReset));
     }
 
     // ---- Check-ins ------------------------------------------------------------------------------------------------

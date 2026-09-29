@@ -77,7 +77,7 @@ public static class MessageTimes
         TimeZoneInfo.ConvertTime(sent, clock.LocalTimeZone).ToString("f", CultureInfo.CurrentCulture);
 }
 
-public sealed class UserMessageItem(string text, string? suffixText = null, bool isCheckIn = false) : MessageItem
+public sealed class UserMessageItem(string text, string? suffixText = null, bool isCheckIn = false, bool isAutoContinue = false) : MessageItem
 {
     public string Text { get; } = text;
 
@@ -91,6 +91,12 @@ public sealed class UserMessageItem(string text, string? suffixText = null, bool
 
     /// <summary>Sent by Claudette as an automatic check-in (DESIGN.md §5, "Check-ins on long turns").</summary>
     public bool IsCheckIn { get; } = isCheckIn;
+
+    /// <summary>Sent by Claudette once a usage limit reset (DESIGN.md §6, "Continuing after a limit resets").</summary>
+    public bool IsAutoContinue { get; } = isAutoContinue;
+
+    /// <summary>The label over a message Claudette sent by itself, or null for one the user sent.</summary>
+    public string? AutomaticLabel => IsCheckIn ? "Automatic check-in" : IsAutoContinue ? "Automatic continue after the usage limit reset" : null;
 
     /// <summary>Attached images, shown as thumbnails (DESIGN.md §5, "Attachments").</summary>
     public IReadOnlyList<MessageImage> Images { get; init; } = [];

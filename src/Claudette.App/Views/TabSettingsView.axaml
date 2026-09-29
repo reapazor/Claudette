@@ -9,7 +9,7 @@
       <TextBlock Classes="muted small" TextWrapping="Wrap"
                  Text="These replace the defaults from Settings for this tab only, and are saved with the tab." />
 
-      <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
+      <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
         <TextBlock Text="Model" VerticalAlignment="Center" />
         <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ModelChoices}" SelectedItem="{Binding SelectedModel}" />
         <TextBlock Grid.Row="1" Text="Effort" VerticalAlignment="Center" />
@@ -19,6 +19,9 @@
         <TextBlock Grid.Row="3" Text="Process monitor" VerticalAlignment="Center" />
         <ComboBox Grid.Row="3" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding MonitorChoices}" SelectedItem="{Binding SelectedMonitor}"
                   ToolTip.Tip="The processes this tab starts, with their CPU and memory, in the composer bar and the side panel" />
+        <TextBlock Grid.Row="4" Text="Auto-continue" VerticalAlignment="Center" />
+        <ComboBox Grid.Row="4" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding AutoContinueChoices}" SelectedItem="{Binding SelectedAutoContinue}"
+                  ToolTip.Tip="When a usage limit stops Claude mid-task, continue the task once the limit resets" />
       </Grid>
 
       <CheckBox Content="Use different check-in settings for this tab" IsChecked="{Binding UseCustomCheckIns}" />
