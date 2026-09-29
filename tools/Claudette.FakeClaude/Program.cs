@@ -13,7 +13,7 @@
 //   FAKE_CLAUDE_UPDATE_FAIL   "1": `update` fails with exit code 1
 //   FAKE_CLAUDE_INSTALL_TYPE  doctor's install type (default native); FAKE_CLAUDE_PACKAGE_MANAGER adds that line
 //   FAKE_CLAUDE_AUTO_UPDATES  doctor's Auto-updates value (default enabled)
-//   FAKE_CLAUDE_LOGGED_IN     "0" to report signed out (default signed in)
+//   FAKE_CLAUDE_LOGGED_IN     "0" to start signed out (default signed in); see "Sign-in" below
 //   FAKE_CLAUDE_RECORD        path: write {args, cwd, env} there at startup
 //   FAKE_CLAUDE_EXIT_AFTER_INITIALIZE  "1": exit with code 3 right after answering initialize
 //
@@ -21,7 +21,22 @@
 //   ASK_PERMISSION   asks can_use_tool for a Bash command, then reports whether it was allowed
 //   SLOW             streams text for ~10 seconds (for interrupts)
 //   CRASH            exits with code 7 and a line on stderr
-//   anything else    replies "pong: <prompt>"
+//   AUTH_FAIL        answers like a signed-out Claude Code: an assistant message with error "authentication_failed"
+//   anything else    replies "pong: <prompt>" (or, while signed out, as AUTH_FAIL does)
+//
+// Sign-in (DESIGN.md §11), with a fake browser step:
+//   fake-claude auth login [--console|--sso]   prints a sign-in URL like the real one, then finishes as FAKE_CLAUDE_LOGIN says
+//   fake-claude auth logout                    signs out
+//   claude_authenticate, claude_oauth_wait_for_completion and claude_oauth_callback in a session do the same
+//   Signed in or out is kept in fake-claude-auth.json in CLAUDE_CONFIG_DIR, so a sign-in sticks for later commands and
+//   sessions; without CLAUDE_CONFIG_DIR, or before the first sign-in or out, FAKE_CLAUDE_LOGGED_IN decides.
+//   FAKE_CLAUDE_LOGIN         how the browser step ends: "auto" (default) finishes on its own after
+//                             FAKE_CLAUDE_LOGIN_DELAY_MS (default 500); "code" waits for the code the fake page shows,
+//                             FAKE-CODE#fake-state, on stdin or through claude_oauth_callback; "fail" fails with
+//                             FAKE_CLAUDE_LOGIN_ERROR; "hang" never finishes
+//   FAKE_CLAUDE_AUTHENTICATE  "unsupported": claude_authenticate is rejected, as by a Claude Code without it
+//   FAKE_CLAUDE_LOGOUT_FAIL   "1": auth logout fails
+//   FAKE_CLAUDE_START_AUTH_ERROR  "1": a session fails to start with an authentication error on stderr
 using System.Collections;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -55,16 +70,39 @@ if (args is ["--version", ..])
 
 if (args is ["auth", "status", ..])
 {
-    var loggedIn = Environment.GetEnvironmentVariable("FAKE_CLAUDE_LOGGED_IN") != "0";
-    Console.WriteLine(new JsonObject
+    var loggedIn = FakeAuth.IsLoggedIn();
+    var status = new JsonObject
     {
         ["loggedIn"] = loggedIn,
         ["authMethod"] = loggedIn ? "claude.ai" : "none",
         ["apiProvider"] = "firstParty",
         ["email"] = loggedIn ? "fake@example.com" : null,
-        ["subscriptionType"] = loggedIn ? "max" : null,
-    }.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        ["subscriptionType"] = loggedIn ? FakeAuth.SubscriptionType() : null,
+    };
+    if (FakeAuth.ConfigDirectory is { } configDirectory)
+    {
+        status["projectsDirectory"] = Path.Combine(configDirectory, "projects");
+        status["configDirectory"] = configDirectory;
+    }
+    Console.WriteLine(status.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     return loggedIn ? 0 : 1;
+}
+
+if (args is ["auth", "login", ..])
+{
+    return await FakeAuth.LoginAsync(args[2..]);
+}
+
+if (args is ["auth", "logout", ..])
+{
+    if (Environment.GetEnvironmentVariable("FAKE_CLAUDE_LOGOUT_FAIL") == "1")
+    {
+        Console.Error.WriteLine("Logout failed: fake-claude couldn't remove the credentials");
+        return 1;
+    }
+    FakeAuth.SetLoggedIn(false, null);
+    Console.WriteLine("Successfully logged out from your Anthropic account.");
+    return 0;
 }
 
 if (args is ["doctor", ..])
@@ -120,6 +158,12 @@ if (!args.Contains("stream-json"))
     return 2;
 }
 
+if (Environment.GetEnvironmentVariable("FAKE_CLAUDE_START_AUTH_ERROR") == "1")
+{
+    Console.Error.WriteLine("Invalid API key · Please run /login");
+    return 1;
+}
+
 return await new FakeSession(version).RunAsync();
 
 internal sealed class FakeSession(string version)
@@ -172,6 +216,11 @@ internal sealed class FakeSession(string version)
     {
         var requestId = message["request_id"]!.GetValue<string>();
         var subtype = message["request"]!["subtype"]!.GetValue<string>();
+        if (subtype is "claude_authenticate" or "claude_oauth_wait_for_completion" or "claude_oauth_callback")
+        {
+            await HandleSignInAsync(requestId, subtype, message["request"]!.AsObject());
+            return;
+        }
         JsonObject? response = subtype switch
         {
             "initialize" => new JsonObject
@@ -217,7 +266,21 @@ internal sealed class FakeSession(string version)
             await WriteAsync(new JsonObject { ["type"] = "system", ["subtype"] = "init", ["session_id"] = _sessionId, ["model"] = "claude-fake-1", ["permissionMode"] = "default", ["claude_code_version"] = version, ["capabilities"] = new JsonArray("interrupt_receipt_v1") });
             try
             {
-                if (prompt.StartsWith("CRASH", StringComparison.Ordinal))
+                if (prompt.StartsWith("AUTH_FAIL", StringComparison.Ordinal) || !FakeAuth.IsLoggedIn())
+                {
+                    // As Claude Code 2.1.284 answers when it isn't signed in (the signed-out protocol fixture).
+                    const string text = "Not logged in · Please run /login";
+                    await WriteAsync(new JsonObject
+                    {
+                        ["type"] = "assistant",
+                        ["message"] = new JsonObject { ["id"] = "msg_fake", ["model"] = "<synthetic>", ["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text }) },
+                        ["parent_tool_use_id"] = null,
+                        ["error"] = "authentication_failed",
+                        ["is_api_error_message"] = true,
+                    });
+                    await WriteAsync(new JsonObject { ["type"] = "result", ["subtype"] = "success", ["is_error"] = true, ["result"] = text, ["terminal_reason"] = "api_error", ["session_id"] = _sessionId });
+                }
+                else if (prompt.StartsWith("CRASH", StringComparison.Ordinal))
                 {
                     await Console.Error.WriteLineAsync("fake-claude: crashed on purpose");
                     Environment.Exit(7);
@@ -259,6 +322,55 @@ internal sealed class FakeSession(string version)
             }
         }
     }
+
+    // ---- Sign-in through the control protocol (DESIGN.md §11) ----------------------------------------------------
+
+    private FakeSignIn? _signIn;
+
+    /// <summary>
+    /// claude_authenticate starts a fake sign-in and returns its two URLs; claude_oauth_wait_for_completion and
+    /// claude_oauth_callback answer once it has finished, with the account or the sign-in's error, as Claude Code does.
+    /// </summary>
+    private async Task HandleSignInAsync(string requestId, string subtype, JsonObject request)
+    {
+        if (subtype == "claude_authenticate")
+        {
+            if (Environment.GetEnvironmentVariable("FAKE_CLAUDE_AUTHENTICATE") == "unsupported")
+            {
+                await RespondAsync(requestId, null, $"Unsupported control request subtype: {subtype}");
+                return;
+            }
+            var method = request["loginWithClaudeAi"]?.GetValue<bool>() == false ? "console" : "claude.ai";
+            var signIn = _signIn = new FakeSignIn(method);
+            signIn.Start();
+            await RespondAsync(requestId, new JsonObject
+            {
+                ["manualUrl"] = FakeAuth.Url(method, manual: true),
+                ["automaticUrl"] = FakeAuth.Url(method, manual: false),
+            }, null);
+            return;
+        }
+        if (_signIn is not { } flow)
+        {
+            await RespondAsync(requestId, null, "No active claude_authenticate flow");
+            return;
+        }
+        if (subtype == "claude_oauth_callback" && !flow.EnterCode($"{request["authorizationCode"]?.GetValue<string>()}#{request["state"]?.GetValue<string>()}"))
+        {
+            flow.Fail("Invalid authorization code");
+        }
+        // Answered once the sign-in finishes, without holding up the other requests meanwhile.
+        _ = Task.Run(async () =>
+        {
+            var error = await flow.Done;
+            var account = new JsonObject { ["account"] = new JsonObject { ["email"] = "fake@example.com", ["subscriptionType"] = FakeAuth.SubscriptionType() } };
+            await RespondAsync(requestId, error is null ? account : null, error);
+        });
+    }
+
+    private Task RespondAsync(string requestId, JsonObject? response, string? error) => WriteAsync(error is null
+        ? new JsonObject { ["type"] = "control_response", ["response"] = new JsonObject { ["subtype"] = "success", ["request_id"] = requestId, ["response"] = response ?? [] } }
+        : new JsonObject { ["type"] = "control_response", ["response"] = new JsonObject { ["subtype"] = "error", ["request_id"] = requestId, ["error"] = error } });
 
     private Task DeltaAsync(string text) => WriteAsync(new JsonObject
     {
@@ -304,6 +416,142 @@ internal sealed class FakeSession(string version)
         finally
         {
             _writeLock.Release();
+        }
+    }
+}
+
+/// <summary>fake-claude's sign-in state: a file in CLAUDE_CONFIG_DIR, so a sign-in sticks for later commands.</summary>
+internal static class FakeAuth
+{
+    public static string? ConfigDirectory => Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR") is { Length: > 0 } directory ? directory : null;
+
+    private static string? StateFile => ConfigDirectory is { } directory ? Path.Combine(directory, "fake-claude-auth.json") : null;
+
+    public static bool IsLoggedIn() => ReadState()?["loggedIn"]?.GetValue<bool>()
+        ?? Environment.GetEnvironmentVariable("FAKE_CLAUDE_LOGGED_IN") != "0";
+
+    /// <summary>A Console account has no subscription.</summary>
+    public static string? SubscriptionType() => ReadState()?["method"]?.GetValue<string>() == "console" ? null : "max";
+
+    public static void SetLoggedIn(bool loggedIn, string? method)
+    {
+        if (StateFile is { } file)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllText(file, new JsonObject { ["loggedIn"] = loggedIn, ["method"] = method }.ToJsonString());
+        }
+    }
+
+    /// <summary>The fake sign-in page: the manual one shows the code FAKE-CODE#fake-state. Never resolves.</summary>
+    public static string Url(string method, bool manual) => manual
+        ? $"https://fake-claude.invalid/oauth/authorize?code=true&method={method}&state=fake-state"
+        : $"https://fake-claude.invalid/oauth/authorize?method={method}&state=fake-state&redirect_uri=http%3A%2F%2Flocalhost%3A54545%2Fcallback";
+
+    /// <summary><c>auth login</c>: prints what Claude Code 2.1.284 prints with no terminal, then reads codes from stdin.</summary>
+    public static async Task<int> LoginAsync(string[] options)
+    {
+        if (options.Contains("--console") && options.Contains("--claudeai"))
+        {
+            Console.Error.WriteLine("Error: --console and --claudeai cannot be used together.");
+            return 1;
+        }
+        var method = options.Contains("--console") ? "console" : options.Contains("--sso") ? "sso" : "claude.ai";
+        var signIn = new FakeSignIn(method);
+        Console.WriteLine("Opening browser to sign in…");
+        Console.WriteLine($"If the browser didn't open, visit: {Url(method, manual: true)}");
+        Console.Write("Paste code here if prompted > ");
+        Console.Out.Flush();
+        signIn.Start();
+        _ = Task.Run(async () =>
+        {
+            while (await Console.In.ReadLineAsync() is { } line)
+            {
+                if (!signIn.EnterCode(line))
+                {
+                    Console.Error.WriteLine("Invalid code. Please make sure the full code was copied.");
+                }
+            }
+        });
+        var error = await signIn.Done;
+        if (error is not null)
+        {
+            Console.Error.WriteLine($"Login failed: {error}");
+            return 1;
+        }
+        Console.WriteLine("Login successful.");
+        return 0;
+    }
+
+    private static JsonNode? ReadState()
+    {
+        if (StateFile is not { } file || !File.Exists(file))
+        {
+            return null;
+        }
+        try
+        {
+            return JsonNode.Parse(File.ReadAllText(file));
+        }
+        catch (Exception ex) when (ex is IOException or JsonException)
+        {
+            return null;
+        }
+    }
+}
+
+/// <summary>One fake sign-in: the browser step ends as FAKE_CLAUDE_LOGIN says, or with the code from the fake page.</summary>
+internal sealed class FakeSignIn(string method)
+{
+    private readonly TaskCompletionSource<string?> _done = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>Null once signed in, or the sign-in's error.</summary>
+    public Task<string?> Done => _done.Task;
+
+    public void Start()
+    {
+        var delay = TimeSpan.FromMilliseconds(int.TryParse(Environment.GetEnvironmentVariable("FAKE_CLAUDE_LOGIN_DELAY_MS"), out var ms) ? ms : 500);
+        switch (Environment.GetEnvironmentVariable("FAKE_CLAUDE_LOGIN") ?? "auto")
+        {
+            case "auto":
+                _ = Task.Delay(delay).ContinueWith(_ => Succeed(), TaskScheduler.Default);
+                break;
+            case "fail":
+                var error = Environment.GetEnvironmentVariable("FAKE_CLAUDE_LOGIN_ERROR") ?? "OAuth error: access_denied (the sign-in was cancelled in the browser)";
+                _ = Task.Delay(delay).ContinueWith(_ => Fail(error), TaskScheduler.Default);
+                break;
+            default:
+                // "code" waits for EnterCode; "hang" never finishes.
+                break;
+        }
+    }
+
+    /// <summary>A <c>code#state</c> from the fake page. False when it isn't in that form.</summary>
+    public bool EnterCode(string code)
+    {
+        var parts = code.Trim().Split('#');
+        if (parts.Length != 2 || parts[0].Length == 0 || parts[1].Length == 0)
+        {
+            return false;
+        }
+        if (parts[0] == "FAKE-CODE" && parts[1] == "fake-state")
+        {
+            Succeed();
+        }
+        else
+        {
+            Fail("Invalid authorization code");
+        }
+        return true;
+    }
+
+    public void Fail(string error) => _done.TrySetResult(error);
+
+    private void Succeed()
+    {
+        if (!_done.Task.IsCompleted)
+        {
+            FakeAuth.SetLoggedIn(true, method);
+            _done.TrySetResult(null);
         }
     }
 }
