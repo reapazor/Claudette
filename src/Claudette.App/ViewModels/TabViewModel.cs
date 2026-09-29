@@ -818,7 +818,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     // ---- Lifecycle -----------------------------------------------------------------------------------------
 
-    public bool CanRestart => Status is TabStatus.Exited or TabStatus.Error && !IsFolderMissing;
+    public bool CanRestart => Status is TabStatus.Exited or TabStatus.Error && !IsFolderMissing && !IsSessionMissing;
 
     [RelayCommand(CanExecute = nameof(CanRestart))]
     private Task RestartAsync() => EnsureStartedAsync();
@@ -826,7 +826,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>Starts the process if it isn't running: restored tabs start on first selection or message.</summary>
     public async Task EnsureStartedAsync()
     {
-        if (_session is not null || Status == TabStatus.Error && !Directory.Exists(Folder))
+        if (_session is not null || IsSessionMissing || Status == TabStatus.Error && !Directory.Exists(Folder))
         {
             return;
         }
@@ -864,6 +864,12 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             _restoredTranscript = true;
             resume = await RestoreTranscriptAsync();
+            if (IsSessionMissing)
+            {
+                ErrorMessage = "Its earlier conversation is gone";
+                Status = TabStatus.Error;
+                return;
+            }
         }
         // A library session resumes from its local working copy, which Claude Code keeps writing to (DESIGN.md §9).
         if (resume is not null && State.TranscriptPath is { } localCopy && File.Exists(localCopy))
@@ -871,6 +877,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             resume = localCopy;
         }
         var fork = State.ForkOnNextStart && resume is not null;
+        if (resume is not null && !fork && !await ClaimLeaseAsync())
+        {
+            return;
+        }
 
         var settings = _services.Settings;
         try
@@ -935,6 +945,32 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         Status = TabStatus.Error;
     }
 
+    // ---- Missing session (DESIGN.md §9, "Old sessions") -----------------------------------------------------------
+
+    /// <summary>
+    /// A restored tab's transcript is gone from this machine and the session library (for example after Claude Code's
+    /// 30-day cleanup): the tab waits for <b>Start a new session</b> rather than silently starting one.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRestart))]
+    [NotifyCanExecuteChangedFor(nameof(RestartCommand))]
+    public partial bool IsSessionMissing { get; private set; }
+
+    public const string SessionMissingText =
+        "The earlier conversation couldn't be found here or in the session library (Claude Code may have cleaned it up). You can start a new session in this folder.";
+
+    /// <summary><b>Start a new session</b> in the same folder, keeping the tab's name, overrides and suffixes.</summary>
+    [RelayCommand]
+    private async Task StartNewSessionAsync()
+    {
+        IsSessionMissing = false;
+        State.SessionId = null;
+        State.TranscriptPath = null;
+        State.ForkOnNextStart = false;
+        _services.SaveState();
+        await EnsureStartedAsync();
+    }
+
     /// <summary><b>Choose folder…</b>: where the folder is now, or another clone of the same project.</summary>
     [RelayCommand]
     private async Task ChooseFolderAsync()
@@ -979,7 +1015,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         await EnsureStartedAsync();
     }
 
-    /// <summary><b>Unpin and close</b> (or <b>Close tab</b>) for a tab whose folder is gone. It's not working, so nothing to confirm.</summary>
+    /// <summary><b>Unpin and close</b> (or <b>Close tab</b>) for a tab whose folder or session is gone. It's not working, so nothing to confirm.</summary>
     [RelayCommand]
     private void UnpinAndClose()
     {
@@ -1015,9 +1051,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         if (path is null)
         {
-            _conversation.AddNote("The earlier conversation couldn't be found here or in the session library (Claude Code may have cleaned it up). Starting a new session in this folder.", NoteKind.Warning);
-            State.SessionId = null;
-            State.TranscriptPath = null;
+            // The tab says so and waits: starting a new session is the user's choice (DESIGN.md §9, "Old sessions").
+            IsSessionMissing = true;
             return null;
         }
         try

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json;
 using Claudette.App.Services;
 using Claudette.Core.Development;
 using Claudette.Core.Git;
@@ -313,40 +314,54 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             SelectedTab = open;
             return;
         }
-        if (entry.IsLocal && !entry.IsConflictCopy)
+        if (entry.IsConflictCopy)
         {
-            var folder = entry.Folder is { } known && Directory.Exists(known)
-                ? known
-                : await _services.Platform.PickFolderAsync($"Choose the folder for \"{entry.Title}\"");
-            if (folder is not null)
+            if (entry.Record is not null)
             {
-                OpenSession(NewState(entry, folder, transcriptPath: null, fork: false));
+                await OpenFromLibraryAsync(entry, fork: true, takeOver: false);
             }
             return;
         }
-        if (entry.Record is null)
+        // This machine's copy, unless another machine carried the session on since: then the library's is newer.
+        var fromLibrary = !entry.IsLocal || entry.ContinuedElsewhere;
+        if (fromLibrary && entry.Record is null)
         {
             return;
         }
-        if (entry.IsConflictCopy)
-        {
-            await OpenFromLibraryAsync(entry, fork: true, takeOver: false);
-            return;
-        }
-        // One machine at a time (DESIGN.md §9).
-        if (_services.Library.CheckLease(entry.SessionId) is LeaseStatus.HeldByOther other)
+        Func<bool, bool, Task> resume = fromLibrary
+            ? (fork, takeOver) => OpenFromLibraryAsync(entry, fork, takeOver)
+            : (fork, takeOver) => OpenLocalAsync(entry, fork, takeOver);
+        // One machine at a time (DESIGN.md §9), whichever copy it opens from.
+        if (entry.Record is not null && _services.Library.CheckLease(entry.SessionId) is LeaseStatus.HeldByOther other)
         {
             Confirmation = new ConfirmationViewModel(
                 $"\"{entry.Title}\" is open on {other.Machine}",
                 $"It was last active there at {other.UpdatedAt.ToLocalTime():t}. Open a copy to continue separately, or take it over; the tab on {other.Machine} then becomes read-only.",
                 "Take over",
-                () => OpenFromLibraryAsync(entry, fork: false, takeOver: true),
+                () => resume(false, true),
                 () => Confirmation = null,
                 "Open a copy",
-                () => OpenFromLibraryAsync(entry, fork: true, takeOver: false));
+                () => resume(true, false));
             return;
         }
-        await OpenFromLibraryAsync(entry, fork: false, takeOver: false);
+        await resume(false, false);
+    }
+
+    /// <summary>A session whose transcript is on this machine: resumes it where Claude Code keeps it.</summary>
+    private async Task OpenLocalAsync(HistoryEntry entry, bool fork, bool takeOver)
+    {
+        var folder = entry.Folder is { } known && Directory.Exists(known)
+            ? known
+            : await _services.Platform.PickFolderAsync($"Choose the folder for \"{entry.Title}\"");
+        if (folder is null)
+        {
+            return;
+        }
+        if (takeOver)
+        {
+            _services.Library.Leases.Acquire(entry.SessionId, _services.Library.Library.GetSessionFolder(entry.SessionId));
+        }
+        OpenSession(NewState(entry, folder, transcriptPath: null, fork));
     }
 
     /// <summary>
@@ -457,7 +472,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         };
         if (record is not null)
         {
-            state.Overrides.Effort = record.Effort;
+            // The tab's own choices come back with it (DESIGN.md §9); older records only had its model and effort.
+            state.Overrides = record.Overrides is { } overrides
+                ? JsonSerializer.Deserialize<TabOverrides>(JsonSerializer.Serialize(overrides, JsonFileStore<TabOverrides>.Options), JsonFileStore<TabOverrides>.Options) ?? new TabOverrides()
+                : new TabOverrides { Model = record.Model, Effort = record.Effort };
             if (!fork)
             {
                 state.Tokens = record.Tokens;

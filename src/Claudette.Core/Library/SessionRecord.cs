@@ -1,5 +1,6 @@
 using Claudette.Core.Git;
 using Claudette.Core.Sessions;
+using Claudette.Core.Settings;
 
 namespace Claudette.Core.Library;
 
@@ -30,6 +31,12 @@ public sealed class SessionRecord
     public string? Effort { get; set; }
 
     public string? PermissionMode { get; set; }
+
+    /// <summary>
+    /// The tab's per-tab overrides (DESIGN.md §14), applied when the session is opened again. Null in records written
+    /// before they were kept; the model and effort above are used then.
+    /// </summary>
+    public TabOverrides? Overrides { get; set; }
 
     public TokenTotals Tokens { get; set; } = new();
 

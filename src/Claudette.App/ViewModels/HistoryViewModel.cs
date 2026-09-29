@@ -49,6 +49,12 @@ public sealed class HistoryEntry
 
     public bool IsLocal => LocalTranscript is not null;
 
+    /// <summary>
+    /// Another machine used it after this one's copy: the library's transcript is newer, so it opens from the library
+    /// (DESIGN.md §9, "Merging the sources").
+    /// </summary>
+    public bool ContinuedElsewhere { get; init; }
+
     public required string Details { get; init; }
 }
 
@@ -156,7 +162,8 @@ public sealed partial class HistoryViewModel : ViewModelBase
             var lastUsedElsewhere = record is not null && record.Machine != machine && record.LastUsed > summary.LastActivity;
             entries.Add(Entry(summary.SessionId, record?.Name ?? summary.Title, summary.FirstPrompt ?? record?.FirstPrompt, summary.Folder ?? record?.Folder,
                 lastUsedElsewhere ? record!.Machine : machine, lastUsedElsewhere ? record!.LastUsed : summary.LastActivity,
-                summary.MessageCount, summary.GitBranch, summary.TranscriptPath, record, libraryEntry?.TranscriptPath, isConflict: false, label: null));
+                summary.MessageCount, summary.GitBranch, summary.TranscriptPath, record, libraryEntry?.TranscriptPath, isConflict: false, label: null,
+                continuedElsewhere: lastUsedElsewhere));
         }
 
         foreach (var libraryEntry in stored)
@@ -177,7 +184,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
         return entries.OrderByDescending(e => e.LastActivity).ToList();
 
         HistoryEntry Entry(string id, string? title, string? prompt, string? folder, string lastMachine, DateTimeOffset last, int messages, string? branch,
-            string? localTranscript, SessionRecord? record, string? libraryTranscript, bool isConflict, string? label)
+            string? localTranscript, SessionRecord? record, string? libraryTranscript, bool isConflict, string? label, bool continuedElsewhere = false)
         {
             var who = lastMachine == machine ? "This machine" : lastMachine;
             var details = new List<string> { who, Ago(now - last) };
@@ -204,6 +211,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
                 MessageCount = messages,
                 Branch = branch,
                 LocalTranscript = localTranscript,
+                ContinuedElsewhere = continuedElsewhere,
                 Record = record,
                 LibraryTranscript = libraryTranscript,
                 IsConflictCopy = isConflict,
