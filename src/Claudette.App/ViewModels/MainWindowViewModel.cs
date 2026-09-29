@@ -178,6 +178,8 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         Account.OnSignedIn(status);
         services.ProjectsDirectory = status.ProjectsDirectory
             ?? (status.ConfigDirectory is { } config ? Path.Combine(config, "projects") : null);
+        services.ClaudeConfigDirectory = status.ConfigDirectory
+            ?? (status.ProjectsDirectory is { } projects ? Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(projects)) : null);
         if (_shell is null)
         {
             _shell = new ShellViewModel(services, ShowSignIn);

@@ -127,6 +127,13 @@ items:
     docs: https://code.claude.com/docs/en/sessions
     test: InstallAndAuthTests
     fallback: Use the documented default location (CLAUDE_CONFIG_DIR or ~/.claude, then projects/).
+  - id: "configDirectory"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs, src/Claudette.App/ViewModels/MainWindowViewModel.cs
+    docs: https://code.claude.com/docs/en/settings
+    test: InstallAndAuthTests
+    fallback: Use the parent of projectsDirectory, which is the config folder by default. Without either, the working line skips the user's settings file.
   - id: "claude auth logout"
     kind: command
     status: documented
@@ -583,9 +590,21 @@ items:
   - id: "settings.local.json"
     kind: file
     status: documented
-    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs
+    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs, src/Claudette.Core/Claude/SpinnerVerbs.cs
     docs: https://code.claude.com/docs/en/settings
-    test: RealCliTests
+    test: RealCliTests, SpinnerVerbsTests
+  - id: "settings.json"
+    kind: file
+    status: documented
+    usedIn: src/Claudette.Core/Claude/SpinnerVerbs.cs
+    docs: https://code.claude.com/docs/en/settings
+    test: SpinnerVerbsTests
+  - id: "spinnerVerbs"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Claude/SpinnerVerbs.cs
+    docs: https://code.claude.com/docs/en/settings-reference
+    test: SpinnerVerbsTests
   - id: "resume from a transcript path writes <session-id>.jsonl next to it"
     kind: behavior
     status: undocumented

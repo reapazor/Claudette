@@ -604,6 +604,15 @@
     <!-- Composer (DESIGN.md §5) -->
     <StackPanel Grid.Row="1" Margin="16,4,16,12" MaxWidth="948" Spacing="6">
 
+      <!-- Working line (DESIGN.md §5): a twinkling glyph, a fun verb, the turn's time and tokens -->
+      <Panel x:Name="WorkingLine" Margin="4,0,4,-2" IsVisible="{Binding IsWorkingLineShown}">
+        <StackPanel Orientation="Horizontal" Spacing="8" DataContext="{Binding Working}" x:DataType="vm:WorkingLine">
+          <TextBlock Classes="working-glyph" Text="{Binding Glyph}" Width="14" TextAlignment="Center" VerticalAlignment="Center" />
+          <TextBlock Classes="working-verb" Text="{Binding Verb}" VerticalAlignment="Center" />
+          <TextBlock Classes="muted small" Text="{Binding Detail}" VerticalAlignment="Center" />
+        </StackPanel>
+      </Panel>
+
       <!-- Possibly stuck (check-ins) -->
       <Border Classes="codeblock" IsVisible="{Binding IsPossiblyStuck}">
         <Grid ColumnDefinitions="*,Auto">

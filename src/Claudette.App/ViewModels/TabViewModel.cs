@@ -567,6 +567,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     private void OnCallUsage()
     {
         TokensShort = TokenTotals.Short(State.Tokens.Total + _callUsage.TurnTokens);
+        Working.Refresh();
         if (_contextUsageUnavailable)
         {
             ShowEstimatedContext();
@@ -933,6 +934,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 ProtocolLogPath = _services.ProtocolLogPath(FolderName),
             }));
             _session = session;
+            _ = LoadSpinnerVerbsAsync();
             _services.RememberModels(session.Initialization?.Models);
             State.SessionStartedAt ??= _services.Time.GetUtcNow();
             // The installed version is what just started; system/init confirms it with the first turn.

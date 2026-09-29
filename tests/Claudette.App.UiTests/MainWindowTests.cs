@@ -72,6 +72,29 @@ public class MainWindowTests
     }
 
     [AvaloniaFact]
+    public async Task While_Claude_works_a_twinkling_line_sits_above_the_composer()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        var settings = Path.Combine(h.WorkFolder, ".claude", "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settings)!);
+        await File.WriteAllTextAsync(settings, """{ "spinnerVerbs": { "mode": "replace", "verbs": ["Noodling"] } }""", TestContext.Current.CancellationToken);
+        await tab.LoadSpinnerVerbsAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        var line = window.GetVisualDescendants().OfType<Panel>().Single(p => p.Name == "WorkingLine");
+        Assert.False(line.IsEffectivelyVisible);
+
+        tab.ComposerText = "Fix the build";
+        await tab.SendCommand.ExecuteAsync(null);
+        await UiText.SettleUntilAsync(window, () => line.IsEffectivelyVisible, "the working line");
+
+        Assert.Equal("· Noodling… 0s · Esc to stop", string.Join(' ', line.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text)));
+
+        h.Transport.Emit("""{"type":"result","subtype":"success","is_error":false,"session_id":"s1"}""");
+        await UiText.SettleUntilAsync(window, () => !line.IsEffectivelyVisible, "the end of the turn");
+    }
+
+    [AvaloniaFact]
     public async Task A_permission_card_shows_the_command_and_a_click_on_Allow_answers_it()
     {
         await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());

@@ -184,6 +184,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Appearance", "Code font"),
         new("Appearance", "Code font size"),
         new("Appearance", "Show thinking expanded"),
+        new("Appearance", "Show fun words while Claude works"),
         new("Usage", "Warn at (% of session used)"),
         new("Usage", "Alert at (% of session used)"),
         new("Usage", "Burn rate window (minutes)"),
@@ -444,6 +445,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         get => _settings.Appearance.ExpandThinking;
         set => Set(value, v => _settings.Appearance.ExpandThinking = v);
+    }
+
+    /// <summary>The working line's twinkling glyph and fun verbs (DESIGN.md §5, "Working line").</summary>
+    public bool FunWorkingWords
+    {
+        get => _settings.Appearance.FunWorkingWords;
+        set => Set(value, v => _settings.Appearance.FunWorkingWords = v);
     }
 
     // ---- Sessions ------------------------------------------------------------------------------------------------

@@ -190,6 +190,12 @@ public sealed class AppServices : IAsyncDisposable
     /// <summary>Where Claude Code keeps transcripts, from <c>claude auth status</c> (DESIGN.md §11).</summary>
     public string? ProjectsDirectory { get; set; }
 
+    /// <summary>Claude Code's config folder, from <c>claude auth status</c>: where its user settings are.</summary>
+    public string? ClaudeConfigDirectory { get; set; }
+
+    /// <summary>For the working line's verbs (DESIGN.md §5). Tests give it a seed.</summary>
+    public Random Random { get; set; } = Random.Shared;
+
     /// <summary>The local usage history (DESIGN.md §6), once usage tracking has started.</summary>
     public UsageStore? UsageHistory { get; private set; }
 

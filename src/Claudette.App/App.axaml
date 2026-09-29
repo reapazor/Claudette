@@ -127,6 +127,16 @@
       <Setter Property="BorderThickness" Value="1" />
     </Style>
 
+    <!-- The working line above the composer (DESIGN.md §5, "Working line") -->
+    <Style Selector="TextBlock.working-glyph">
+      <Setter Property="Foreground" Value="{DynamicResource AccentStatusBrush}" />
+      <Setter Property="FontSize" Value="14" />
+    </Style>
+    <Style Selector="TextBlock.working-verb">
+      <Setter Property="Foreground" Value="{DynamicResource AccentStatusBrush}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
     <!-- Status dots and glyphs -->
     <Style Selector="TextBlock.status">
       <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />

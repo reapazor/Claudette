@@ -235,6 +235,9 @@
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,-4,0,0"
                      Text="Leave a font empty for the default. A font that isn't installed on this machine falls back to the default." />
           <CheckBox Content="Show thinking expanded" IsChecked="{Binding ExpandThinking}" />
+          <CheckBox Content="Show fun words while Claude works" IsChecked="{Binding FunWorkingWords}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="A twinkling line above the message box, such as “Noodling… 42s · 3.1k tokens”. Off, it says “Working…”. Verbs added to spinnerVerbs in Claude Code's settings show here too." />
           <Button Content="Reset to defaults" Command="{Binding ResetAppearanceCommand}" />
         </StackPanel>
 

@@ -199,6 +199,9 @@ public sealed class AppearanceSettings
     public string? CodeFont { get; set; }
 
     public bool ExpandThinking { get; set; }
+
+    /// <summary>The working line's twinkling glyph and fun verbs (DESIGN.md §5, "Working line"); off shows "Working…".</summary>
+    public bool FunWorkingWords { get; set; } = true;
 }
 
 public sealed class SessionSettings
