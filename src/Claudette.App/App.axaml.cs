@@ -24,6 +24,7 @@ public partial class App : Application
     private AppServices? _services;
     private MainWindowViewModel? _mainViewModel;
     private PlatformChrome? _chrome;
+    private WindowPlacementTracker? _placement;
     private bool _shutdownComplete;
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -33,6 +34,7 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var window = new MainWindow();
+            _placement = new WindowPlacementTracker(window);
             var launcher = new ProcessLauncher();
             var trees = TryCreateProcessTracker(launcher);
             _services = new AppServices(
@@ -52,6 +54,11 @@ public partial class App : Application
             var args = desktop.Args ?? [];
             _mainViewModel = new MainWindowViewModel(_services, LaunchArguments.Folder(args));
             var restoreNonce = UseDevelopmentBuild(window, args);
+            if (restoreNonce is null && _services.State.Window is { } saved)
+            {
+                // Where the window was last time on this machine (DESIGN.md §14).
+                _placement.Apply(saved);
+            }
             window.DataContext = _mainViewModel;
             var main = _mainViewModel;
             if (Program.Instance is { } instance)
@@ -88,8 +95,8 @@ public partial class App : Application
         var main = _mainViewModel;
         var instance = Program.Instance;
         main.UseDevelopmentBuild(build, instance is null ? null : instance.StopListening, instance is null ? null : instance.Listen);
-        main.GetWindowPlacement = () => new WindowPlacement(window.Position.X, window.Position.Y, window.Width, window.Height,
-            window.WindowState == WindowState.Maximized);
+        var placement = _placement!;
+        main.GetWindowPlacement = placement.Current;
         main.ExitRequested += window.Close;
         if (LaunchArguments.RestoreNonce(args) is not { } nonce)
         {
@@ -98,16 +105,9 @@ public partial class App : Application
         if (RestartSnapshot.Load(_services.Paths.RestartFile, nonce, _services.Time.GetUtcNow()) is { } snapshot)
         {
             main.RestoreOnStart(snapshot);
-            if (snapshot.Window is { } placement)
+            if (snapshot.Window is { } where)
             {
-                window.WindowStartupLocation = WindowStartupLocation.Manual;
-                window.Position = new PixelPoint(placement.X, placement.Y);
-                window.Width = placement.Width;
-                window.Height = placement.Height;
-                if (placement.IsMaximized)
-                {
-                    window.WindowState = WindowState.Maximized;
-                }
+                placement.Apply(where);
             }
         }
         return nonce;
@@ -172,6 +172,12 @@ public partial class App : Application
         try
         {
             _chrome?.Dispose();
+            if (_services is not null && _placement is not null)
+            {
+                // Saved with the state; after a restart handover, saving is suspended and the new build has it.
+                _services.State.Window = _placement.Current();
+                _services.SaveState();
+            }
             if (_mainViewModel is not null)
             {
                 await _mainViewModel.DisposeAsync();

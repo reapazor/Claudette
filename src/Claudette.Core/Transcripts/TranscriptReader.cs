@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Claudette.Core.Protocol;
@@ -16,7 +17,8 @@ public sealed record TranscriptMessage(ClaudeMessage Message) : TranscriptItem;
 /// <summary>A local command's output, such as the note after a model change.</summary>
 public sealed record TranscriptNote(string Text) : TranscriptItem;
 
-public sealed record Transcript(IReadOnlyList<TranscriptItem> Items, string? AiTitle, string? CustomTitle)
+/// <param name="StartedAt">The time of the transcript's first entry: when the session started.</param>
+public sealed record Transcript(IReadOnlyList<TranscriptItem> Items, string? AiTitle, string? CustomTitle, DateTimeOffset? StartedAt = null)
 {
     /// <summary>The name Claude Code would show: a custom name wins over the AI-generated title.</summary>
     public string? Title => CustomTitle ?? AiTitle;
@@ -61,6 +63,7 @@ public static class TranscriptReader
         var items = new List<TranscriptItem>();
         string? aiTitle = null;
         string? customTitle = null;
+        DateTimeOffset? startedAt = null;
         foreach (var line in lines)
         {
             if (string.IsNullOrWhiteSpace(line))
@@ -76,7 +79,15 @@ public static class TranscriptReader
             {
                 continue;
             }
-            if (entry is null || entry.GetBool("isSidechain") == true || entry.GetBool("isMeta") == true)
+            if (entry is null)
+            {
+                continue;
+            }
+            if (startedAt is null && DateTimeOffset.TryParse(entry.GetString("timestamp"), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var time))
+            {
+                startedAt = time;
+            }
+            if (entry.GetBool("isSidechain") == true || entry.GetBool("isMeta") == true)
             {
                 continue;
             }
@@ -100,7 +111,7 @@ public static class TranscriptReader
                     break;
             }
         }
-        return new Transcript(items, aiTitle, customTitle);
+        return new Transcript(items, aiTitle, customTitle, startedAt);
     }
 
     private static void ReadUser(JsonObject entry, JsonObject message, List<TranscriptItem> items)

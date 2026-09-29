@@ -232,5 +232,11 @@ public class NotificationTests
         var update = Assert.Single(h.Notifier.Shown);
         Assert.Equal("UpdateReady", update.Id);
         Assert.Equal("Claude Code 2.1.290 is ready", update.Title);
+
+        // Remembered on this machine: a restart doesn't announce the same version again.
+        using var afterRestart = new ClaudeUpdateViewModel(h.Services, h.Services.ClaudeUpdates!, () => h.Shell.RunningVersions);
+        await h.Services.ClaudeUpdates.CheckNowAsync();
+        Assert.Single(h.Notifier.Shown);
+        Assert.Equal("2.1.290", h.Services.State.NotifiedClaudeUpdate);
     }
 }

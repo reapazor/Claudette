@@ -55,6 +55,10 @@ public class LibraryAndHistoryTests
         await TabTestHarness.Eventually(() => h.Factory.Launches.Count == 1, "the resume");
         Assert.Equal("old-1", h.Factory.Launches[0].Resume);
         Assert.Contains(tab.Items, i => i is Conversation.UserMessageItem { Text: "Refactor the parser" });
+        // When the session began, not when this tab started its process.
+        var started = DateTimeOffset.Parse("2026-09-28T10:00:00Z", CultureInfo.InvariantCulture);
+        Assert.Equal(started, tab.State.SessionStartedAt);
+        Assert.Contains(tab.InfoRows, r => r.Label == "Started" && r.Value == started.ToLocalTime().ToString("g"));
     }
 
     [Fact]

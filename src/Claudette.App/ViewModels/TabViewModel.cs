@@ -242,7 +242,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 rows.Add(new InfoRow("Mode", PermissionModeName));
             }
-            if (_sessionStartedAt is { } started)
+            if (State.SessionStartedAt is { } started)
             {
                 rows.Add(new InfoRow("Started", started.ToLocalTime().ToString("g")));
             }
@@ -262,8 +262,6 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             return rows;
         }
     }
-
-    private DateTimeOffset? _sessionStartedAt;
 
     /// <summary>The Claude Code version this tab's process runs, while it runs (DESIGN.md §12).</summary>
     public Version? RunningVersion { get; private set; }
@@ -897,7 +895,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 ProtocolLogPath = _services.ProtocolLogPath(FolderName),
             });
             _session = session;
-            _sessionStartedAt = _services.Time.GetUtcNow();
+            State.SessionStartedAt ??= _services.Time.GetUtcNow();
             // The installed version is what just started; system/init confirms it with the first turn.
             SetRunningVersion(_services.InstalledClaudeVersion);
             if (fork)
@@ -965,6 +963,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     {
         IsSessionMissing = false;
         State.SessionId = null;
+        State.SessionStartedAt = null;
         State.TranscriptPath = null;
         State.ForkOnNextStart = false;
         _services.SaveState();
@@ -1058,6 +1057,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         try
         {
             var transcript = await TranscriptReader.ReadAsync(path);
+            State.SessionStartedAt ??= transcript.StartedAt;
             foreach (var item in transcript.Items)
             {
                 switch (item)
@@ -1225,6 +1225,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     break;
                 case ConversationReset:
                     _callUsage.ContextReset();
+                    State.SessionStartedAt = _services.Time.GetUtcNow();
+                    OnPropertyChanged(nameof(InfoRows));
                     TodoList.Clear();
                     State.AutoName = null;
                     _titleRequested = false;

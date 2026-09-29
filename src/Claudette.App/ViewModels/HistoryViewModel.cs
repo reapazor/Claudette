@@ -17,6 +17,9 @@ public sealed class HistoryEntry
 
     public string? FirstPrompt { get; init; }
 
+    /// <summary>Every prompt in the session, for search (DESIGN.md §9, "Search by title and prompt text").</summary>
+    public string? Prompts { get; init; }
+
     public bool HasFirstPrompt => !string.IsNullOrEmpty(FirstPrompt) && FirstPrompt != Title;
 
     /// <summary>The session's folder: on this machine for local sessions, on the other machine for library-only ones.</summary>
@@ -163,7 +166,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
             entries.Add(Entry(summary.SessionId, record?.Name ?? summary.Title, summary.FirstPrompt ?? record?.FirstPrompt, summary.Folder ?? record?.Folder,
                 lastUsedElsewhere ? record!.Machine : machine, lastUsedElsewhere ? record!.LastUsed : summary.LastActivity,
                 summary.MessageCount, summary.GitBranch, summary.TranscriptPath, record, libraryEntry?.TranscriptPath, isConflict: false, label: null,
-                continuedElsewhere: lastUsedElsewhere));
+                continuedElsewhere: lastUsedElsewhere, prompts: summary.Prompts));
         }
 
         foreach (var libraryEntry in stored)
@@ -179,12 +182,13 @@ public sealed partial class HistoryViewModel : ViewModelBase
             entries.Add(Entry(record.SessionId, libraryEntry.IsConflictCopy ? $"{title} ({libraryEntry.ConflictLabel})" : title,
                 summary?.FirstPrompt ?? record.FirstPrompt, record.Folder, record.Machine, record.LastUsed,
                 summary?.MessageCount ?? 0, record.Project?.Branch, localTranscript: null, record, libraryEntry.TranscriptPath,
-                libraryEntry.IsConflictCopy, libraryEntry.ConflictLabel));
+                libraryEntry.IsConflictCopy, libraryEntry.ConflictLabel, prompts: summary?.Prompts));
         }
         return entries.OrderByDescending(e => e.LastActivity).ToList();
 
         HistoryEntry Entry(string id, string? title, string? prompt, string? folder, string lastMachine, DateTimeOffset last, int messages, string? branch,
-            string? localTranscript, SessionRecord? record, string? libraryTranscript, bool isConflict, string? label, bool continuedElsewhere = false)
+            string? localTranscript, SessionRecord? record, string? libraryTranscript, bool isConflict, string? label, bool continuedElsewhere = false,
+            string? prompts = null)
         {
             var who = lastMachine == machine ? "This machine" : lastMachine;
             var details = new List<string> { who, Ago(now - last) };
@@ -205,6 +209,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
                 SessionId = id,
                 Title = title is { Length: > 0 } ? title : prompt ?? "Untitled session",
                 FirstPrompt = prompt,
+                Prompts = prompts,
                 Folder = folder,
                 Machine = who,
                 LastActivity = last,
@@ -229,6 +234,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
         var matches = _all.Where(e => words.All(w =>
             e.Title.Contains(w, StringComparison.OrdinalIgnoreCase)
             || (e.FirstPrompt?.Contains(w, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (e.Prompts?.Contains(w, StringComparison.OrdinalIgnoreCase) ?? false)
             || (e.Folder?.Contains(w, StringComparison.OrdinalIgnoreCase) ?? false)));
         Groups.Clear();
         foreach (var group in matches.GroupBy(e => e.Folder is null ? "" : FolderHistory.Normalize(e.Folder), StringComparer.OrdinalIgnoreCase)

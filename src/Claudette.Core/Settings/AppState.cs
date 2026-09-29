@@ -1,3 +1,4 @@
+using Claudette.Core.Development;
 using Claudette.Core.Sessions;
 
 namespace Claudette.Core.Settings;
@@ -52,6 +53,15 @@ public sealed class AppState
     /// (DESIGN.md §9, "Working on Claudette").
     /// </summary>
     public bool RestartOnNewBuild { get; set; }
+
+    /// <summary>The main window's position and size when Claudette last closed on this machine (DESIGN.md §14).</summary>
+    public WindowPlacement? Window { get; set; }
+
+    /// <summary>The Claude Code version whose update badge the user dismissed: hidden until a newer one (DESIGN.md §12).</summary>
+    public string? DismissedClaudeUpdate { get; set; }
+
+    /// <summary>The Claude Code version the last "update ready" notification was for: once per version (DESIGN.md §10).</summary>
+    public string? NotifiedClaudeUpdate { get; set; }
 }
 
 /// <summary>What's saved for one tab (DESIGN.md §9, "Restore on launch").</summary>
@@ -83,6 +93,12 @@ public sealed class TabState
     /// Code's own copy, found by <see cref="SessionId"/>.
     /// </summary>
     public string? TranscriptPath { get; set; }
+
+    /// <summary>
+    /// When the session began, for the tab info card (DESIGN.md §4): its transcript's first entry for a resumed session,
+    /// else when the tab first started it.
+    /// </summary>
+    public DateTimeOffset? SessionStartedAt { get; set; }
 
     /// <summary>Resume as a copy with a new session id ("Open a copy", DESIGN.md §9). Cleared once started.</summary>
     public bool ForkOnNextStart { get; set; }

@@ -190,6 +190,9 @@ public class ClaudeUpdateTests
 
         updates.DismissCommand.Execute(null);
         Assert.False(updates.HasBadge);
+        // Saved on this machine, so it stays dismissed after a restart.
+        Assert.Equal("2.1.290", h.Services.State.DismissedClaudeUpdate);
+        Assert.False(Updates(h).HasBadge);
 
         updater.Available = new Version(2, 1, 300);
         await h.Services.ClaudeUpdates.CheckNowAsync();

@@ -17,8 +17,6 @@ public sealed partial class ClaudeUpdateViewModel : ViewModelBase, IDisposable
     private readonly ClaudeUpdateService _updates;
     private readonly Func<IReadOnlyCollection<Version>> _runningVersions;
     private readonly StringBuilder _output = new();
-    private Version? _dismissed;
-    private Version? _notified;
 
     public ClaudeUpdateViewModel(AppServices services, ClaudeUpdateService updates, Func<IReadOnlyCollection<Version>> runningVersions)
     {
@@ -38,7 +36,12 @@ public sealed partial class ClaudeUpdateViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     public partial bool IsReadyInstalled { get; private set; }
 
-    public bool HasBadge => ReadyVersion is not null && ReadyVersion != _dismissed;
+    public bool HasBadge => ReadyVersion is { } ready && !(Dismissed >= ready);
+
+    /// <summary>Saved on this machine, so a dismissed badge and a sent notification stay that way after a restart.</summary>
+    private Version? Dismissed => Version.TryParse(_services.State.DismissedClaudeUpdate, out var version) ? version : null;
+
+    private Version? Notified => Version.TryParse(_services.State.NotifiedClaudeUpdate, out var version) ? version : null;
 
     public string BadgeText => $"Claude Code {ReadyVersion} is ready";
 
@@ -174,10 +177,11 @@ public sealed partial class ClaudeUpdateViewModel : ViewModelBase, IDisposable
             ResultText = result.Message;
         }
         OnPropertyChanged(nameof(HasBadge));
-        if (ReadyVersion is { } readyVersion && readyVersion != _notified && readyVersion != _dismissed)
+        if (ReadyVersion is { } readyVersion && !(Notified >= readyVersion) && !(Dismissed >= readyVersion))
         {
             // Once per version (DESIGN.md §10).
-            _notified = readyVersion;
+            _services.State.NotifiedClaudeUpdate = readyVersion.ToString();
+            _services.SaveState();
             _services.Notifications.Notify(NotificationKind.UpdateReady, BadgeText, IsReadyInstalled
                 ? "New tabs use it. Open tabs keep their version until you close them."
                 : $"Update it from Claudette: {Plan?.Method ?? "your package manager"} has it.");
@@ -237,7 +241,8 @@ public sealed partial class ClaudeUpdateViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void Dismiss()
     {
-        _dismissed = ReadyVersion;
+        _services.State.DismissedClaudeUpdate = ReadyVersion?.ToString();
+        _services.SaveState();
         OnPropertyChanged(nameof(HasBadge));
     }
 
