@@ -63,7 +63,17 @@ internal sealed class FakeRunningProcess(int id) : IRunningProcess
     /// <summary>Completes when the process is disposed.</summary>
     public Task Disposed => _disposed.Task;
 
-    public ValueTask WriteLineAsync(string line, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    /// <summary>Lines written to standard input.</summary>
+    public List<string> Input { get; } = [];
+
+    public ValueTask WriteLineAsync(string line, CancellationToken cancellationToken = default)
+    {
+        lock (Input)
+        {
+            Input.Add(line);
+        }
+        return ValueTask.CompletedTask;
+    }
 
     public void CloseStandardInput() => StandardInputClosed = true;
 

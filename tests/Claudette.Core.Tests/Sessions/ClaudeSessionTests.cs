@@ -236,6 +236,43 @@ public class ClaudeSessionTests
     }
 
     [Fact]
+    public async Task An_organization_that_isnt_allowed_needs_a_sign_in_too()
+    {
+        await using var session = await StartAsync();
+
+        _transport.Emit("""{"type":"assistant","message":{"model":"<synthetic>","content":[{"type":"text","text":"Your organization isn't allowed"}]},"error":"oauth_org_not_allowed"}""");
+
+        var (required, _) = await session.ReadUntilAsync<AuthenticationRequired>();
+        Assert.Equal("Your organization isn't allowed", required.Detail);
+    }
+
+    [Fact]
+    public async Task Only_a_failed_auth_status_needs_a_sign_in()
+    {
+        await using var session = await StartAsync();
+
+        // Progress from a cloud credential helper, then its failure.
+        _transport.Emit("""{"type":"auth_status","isAuthenticating":true,"output":["Refreshing AWS credentials"],"uuid":"u1","session_id":"s"}""");
+        _transport.Emit("""{"type":"auth_status","isAuthenticating":false,"output":[],"error":"awsAuthRefresh failed","uuid":"u2","session_id":"s"}""");
+
+        var (required, seen) = await session.ReadUntilAsync<AuthenticationRequired>();
+        Assert.Equal("awsAuthRefresh failed", required.Detail);
+        Assert.Single(seen.OfType<AuthenticationRequired>());
+    }
+
+    [Fact]
+    public async Task Other_assistant_errors_dont_need_a_sign_in()
+    {
+        await using var session = await StartAsync();
+
+        _transport.Emit("""{"type":"assistant","message":{"model":"<synthetic>","content":[{"type":"text","text":"Rate limited"}]},"error":"rate_limit"}""");
+        _transport.Emit("""{"type":"result","subtype":"success","is_error":true,"result":"Rate limited"}""");
+
+        var (_, seen) = await session.ReadUntilAsync<TurnCompleted>();
+        Assert.DoesNotContain(seen, e => e is AuthenticationRequired);
+    }
+
+    [Fact]
     public async Task Unsupported_control_requests_get_an_error_answer()
     {
         await using var session = await StartAsync();

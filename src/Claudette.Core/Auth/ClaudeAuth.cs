@@ -18,9 +18,17 @@ public sealed record AuthStatus(
     string? ProjectsDirectory);
 
 /// <summary>Runs Claude Code's documented <c>auth</c> commands.</summary>
-public sealed class ClaudeAuth(string claudePath, IProcessLauncher launcher, TimeProvider timeProvider)
+/// <param name="environment">Added to the clean environment of each command. Tests use it for fake-claude's options.</param>
+public sealed class ClaudeAuth(
+    string claudePath,
+    IProcessLauncher launcher,
+    TimeProvider timeProvider,
+    IReadOnlyDictionary<string, string?>? environment = null)
 {
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>How long <c>claude auth login</c> waits for the user to finish in the browser.</summary>
+    public static readonly TimeSpan LoginTimeout = TimeSpan.FromMinutes(10);
 
     public async Task<AuthStatus> GetStatusAsync(CancellationToken cancellationToken = default)
     {
@@ -31,14 +39,26 @@ public sealed class ClaudeAuth(string claudePath, IProcessLauncher launcher, Tim
             : throw new InvalidOperationException($"Couldn't read 'claude auth status' (exit {result.ExitCode}): {result.StandardError.Trim()}");
     }
 
+    /// <summary>
+    /// Runs <c>claude auth logout</c>, which signs Claude Code out everywhere on this computer (DESIGN.md §11,
+    /// "Account menu"). Throws with the command's message when it fails.
+    /// </summary>
     public async Task SignOutAsync(CancellationToken cancellationToken = default)
     {
         var result = await RunAsync(["auth", "logout"], cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0)
         {
-            throw new InvalidOperationException($"'claude auth logout' failed (exit {result.ExitCode}): {result.StandardError.Trim()}");
+            var message = ClaudeLogin.StripEscapes(result.StandardError).Trim();
+            throw new InvalidOperationException(message.Length > 0 ? message : $"'claude auth logout' ended with exit code {result.ExitCode}.");
         }
     }
+
+    /// <summary>
+    /// Starts <c>claude auth login</c> (DESIGN.md §11): the fallback when the sign-in control requests aren't
+    /// available, and the way to sign in with SSO.
+    /// </summary>
+    public ClaudeLogin StartLogin(SignInMethod method) =>
+        ClaudeLogin.Start(launcher, Spec(ClaudeLogin.Arguments(method)), LoginTimeout, timeProvider);
 
     public static bool TryParseStatus(string json, out AuthStatus status)
     {
@@ -69,10 +89,8 @@ public sealed class ClaudeAuth(string claudePath, IProcessLauncher launcher, Tim
     }
 
     private Task<ProcessResult> RunAsync(IReadOnlyList<string> args, CancellationToken cancellationToken) =>
-        ProcessRunner.RunAsync(
-            launcher,
-            new ProcessStartSpec(claudePath, args) { Environment = ClaudeEnvironment.Create() },
-            CommandTimeout,
-            timeProvider,
-            cancellationToken);
+        ProcessRunner.RunAsync(launcher, Spec(args), CommandTimeout, timeProvider, cancellationToken);
+
+    private ProcessStartSpec Spec(IReadOnlyList<string> args) =>
+        new(claudePath, args) { Environment = ClaudeEnvironment.Create(environment) };
 }

@@ -38,6 +38,10 @@ public sealed record PermissionCancelled(string RequestId) : SessionEvent;
 
 public sealed record RateLimitUpdated(RateLimitEventMessage Message) : SessionEvent;
 
+/// <summary>
+/// Claude Code needs a sign-in (DESIGN.md §11, "Detecting"): an <c>assistant</c> message with a sign-in error, or an
+/// <c>auth_status</c> message with an error.
+/// </summary>
 public sealed record AuthenticationRequired(string? Detail) : SessionEvent;
 
 /// <summary>The conversation was cleared (for example by <c>/clear</c>); drop the view and any cached title.</summary>
