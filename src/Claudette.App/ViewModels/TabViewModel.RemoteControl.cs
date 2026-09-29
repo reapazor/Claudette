@@ -26,6 +26,9 @@ public sealed partial class TabViewModel
 
     private RemoteChange _remoteWaiting;
 
+    /// <summary>The request to disconnect is out: Claude Code is closing the connection, whatever the switch says now.</summary>
+    private bool _remoteDisconnecting;
+
     /// <summary>This session's Claude Code rejected the <c>remote_control</c> request: the tab uses <c>/remote-control</c> instead.</summary>
     private bool _remoteUsesCommand;
 
@@ -99,15 +102,23 @@ public sealed partial class TabViewModel
     {
         OnPropertyChanged(nameof(CanToggleRemoteControl));
         OnPropertyChanged(nameof(RemoteControlTip));
+        OnPropertyChanged(nameof(IsRemoteLeaving));
+        OnRemoteInfoChanged();
+        ToggleRemoteControlCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>What the row's tip and the info card say about the connection changed.</summary>
+    private void OnRemoteInfoChanged()
+    {
+        OnPropertyChanged(nameof(RemoteTip));
         OnPropertyChanged(nameof(RemoteInfo));
         OnPropertyChanged(nameof(InfoRows));
-        ToggleRemoteControlCommand.NotifyCanExecuteChanged();
     }
 
     // ---- The connection -------------------------------------------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsRemoteConnected), nameof(ShowRemoteIcon), nameof(IsRemoteSettling), nameof(RemoteTip), nameof(HasRemoteUrl), nameof(RemoteInfo), nameof(InfoRows))]
+    [NotifyPropertyChangedFor(nameof(IsRemoteConnected), nameof(ShowRemoteIcon), nameof(IsRemoteSettling), nameof(IsRemoteLeaving), nameof(RemoteTip), nameof(HasRemoteUrl), nameof(RemoteInfo), nameof(InfoRows))]
     [NotifyCanExecuteChangedFor(nameof(OpenInClaudeAppCommand))]
     public partial RemoteControlStatus Remote { get; private set; } = RemoteControlStatus.NotConnected;
 
@@ -129,10 +140,18 @@ public sealed partial class TabViewModel
     /// <summary>Connecting, or reconnecting: the row's icon is dimmed.</summary>
     public bool IsRemoteSettling => Remote.State == RemoteControlState.Connecting || Remote.Detail == RemoteControlProtocol.Reconnecting;
 
+    /// <summary>
+    /// Switched off but still connected, waiting for the turn to end, or Claude Code is closing the connection. The
+    /// row's icon is dimmed further than while it settles.
+    /// </summary>
+    public bool IsRemoteLeaving => Remote.IsConnected && (!State.RemoteControl || _remoteDisconnecting);
+
     /// <summary>The row icon's tip.</summary>
     public string RemoteTip => Remote.State switch
     {
         RemoteControlState.Connecting => "Connecting to the Claude app…",
+        RemoteControlState.Connected when _remoteWaiting == RemoteChange.Disconnect => "Connected to the Claude app. Disconnects when Claude finishes this turn.",
+        RemoteControlState.Connected when IsRemoteLeaving => "Disconnecting from the Claude app…",
         RemoteControlState.Connected when Remote.Detail == RemoteControlProtocol.Reconnecting => "Connected to the Claude app, reconnecting…",
         RemoteControlState.Connected => "Connected to the Claude app",
         _ => "Not connected to the Claude app",
@@ -150,7 +169,7 @@ public sealed partial class TabViewModel
         RemoteControlState.Connected => "Connected"
             + (Remote.Url is { } url ? $": {url}" : "")
             + (Remote.Detail is { } detail ? $" ({detail})" : "")
-            + (_remoteWaiting == RemoteChange.Disconnect ? ". Disconnects when Claude finishes this turn." : ""),
+            + (_remoteWaiting == RemoteChange.Disconnect ? ". Disconnects when Claude finishes this turn." : IsRemoteLeaving ? ". Disconnecting…" : ""),
         RemoteControlState.Connecting => "Connecting…",
         RemoteControlState.Unavailable => $"Not available: {Remote.Detail}",
         _ when _remoteWaiting == RemoteChange.Connect => "Connects when Claude finishes this turn",
@@ -194,21 +213,20 @@ public sealed partial class TabViewModel
         {
             // Still connected: nothing to do once the turn ends.
             _remoteWaiting = RemoteChange.None;
-            OnPropertyChanged(nameof(RemoteInfo));
-            OnPropertyChanged(nameof(InfoRows));
+            _conversation.AddNote("Staying connected to the Claude app.");
+            OnRemoteInfoChanged();
             return;
         }
-        if (_session is not { } session || Remote.State is RemoteControlState.Connected or RemoteControlState.Connecting)
+        // Claude Code already closing the connection connects again once it has.
+        if (_session is not { } session || _remoteDisconnecting || Remote.State is RemoteControlState.Connected or RemoteControlState.Connecting)
         {
-            OnPropertyChanged(nameof(RemoteInfo));
-            OnPropertyChanged(nameof(InfoRows));
+            OnRemoteInfoChanged();
             return;
         }
         if (session.State == SessionState.Working)
         {
             _remoteWaiting = RemoteChange.Connect;
-            OnPropertyChanged(nameof(RemoteInfo));
-            OnPropertyChanged(nameof(InfoRows));
+            OnRemoteInfoChanged();
             return;
         }
         _ = _remoteUsesCommand ? SendRemoteCommandAsync(session) : ConnectRemoteAsync(session);
@@ -372,15 +390,23 @@ public sealed partial class TabViewModel
             {
                 Remote = RemoteControlStatus.NotConnected;
             }
-            OnPropertyChanged(nameof(RemoteInfo));
-            OnPropertyChanged(nameof(InfoRows));
+            OnRemoteInfoChanged();
+            return;
+        }
+        if (_remoteDisconnecting)
+        {
+            // Turned on and off again while Claude Code closes the connection: the request that's out is enough.
+            OnRemoteInfoChanged();
             return;
         }
         if (session.State == SessionState.Working)
         {
-            _remoteWaiting = RemoteChange.Disconnect;
-            OnPropertyChanged(nameof(RemoteInfo));
-            OnPropertyChanged(nameof(InfoRows));
+            if (_remoteWaiting != RemoteChange.Disconnect)
+            {
+                _remoteWaiting = RemoteChange.Disconnect;
+                _conversation.AddNote("Disconnecting from the Claude app when Claude finishes this turn.");
+            }
+            OnRemoteInfoChanged();
             return;
         }
         await DisconnectRemoteAsync(session);
@@ -388,36 +414,52 @@ public sealed partial class TabViewModel
 
     /// <summary>
     /// <c>remote_control</c> with <c>enabled: false</c>: Claude Code disconnects and the session carries on here. If
-    /// it can't say it did, Claude Code is restarted on the same session instead, which doesn't connect again.
+    /// it can't say it did, Claude Code is restarted on the same session instead, which doesn't connect again. A tab
+    /// switched back on in the meantime connects again once it's disconnected.
     /// </summary>
     private async Task DisconnectRemoteAsync(ClaudeSession session)
     {
         _remoteWaiting = RemoteChange.None;
+        _remoteDisconnecting = true;
         try
         {
             await session.DisableRemoteControlAsync();
         }
         catch (ClaudeSessionExitedException)
         {
+            // The session ended; its exit resets the connection.
             return;
         }
         catch (Exception ex) when (ex is ControlRequestException or TimeoutException or IOException or ObjectDisposedException or InvalidOperationException or OperationCanceledException)
         {
             _services.Dispatcher.Post(() =>
             {
-                if (ReferenceEquals(session, _session) && !State.RemoteControl)
+                if (ReferenceEquals(session, _session))
                 {
-                    _ = RestartToDisconnectAsync();
+                    // Still connected, as far as Claudette knows.
+                    _remoteDisconnecting = false;
+                    OnPropertyChanged(nameof(IsRemoteLeaving));
+                    OnRemoteInfoChanged();
+                    if (!State.RemoteControl)
+                    {
+                        _ = RestartToDisconnectAsync();
+                    }
                 }
             });
             return;
         }
         _services.Dispatcher.Post(() =>
         {
-            if (ReferenceEquals(session, _session) && !State.RemoteControl)
+            if (ReferenceEquals(session, _session))
             {
+                _remoteDisconnecting = false;
                 Remote = RemoteControlStatus.NotConnected;
                 _conversation.AddNote("Disconnected from the Claude app.");
+                if (State.RemoteControl)
+                {
+                    // Switched back on while Claude Code closed the connection.
+                    RequestRemoteConnect();
+                }
             }
         });
     }
@@ -441,6 +483,8 @@ public sealed partial class TabViewModel
                 _ = _remoteUsesCommand ? SendRemoteCommandAsync(session) : ConnectRemoteAsync(session);
                 break;
             case RemoteChange.Disconnect when !State.RemoteControl:
+                // No longer waiting: the tip and the info card say it's disconnecting.
+                OnRemoteInfoChanged();
                 _ = DisconnectRemoteAsync(session);
                 break;
         }
@@ -485,6 +529,7 @@ public sealed partial class TabViewModel
     private void ResetRemote()
     {
         _remoteWaiting = RemoteChange.None;
+        _remoteDisconnecting = false;
         _remoteCommandPending = false;
         _remoteUsesCommand = false;
         Remote = RemoteControlStatus.NotConnected;

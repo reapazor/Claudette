@@ -51,7 +51,18 @@ public class RemoteControlUiTests
         UiText.Settle(window);
         Assert.Equal([SessionUrl], h.Platform.OpenedUrls);
 
+        // Claude Code answers once it has closed the connection; until then the row's icon is fainter.
+        h.Transport.Answers["remote_control"] = _ => null;
         ClickMenuItem(window, item);
+        await UiText.SettleUntilAsync(window, () => tab.IsRemoteLeaving, "switching off");
+
+        Assert.False(item.IsChecked);
+        Assert.True(icon.IsEffectivelyVisible);
+        Assert.Equal(0.2, icon.Opacity);
+        Assert.Equal("Disconnecting from the Claude app…", ToolTip.GetTip(icon));
+
+        var id = h.Transport.Sent.Last(m => m["request"]?["subtype"]?.GetValue<string>() == "remote_control")["request_id"]!.GetValue<string>();
+        h.Transport.Emit(Core.Protocol.OutgoingMessages.ControlSuccess(id, null));
         await UiText.SettleUntilAsync(window, () => !tab.Remote.IsConnected, "the disconnection");
 
         Assert.False(tab.RemoteControl);

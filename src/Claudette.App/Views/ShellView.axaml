@@ -60,6 +60,10 @@
     <Style Selector="Border#RemoteIcon.settling">
       <Setter Property="Opacity" Value="0.45" />
     </Style>
+    <!-- Switched off and waiting to disconnect: fainter still. After .settling, so it wins when both apply. -->
+    <Style Selector="Border#RemoteIcon.leaving">
+      <Setter Property="Opacity" Value="0.2" />
+    </Style>
     <!-- How many tasks a tab still has running once its turn is over (DESIGN.md §4, "Sidebar"): no taller than the
          name beside it, so the row keeps its height. -->
     <Style Selector="Border.taskbadge">
@@ -179,9 +183,11 @@
                                             ToolTip.Tip="Synced to the session library" AutomationProperties.Name="Synced to the session library">
                                       <Path Data="{StaticResource IconSync}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="9" Height="9" Stretch="Uniform" />
                                     </Border>
-                                    <!-- Connected to the Claude app (DESIGN.md §18, "Remote Control"); dimmed while it connects or reconnects -->
+                                    <!-- Connected to the Claude app (DESIGN.md §18, "Remote Control"); dimmed while it connects or reconnects,
+                                         and more once it's switched off and waiting to disconnect -->
                                     <Border x:Name="RemoteIcon" DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding ShowRemoteIcon}" VerticalAlignment="Center" Margin="0,0,5,0"
-                                            Classes.settling="{Binding IsRemoteSettling}" ToolTip.Tip="{Binding RemoteTip}" AutomationProperties.Name="{Binding RemoteTip}">
+                                            Classes.settling="{Binding IsRemoteSettling}" Classes.leaving="{Binding IsRemoteLeaving}"
+                                            ToolTip.Tip="{Binding RemoteTip}" AutomationProperties.Name="{Binding RemoteTip}">
                                       <Path Data="{StaticResource IconPhone}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="7" Height="10" Stretch="Uniform" />
                                     </Border>
                                     <TextBlock DockPanel.Dock="Left" Classes="status busy small" Text="⚙" IsVisible="{Binding HasBusyProcesses}" VerticalAlignment="Center" Margin="0,0,5,0"

@@ -219,6 +219,85 @@ public class RemoteControlTests
     }
 
     [Fact]
+    public async Task Switched_off_while_Claude_works_it_says_when_it_disconnects_and_dims_the_icon_until_it_has()
+    {
+        await using var h = new TabTestHarness(s => s.ClaudeCode.ConnectNewTabsToClaudeApp = true);
+        AnswerConnected(h);
+        var tab = await h.OpenTabAsync();
+        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
+        tab.ComposerText = "work";
+        await tab.SendCommand.ExecuteAsync(null);
+        // Claude Code answers once it has closed the connection, which takes a moment.
+        h.Transport.Answers["remote_control"] = _ => null;
+
+        await tab.SetRemoteControlAsync(false);
+
+        Assert.Equal("Disconnecting from the Claude app when Claude finishes this turn.", InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last().Text));
+        Assert.True(tab.ShowRemoteIcon);
+        Assert.True(tab.IsRemoteLeaving);
+        Assert.Equal("Connected to the Claude app. Disconnects when Claude finishes this turn.", tab.RemoteTip);
+
+        // Turned back on before the turn ends: nothing to do, and the conversation says so.
+        await tab.SetRemoteControlAsync(true);
+
+        Assert.Equal("Staying connected to the Claude app.", InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last().Text));
+        Assert.False(tab.IsRemoteLeaving);
+        Assert.Equal("Connected to the Claude app", tab.RemoteTip);
+
+        await tab.SetRemoteControlAsync(false);
+        h.Transport.EmitTurn();
+        await TabTestHarness.Eventually(() => RemoteRequests(h).Count == 2, "the request to disconnect");
+
+        Assert.True(tab.IsRemoteLeaving);
+        Assert.Equal("Disconnecting from the Claude app…", tab.RemoteTip);
+        Assert.Contains(tab.InfoRows, r => r.Label == "Claude app" && r.Value.EndsWith(". Disconnecting…", StringComparison.Ordinal));
+
+        var id = h.Transport.Sent.Last(IsRemoteRequest)["request_id"]!.GetValue<string>();
+        h.Transport.Emit(Core.Protocol.OutgoingMessages.ControlSuccess(id, null));
+        await TabTestHarness.Eventually(() => !tab.Remote.IsConnected, "the disconnection");
+
+        Assert.False(tab.ShowRemoteIcon);
+        Assert.False(tab.IsRemoteLeaving);
+        Assert.Equal("Disconnected from the Claude app.", InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last().Text));
+    }
+
+    [Fact]
+    public async Task Switched_back_on_while_Claude_Code_disconnects_it_connects_again_once_it_has()
+    {
+        await using var h = new TabTestHarness(s => s.ClaudeCode.ConnectNewTabsToClaudeApp = true);
+        AnswerConnected(h);
+        var tab = await h.OpenTabAsync();
+        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
+        h.Transport.Answers["remote_control"] = _ => null;
+
+        var off = tab.SetRemoteControlAsync(false);
+        await TabTestHarness.Eventually(() => RemoteRequests(h).Count == 2, "the request to disconnect");
+        await tab.SetRemoteControlAsync(true);
+
+        // Claude Code is closing the connection all the same.
+        Assert.True(tab.IsRemoteLeaving);
+        Assert.Equal("Disconnecting from the Claude app…", tab.RemoteTip);
+
+        // Off and on again while it does: the request that's out is enough.
+        await tab.SetRemoteControlAsync(false);
+        await tab.SetRemoteControlAsync(true);
+        Assert.Equal(2, RemoteRequests(h).Count);
+
+        AnswerConnected(h);
+        var id = h.Transport.Sent.Last(IsRemoteRequest)["request_id"]!.GetValue<string>();
+        h.Transport.Emit(Core.Protocol.OutgoingMessages.ControlSuccess(id, null));
+        await off;
+        await TabTestHarness.Eventually(() => RemoteRequests(h).Count == 3 && tab.Remote.IsConnected, "the connection again");
+
+        Assert.Equal([true, false, true], RemoteRequests(h).Select(r => r["enabled"]!.GetValue<bool>()));
+        Assert.Equal(["Disconnected from the Claude app.", "Connected to the Claude app."],
+            InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Select(n => n.Text).TakeLast(2).ToList()));
+        Assert.False(tab.IsRemoteLeaving);
+        Assert.Equal("Connected to the Claude app", tab.RemoteTip);
+        Assert.True(h.SleepBlocker.IsBlocking);
+    }
+
+    [Fact]
     public async Task When_Claude_Code_cant_disconnect_it_restarts_on_the_same_session_without_connecting()
     {
         await using var h = new TabTestHarness(s => s.ClaudeCode.ConnectNewTabsToClaudeApp = true);
