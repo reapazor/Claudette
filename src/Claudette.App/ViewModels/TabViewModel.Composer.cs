@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Claudette.Core.Composer;
+using Claudette.Core.Development;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -132,7 +133,8 @@ public sealed partial class TabViewModel
     /// <summary>
     /// A paste into the composer: copied files are attached, then text is left to paste as usual, then an image (such
     /// as a screenshot) is attached. Text wins over an image because apps often put both, as an image of the same
-    /// text. Returns what to insert (mentions, or nothing), or null to let the text box paste the text itself.
+    /// text; text that's only white space doesn't, since it says nothing the image doesn't. Returns what to insert
+    /// (mentions, or nothing), or null to let the text box paste the text itself.
     /// </summary>
     public async Task<string?> PasteAttachmentsAsync()
     {
@@ -141,7 +143,7 @@ public sealed partial class TabViewModel
         {
             return await AddFilesAsync(files) ?? "";
         }
-        if (await platform.ClipboardHasTextAsync())
+        if (!string.IsNullOrWhiteSpace(await platform.GetClipboardTextAsync()))
         {
             return null;
         }
@@ -175,6 +177,20 @@ public sealed partial class TabViewModel
         var images = Attachments.Select(a => a.Image).ToArray();
         Attachments.Clear();
         AttachmentError = null;
+        SendCommand.NotifyCanExecuteChanged();
         return images;
+    }
+
+    /// <summary>The attached images, for the draft a restart into a new build keeps (DESIGN.md §9, "Working on Claudette").</summary>
+    private List<DraftImage> DraftImages() => [.. Attachments.Select(a => new DraftImage(a.Name, a.Data))];
+
+    /// <summary>Puts back a draft's images, checked again as when they were attached.</summary>
+    private void RestoreDraftImages(IReadOnlyList<DraftImage>? images)
+    {
+        foreach (var image in images ?? [])
+        {
+            AddImage(image.Data, image.Name);
+        }
+        AttachmentError = null;
     }
 }

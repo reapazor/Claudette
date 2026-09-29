@@ -733,10 +733,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     // ---- Restarting into a new build (DESIGN.md §9, "Working on Claudette") -------------------------------
 
-    /// <summary>The message typed but not sent, with its one-off quick suffixes, or null when there's none.</summary>
-    public TabDraft? Draft => ComposerText.Length == 0 && Chips.All(c => c.IsKept)
+    /// <summary>The message typed but not sent, with its one-off quick suffixes and attached images, or null when there's none.</summary>
+    public TabDraft? Draft => ComposerText.Length == 0 && Chips.All(c => c.IsKept) && Attachments.Count == 0
         ? null
-        : new TabDraft(ComposerText, Chips.Where(c => !c.IsKept).Select(c => c.Suffix.Id).ToList());
+        : new TabDraft(ComposerText, Chips.Where(c => !c.IsKept).Select(c => c.Suffix.Id).ToList(), Attachments.Count > 0 ? DraftImages() : null);
 
     /// <summary>Puts back a draft from the build that restarted into this one.</summary>
     public void RestoreDraft(TabDraft draft)
@@ -746,6 +746,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             AddSuffix(_services.Settings.QuickSuffixes.FirstOrDefault(s => s.Id == id));
         }
+        RestoreDraftImages(draft.Images);
     }
 
     /// <summary>Whether this tab's Claude Code is running.</summary>

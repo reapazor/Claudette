@@ -533,7 +533,7 @@ items:
     status: undocumented
     usedIn: src/Claudette.Core/Composer/Attachment.cs
     test: RealCliTests
-    fallback: 2.1.284 caps the long edge at 2000 px and re-encodes large images as JPEG, so Claudette sends images as they are, up to 20 MB. If that stops, scale images down in Claudette before sending (at most 2000 px on the long edge and 5 MB base64, the Bedrock and Vertex limit).
+    fallback: 2.1.284 caps the long edge at 2000 px and re-encodes large images as JPEG (a 12 MB or 20 MB PNG reaches the API under 5 MB base64), so Claudette sends images as they are, up to 20 MB. If that stops, scale images down in Claudette before sending (at most 2000 px on the long edge and 5 MB base64, the Bedrock and Vertex limit).
   - id: "@path mentions in prompts"
     kind: behavior
     status: documented

@@ -252,7 +252,7 @@ internal sealed class NoPlatform : IPlatformServices
 
     public Task<IReadOnlyList<string>> GetClipboardFilesAsync() => Task.FromResult<IReadOnlyList<string>>(ClipboardFiles.ToArray());
 
-    public Task<bool> ClipboardHasTextAsync() => Task.FromResult(!string.IsNullOrEmpty(Clipboard));
+    public Task<string?> GetClipboardTextAsync() => Task.FromResult(Clipboard);
 
     public Task<byte[]?> GetClipboardImageAsync() => Task.FromResult(ClipboardImage);
 
