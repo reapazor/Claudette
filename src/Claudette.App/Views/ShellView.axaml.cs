@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -13,6 +14,8 @@ namespace Claudette.App.Views;
 public partial class ShellView : UserControl
 {
     private TopLevel? _topLevel;
+    private ShellViewModel? _shell;
+    private ClaudeUpdateViewModel? _updates;
 
     private const double DragThreshold = 6;
 
@@ -21,17 +24,66 @@ public partial class ShellView : UserControl
     private Point _dragStart;
     private bool _dragging;
 
+    /// <summary>Where a drag of the sidebar's edge started, and the width then; null when not resizing.</summary>
+    private double? _resizeFrom;
+    private double _resizeStartWidth;
+
     public ShellView()
     {
         InitializeComponent();
         // Handled events too: the tab and label buttons handle presses themselves.
-        GroupStrip.AddHandler(PointerPressedEvent, OnStripPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
-        GroupStrip.AddHandler(PointerMovedEvent, OnStripPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
-        GroupStrip.AddHandler(PointerReleasedEvent, OnStripPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
-        // A folder dragged from Finder or Explorer onto the tab strip opens a tab there (DESIGN.md §4, "Other ways in").
-        DragDrop.SetAllowDrop(TabStrip, true);
-        TabStrip.AddHandler(DragDrop.DragOverEvent, OnFolderDragOver);
-        TabStrip.AddHandler(DragDrop.DropEvent, OnFolderDrop);
+        GroupList.AddHandler(PointerPressedEvent, OnListPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        GroupList.AddHandler(PointerMovedEvent, OnListPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
+        GroupList.AddHandler(PointerReleasedEvent, OnListPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+        // A folder dragged from Finder or Explorer onto the sidebar opens a tab there (DESIGN.md §4, "Other ways in").
+        DragDrop.SetAllowDrop(Sidebar, true);
+        Sidebar.AddHandler(DragDrop.DragOverEvent, OnFolderDragOver);
+        Sidebar.AddHandler(DragDrop.DropEvent, OnFolderDrop);
+        SidebarEdge.PointerPressed += OnEdgePressed;
+        SidebarEdge.PointerMoved += OnEdgeMoved;
+        SidebarEdge.PointerReleased += (_, e) => EndResize(e.Pointer);
+        SidebarEdge.PointerCaptureLost += (_, _) => EndResize(null);
+        SidebarEdge.DoubleTapped += (_, _) =>
+        {
+            ViewModel?.ResizeSidebar(ShellViewModel.DefaultSidebarWidth);
+            ViewModel?.SaveSidebarWidth();
+        };
+        // A narrow window shows the sidebar's rail (DESIGN.md §4, "Sidebar").
+        SizeChanged += (_, e) => ViewModel?.SetAvailableWidth(e.NewSize.Width);
+    }
+
+    // ---- Resizing the sidebar -------------------------------------------------------------------------------------
+
+    private void OnEdgePressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (ViewModel is not { } shell || !e.GetCurrentPoint(SidebarEdge).Properties.IsLeftButtonPressed || e.ClickCount > 1)
+        {
+            return;
+        }
+        // Measured against the whole view, which doesn't move as the edge does.
+        _resizeFrom = e.GetPosition(this).X;
+        _resizeStartWidth = shell.SidebarWidth;
+        e.Pointer.Capture(SidebarEdge);
+        e.Handled = true;
+    }
+
+    private void OnEdgeMoved(object? sender, PointerEventArgs e)
+    {
+        if (_resizeFrom is { } from)
+        {
+            ViewModel?.ResizeSidebar(_resizeStartWidth + e.GetPosition(this).X - from);
+        }
+    }
+
+    private void EndResize(IPointer? pointer)
+    {
+        if (_resizeFrom is null)
+        {
+            return;
+        }
+        _resizeFrom = null;
+        pointer?.Capture(null);
+        ViewModel?.SaveSidebarWidth();
     }
 
     private void OnFolderDragOver(object? sender, DragEventArgs e) =>
@@ -55,11 +107,11 @@ public partial class ShellView : UserControl
 
     // ---- Dragging tabs and groups (DESIGN.md §4) ------------------------------------------------------------------
 
-    private void OnStripPointerPressed(object? sender, PointerPressedEventArgs e)
+    private void OnListPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         _dragItem = null;
         _dragging = false;
-        if (!e.GetCurrentPoint(GroupStrip).Properties.IsLeftButtonPressed)
+        if (!e.GetCurrentPoint(GroupList).Properties.IsLeftButtonPressed)
         {
             return;
         }
@@ -71,20 +123,20 @@ public partial class ShellView : UserControl
             { DataContext: TabGroupViewModel group } when button.Classes.Contains("grouplabel") => group,
             _ => null,
         };
-        _dragStart = e.GetPosition(GroupStrip);
+        _dragStart = e.GetPosition(GroupList);
     }
 
-    /// <summary>The dragged item moves as soon as the pointer passes the middle of a neighbor, so the strip shows the result live.</summary>
-    private void OnStripPointerMoved(object? sender, PointerEventArgs e)
+    /// <summary>The dragged item moves as soon as the pointer passes the middle of a neighbor, so the list shows the result live.</summary>
+    private void OnListPointerMoved(object? sender, PointerEventArgs e)
     {
         if (_dragItem is null || ViewModel is not { } shell)
         {
             return;
         }
-        var x = e.GetPosition(GroupStrip).X;
+        var y = e.GetPosition(GroupList).Y;
         if (!_dragging)
         {
-            if (Math.Abs(x - _dragStart.X) < DragThreshold)
+            if (Math.Abs(y - _dragStart.Y) < DragThreshold)
             {
                 return;
             }
@@ -98,9 +150,9 @@ public partial class ShellView : UserControl
         {
             case TabViewModel tab when shell.Groups.FirstOrDefault(g => g.Tabs.Contains(tab)) is { } group:
                 {
-                    var buttons = GroupStrip.GetVisualDescendants().OfType<Button>()
+                    var buttons = GroupList.GetVisualDescendants().OfType<Button>()
                         .Where(b => b.Classes.Contains("tab") && b.DataContext is TabViewModel t && group.Tabs.Contains(t));
-                    if (TargetIndex(buttons, x, b => group.Tabs.IndexOf((TabViewModel)b.DataContext!), group.Tabs.IndexOf(tab)) is { } index)
+                    if (TargetIndex(buttons, y, b => group.Tabs.IndexOf((TabViewModel)b.DataContext!), group.Tabs.IndexOf(tab)) is { } index)
                     {
                         shell.MoveTabTo(tab, index);
                     }
@@ -108,8 +160,8 @@ public partial class ShellView : UserControl
                 }
             case TabGroupViewModel group:
                 {
-                    var containers = Enumerable.Range(0, shell.Groups.Count).Select(i => GroupStrip.ContainerFromIndex(i)).OfType<Control>();
-                    if (TargetIndex(containers, x, c => shell.Groups.IndexOf((TabGroupViewModel)c.DataContext!), shell.Groups.IndexOf(group)) is { } index)
+                    var containers = Enumerable.Range(0, shell.Groups.Count).Select(i => GroupList.ContainerFromIndex(i)).OfType<Control>();
+                    if (TargetIndex(containers, y, c => shell.Groups.IndexOf((TabGroupViewModel)c.DataContext!), shell.Groups.IndexOf(group)) is { } index)
                     {
                         shell.MoveGroupTo(group, index);
                     }
@@ -121,17 +173,17 @@ public partial class ShellView : UserControl
     /// <summary>
     /// The index of the item the pointer has moved past the middle of, in the direction of travel, or null to stay put.
     /// </summary>
-    private int? TargetIndex(IEnumerable<Control> items, double x, Func<Control, int> indexOf, int from)
+    private int? TargetIndex(IEnumerable<Control> items, double y, Func<Control, int> indexOf, int from)
     {
         foreach (var item in items)
         {
-            if (item.TranslatePoint(default, GroupStrip) is not { } origin)
+            if (item.TranslatePoint(default, GroupList) is not { } origin)
             {
                 continue;
             }
             var index = indexOf(item);
-            var middle = origin.X + item.Bounds.Width / 2;
-            if (index > from && x > middle && x < origin.X + item.Bounds.Width || index < from && x < middle && x > origin.X)
+            var middle = origin.Y + item.Bounds.Height / 2;
+            if (index > from && y > middle && y < origin.Y + item.Bounds.Height || index < from && y < middle && y > origin.Y)
             {
                 return index;
             }
@@ -139,7 +191,7 @@ public partial class ShellView : UserControl
         return null;
     }
 
-    private void OnStripPointerReleased(object? sender, PointerReleasedEventArgs e)
+    private void OnListPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         if (_dragging)
         {
@@ -156,9 +208,50 @@ public partial class ShellView : UserControl
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (ViewModel is { } shell)
+        if (_shell is not null)
         {
-            shell.ShowSettingsWindow = ShowSettingsAsync;
+            _shell.PropertyChanged -= OnShellChanged;
+        }
+        _shell = ViewModel;
+        if (_shell is not null)
+        {
+            _shell.ShowSettingsWindow = ShowSettingsAsync;
+            _shell.PropertyChanged += OnShellChanged;
+            if (Bounds.Width > 0)
+            {
+                _shell.SetAvailableWidth(Bounds.Width);
+            }
+        }
+        WatchUpdates();
+    }
+
+    private void OnShellChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ShellViewModel.Updates))
+        {
+            WatchUpdates();
+        }
+    }
+
+    /// <summary>A clicked "update ready" notification opens the badge's dialog (DESIGN.md §12).</summary>
+    private void WatchUpdates()
+    {
+        if (_updates is not null)
+        {
+            _updates.OpenRequested -= OpenUpdateDialog;
+        }
+        _updates = _shell?.Updates;
+        if (_updates is not null)
+        {
+            _updates.OpenRequested += OpenUpdateDialog;
+        }
+    }
+
+    private void OpenUpdateDialog()
+    {
+        if (UpdateBadge.IsVisible)
+        {
+            UpdateBadge.Flyout?.ShowAt(UpdateBadge);
         }
     }
 
@@ -219,6 +312,10 @@ public partial class ShellView : UserControl
         else if (Is(KeyboardShortcuts.Settings))
         {
             shell.OpenSettingsCommand.Execute(null);
+        }
+        else if (Is(KeyboardShortcuts.ToggleSidebar))
+        {
+            shell.ToggleSidebarCommand.Execute(null);
         }
         else if (Is(KeyboardShortcuts.GoToTab) && Shortcuts.Digit(e.Key) is { } number)
         {

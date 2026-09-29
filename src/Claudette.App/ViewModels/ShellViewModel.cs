@@ -9,8 +9,8 @@ using CommunityToolkit.Mvvm.Input;
 namespace Claudette.App.ViewModels;
 
 /// <summary>
-/// The main UI once Claude Code is ready: the tab strip grouped by folder, the selected tab, the new-tab picker and
-/// dialogs (DESIGN.md §3, §4).
+/// The main UI once Claude Code is ready: the sidebar of tabs grouped by folder, the selected tab, the new-tab picker
+/// and dialogs (DESIGN.md §3, §4).
 /// </summary>
 public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 {
@@ -21,6 +21,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     {
         _services = services;
         _onAuthenticationRequired = onAuthenticationRequired;
+        IsSidebarCollapsed = services.State.SidebarCollapsed;
+        SidebarWidth = Math.Clamp(services.State.SidebarWidth ?? DefaultSidebarWidth, MinSidebarWidth, MaxSidebarWidth);
         _services.Notifications.SelectedTabId = () => SelectedTab?.Id;
         _services.SettingsChanged += (_, _) =>
         {
@@ -77,6 +79,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     public IReadOnlyList<QuickSuffix> QuickSuffixes => _services.Settings.QuickSuffixes;
 
     public ShortcutTips Tips => _services.Tips;
+
+    /// <summary>The Claude Code update badge at the foot of the sidebar (DESIGN.md §12); null until update checks start.</summary>
+    [ObservableProperty]
+    public partial ClaudeUpdateViewModel? Updates { get; set; }
 
     /// <summary>The Claude Code version each running tab uses (DESIGN.md §12).</summary>
     public IReadOnlyCollection<Version> RunningVersions => AllTabs.Select(t => t.RunningVersion).OfType<Version>().ToArray();
@@ -577,10 +583,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     }
 
     [RelayCommand]
-    private void MoveTabLeft(TabViewModel? tab) => MoveTab(tab, -1);
+    private void MoveTabUp(TabViewModel? tab) => MoveTab(tab, -1);
 
     [RelayCommand]
-    private void MoveTabRight(TabViewModel? tab) => MoveTab(tab, 1);
+    private void MoveTabDown(TabViewModel? tab) => MoveTab(tab, 1);
 
     /// <summary>Moves a tab within its group, keeping pinned tabs first.</summary>
     private void MoveTab(TabViewModel? tab, int offset)
@@ -651,6 +657,67 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             }
         }
         SaveTabs();
+    }
+
+    // ---- Sidebar (DESIGN.md §4, "Sidebar") ------------------------------------------------------------------
+
+    public const double DefaultSidebarWidth = 248;
+    public const double MinSidebarWidth = 180;
+    public const double MaxSidebarWidth = 420;
+
+    /// <summary>The collapsed sidebar: a rail of status icons.</summary>
+    public const double RailWidth = 52;
+
+    /// <summary>Below this width the sidebar collapses to its rail by itself, leaving the user's own choice alone.</summary>
+    public const double NarrowWidth = 900;
+
+    private bool _isNarrow;
+
+    /// <summary>Whether the sidebar shows only its rail.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSidebarExpanded), nameof(SidebarDisplayWidth))]
+    public partial bool IsSidebarCollapsed { get; set; }
+
+    public bool IsSidebarExpanded => !IsSidebarCollapsed;
+
+    /// <summary>The expanded sidebar's width, as the user dragged it.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SidebarDisplayWidth))]
+    public partial double SidebarWidth { get; set; }
+
+    public double SidebarDisplayWidth => IsSidebarCollapsed ? RailWidth : SidebarWidth;
+
+    [RelayCommand]
+    private void ToggleSidebar()
+    {
+        IsSidebarCollapsed = !IsSidebarCollapsed;
+        // In a narrow window, expanding is only for now: once it's wide again, the user's choice comes back.
+        if (!_isNarrow)
+        {
+            _services.State.SidebarCollapsed = IsSidebarCollapsed;
+            _services.SaveState();
+        }
+    }
+
+    /// <summary>Called by the view as the window resizes: a narrow window shows the rail.</summary>
+    public void SetAvailableWidth(double width)
+    {
+        var narrow = width < NarrowWidth;
+        if (narrow == _isNarrow)
+        {
+            return;
+        }
+        _isNarrow = narrow;
+        IsSidebarCollapsed = narrow || _services.State.SidebarCollapsed;
+    }
+
+    /// <summary>Dragging the sidebar's edge. <see cref="SaveSidebarWidth"/> keeps the result when the drag ends.</summary>
+    public void ResizeSidebar(double width) => SidebarWidth = Math.Clamp(width, MinSidebarWidth, MaxSidebarWidth);
+
+    public void SaveSidebarWidth()
+    {
+        _services.State.SidebarWidth = SidebarWidth;
+        _services.SaveState();
     }
 
     // ---- Settings -------------------------------------------------------------------------------------------

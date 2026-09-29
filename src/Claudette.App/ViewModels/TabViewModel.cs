@@ -179,7 +179,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     // ---- Status (DESIGN.md §4, "Status icon") ------------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StatusGlyph), nameof(StatusTip), nameof(InfoRows), nameof(IsWorking), nameof(NeedsInput), nameof(IsBusyStatus), nameof(IsAlertStatus), nameof(IsErrorStatus), nameof(IsUnread))]
+    [NotifyPropertyChangedFor(nameof(StatusGlyph), nameof(StatusTip), nameof(InfoRows), nameof(IsWorking), nameof(NeedsInput), nameof(IsBusyStatus), nameof(IsAlertStatus), nameof(IsErrorStatus), nameof(IsUnread), nameof(RowDetail))]
     [NotifyCanExecuteChangedFor(nameof(StopCommand), nameof(SendCommand), nameof(RestartCommand), nameof(CompactCommand))]
     public partial TabStatus Status { get; set; }
 
@@ -296,7 +296,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     public IReadOnlyList<ModelInfo> Models => _session?.Initialization?.Models.Where(m => m.Value != "default").ToArray() ?? [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ModelBadge), nameof(InfoRows), nameof(EffortLevels))]
+    [NotifyPropertyChangedFor(nameof(ModelBadge), nameof(InfoRows), nameof(EffortLevels), nameof(RowDetail))]
     public partial string? ModelName { get; set; }
 
     /// <summary>The model id Claude Code reports (for example <c>claude-opus-5-5[1m]</c>).</summary>
@@ -304,12 +304,18 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     /// <summary>The effort level in use. Null means the model's default; Claude Code doesn't report it.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(EffortName), nameof(ModelBadge), nameof(InfoRows))]
+    [NotifyPropertyChangedFor(nameof(EffortName), nameof(ModelBadge), nameof(InfoRows), nameof(RowDetail))]
     public partial string? Effort { get; set; }
 
     public string EffortName => Effort is null ? "Default effort" : Capitalize(Effort);
 
     public string ModelBadge => $"{ShortModel(ModelName)} · {(Effort is null ? "Default" : Capitalize(Effort))}";
+
+    /// <summary>
+    /// The second line of the tab's row in the sidebar (DESIGN.md §4): the model and effort, or what needs attention
+    /// when the tab is waiting on the user or has failed.
+    /// </summary>
+    public string RowDetail => Status is TabStatus.NeedsInput or TabStatus.Error ? StatusTip : ModelBadge;
 
     public IReadOnlyList<string> EffortLevels => CurrentModelInfo?.SupportedEffortLevels ?? [];
 

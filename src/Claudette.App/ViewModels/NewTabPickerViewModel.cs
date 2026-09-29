@@ -72,7 +72,7 @@ public sealed class FolderEntry(string path, string? branch, DateTimeOffset? las
     };
 }
 
-/// <summary>The picker behind Ctrl/Cmd+T and the tab strip's + (DESIGN.md §4, "Opening a tab").</summary>
+/// <summary>The picker behind Ctrl/Cmd+T and the sidebar's <b>New tab</b> (DESIGN.md §4, "Opening a tab").</summary>
 public sealed partial class NewTabPickerViewModel : ViewModelBase
 {
     private readonly AppServices _services;

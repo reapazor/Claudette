@@ -172,6 +172,7 @@ public static class KeyboardShortcuts
     public const string Suffixes = "composer.suffixes";
     public const string AllowPrompt = "prompt.allow";
     public const string DenyPrompt = "prompt.deny";
+    public const string ToggleSidebar = "sidebar.toggle";
 
     /// <summary>Every rebindable command, in the order Settings lists them.</summary>
     public static IReadOnlyList<ShortcutCommand> All { get; } =
@@ -183,6 +184,7 @@ public static class KeyboardShortcuts
         new(GoToTab, "Go to tab 1–9", Chord("Primary+D1")),
         new(History, "History", Chord("Primary+Shift+H")),
         new(Settings, "Settings", Chord("Primary+OemComma")),
+        new(ToggleSidebar, "Collapse or expand the sidebar", Chord("Primary+B")),
         new(Stop, "Stop Claude", Chord("Escape")),
         new(Suffixes, "Quick suffixes menu", Chord("Primary+Shift+S")),
         new(AllowPrompt, "Allow the waiting prompt", Chord("Primary+Enter")),

@@ -26,6 +26,12 @@ public sealed class AppState
     /// <summary>Folder groups the user collapsed.</summary>
     public List<string> CollapsedGroups { get; set; } = [];
 
+    /// <summary>The user collapsed the sidebar to its rail of status icons (DESIGN.md §4, "Sidebar").</summary>
+    public bool SidebarCollapsed { get; set; }
+
+    /// <summary>The sidebar's width as the user dragged it, or null for the default.</summary>
+    public double? SidebarWidth { get; set; }
+
     /// <summary>
     /// Where a project from another machine lives on this one, keyed by normalized git remote and path in the repo
     /// (DESIGN.md §9, "Restoring on another machine").

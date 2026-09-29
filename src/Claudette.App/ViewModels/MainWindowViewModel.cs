@@ -172,7 +172,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         }
     }
 
-    /// <summary>Checks for Claude Code updates at launch and every few hours, and shows the header badge (DESIGN.md §12).</summary>
+    /// <summary>Checks for Claude Code updates at launch and every few hours, and shows the sidebar's badge (DESIGN.md §12).</summary>
     private void StartUpdateChecks(ShellViewModel shell)
     {
         if (services.ClaudeUpdates is not { } updates)
@@ -182,6 +182,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         var viewModel = new ClaudeUpdateViewModel(services, updates, () => shell.RunningVersions);
         shell.RunningVersionsChanged += viewModel.Refresh;
         Updates = viewModel;
+        shell.Updates = viewModel;
         updates.Start();
     }
 

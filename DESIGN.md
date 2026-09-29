@@ -25,7 +25,7 @@ Claudette does not replace Claude Code. It runs the real `claude` CLI as a child
 |---|---|---|
 | Runtime | .NET 10 (LTS) | |
 | UI | Avalonia 12 | One codebase for Windows, macOS and Linux. |
-| Look & feel | Fluent theme on Windows, macOS-style theme on macOS | Follows the OS light/dark setting and accent color. Mica backdrop on Windows 11; native title bar, traffic lights and menu bar on macOS. Mica is used only once Windows grants it: the title bar, header and tab strip show it, and the page keeps an opaque background. The macOS-style theme isn't built yet; macOS uses the Fluent theme for now. |
+| Look & feel | Fluent theme on Windows, macOS-style theme on macOS | Follows the OS light/dark setting and accent color. Mica backdrop on Windows 11; native title bar, traffic lights and menu bar on macOS. Mica is used only once Windows grants it: the title bar, header and sidebar show it, and the page keeps an opaque background. The macOS-style theme isn't built yet; macOS uses the Fluent theme for now. |
 | Pattern | MVVM with CommunityToolkit.Mvvm | |
 | Markdown | LiveMarkdown.Avalonia | For assistant messages. Built for streaming: text is appended as it arrives instead of re-rendering the whole message. Includes syntax-highlighted code blocks. (Markdown.Avalonia only had an alpha for Avalonia 12.) |
 | Diffs | Claudette's own line diff and diff view, highlighted with TextMateSharp | The TextMate grammars and themes LiveMarkdown already ships for code blocks. AvaloniaEdit was the plan, but a read-only diff doesn't need an editor. |
@@ -61,33 +61,29 @@ The files are in `packaging/`, and `.github/workflows/package.yml` builds them.
 │ ● ● ●  Claudette                                                           │
 │ ┌ Session ███████████░░░░░░░ 62%  resets 2h 14m ┐  Weekly ███░░░ 38%       │
 │ └ ╱╱╱ at this rate: limit hit in 1h 05m !       ┘  Fable  █░░░░░ 12%       │
-├────────────────────────────────────────────────────────────────────────────┤
-│ ▾ api [● refactor auth ×] [◌ fix login bug ×] [+] │ ▾ docs [! intro ×] [+] │
-├──────────────────────────────────────────────────────┬─────────────────────┤
-│                                                      │ Changed files       │
-│  You: refactor the auth middleware…                  │  M src/auth.cs  +12 │
-│                                                      │  A src/token.cs +40 │
-│  Claude: I'll start by reading…                      │                     │
-│   ┌ Read  src/auth.cs ─────────────────────────┐     │                     │
-│   └────────────────────────────────────────────┘     │                     │
-│   ┌ Edit  src/auth.cs  (+12 −3)  [view diff] ──┐     │                     │
-│   └────────────────────────────────────────────┘     │                     │
-│   ┌ Allow Bash: dotnet test? ──────────────────┐     │                     │
-│   │ [Allow]  [Always allow]  [Deny]            │     │                     │
-│   └────────────────────────────────────────────┘     │                     │
-├──────────────────────────────────────────────────────┴─────────────────────┤
-│ ~/src/api  Opus ▾  Effort: High ▾  Mode: Default ▾  Ctx 41%  1.2M tok      │
-│ ┌─────────────────────────────────────────────────────────────┐            │
-│ │ Message Claude…                                             │ [ ■ Stop ] │
-│ └─────────────────────────────────────────────────────────────┘            │
-│ Suffixes ▾  [Clarify first ×] [Test it (kept) ×]                           │
-└────────────────────────────────────────────────────────────────────────────┘
+├──────────────────┬─────────────────────────────────────┬───────────────────┤
+│ + New tab      « │                                     │ Changed files     │
+│ ▾ ● api        + │  You: refactor the auth middleware… │ M src/auth.cs +12 │
+│ │ ● refactor au… │                                     │ A src/token +40   │
+│ │   Opus · High  │  Claude: I'll start by reading…     │                   │
+│ │ ! fix login b… │   ┌ Read  src/auth.cs ────────────┐ │                   │
+│ │   Needs input  │   └───────────────────────────────┘ │                   │
+│ ▸ ● docs  !    + │   ┌ Edit  src/auth.cs (+12 −3) ───┐ │                   │
+│                  │   └───────────────────────────────┘ │                   │
+│                  │   ┌ Allow Bash: dotnet test? ─────┐ │                   │
+│                  │   │ [Allow] [Always allow] [Deny] │ │                   │
+│                  │   └───────────────────────────────┘ │                   │
+├──────────────────┼─────────────────────────────────────┴───────────────────┤
+│ History          │ ~/src/api  Opus ▾  High ▾  Default ▾  Ctx 41%  1.2M tok │
+│ 2.1.290 is ready │ ┌──────────────────────────────────────────┐            │
+│ Settings         │ │ Message Claude…                          │ [ ■ Stop ] │
+│                  │ └──────────────────────────────────────────┘            │
+│                  │ Suffixes ▾  [Clarify first ×]                           │
+└──────────────────┴─────────────────────────────────────────────────────────┘
 ```
 
-From top to bottom:
-
-1. **Usage header.** Always visible. Session usage is the most prominent item; weekly limits are smaller. See [§6](#6-token-burn-awareness).
-2. **Tab strip.** One tab per session, with a status icon, grouped by working folder. See [§4](#4-tabs--sessions).
+1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. See [§6](#6-token-burn-awareness).
+2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder. **New tab** is at its top; **History**, the Claude Code update badge and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
 3. **Conversation.** The selected tab's conversation. See [§5](#5-conversation-view).
 4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), and optionally its running processes ([§4](#process-monitor)).
 5. **Composer.** Where you type to the selected tab, plus the Stop button and per-tab controls.
@@ -117,7 +113,7 @@ The visual reference is Claude Code's own Visual Studio Code extension:
   - Needs input: a permission prompt or question is waiting (highlighted, so it stands out from any tab)
   - Finished while in the background (unread dot)
   - Error or process exited
-- **Model and effort** are easy to see for every tab. The tab shows a small badge (for example `Opus · High`), and the composer bar shows the same thing in full for the selected tab. See [Model & effort](#model--effort).
+- **Model and effort** are easy to see for every tab. The second line of the tab's row shows them (for example `Opus · High`), and the composer bar shows the same thing in full for the selected tab. See [Model & effort](#model--effort).
 - **Tab info card.** Hovering a tab shows a card with the tab's details. It's the one place features add per-tab information, rather than putting it in the tab name. It shows:
   - The full folder path and git branch.
   - Model and effort.
@@ -131,24 +127,42 @@ The visual reference is Claude Code's own Visual Studio Code extension:
   - Shown in short form in the composer bar (for example `1.2M tok`). Click it for a popover with the full breakdown and a small per-turn chart.
   - Saved with the tab, so the counts survive app restarts and session resumes.
   - The same numbers feed the "which tab is burning the most" view in the Usage panel ([§6](#6-token-burn-awareness)).
-- **Grouped by folder.** Tabs that share a working folder sit together in a group, like browser tab groups:
-  - Each group has a label with the folder name and a color. The color is picked automatically and can be changed. If two folders have the same name, the label adds the parent folder (`work/api`, `personal/api`).
+- **Grouped by folder.** Tabs that share a working folder sit together in a group, like browser tab groups. In the sidebar a group is a label with its tabs listed under it:
+  - Each group has a label with the folder name and a color. A line in the color runs down beside its tabs. The color is picked automatically and can be changed. If two folders have the same name, the label adds the parent folder (`work/api`, `personal/api`).
   - Hovering the label shows the full path. The group's `+` opens a new tab in the same folder.
   - A group can be collapsed to just its label. A collapsed group still shows the most urgent status of its tabs, such as "needs input".
   - Tabs can be dragged to reorder them within their group, and groups can be dragged (by their label) to reorder them. A tab can't be dragged into another group, because its folder is fixed, and pinned tabs stay ahead of the others.
-    - A dragged tab is selected, and the strip rearranges as soon as the pointer passes the middle of a neighbor. **Move left** and **Move right** in the tab menu do the same from the keyboard or mouse.
-  - A group with a single tab still gets a label, so the strip always looks the same.
+    - A dragged tab is selected, and the list rearranges as soon as the pointer passes the middle of a neighbor. **Move up** and **Move down** in the tab menu do the same from the keyboard or mouse.
+  - A group with a single tab still gets a label, so the sidebar always looks the same.
 - Closing a tab that is working asks for confirmation, then stops the process. Right-clicking a group label gives **Close group**.
 - **Pinned tabs** come back every time Claudette launches, resuming their sessions.
   - Pin or unpin from the tab's right-click menu. A pinned tab shows a pin icon and sits at the start of its folder group.
   - **Close group** and **Close other tabs** skip pinned tabs.
   - Closing a pinned tab asks *"This tab is pinned. Close and unpin it?"*
   - Unpinned tabs aren't restored unless **Also restore unpinned tabs** is on in Settings. See [§9](#restore-on-launch) for what's restored.
-- Keyboard: `Ctrl/Cmd+T` new tab, `Ctrl/Cmd+W` close, `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle, `Ctrl/Cmd+1…9` jump to a tab.
+- Keyboard: `Ctrl/Cmd+T` new tab, `Ctrl/Cmd+W` close, `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle, `Ctrl/Cmd+1…9` jump to a tab, `Ctrl/Cmd+B` collapse or expand the sidebar.
+
+### Sidebar
+
+The tabs are listed in a sidebar on the left of the window, rather than a strip across the top, so long session names, a status line and many tabs all fit.
+
+- **A tab's row** has two lines:
+  - The status icon, a pin icon if pinned, a gear while a process it started is busy ([Process monitor](#process-monitor)), and the name, cut short with an ellipsis if it doesn't fit.
+  - The model and effort, or instead what needs attention: *Needs your input*, or the error.
+  - The close button shows on hover and on the selected tab. Hovering the row shows the tab info card; double-clicking renames it.
+- **Top:** **New tab**, which opens the picker ([Opening a tab](#opening-a-tab)), and the button that collapses the sidebar.
+- **Foot:** **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
+- **Resizing.** Drag the sidebar's edge to make it wider or narrower (180 to 420 pixels; 248 by default). Double-click the edge for the default width. The width is remembered.
+- **Collapsing.** The collapse button, or `Ctrl/Cmd+B`, shrinks the sidebar to a rail:
+  - The rail shows each group's color, then a square per tab with the first letter of its name and a small status icon. Hovering a square shows the tab info card.
+  - A collapsed group shows only its color and its most urgent status.
+  - New tab, History, the update badge and Settings stay as icons.
+  - Whether the sidebar is collapsed is remembered.
+- **Narrow windows.** Below 900 pixels wide the sidebar collapses to the rail by itself, and expands again when the window is widened. Expanding it by hand in a narrow window lasts until the window is widened, when the remembered choice applies again; neither changes that choice.
 
 ### Opening a tab
 
-`Ctrl/Cmd+T`, or the `+` at the end of the tab strip, opens the **New tab** picker. A group's own `+` skips the picker and opens a tab in that group's folder.
+`Ctrl/Cmd+T`, or **New tab** at the top of the sidebar, opens the **New tab** picker. A group's own `+` skips the picker and opens a tab in that group's folder.
 
 The picker shows:
 
@@ -175,7 +189,7 @@ Using the picker:
 
 **Other ways in.**
 
-- Dragging a folder from Finder or Explorer onto the tab strip opens a tab there.
+- Dragging a folder from Finder or Explorer onto the sidebar opens a tab there.
 - The command line: `Claudette --folder <path>` opens a tab in that folder on startup. Open Recent and the jump list use this too.
 - On macOS, **File → Open Recent** and the Dock icon's menu list recent folders. On Windows, the taskbar jump list does the same.
 - Choosing any of these opens a new tab in that folder.
@@ -705,7 +719,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 
 ### Applying it
 
-- A small, non-blocking badge appears in the header: *"Claude Code 2.1.290 is ready"*. Clicking it shows the current and new version, a link to the Claude Code changelog, and the actions from the table above.
+- A small, non-blocking badge appears at the foot of the sidebar: *"Claude Code 2.1.290 is ready"* (an icon when the sidebar is collapsed). Clicking it shows the current and new version, a link to the Claude Code changelog, and the actions from the table above.
   - It appears when the package manager has a newer version than the one installed, or when the installed version is newer than the one an open tab is running.
   - **Dismiss** hides it until a newer version comes along. It also goes away once no open tab runs an older version.
   - Settings → Claude Code shows the same details and actions, plus the install method, auto-update state, channel, last update attempt and `claude doctor`'s warnings.
@@ -724,7 +738,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 
 ```
 ┌──────────────────────── Claudette.App (Avalonia) ────────────────────────┐
-│  Views + ViewModels: MainWindow, UsageHeader, TabStrip, Conversation,    │
+│  Views + ViewModels: MainWindow, UsageHeader, Sidebar, Conversation,     │
 │  Composer, DiffView, Processes, History, SignIn, Settings                │
 └───────────────┬───────────────────────────────┬──────────────────────────┘
                 │                               │
@@ -882,7 +896,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 
 ### Keyboard shortcuts
 
-Settings → Keyboard lists every shortcut Claudette handles, with its default from the section that describes it: new tab, close tab, next and previous tab, go to tab 1–9, History, Settings, Stop, the quick suffixes menu, and allowing or denying the waiting prompt.
+Settings → Keyboard lists every shortcut Claudette handles, with its default from the section that describes it: new tab, close tab, next and previous tab, go to tab 1–9, History, Settings, collapsing the sidebar, Stop, the quick suffixes menu, and allowing or denying the waiting prompt.
 
 - **Rebinding.** Click a shortcut and press the new keys; Esc cancels. **Reset** puts one back, **Remove** clears it, and **Reset to defaults** restores them all.
 - **One key for both OSes.** Shortcuts are stored with a *Primary* modifier: Ctrl on Windows and Linux, Cmd on macOS. That way a shortcut synced between a Windows machine and a Mac means the same thing on both. Ctrl is its own modifier only on macOS; elsewhere it is Primary.
@@ -942,7 +956,7 @@ These apply from milestone 1:
 | Protocol replay | Turning Claude Code's output into events, and what Claudette writes back: messages, interrupts, permission replies, model and effort changes | Recorded stream-json traffic from real sessions, checked in as fixture files and replayed through a fake transport | None |
 | Fake CLI | Process handling: launch flags, stdin/stdout, interrupts, crashes, hangs, sign-in failures, `--version` and `doctor` output, child processes for the process monitor | A small `fake-claude` test program that speaks the stream-json protocol and follows a scenario file. Claudette points at it through the "path to `claude`" setting. | None |
 | Real CLI, fake model | End to end against the real `claude` binary: real tools, permission prompts, file edits, transcripts and resume | A local mock server that implements the Anthropic Messages API and returns scripted replies. `claude` points at it with `ANTHROPIC_BASE_URL` and a dummy `ANTHROPIC_API_KEY`. | None |
-| UI | View models, and views: tab strip, composer, chips, permission cards, meters | View-model tests with no UI; Avalonia.Headless for rendering and input; snapshot tests with Verify | None |
+| UI | View models, and views: sidebar, composer, chips, permission cards, meters | View-model tests with no UI; Avalonia.Headless for rendering and input; snapshot tests with Verify | None |
 | Live (opt-in) | What only the real service can confirm: `rate_limits` data, sign-in, real model output | Tests tagged `Live`, excluded by default and run manually before a release | A few cents |
 
 ### Protocol fixtures
@@ -1156,7 +1170,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
 7. **Polish & ship.** ✅ Built 2026-09-29.
    - **Claude Code updates ([§12](#12-claude-code-updates)):**
      - Checks with `claude --version`, `claude doctor` and Homebrew or WinGet, at launch and every 4 hours.
-     - The header badge and its dialog, **Update now** for each install method, and **Update on next launch** for WinGet.
+     - The update badge and its dialog, **Update now** for each install method, and **Update on next launch** for WinGet.
      - The tab note for an older version, and **Update now** on the too-old setup screen.
    - **Notifications ([§10](#10-notifications)):** every type, with its setting, click routing and the Dock/taskbar badge, on Windows, macOS and Linux.
    - **Keyboard ([§14](#keyboard-shortcuts)):** Settings → Keyboard with rebindable, synced shortcuts, per-suffix shortcuts, and 1–9 in the suffix menu.
@@ -1165,8 +1179,9 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
      - Mica on Windows 11.
      - The macOS menu bar (Settings…, File with Open Recent) and Dock menu, and the Windows jump list.
      - One running instance, which takes later launches' `--folder`.
-     - Folders dropped on the tab strip open tabs.
+     - Folders dropped on the sidebar open tabs.
      - Dragging tabs and groups.
+   - **Sidebar ([§4](#sidebar)):** the tab strip was replaced by a sidebar on the left, which collapses to a rail (by hand, and in narrow windows), can be resized, and holds History, the update badge and Settings at its foot.
    - **Packaging ([§2](#packaging-and-signing)):** MSIX, and a signed, notarized `.dmg`, built by `package.yml`, with a placeholder icon.
    - **Still to verify on real machines** (CI builds and runs the platform tests on Windows and macOS, but nothing there is looked at or clicked):
      - Showing and clicking toasts and macOS notifications, and both badges.
