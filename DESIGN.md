@@ -744,6 +744,7 @@ A tab starts in auto mode, like a Claude Code session in a terminal or VS Code, 
 - Selecting a file opens a diff view (side-by-side or inline) with syntax highlighting.
   - The view is a window of its own, so it can stay open beside the conversation.
   - It shows the changes with a few lines of context, or the **Whole file**.
+  - Long lines scroll sideways with a scroll bar along the bottom, Shift and the mouse wheel, or a touchpad. Every line scrolls together, both sides at once when they're side by side, and the line numbers stay where they are. The rows scroll up and down as usual.
   - Highlighting uses TextMate grammars, by file extension, with the dark or light theme to match the app. Files over 20,000 lines, and binary files, are shown without it.
   - A leading byte order mark isn't counted as a change.
 - Actions: open in external diff tool, open in external editor (the app the OS uses for that file type), reveal in Finder/Explorer, copy path.

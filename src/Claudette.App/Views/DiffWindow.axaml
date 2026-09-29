@@ -11,6 +11,8 @@
     <Style Selector="ListBox.diff">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="Padding" Value="0" />
+      <!-- The rows stay the width of the window; the LineScroller around the list scrolls the code in them sideways -->
+      <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
     </Style>
     <Style Selector="ListBox.diff ListBoxItem">
       <Setter Property="Padding" Value="0" />
@@ -78,48 +80,58 @@
       <TextBlock Classes="muted" Margin="16" Text="{Binding Message}" IsVisible="{Binding Message, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
       <!-- Inline -->
-      <ListBox Classes="diff" ItemsSource="{Binding InlineRows}" IsVisible="{Binding IsInline}">
-        <ListBox.ItemTemplate>
-          <DataTemplate DataType="diffs:InlineDiffRow">
-            <Border Classes="line" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}" Padding="6,0">
-              <Grid ColumnDefinitions="48,48,16,*">
-                <TextBlock Classes="mono muted small" Text="{Binding OldNumber}" HorizontalAlignment="Right" Margin="0,0,8,0" />
-                <TextBlock Grid.Column="1" Classes="mono muted small" Text="{Binding NewNumber}" HorizontalAlignment="Right" Margin="0,0,8,0" />
-                <TextBlock Grid.Column="2" Classes="mono" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Text="{Binding Marker}" />
-                <controls:ColoredTextBlock Grid.Column="3" Classes="mono" Code="{Binding Text}" Runs="{Binding Runs}" />
-              </Grid>
-            </Border>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
-
-      <!-- Side by side -->
-      <ListBox Classes="diff" ItemsSource="{Binding SideRows}" IsVisible="{Binding IsSideBySide}">
-        <ListBox.ItemTemplate>
-          <DataTemplate DataType="diffs:SideBySideDiffRow">
-            <Panel>
-              <Border Classes="line header" Padding="6,0" IsVisible="{Binding IsHeader}">
-                <TextBlock Classes="mono muted small" Text="{Binding HeaderText}" />
+      <controls:LineScroller Lines="{Binding InlineRows}" IsVisible="{Binding IsInline}">
+        <ListBox Classes="diff" ItemsSource="{Binding InlineRows}">
+          <ListBox.ItemTemplate>
+            <DataTemplate DataType="diffs:InlineDiffRow">
+              <Border Classes="line" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}" Padding="6,0">
+                <Grid ColumnDefinitions="48,48,16,*">
+                  <TextBlock Classes="mono muted small" Text="{Binding OldNumber}" HorizontalAlignment="Right" Margin="0,0,8,0" />
+                  <TextBlock Grid.Column="1" Classes="mono muted small" Text="{Binding NewNumber}" HorizontalAlignment="Right" Margin="0,0,8,0" />
+                  <TextBlock Grid.Column="2" Classes="mono" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Text="{Binding Marker}" />
+                  <controls:ScrollingLine Grid.Column="3">
+                    <controls:ColoredTextBlock Classes="mono" Code="{Binding Text}" Runs="{Binding Runs}" />
+                  </controls:ScrollingLine>
+                </Grid>
               </Border>
-              <Grid ColumnDefinitions="*,1,*" IsVisible="{Binding !IsHeader}">
-                <Border Classes="line" Classes.removed="{Binding Left.IsRemoved, FallbackValue=False}" Classes.empty="{Binding !HasLeft}" Padding="6,0">
-                  <Grid ColumnDefinitions="48,*">
-                    <TextBlock Classes="mono muted small" Text="{Binding Left.Number, FallbackValue=''}" HorizontalAlignment="Right" Margin="0,0,8,0" />
-                    <controls:ColoredTextBlock Grid.Column="1" Classes="mono" Code="{Binding Left.Text, FallbackValue=''}" Runs="{Binding Left.Runs, FallbackValue={x:Null}}" />
-                  </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </controls:LineScroller>
+
+      <!-- Side by side: both sides scroll sideways together -->
+      <controls:LineScroller Lines="{Binding SideRows}" IsVisible="{Binding IsSideBySide}">
+        <ListBox Classes="diff" ItemsSource="{Binding SideRows}">
+          <ListBox.ItemTemplate>
+            <DataTemplate DataType="diffs:SideBySideDiffRow">
+              <Panel>
+                <Border Classes="line header" Padding="6,0" IsVisible="{Binding IsHeader}">
+                  <TextBlock Classes="mono muted small" Text="{Binding HeaderText}" />
                 </Border>
-                <Border Grid.Column="1" Background="{DynamicResource DividerBrush}" />
-                <Border Grid.Column="2" Classes="line" Classes.added="{Binding Right.IsAdded, FallbackValue=False}" Classes.empty="{Binding !HasRight}" Padding="6,0">
-                  <Grid ColumnDefinitions="48,*">
-                    <TextBlock Classes="mono muted small" Text="{Binding Right.Number, FallbackValue=''}" HorizontalAlignment="Right" Margin="0,0,8,0" />
-                    <controls:ColoredTextBlock Grid.Column="1" Classes="mono" Code="{Binding Right.Text, FallbackValue=''}" Runs="{Binding Right.Runs, FallbackValue={x:Null}}" />
-                  </Grid>
-                </Border>
-              </Grid>
-            </Panel>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
+                <Grid ColumnDefinitions="*,1,*" IsVisible="{Binding !IsHeader}">
+                  <Border Classes="line" Classes.removed="{Binding Left.IsRemoved, FallbackValue=False}" Classes.empty="{Binding !HasLeft}" Padding="6,0">
+                    <Grid ColumnDefinitions="48,*">
+                      <TextBlock Classes="mono muted small" Text="{Binding Left.Number, FallbackValue=''}" HorizontalAlignment="Right" Margin="0,0,8,0" />
+                      <controls:ScrollingLine Grid.Column="1">
+                        <controls:ColoredTextBlock Classes="mono" Code="{Binding Left.Text, FallbackValue=''}" Runs="{Binding Left.Runs, FallbackValue={x:Null}}" />
+                      </controls:ScrollingLine>
+                    </Grid>
+                  </Border>
+                  <Border Grid.Column="1" Background="{DynamicResource DividerBrush}" />
+                  <Border Grid.Column="2" Classes="line" Classes.added="{Binding Right.IsAdded, FallbackValue=False}" Classes.empty="{Binding !HasRight}" Padding="6,0">
+                    <Grid ColumnDefinitions="48,*">
+                      <TextBlock Classes="mono muted small" Text="{Binding Right.Number, FallbackValue=''}" HorizontalAlignment="Right" Margin="0,0,8,0" />
+                      <controls:ScrollingLine Grid.Column="1">
+                        <controls:ColoredTextBlock Classes="mono" Code="{Binding Right.Text, FallbackValue=''}" Runs="{Binding Right.Runs, FallbackValue={x:Null}}" />
+                      </controls:ScrollingLine>
+                    </Grid>
+                  </Border>
+                </Grid>
+              </Panel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </controls:LineScroller>
     </Panel>
   </DockPanel>
 </Window>
