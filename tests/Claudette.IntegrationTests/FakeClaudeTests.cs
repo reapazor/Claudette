@@ -94,6 +94,43 @@ public sealed class FakeClaudeTests : IDisposable
     }
 
     [Fact]
+    public async Task Subagents_fan_out_with_a_prompt_from_inside_one()
+    {
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("SUBAGENTS", TestContext.Current.CancellationToken);
+        var (requested, before) = await session.ReadUntilAsync<PermissionRequested>();
+        requested.Request.Allow();
+        var (done, after) = await session.ReadUntilAsync<TurnCompleted>();
+        var seen = before.Concat(after).ToArray();
+
+        // The same shape as Claude Code's (DESIGN.md §18): nested traffic tagged with its Agent call, and the prompt
+        // naming the subagent's task.
+        Assert.Equal("fake_task_1", requested.Request.AgentId);
+        var calls = seen.OfType<AssistantMessageReceived>()
+            .SelectMany(a => a.Message.Content.OfType<ToolUseBlock>().Where(t => t.Name == "Agent").Select(t => $"{a.Message.ParentToolUseId ?? "main"}>{t.Id}"));
+        Assert.Equal(["main>toolu_fake_agent_1", "main>toolu_fake_agent_2", "toolu_fake_agent_2>toolu_fake_agent_3"], calls);
+        Assert.Equal(3, seen.OfType<SystemNotice>().Count(n => n.Message.Subtype == "task_notification"));
+        Assert.Equal("Both parts are done.", done.Result.Result);
+    }
+
+    [Fact]
+    public async Task Stop_task_stops_a_subagent_waiting_on_permission()
+    {
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("SUBAGENTS", TestContext.Current.CancellationToken);
+        var (requested, _) = await session.ReadUntilAsync<PermissionRequested>();
+        await session.StopTaskAsync(requested.Request.AgentId!, TestContext.Current.CancellationToken);
+        var (done, seen) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.Contains(seen, e => e is PermissionCancelled);
+        Assert.Contains(seen.OfType<SystemNotice>(), n => n.Message.Subtype == "task_notification" && n.Message.Raw["status"]?.GetValue<string>() == "stopped");
+        Assert.False(done.Result.IsError);
+        await Assert.ThrowsAnyAsync<Exception>(() => session.StopTaskAsync("no-such-task", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task Interrupt_stops_a_streaming_turn()
     {
         await using var session = await StartAsync();

@@ -224,24 +224,85 @@ public sealed class RealCliTests : IAsyncLifetime
         Assert.True(File.Exists(Path.Combine(library, $"{sessionId}.jsonl")), "The continued transcript should be written next to the resumed file (DESIGN.md §9).");
     }
 
-    private async Task<ClaudeSession> StartAsync(string? permissionMode = null, string? resume = null)
+    [Fact]
+    public async Task Subagent_traffic_and_prompts_name_the_subagent()
+    {
+        // Nesting is on by default, but a user's settings or environment can limit it; this test needs one level.
+        await using var session = await StartAsync(environment: new() { ["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"] = "3" });
+
+        await session.SendUserMessageAsync("SUBAGENTS", TestContext.Current.CancellationToken);
+        var (requested, before) = await session.ReadUntilAsync<PermissionRequested>(timeout: TimeSpan.FromSeconds(30));
+        requested.Request.Allow();
+        var (done, after) = await session.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(30));
+        var seen = before.Concat(after).ToArray();
+
+        // DESIGN.md §18: task_started ties each subagent's task id to its Agent call, and a permission request from
+        // inside a subagent names that task id in agent_id.
+        var tasks = seen.OfType<SystemNotice>().Where(n => n.Message.Subtype == "task_started" && n.Message.Raw["task_type"]?.GetValue<string>() == "local_agent")
+            .ToDictionary(n => n.Message.Raw["tool_use_id"]!.GetValue<string>(), n => n.Message.Raw["task_id"]!.GetValue<string>());
+        var calls = seen.OfType<AssistantMessageReceived>()
+            .SelectMany(a => a.Message.Content.OfType<Core.Protocol.ToolUseBlock>().Where(t => t.Name == "Agent").Select(t => (a.Message.ParentToolUseId, t)))
+            .ToArray();
+        Assert.Equal(3, calls.Length);
+        var touch = calls.Single(c => c.t.Input["description"]?.GetValue<string>() == "Touch a marker file").t;
+        var deeper = calls.Single(c => c.t.Input["description"]?.GetValue<string>() == "Delegate a deeper look").t;
+        Assert.Equal(deeper.Id, calls.Single(c => c.t.Input["description"]?.GetValue<string>() == "Search deeper").ParentToolUseId);
+        Assert.Equal(tasks[touch.Id], requested.Request.AgentId);
+        Assert.Equal(3, tasks.Count);
+        Assert.Contains(seen.OfType<AssistantMessageReceived>(), a => a.Message.ParentToolUseId == touch.Id);
+        Assert.True(File.Exists(Path.Combine(Work, "agent-marker.txt")));
+        Assert.False(done.Result.IsError);
+    }
+
+    [Fact]
+    public async Task Stop_task_stops_one_foreground_subagent_and_the_turn_carries_on()
+    {
+        await using var session = await StartAsync();
+
+        await session.SendUserMessageAsync("LONG_AGENT", TestContext.Current.CancellationToken);
+        var (started, _) = await session.ReadUntilAsync<SystemNotice>(
+            n => n.Message.Subtype == "task_started" && n.Message.Raw["task_type"]?.GetValue<string>() == "local_agent", TimeSpan.FromSeconds(30));
+        var taskId = started.Message.Raw["task_id"]!.GetValue<string>();
+        var toolUseId = started.Message.Raw["tool_use_id"]!.GetValue<string>();
+        Assert.False(started.Message.Raw["is_backgrounded"]?.GetValue<bool>());
+        await session.ReadUntilAsync<AssistantMessageReceived>(a => a.Message.ParentToolUseId == toolUseId, TimeSpan.FromSeconds(30));
+
+        await session.StopTaskAsync(taskId, TestContext.Current.CancellationToken);
+        var (done, seen) = await session.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(30));
+
+        // DESIGN.md §18: the subagent is stopped, not the turn; its Agent call comes back as an error.
+        Assert.Contains(seen.OfType<SystemNotice>(), n => n.Message.Subtype == "task_notification"
+            && n.Message.Raw["task_id"]?.GetValue<string>() == taskId && n.Message.Raw["status"]?.GetValue<string>() == "stopped");
+        var result = seen.OfType<ToolResultsReceived>().Where(r => r.Message.ParentToolUseId is null)
+            .SelectMany(r => r.Message.Content.OfType<Core.Protocol.ToolResultBlock>()).Single(b => b.ToolUseId == toolUseId);
+        Assert.True(result.IsError);
+        Assert.False(done.Result.IsError);
+        Assert.Equal("Done with the tool.", done.Result.Result);
+    }
+
+    private async Task<ClaudeSession> StartAsync(string? permissionMode = null, string? resume = null, Dictionary<string, string?>? environment = null)
     {
         Assert.SkipWhen(_factory is null, "Claude Code isn't installed.");
+        var overrides = new Dictionary<string, string?>
+        {
+            ["ANTHROPIC_BASE_URL"] = _api.BaseAddress.ToString().TrimEnd('/'),
+            ["ANTHROPIC_API_KEY"] = "sk-ant-mock-000",
+            ["ANTHROPIC_AUTH_TOKEN"] = null,
+            ["CLAUDE_CODE_OAUTH_TOKEN"] = null,
+            ["CLAUDE_CONFIG_DIR"] = Config,
+            ["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1",
+        };
+        foreach (var (name, value) in environment ?? [])
+        {
+            overrides[name] = value;
+        }
         return await _factory!.StartAsync(new ClaudeLaunchOptions
         {
             WorkingDirectory = Work,
             Model = "claude-haiku-4-5",
             PermissionMode = permissionMode,
             Resume = resume,
-            EnvironmentOverrides = new Dictionary<string, string?>
-            {
-                ["ANTHROPIC_BASE_URL"] = _api.BaseAddress.ToString().TrimEnd('/'),
-                ["ANTHROPIC_API_KEY"] = "sk-ant-mock-000",
-                ["ANTHROPIC_AUTH_TOKEN"] = null,
-                ["CLAUDE_CODE_OAUTH_TOKEN"] = null,
-                ["CLAUDE_CONFIG_DIR"] = Config,
-                ["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1",
-            },
+            EnvironmentOverrides = overrides,
         }, TestContext.Current.CancellationToken);
     }
 }

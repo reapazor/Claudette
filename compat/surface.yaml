@@ -741,6 +741,13 @@ items:
     usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs
     test: TranscriptReaderTests
     fallback: Its toolUseId says which Agent call a subagent transcript belongs to. Without it, a restored tab's subagent groups are empty and the agent map shows only the top-level subagents, without their activity.
+  - id: "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"
+    kind: env
+    status: documented
+    usedIn: tests/Claudette.IntegrationTests/RealCliTests.cs
+    docs: https://code.claude.com/docs/en/sub-agents
+    test: RealCliTests
+    fallback: User configuration, passed through to claude. The real-CLI test sets it so nesting is on whatever the machine's environment says.
 
   # --- Claude Code updates (DESIGN.md §12) --------------------------------------------------------------
   - id: "claude doctor"
