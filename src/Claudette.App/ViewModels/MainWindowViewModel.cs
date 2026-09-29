@@ -249,9 +249,16 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
 
     /// <summary>
     /// A tab reported that Claude Code needs a sign-in (DESIGN.md §11): a banner across all tabs, which stay open, and
-    /// an OS notification if Claudette isn't in front.
+    /// an OS notification if Claudette isn't in front. The account menu catches up with <c>claude auth status</c>.
     /// </summary>
-    private void ShowSignIn() => Account.RequireSignIn();
+    private void ShowSignIn()
+    {
+        if (!Account.NeedsSignIn)
+        {
+            Account.RequireSignIn();
+            _ = Account.RefreshAsync();
+        }
+    }
 
     /// <summary>Asks the window to come to the front, for a clicked notification or a second launch.</summary>
     public event Action? BringToFrontRequested;

@@ -393,6 +393,27 @@ public class AccountAndSignInTests
     }
 
     [Fact]
+    public async Task The_account_catches_up_with_claude_auth_status()
+    {
+        var launcher = new FakeLauncher
+        {
+            OnStart = (_, process) =>
+            {
+                process.WriteOutput("""{"loggedIn": false, "authMethod": "none"}""");
+                process.Exit(1);
+            },
+        };
+        await using var h = WithAuth(launcher);
+        var account = new AccountViewModel(h.Services) { Status = SignedIn };
+
+        await account.RefreshAsync();
+
+        Assert.Equal(["auth", "status"], launcher.Started.Single().Arguments);
+        Assert.Equal("Not signed in", account.Summary);
+        Assert.True(account.CanBeginSignIn);
+    }
+
+    [Fact]
     public async Task Signed_out_the_account_menu_offers_sign_in()
     {
         await using var h = new TabTestHarness();

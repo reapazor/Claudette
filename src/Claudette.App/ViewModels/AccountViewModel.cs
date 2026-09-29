@@ -95,6 +95,23 @@ public sealed partial class AccountViewModel(AppServices services) : ViewModelBa
     /// <summary>Opens the sign-in dialog without starting, for a clicked notification.</summary>
     public void ShowSignIn() => SignIn ??= new SignInViewModel(services, () => CheckSignIn?.Invoke() ?? Task.CompletedTask, () => SignIn = null);
 
+    /// <summary>Runs <c>claude auth status</c> again, so the header shows what Claude Code now reports.</summary>
+    public async Task RefreshAsync()
+    {
+        if (services.Auth is not { } auth)
+        {
+            return;
+        }
+        try
+        {
+            Status = await auth.GetStatusAsync();
+        }
+        catch (Exception)
+        {
+            // The header keeps what it had; the banner says what matters.
+        }
+    }
+
     /// <summary><c>claude auth status</c> reports a sign-in: the banner and dialog go away.</summary>
     public void OnSignedIn(AuthStatus status)
     {

@@ -681,7 +681,7 @@ Claude Code keeps its own credentials. Claudette never reads or stores them; it 
 
 ### Signing in
 
-- At launch, Claudette shows a sign-in screen instead of the tabs. In the middle of a session, it shows a banner across all tabs, which stay open: *"Claude Code needs you to sign in."*, with a **Sign in** button. If Claudette isn't focused, it also sends an OS notification, once however many tabs find Claude Code signed out. Clicking the notification opens the sign-in dialog.
+- At launch, Claudette shows a sign-in screen instead of the tabs. In the middle of a session, it shows a banner across all tabs, which stay open: *"Claude Code needs you to sign in."*, with a **Sign in** button. If Claudette isn't focused, it also sends an OS notification, once however many tabs find Claude Code signed out. Clicking the notification opens the sign-in dialog. The account menu runs `claude auth status` again, so it shows what Claude Code now reports.
 - The banner's **Sign in** opens the same sign-in screen as a dialog over the window, and starts signing in straight away. The dialog can be closed.
 - **Sign in** (main flow) uses the utility session's control protocol, as the Agent SDK does:
   1. Claudette sends `claude_authenticate` with `loginWithClaudeAi: true`. Claude Code replies with two URLs and doesn't open a browser itself:
