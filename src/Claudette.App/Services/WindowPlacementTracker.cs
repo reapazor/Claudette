@@ -18,6 +18,9 @@ public sealed class WindowPlacementTracker
     private PixelPoint _position;
     private Size _size;
 
+    /// <summary>Whether the window was maximized before it was minimized, so it comes back that way.</summary>
+    private bool _maximized;
+
     public WindowPlacementTracker(Window window)
     {
         _window = window;
@@ -36,12 +39,43 @@ public sealed class WindowPlacementTracker
             {
                 _size = size;
             }
+            if (e.Property == Window.WindowStateProperty)
+            {
+                OnWindowStateChanged(e.GetOldValue<WindowState>(), e.GetNewValue<WindowState>());
+            }
         };
     }
 
-    /// <summary>The window's normal bounds, and whether it's maximized.</summary>
+    /// <summary>
+    /// A window started minimized was never maximized as far as the OS knows, so it would come back at its normal size:
+    /// it's maximized here instead.
+    /// </summary>
+    private void OnWindowStateChanged(WindowState old, WindowState state)
+    {
+        if (state == WindowState.Normal && old == WindowState.Minimized && _maximized)
+        {
+            _window.WindowState = WindowState.Maximized;
+        }
+        else if (state != WindowState.Minimized)
+        {
+            _maximized = state == WindowState.Maximized;
+        }
+    }
+
+    /// <summary>The window's normal bounds, and whether it's maximized (or was, before it was minimized).</summary>
     public WindowPlacement Current() =>
-        new(_position.X, _position.Y, _size.Width, _size.Height, _window.WindowState == WindowState.Maximized);
+        new(_position.X, _position.Y, _size.Width, _size.Height,
+            _window.WindowState == WindowState.Maximized || _window.WindowState == WindowState.Minimized && _maximized);
+
+    /// <summary>
+    /// Opens the window minimized and without taking focus, for a start at login (DESIGN.md §9, "Starting at login"). Call
+    /// after <see cref="Apply"/> and before it's shown. A window that was maximized comes back maximized.
+    /// </summary>
+    public void StartMinimized()
+    {
+        _window.ShowActivated = false;
+        _window.WindowState = WindowState.Minimized;
+    }
 
     /// <summary>
     /// Puts the window where it was, before it's shown. A position no longer on any screen (a monitor unplugged since)

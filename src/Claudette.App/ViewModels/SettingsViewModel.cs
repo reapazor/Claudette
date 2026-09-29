@@ -3,7 +3,9 @@ using Claudette.App.Services;
 using Claudette.Core.Diffs;
 using Claudette.Core.Installation;
 using Claudette.Core.Library;
+using Claudette.Core.LoginItems;
 using Claudette.Core.Settings;
+using Claudette.Core.Updates;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -175,6 +177,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         FillPerforceLogin();
         // Signing in from this window can make the Claude app available, or not (DESIGN.md §18).
         _services.RemoteControl.AvailabilityChanged += OnRemoteControlAvailabilityChanged;
+        _ = RefreshStartAtLoginAsync();
     }
 
     public void Dispose()
@@ -193,6 +196,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     /// </summary>
     private static readonly IReadOnlyList<SettingsSearchResult> SearchIndex =
     [
+        new("General", "Start Claudette when I log in"),
         new("General", "Confirm before closing a tab where Claude is working"),
         new("General", "Also rename the session in Claude Code when I rename a tab"),
         new("General", "Show Claude's service status"),
@@ -349,6 +353,85 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     public bool IsAdvanced => SelectedCategory == "Advanced";
 
     // ---- General ---------------------------------------------------------------------------------------------
+
+    private LoginItemStatus? _loginItem;
+    private bool _changingLoginItem;
+
+    /// <summary>
+    /// Reads whether Claudette starts at login, as the window opens: Task Manager, System Settings or another copy of
+    /// Claudette may have changed it since (DESIGN.md §9, "Starting at login").
+    /// </summary>
+    public async Task RefreshStartAtLoginAsync() => UseLoginItem(await _services.StartAtLogin.ReadAsync());
+
+    /// <summary>
+    /// <b>Start Claudette when I log in</b>. It's this machine's, and lives in the OS rather than in settings.json, so
+    /// Reset to defaults leaves it.
+    /// </summary>
+    public bool StartsAtLogin
+    {
+        get => _loginItem?.IsOn == true;
+        set
+        {
+            if (value != StartsAtLogin && CanChangeStartAtLogin)
+            {
+                _ = SetStartAtLoginAsync(value);
+            }
+        }
+    }
+
+    public bool CanChangeStartAtLogin => _loginItem?.CanChange == true && !_changingLoginItem;
+
+    /// <summary>What happens at login, and which copy of Claudette starts when it isn't simply this one.</summary>
+    public string StartAtLoginText
+    {
+        get
+        {
+            const string opens = "Claudette opens minimized when you log in to this computer.";
+            var current = _services.ThisCopy;
+            return _loginItem?.Starts switch
+            {
+                { } starts when !starts.IsSameCopy(current) => $"{opens} It starts {starts.Describe()} rather than this {current.KindName}.",
+                { Kind: AppInstallKind.SourceBuild } => $"{opens} It starts this source build's newest build. Once Claudette is installed, the installed one starts instead.",
+                _ => opens,
+            };
+        }
+    }
+
+    /// <summary>Why the switch can't be changed here, such as being turned off in Task Manager.</summary>
+    public string? StartAtLoginNote => _loginItem?.Note;
+
+    public bool HasStartAtLoginNote => StartAtLoginNote is not null;
+
+    public string? StartAtLoginError => _loginItem?.Error;
+
+    public bool HasStartAtLoginError => StartAtLoginError is not null;
+
+    private async Task SetStartAtLoginAsync(bool on)
+    {
+        _changingLoginItem = true;
+        OnPropertyChanged(nameof(CanChangeStartAtLogin));
+        try
+        {
+            UseLoginItem(await _services.StartAtLogin.SetAsync(on));
+        }
+        finally
+        {
+            _changingLoginItem = false;
+            OnPropertyChanged(nameof(CanChangeStartAtLogin));
+        }
+    }
+
+    private void UseLoginItem(LoginItemStatus status)
+    {
+        _loginItem = status;
+        OnPropertyChanged(nameof(StartsAtLogin));
+        OnPropertyChanged(nameof(CanChangeStartAtLogin));
+        OnPropertyChanged(nameof(StartAtLoginText));
+        OnPropertyChanged(nameof(StartAtLoginNote));
+        OnPropertyChanged(nameof(HasStartAtLoginNote));
+        OnPropertyChanged(nameof(StartAtLoginError));
+        OnPropertyChanged(nameof(HasStartAtLoginError));
+    }
 
     public bool ConfirmCloseWorkingTab
     {

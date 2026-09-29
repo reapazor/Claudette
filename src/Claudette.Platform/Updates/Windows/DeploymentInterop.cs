@@ -105,6 +105,20 @@ internal static unsafe partial class Deployment
         }
     }
 
+    private const int ErrorInsufficientBuffer = 122;
+
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial int GetPackagesByPackageFamily(string packageFamilyName, ref uint count, nint packageFullNames, ref uint bufferLength, nint buffer);
+
+    /// <summary>Whether a package of <paramref name="familyName"/> is installed for this user, from inside a package or not.</summary>
+    public static bool IsFamilyInstalled(string familyName)
+    {
+        uint count = 0;
+        uint length = 0;
+        var result = GetPackagesByPackageFamily(familyName, ref count, 0, ref length, 0);
+        return result is 0 or ErrorInsufficientBuffer && count > 0;
+    }
+
     public static IApplicationActivationManager CreateActivationManager()
     {
         Marshal.ThrowExceptionForHR(WinRt.CoCreateInstance(ApplicationActivationManagerClsid, 0, ClsctxLocalServer, typeof(IApplicationActivationManager).GUID, out var instance));

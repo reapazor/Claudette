@@ -1,4 +1,5 @@
 using Claudette.Core.Development;
+using Claudette.Core.LoginItems;
 using Claudette.Core.Sessions;
 using Claudette.Core.Status;
 
@@ -99,6 +100,12 @@ public sealed class AppState
     /// (DESIGN.md §18, "Service status"). Forgotten once everything is back to operational.
     /// </summary>
     public ServiceStatusDismissal? DismissedServiceStatus { get; set; }
+
+    /// <summary>
+    /// Which copy of Claudette the login entry starts, and the installed release a source build prefers to it (DESIGN.md
+    /// §9, "Starting at login"). Whether the entry is on is the OS's to say.
+    /// </summary>
+    public LoginItemRecord LoginItem { get; set; } = new();
 }
 
 /// <summary>What's saved for one tab (DESIGN.md §9, "Restore on launch").</summary>

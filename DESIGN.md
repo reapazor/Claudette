@@ -41,6 +41,7 @@ The files are in `packaging/`, and `.github/workflows/package.yml` builds them.
 - **Windows: MSIX**, one per architecture (x64, arm64), self-contained.
   - `packaging/windows/build-msix.ps1` publishes the app, adds `Package.appxmanifest` and the tile images, builds `resources.pri` for the scaled taskbar icons, packs with `makeappx`, and signs with `signtool`.
   - The identity is `reapazor.Claudette`, the same as the AppUserModelID an unpackaged Claudette uses. The manifest's `Publisher` must match the signing certificate's subject; the script takes it as `-Publisher` or `MSIX_PUBLISHER`.
+  - A startup task (`windows.startupTask`, `ClaudetteAtLogin`, off until Settings turns it on) starts Claudette at login ([§9](#starting-at-login)).
   - **File and registry write virtualization are off** (`desktop6:FileSystemWriteVirtualization`, with the `unvirtualizedResources` capability). Claude Code and every tool it runs are Claudette's children and share its package container. Otherwise their writes under AppData and HKCU would go to Claudette's private copy, where a terminal `claude` wouldn't see them.
   - Windows only installs signed packages. For a local test, sign with a self-signed certificate whose subject matches the publisher, and trust it.
 - **macOS: a `.dmg` per architecture** (arm64, x64) holding `Claudette.app` and an Applications link.
@@ -286,7 +287,7 @@ Using the picker:
 **Other ways in.**
 
 - Dragging a folder from Finder or Explorer onto the sidebar opens a tab there.
-- The command line: `Claudette --folder <path>` opens a tab in that folder on startup. Open Recent and the jump list use this too.
+- The command line: `Claudette --folder <path>` opens a tab in that folder on startup. Open Recent and the jump list use this too. `--login` is how the login entry starts Claudette: minimized, and ignored by a running Claudette ([§9](#starting-at-login)).
 - On macOS, **File → Open Recent** and the Dock icon's menu list recent folders. On Windows, the taskbar jump list does the same, unless the user has turned off **Show recently opened items** in Windows' Start settings, which stops Windows from showing any app's recent items there.
 - Choosing any of these opens a new tab in that folder.
 - The lists hold favorites first, then recent folders, up to 10, leaving out folders that no longer exist. Folders with the same name show their parent too (`work/api`), as tab groups do.
@@ -815,6 +816,35 @@ A tab starts in auto mode, like a Claude Code session in a terminal or VS Code, 
   - Claude Code finds sessions by folder, so Claudette copies the transcript to its local working folder and resumes from that file, as for a session from another machine ([Session library](#session-library-sync-across-machines)).
 - Pinned tabs belong to this machine. On another machine, the same sessions appear in History ([below](#history)) instead.
 
+### Starting at login
+
+**Start Claudette when I log in** (Settings → General, off by default) starts Claudette when the user logs in to this computer. The setting lives in the OS rather than in `settings.json`, so it's this machine's, doesn't sync, and **Reset to defaults** leaves it.
+
+- **How it opens.** Minimized to the taskbar or Dock, without taking focus, and with tabs restored as on any launch ([above](#restore-on-launch)). If the window was maximized, it comes back maximized. A login start while Claudette is already running does nothing.
+- **The entry**, one per user:
+  - **MSIX:** the package's startup task (`windows.startupTask` in the manifest, task `ClaudetteAtLogin`), turned on and off with `StartupTask`. It's listed as Claudette in Task Manager's Startup apps. Windows starts it without arguments; Claudette tells from its activation (`AppInstance.GetActivatedEventArgs`, `ActivationKind.StartupTask`).
+  - **Other Windows builds:** a `Claudette` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+  - **macOS:** a LaunchAgent, `~/Library/LaunchAgents/com.reapazor.claudette.login.plist`, run once at login. For `Claudette.app` it runs `open -a <the app> --args --login`. A LaunchAgent works on macOS 12, which the package still supports, and for a source build, which has no bundle; `SMAppService` needs macOS 13 and a bundle.
+  - **Linux:** `claudette.desktop` in the XDG autostart folder (`$XDG_CONFIG_HOME/autostart`, or `~/.config/autostart`).
+  - Every entry but the MSIX's starts Claudette with `--login`, which says it was started at login.
+- **Which Claudette starts.** A machine can have an installed release, another build (an unpackaged Windows one, a Linux one) and source builds in one or more checkouts. The entry starts the best one: a release (MSIX or `Claudette.app`), then another build, then a source build.
+  - Each Claudette that isn't a source build notes itself in this machine's state when it starts: the MSIX by its package family, `Claudette.app` by its path, another build by its folder. That's how a source build finds the release. A release that was never opened isn't known. A better release that's still installed keeps its place; between two of the same kind, the one that started last wins.
+  - Turning it on from a source build starts the release when there is one, and the switch says so: *"It starts the installed Claudette 0.3.0 rather than this source build."*
+  - A source build's entry starts its build output, not the copy it runs from, so at login it copies and runs the newest build ([Working on Claudette](#working-on-claudette)). Between source builds, the entry keeps the checkout it has while that checkout is there.
+  - Any Claudette started with `--login` hands over to a better copy when one is installed: it starts that copy with `--login` and exits.
+  - When a Claudette starts, it tidies the entry without turning it on or off. A release replaces an entry that starts a source build, and an entry whose copy is gone (a deleted checkout, an uninstalled release) starts the best copy left.
+- **The MSIX.** Only the package can turn its own startup task on or off.
+  - A source build turning it on while the MSIX's task is off writes the Run value for itself. At login it hands over to the MSIX (`IApplicationActivationManager`, with `--login`). The MSIX then turns on its task and removes the Run value.
+  - While the MSIX's task is on, the switch in a source build is on but disabled: *"The installed Claudette 0.3.0 starts at login. Turn it off in that Claudette, or in Task Manager's Startup apps."* The source build knows the task is on because the MSIX notes it with itself.
+- **Turned off outside Claudette.** Only the user can turn these back on, so the switch shows them off and disabled, and says where to turn them on:
+  - Task Manager's Startup apps can turn off the MSIX's task (`DisabledByUser`) or the Run value (a value of the same name under `Explorer\StartupApproved\Run` whose first byte is odd). Removing the Run value also removes that note, so a later entry starts out turned on.
+  - An organization's policy can hold the MSIX's task on or off; the switch says which.
+  - On Linux, a file with `Hidden=true` or `X-GNOME-Autostart-enabled=false` is off.
+  - macOS can turn off the LaunchAgent under **Allow in the Background** in System Settings → General → Login Items. Claudette doesn't read that.
+- **Not with `CLAUDETTE_HOME`.** A Claudette started with `CLAUDETTE_HOME` (to try things against the mock) leaves the entry alone and disables the switch, since the entry would start Claudette without it.
+
+> **Not yet tested on a real machine:** the MSIX's startup task, its activation and the handover to it, which need an installed package; and the LaunchAgent on macOS. The manifest passes `makeappx`'s schema check. Choosing the copy, the Run value (in a test key), the LaunchAgent and autostart files, and the minimized start are covered by tests.
+
 ### History
 
 - **History** (`Ctrl/Cmd+Shift+H`, or from the new tab menu) lists past sessions, grouped by folder. Each entry shows the name/title, the machine it was last used on, last activity time, first prompt and message count.
@@ -1284,7 +1314,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 
 - A sidebar lists the categories. Below them, after a divider, the selected tab's project has a group of its own ([below](#the-projects-pages)).
 - Changes apply immediately; there is no Save button.
-- Each category has **Reset to defaults**. In Sessions it leaves the library folder and settings sync as they are, since changing either moves where sessions and settings live; in New tabs it leaves favorite and recent folders, which are this machine's data rather than settings. No **Reset to defaults** touches a project's files or its remembered choices, and the project's pages have none.
+- Each category has **Reset to defaults**. In Sessions it leaves the library folder and settings sync as they are, since changing either moves where sessions and settings live; in New tabs it leaves favorite and recent folders, which are this machine's data rather than settings; in General it leaves **Start Claudette when I log in**, which the OS keeps. No **Reset to defaults** touches a project's files or its remembered choices, and the project's pages have none.
 - A search box filters settings by name.
 - The foot of the sidebar shows Claudette's version and **Report an issue** ([Version](#version)).
 
@@ -1292,7 +1322,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 
 | Category | Settings |
 |---|---|
-| General | Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. Show Claude's service status (on by default): the header's dot and the incident banner ([§18](#service-status)). Claudette's version and updates: check for updates automatically (on by default), include pre-releases (off), **Check now**, and the update's actions. See [Updating Claudette](#updating-claudette). |
+| General | Start Claudette when I log in (off by default; this machine's, kept by the OS, and left by **Reset to defaults**; [§9](#starting-at-login)). Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. Show Claude's service status (on by default): the header's dot and the incident banner ([§18](#service-status)). Claudette's version and updates: check for updates automatically (on by default), include pre-releases (off), **Check now**, and the update's actions. See [Updating Claudette](#updating-claudette). |
 | Sessions | Also restore unpinned tabs on launch (off by default; pinned tabs are always restored). Session library folder (with **Browse…** and **Move library…**, which copies existing sessions to the new folder). Sync new tabs to the session library (off by default; each tab can be switched with **Sync to other machines** in its menu). Name for this machine, as shown in History. How long to keep sessions in the library. Sync Claudette's settings through the library (off by default). See [§9](#session-library-sync-across-machines) and [Settings sync](#settings-sync-optional). |
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
 | Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. Use my login shell's environment (macOS and Linux only, on by default; [§13](#login-shell-environment)). **Claude app (Remote Control)**: Connect new tabs to the Claude app (off by default; each tab has its own switch), with what it does, the privacy note and how to get pushes on the phone, and Keep this computer awake while tabs are connected (on by default). Disabled, with the reason, when the account can't use it ([§18](#remote-control-the-claude-app)). |
@@ -1358,7 +1388,7 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 **Sync settings through the session library** (Settings → Sessions, off by default) keeps Claudette's settings the same on every machine that uses the same library folder ([§9](#session-library-sync-across-machines)).
 
 - **What syncs:** appearance, new-tab defaults, usage thresholds, check-ins, quick suffixes, notifications, keyboard shortcuts and process monitor options.
-- **What stays on each machine:** the path to `claude`, the login shell setting, the Claude app settings, this machine's name, the library folder itself, the diff tool and Settings → Project tools (program paths and installed IDEs differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, the sidebar's and the usage header's collapsed or detailed state, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
+- **What stays on each machine:** whether Claudette starts at login (the OS keeps it, [§9](#starting-at-login)), the path to `claude`, the login shell setting, the Claude app settings, this machine's name, the library folder itself, the diff tool and Settings → Project tools (program paths and installed IDEs differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, the sidebar's and the usage header's collapsed or detailed state, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
 - The synced settings are stored as one file in the library. Each setting keeps the time it was last changed, and the newest change wins, so edits on two machines don't overwrite each other wholesale.
 - The first time sync is turned on and the library already has settings from another machine, Claudette asks: **Use synced settings** or **Replace them with this machine's**.
 - Turning sync off keeps the current values on this machine and stops syncing.
@@ -1476,6 +1506,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 | Perforce | A pretend `p4` (`tests/Claudette.Core.Tests/Support/FakeP4.cs`, also compiled into the App tests), `Perforce*Tests` in the Core and App tests, and a shell-script `p4` for a real pipe in `PerforceIntegrationTests`. Credential stores: `CredentialStoreTests`. |
 | Real-CLI checks of subagents and stopping one | `RealCliTests`, with the mock's `SUBAGENTS` and `LONG_AGENT` scripts; the `12-subagents` fixture was recorded from `SUBAGENTS` |
 | Login shell environment | `LoginShellTests` in `tests/Claudette.Platform.Tests/LoginShell/`: reading the output, the terminal rule, timeouts and failures with a fake launcher and `FakeTimeProvider`, and real bash, dash, zsh and fish (each where installed) with a made-up `HOME`, never the user's rc files. `UserEnvironmentTests` in Core (the merge, waiting, and the callers) and `LoginShellSettingsTests` in the App tests. |
+| Starting at login | `StartAtLoginTests` in the Core tests (which copy starts, the MSIX handover, turned off outside Claudette, tidying at launch) with `FakeLoginItems` (`tests/Claudette.Core.Tests/Support/`, also compiled into the App tests), and `LoginCommandTests`; `LoginItems/` in the Platform tests (the Run value in a test key of its own, on Windows only; the LaunchAgent and autostart files on every OS); `StartAtLoginTests` in the App tests (the switch and `--login`) and `StartAtLoginUiTests` (the minimized start). |
 | Service status | `ServiceStatusTests` in the Core tests (the summary, levels and names, dismissals, which API errors count, the feed) and the App tests (the schedule with `FakeTimeProvider`, the banner, the setting), and `ServiceStatusUiTests`. The status page is `FakeHttpHandler` with a real summary from an incident, trimmed, in `tests/Claudette.Core.Tests/Fixtures/status/`. |
 
 ## 16. Tracking Claude Code Changes
@@ -1708,6 +1739,8 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Sync now ([§9](#session-library-sync-across-machines)).** A tab that syncs has **Sync now** in its menu, which copies its session to the library straight away, every file again, and says in the conversation how it went; it checks the lease first ([issue #16](https://github.com/reapazor/Claudette/issues/16)). ✅ Built 2026-09-29.
     - **Reviewed files ([§8](#8-file-changes--diff-view)).** A box on each changed file ticks it as reviewed, in both views, until Claude changes the file again; reviewed files are drawn faintly and counted in the panel's summary. The built-in diff view's **Reviewed** button ticks the file and closes the view. Ticks are saved with the tab and synced through the session record. ✅ Built 2026-09-29.
       - **Still to verify:** how the box and the faint rows look on real Windows, macOS and Linux desktops, in both styles and themes; so far they've only been rendered headlessly.
+    - **Starting at login ([§9](#starting-at-login)).** Settings → General → **Start Claudette when I log in** starts Claudette minimized at login: the MSIX through its startup task, other Windows builds through the Run key, a LaunchAgent on macOS and an XDG autostart file on Linux. The entry prefers an installed release to other builds, and those to source builds; a source build hands over to the MSIX, whose task only the MSIX can turn on. ✅ Built 2026-09-29.
+      - **Still to verify on real machines:** the MSIX's startup task, its activation and the handover to it; the LaunchAgent on macOS; and the minimized start on real Windows, macOS and Linux desktops.
 16. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features

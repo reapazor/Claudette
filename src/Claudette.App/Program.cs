@@ -3,6 +3,7 @@ using Claudette.App.Services;
 using Claudette.Core;
 using Claudette.Core.Processes;
 using Claudette.Platform;
+using Claudette.Platform.LoginItems;
 
 namespace Claudette.App;
 
@@ -21,10 +22,21 @@ internal sealed class Program
             SetWindowsIdentity();
         }
         var paths = AppPaths.ForCurrentUser();
+        // The MSIX's startup task starts it without arguments: mark it as started at login, as the other entries do.
+        if (LoginItemPlatforms.StartedByPackageTask())
+        {
+            args = [.. args, LaunchArguments.LoginOption];
+        }
         // One Claudette per user and data folder: a second launch hands its arguments over and exits. A build that
         // Claudette restarted into takes over instead: the one that started it has stopped listening.
         var instance = new SingleInstance(paths.DataDirectory);
         if (LaunchArguments.RestoreNonce(args) is null && instance.TryHandOffAsync(args).GetAwaiter().GetResult())
+        {
+            instance.Dispose();
+            return;
+        }
+        // At login, a source build starts the installed release instead (DESIGN.md §9, "Starting at login").
+        if (LaunchArguments.IsLogin(args) && LoginLaunch.TryHandOver(args, paths, new ProcessLauncher()))
         {
             instance.Dispose();
             return;

@@ -1,0 +1,12 @@
+﻿"General"
+[ ] Start Claudette when I log in
+"Claudette opens minimized when you log in to this computer."
+[x] Confirm before closing a tab where Claude is working
+[ ] Also rename the session in Claude Code when I rename a tab
+"Then claude --resume <name> in a terminal finds the session by the same name."
+[x] Show Claude's service status
+"A dot in the header, and a banner while Claude Code, the Claude API or claude.ai has an incident. Read from status.claude.com every 5 minutes."
+"Claudette updates"
+[x] Check for Claudette updates automatically
+[ ] Include pre-releases
+[button] Reset to defaults

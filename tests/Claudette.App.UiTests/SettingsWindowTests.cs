@@ -14,6 +14,7 @@ namespace Claudette.App.UiTests;
 public class SettingsWindowTests
 {
     [AvaloniaTheory]
+    [InlineData("General")]
     [InlineData("New tabs")]
     [InlineData("Appearance")]
     [InlineData("Sessions")]

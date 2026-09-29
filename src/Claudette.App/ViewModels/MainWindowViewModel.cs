@@ -290,6 +290,11 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     /// </summary>
     public void OnLaunchedAgain(IReadOnlyList<string> args)
     {
+        // A login entry starting Claudette when it's already running: nothing to do (DESIGN.md §9, "Starting at login").
+        if (LaunchArguments.IsLogin(args))
+        {
+            return;
+        }
         BringToFrontRequested?.Invoke();
         if (LaunchArguments.Folder(args) is { } folder && _shell is not null && CurrentPage == _shell)
         {

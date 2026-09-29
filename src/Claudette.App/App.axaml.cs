@@ -66,7 +66,8 @@ public partial class App : Application
                 loginShell: LoginShellReader.CreateForCurrentOS(launcher, TimeProvider.System),
                 systemProcesses: new SystemProcesses(launcher, TimeProvider.System),
                 unrealRegistry: UnrealEngineRegistries.CreateForCurrentOS(),
-                sleepBlocker: SleepBlockers.CreateForCurrentOS(launcher));
+                sleepBlocker: SleepBlockers.CreateForCurrentOS(launcher),
+                loginItems: LoginLaunch.CreateItems(launcher, TimeProvider.System));
             // In the background, so the window isn't held up; the first claude start waits for it (DESIGN.md §13).
             _services.UserEnvironment.Start();
             var services = _services;
@@ -78,11 +79,17 @@ public partial class App : Application
             var args = desktop.Args ?? [];
             _mainViewModel = new MainWindowViewModel(_services, LaunchArguments.Folder(args));
             UseRestarts(window, args);
+            _services.ThisCopy = LoginLaunch.CurrentCopy(args, _services.AppVersion);
             var restored = RestoreAfterRestart(args);
             if (restored is null && _services.State.Window is { } saved)
             {
                 // Where the window was last time on this machine (DESIGN.md §14).
                 _placement.Apply(saved);
+            }
+            if (restored is null && LaunchArguments.IsLogin(args))
+            {
+                // Started at login: out of the way until it's wanted (DESIGN.md §9, "Starting at login").
+                _placement.StartMinimized();
             }
             window.DataContext = _mainViewModel;
             var main = _mainViewModel;
@@ -100,6 +107,8 @@ public partial class App : Application
             {
                 _ = SignalRestartedAsync(started, opened.Task, _services.Paths, restored.Nonce);
             }
+            // An installed Claudette notes itself for source builds, and takes over an entry one left for it.
+            _ = _services.StartAtLogin.RefreshAtLaunchAsync();
         }
 
         base.OnFrameworkInitializationCompleted();

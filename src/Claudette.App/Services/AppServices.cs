@@ -5,6 +5,7 @@ using Claudette.Core.Credentials;
 using Claudette.Core.Diffs;
 using Claudette.Core.Git;
 using Claudette.Core.Installation;
+using Claudette.Core.LoginItems;
 using Claudette.Core.Processes;
 using Claudette.Core.ProjectTools;
 using Claudette.Core.ProjectTools.Unreal;
@@ -60,6 +61,7 @@ public sealed class AppServices : IAsyncDisposable
     /// Keeps the computer awake while tabs are connected to the Claude app (DESIGN.md §18, "Remote Control"). Null
     /// keeps nothing awake: tests.
     /// </param>
+    /// <param name="loginItems">The OS's login entry (DESIGN.md §9, "Starting at login"). Null has none: tests.</param>
     public AppServices(
         AppPaths paths,
         IProcessLauncher launcher,
@@ -77,10 +79,13 @@ public sealed class AppServices : IAsyncDisposable
         ISystemProcesses? systemProcesses = null,
         IUnrealEngineRegistry? unrealRegistry = null,
         ProjectToolPaths? projectToolPaths = null,
-        ISleepBlocker? sleepBlocker = null)
+        ISleepBlocker? sleepBlocker = null,
+        ILoginItems? loginItems = null)
     {
         AppInstaller = appInstaller ?? new NoAppInstaller();
         AppVersion = appVersion ?? BuiltVersion();
+        LoginItems = loginItems ?? new NoLoginItems("Claudette can't start at login here.");
+        ThisCopy = new ClaudetteCopy(AppInstallKind.Other, Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory), AppVersion.ToString());
         BuildCommit = AppBuild.CommitOf(InformationalVersion());
         Http = new HttpClient(httpHandler ?? new SocketsHttpHandler { AutomaticDecompression = System.Net.DecompressionMethods.All }, disposeHandler: true)
         {
@@ -160,8 +165,28 @@ public sealed class AppServices : IAsyncDisposable
     /// <summary>This copy of Claudette, for the foot of the Settings sidebar and bug reports (DESIGN.md §14, "Version").</summary>
     public AppBuild Build => new(AppVersion, IsSourceBuild ? AppInstallKind.SourceBuild : AppInstaller.Kind, BuildCommit) { Configuration = BuildConfiguration };
 
+    /// <summary>The OS's login entry (DESIGN.md §9, "Starting at login").</summary>
+    public ILoginItems LoginItems { get; }
+
+    /// <summary>This copy of Claudette, which the login entry may start. Set at launch: a source build by its build output.</summary>
+    public ClaudetteCopy ThisCopy
+    {
+        get;
+        set
+        {
+            field = value;
+            _startAtLogin = null;
+        }
+    }
+
+    private StartAtLogin? _startAtLogin;
+
+    /// <summary>Settings → General's <b>Start Claudette when I log in</b>, and tidying the entry up at launch.</summary>
+    public StartAtLogin StartAtLogin =>
+        _startAtLogin ??= new StartAtLogin(LoginItems, ThisCopy, State.LoginItem, SaveState, Loggers.CreateLogger("LoginItems"));
+
     /// <summary>The version the running app was built with (<c>-p:Version=…</c> in packaging/), without build metadata.</summary>
-    private static AppVersion BuiltVersion() =>
+    internal static AppVersion BuiltVersion() =>
         AppVersion.TryParse(InformationalVersion())
         ?? AppVersion.TryParse(typeof(AppServices).Assembly.GetName().Version?.ToString(3))
         ?? new AppVersion(0, 0, 0);

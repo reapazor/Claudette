@@ -1,6 +1,8 @@
+using Claudette.Core.LoginItems;
+
 namespace Claudette.App.Services;
 
-/// <summary>Claudette's command line (DESIGN.md §4, "Other ways in", and §9, "Working on Claudette").</summary>
+/// <summary>Claudette's command line (DESIGN.md §4, "Other ways in", and §9, "Starting at login" and "Working on Claudette").</summary>
 public static class LaunchArguments
 {
     public const string FolderOption = "--folder";
@@ -8,6 +10,15 @@ public static class LaunchArguments
     public const string SourceBuildOption = "--source-build";
 
     public const string RestoreOption = "--restore";
+
+    /// <summary><c>--login</c>: started by the login entry (DESIGN.md §9, "Starting at login").</summary>
+    public const string LoginOption = LoginCommand.LoginOption;
+
+    /// <summary>
+    /// Started at login: open minimized, or hand over to a better copy of Claudette. A running Claudette ignores it from
+    /// a later launch.
+    /// </summary>
+    public static bool IsLogin(IReadOnlyList<string> args) => args.Contains(LoginOption);
 
     /// <summary><c>--folder &lt;path&gt;</c>: open a tab in that folder. The jump list and Open Recent use it too.</summary>
     public static string? Folder(IReadOnlyList<string> args) => Value(args, FolderOption) is { } folder ? Path.GetFullPath(folder) : null;
