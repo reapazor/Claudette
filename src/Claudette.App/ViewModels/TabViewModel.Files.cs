@@ -60,6 +60,8 @@ public sealed partial class TabViewModel
     private ITimer? _reviewSync;
     private bool _reviewSyncStopped;
     private bool _refreshQueued;
+    /// <summary>Counts refreshes started, so one that finishes after a later one leaves that one's newer rows alone.</summary>
+    private int _refreshGeneration;
 
     private ChangedFiles Changes
     {
@@ -194,6 +196,7 @@ public sealed partial class TabViewModel
     private async Task RefreshChangedFilesAsync()
     {
         var folder = Folder;
+        var generation = ++_refreshGeneration;
         List<ChangedFileRow> rows;
         if (ShowGitChanges)
         {
@@ -236,6 +239,10 @@ public sealed partial class TabViewModel
                     BeforeKnown = file.BeforeKnown,
                 };
             }).ToList());
+        }
+        if (generation != _refreshGeneration)
+        {
+            return;
         }
         // Marks on files Claude has changed since are forgotten (DESIGN.md §8, "Reviewed").
         if (Reviewed.Prune(Changes))

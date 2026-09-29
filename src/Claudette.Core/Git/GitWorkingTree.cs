@@ -59,12 +59,54 @@ public sealed class GitWorkingTree(IProcessLauncher launcher, TimeProvider timeP
     }
 
     /// <summary>
+    /// The repository's top folder as git reports it, to run git from, and as <paramref name="folder"/> spells it, to put
+    /// the paths git lists under. Git resolves symlinks, so on macOS the top of a folder under <c>/var</c> is under
+    /// <c>/private/var</c>, and paths under it wouldn't match the same files as Claude and the tab name them. When the
+    /// folder's path doesn't end in its path from the top, as when the folder is a symlink inside the repository, both
+    /// are git's. Null when the folder isn't in a repository.
+    /// </summary>
+    private async Task<(string Root, string PathRoot)?> GetRootsAsync(string folder, CancellationToken cancellationToken)
+    {
+        var result = await RunAsync(folder, ["rev-parse", "--show-toplevel", "--show-prefix"], cancellationToken).ConfigureAwait(false);
+        if (result is not { ExitCode: 0 })
+        {
+            return null;
+        }
+        var lines = result.StandardOutput.Split('\n', 3);
+        var top = lines[0].TrimEnd('\r');
+        var prefix = lines.Length > 1 ? lines[1].TrimEnd('\r') : "";
+        try
+        {
+            if (top.Length == 0)
+            {
+                return null;
+            }
+            var root = Path.GetFullPath(top);
+            var pathRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+            foreach (var name in prefix.Split('/', StringSplitOptions.RemoveEmptyEntries).Reverse())
+            {
+                if (!ChangedFiles.PlatformPathComparer.Equals(Path.GetFileName(pathRoot), name) || Path.GetDirectoryName(pathRoot) is not { } parent)
+                {
+                    return (root, root);
+                }
+                pathRoot = parent;
+            }
+            return (root, pathRoot);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Every file that differs from HEAD, including untracked ones, across the whole repository. In a repository with no
-    /// commits yet, everything is added.
+    /// commits yet, everything is added. Paths are spelled the way <paramref name="folder"/> is where that can be told,
+    /// so they match Claude's changes to the same files (see <see cref="GetRootsAsync"/>).
     /// </summary>
     public async Task<IReadOnlyList<GitChange>> GetChangesAsync(string folder, CancellationToken cancellationToken = default)
     {
-        if (await GetRepositoryRootAsync(folder, cancellationToken).ConfigureAwait(false) is not { } root)
+        if (await GetRootsAsync(folder, cancellationToken).ConfigureAwait(false) is not (var root, var pathRoot))
         {
             return [];
         }
@@ -91,11 +133,11 @@ public sealed class GitWorkingTree(IProcessLauncher launcher, TimeProvider timeP
                 continue;
             }
             var reportedPath = kind == GitChangeKind.Deleted && originalPath is not null ? originalPath : path;
-            var absolute = Absolute(root, reportedPath);
+            var absolute = Absolute(pathRoot, reportedPath);
             (int? Added, int? Removed) lines = kind is GitChangeKind.Untracked || (kind is GitChangeKind.Added && !hasHead)
                 ? CountAllAdded(absolute)
                 : counts.TryGetValue(reportedPath, out var counted) ? counted : (null, null);
-            var oldPath = kind == GitChangeKind.Renamed && originalPath is not null ? Absolute(root, originalPath) : null;
+            var oldPath = kind == GitChangeKind.Renamed && originalPath is not null ? Absolute(pathRoot, originalPath) : null;
             changes.Add(new GitChange(absolute, kind.Value, oldPath, lines.Added, lines.Removed));
         }
         return changes;
