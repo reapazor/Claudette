@@ -146,12 +146,21 @@ public class NotifierTests
     public void Windows_builds_a_jump_list()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only.");
+        Assert.SkipWhen(RecentItemsTurnedOff(), "Windows refuses jump list categories while Settings → Personalization → Start → Show recently opened items is off.");
         var jumpList = new Claudette.Platform.Shell.Windows.WindowsJumpList(Environment.ProcessPath!, NullLogger.Instance);
 
         var list = jumpList.Build([new("api", Path.GetTempPath()), new("docs", Environment.CurrentDirectory)], out var added);
         list.AbortList();
 
         Assert.Equal(2, added);
+    }
+
+    /// <summary>Whether "Show recently opened items in Start, Jump Lists and File Explorer" is off, which Windows keeps as Start_TrackDocs.</summary>
+    [SupportedOSPlatform("windows")]
+    private static bool RecentItemsTurnedOff()
+    {
+        using var advanced = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced");
+        return advanced?.GetValue("Start_TrackDocs") is 0;
     }
 
     private static async Task WaitFor(Func<bool> condition)
