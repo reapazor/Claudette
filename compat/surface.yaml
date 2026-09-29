@@ -720,7 +720,7 @@ items:
   - id: "subagent_retry"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.App/Conversation/AgentMap.cs
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: MessageParserTests
   - id: "heartbeat"
@@ -744,19 +744,19 @@ items:
   - id: "task_progress"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: AgentMapTests
   - id: "task_notification"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: AgentMapTests
   - id: "task_updated"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs, src/Claudette.App/Conversation/AgentNode.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: AgentMapTests
   - id: 'task_type: "local_agent"'
@@ -768,7 +768,7 @@ items:
   - id: "is_backgrounded"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: AgentMapTests
   - id: "agent_id"
@@ -787,43 +787,43 @@ items:
   - id: "run_in_background"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: AgentMapTests
   - id: 'status: "async_launched"'
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/ConversationItems.cs, src/Claudette.App/Conversation/AgentMap.cs
+    usedIn: src/Claudette.App/Conversation/ConversationItems.cs, src/Claudette.App/Conversation/AgentNode.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: AgentMapTests
   - id: "totalTokens"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: AgentMapTests
   - id: "totalToolUseCount"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: AgentMapTests
   - id: "totalDurationMs"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: AgentMapTests
   - id: "resolvedModel"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: AgentMapTests
   - id: "agentType"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: AgentMapTests
   - id: "[Subagent hand-back]"
