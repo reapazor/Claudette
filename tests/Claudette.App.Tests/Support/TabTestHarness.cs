@@ -151,12 +151,26 @@ internal sealed class InlineDispatcher : IUiDispatcher
     // Stands in for the one UI thread: every harness shares it, and tests read view model state under it too.
     private static readonly Lock UiThread = new();
 
-    public void Post(Action action)
+    public void Post(Action action) => RunOnUiThread(action);
+
+    /// <summary>
+    /// Serializes like a UI thread would, with a synchronization context so an <c>await</c> in posted work resumes
+    /// under the lock too, as it resumes on Avalonia's UI thread in the app.
+    /// </summary>
+    private static void RunOnUiThread(Action action)
     {
-        // Serialize like a UI thread would.
         lock (UiThread)
         {
-            action();
+            var previous = SynchronizationContext.Current;
+            SynchronizationContext.SetSynchronizationContext(UiContext.Instance);
+            try
+            {
+                action();
+            }
+            finally
+            {
+                SynchronizationContext.SetSynchronizationContext(previous);
+            }
         }
     }
 
@@ -167,6 +181,19 @@ internal sealed class InlineDispatcher : IUiDispatcher
         {
             return read();
         }
+    }
+
+    /// <summary>Runs continuations later on a pool thread, one at a time under the lock, like a UI thread's queue.</summary>
+    private sealed class UiContext : SynchronizationContext
+    {
+        public static readonly UiContext Instance = new();
+
+        public override void Post(SendOrPostCallback d, object? state) =>
+            ThreadPool.UnsafeQueueUserWorkItem(_ => RunOnUiThread(() => d(state)), null);
+
+        public override void Send(SendOrPostCallback d, object? state) => RunOnUiThread(() => d(state));
+
+        public override SynchronizationContext CreateCopy() => this;
     }
 }
 
