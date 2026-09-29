@@ -125,12 +125,14 @@ public partial class TabView : UserControl
         {
             _tab.DiffRequested -= OnDiffRequested;
             _tab.ScrollToRequested -= OnScrollToRequested;
+            _tab.AgentWindowRequested -= OnAgentWindowRequested;
         }
         _tab = ViewModel;
         if (_tab is not null)
         {
             _tab.DiffRequested += OnDiffRequested;
             _tab.ScrollToRequested += OnScrollToRequested;
+            _tab.AgentWindowRequested += OnAgentWindowRequested;
         }
     }
 
@@ -151,18 +153,68 @@ public partial class TabView : UserControl
         }
     }
 
-    /// <summary>Scrolls to a card, for example the Bash call that started a process.</summary>
+    /// <summary>
+    /// Scrolls to a card, for example the Bash call that started a process, or a subagent's group from the agent map.
+    /// A group nested in another only has a container once the groups around it have expanded and been laid out.
+    /// </summary>
     private void OnScrollToRequested(ConversationItem item)
     {
+        _stickToBottom = false;
+        if (item is ToolUseItem tool)
+        {
+            tool.IsExpanded = true;
+        }
         if (ConversationItems.ContainerFromItem(item) is { } container)
         {
-            _stickToBottom = false;
-            if (item is ToolUseItem tool)
-            {
-                tool.IsExpanded = true;
-            }
-            container.BringIntoView();
+            BringTopIntoView(container);
+            return;
         }
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (ConversationItems.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().FirstOrDefault(p => ReferenceEquals(p.Content, item)) is { } nested)
+            {
+                BringTopIntoView(nested);
+            }
+        }, Avalonia.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>The top of a card, so a long expanded group starts at its header.</summary>
+    private static void BringTopIntoView(Control container) =>
+        container.BringIntoView(new Rect(0, 0, container.Bounds.Width, Math.Min(container.Bounds.Height, 80)));
+
+    private AgentMapWindow? _agentWindow;
+
+    /// <summary>The agent map in a window of its own, beside the conversation (DESIGN.md §18); one per tab.</summary>
+    private void OnAgentWindowRequested()
+    {
+        if (_agentWindow is not null)
+        {
+            _agentWindow.Activate();
+            return;
+        }
+        var window = _agentWindow = new AgentMapWindow { DataContext = DataContext };
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_agentWindow, window))
+            {
+                _agentWindow = null;
+            }
+        };
+        if (TopLevel.GetTopLevel(this) is Window owner)
+        {
+            window.Show(owner);
+        }
+        else
+        {
+            window.Show();
+        }
+    }
+
+    /// <summary>The tab closed: its agent map window goes with it.</summary>
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        _agentWindow?.Close();
     }
 
     /// <summary>Without a diff tool, selecting a file opens the built-in diff view; with one, double-click opens the tool (DESIGN.md §8).</summary>

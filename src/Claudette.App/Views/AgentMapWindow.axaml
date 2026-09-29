@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Claudette.App.ViewModels"
+        xmlns:views="using:Claudette.App.Views"
+        x:Class="Claudette.App.Views.AgentMapWindow"
+        x:DataType="vm:TabViewModel"
+        Title="{Binding DisplayName, StringFormat='{}{0} — agents'}"
+        Width="1040" Height="680" MinWidth="560" MinHeight="320"
+        WindowStartupLocation="CenterOwner">
+
+  <!-- The agent map's larger view (DESIGN.md §18): the tree beside the selected agent's prompt and result. -->
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Padding="14,10" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1">
+      <StackPanel Spacing="2">
+        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+        <TextBlock Classes="muted small" Text="{Binding AgentsHeader}" TextWrapping="Wrap" />
+      </StackPanel>
+    </Border>
+    <Grid ColumnDefinitions="2*,Auto,3*">
+      <!-- The same subtle background as the side panel, which the tree's selection is drawn against. -->
+      <Border Background="{DynamicResource SubtleBrush}">
+        <views:AgentTree Margin="0,6,0,0" />
+      </Border>
+      <GridSplitter Grid.Column="1" Width="5" Background="Transparent" ResizeDirection="Columns"
+                    BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1,0,0,0" />
+      <views:AgentDetails Grid.Column="2" />
+    </Grid>
+  </DockPanel>
+</Window>

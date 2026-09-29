@@ -6,6 +6,7 @@
              xmlns:settings="using:Claudette.Core.Settings"
              xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
              xmlns:controls="using:Claudette.App.Controls"
+             xmlns:views="using:Claudette.App.Views"
              x:Class="Claudette.App.Views.TabView"
              x:DataType="vm:TabViewModel"
              FontSize="{DynamicResource ConversationFontSize}">
@@ -173,6 +174,7 @@
       <Border Classes="prompt" Classes.answered="{Binding !IsPending}">
         <StackPanel Spacing="8">
           <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+          <TextBlock Classes="muted small" Text="{Binding Asker, StringFormat='Asked by the {0}'}" TextWrapping="Wrap" IsVisible="{Binding HasAsker}" />
           <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
           <Border Classes="codeblock" IsVisible="{Binding HasCommand}">
             <SelectableTextBlock Classes="mono" Text="{Binding Command, StringFormat='$ {0}'}" TextWrapping="Wrap" />
@@ -321,18 +323,25 @@
 
   <Grid RowDefinitions="*,Auto" ColumnDefinitions="*,Auto">
 
-    <!-- Side panel (DESIGN.md §3): changed files and, when the monitor is on, processes -->
+    <!-- Side panel (DESIGN.md §3): changed files, agents and, when the monitor is on, processes -->
     <Border Grid.Column="1" Grid.RowSpan="2" Width="340" IsVisible="{Binding IsSidePanelOpen}"
             BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1,0,0,0" Background="{DynamicResource SubtleBrush}">
       <DockPanel>
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*,Auto" Margin="8,6">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="8,6">
           <Button Classes="flat" Command="{Binding ShowFilesPageCommand}">
             <TextBlock Text="Changed files" FontWeight="{Binding IsFilesPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
           </Button>
-          <Button Grid.Column="1" Classes="flat" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding IsProcessMonitorOn}">
+          <!-- Agents (DESIGN.md §18); a busy dot while a subagent runs -->
+          <Button Grid.Column="1" Classes="flat" Command="{Binding ShowAgentsPageCommand}" ToolTip.Tip="{Binding AgentsHeader}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <TextBlock Text="Agents" FontWeight="{Binding IsAgentsPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
+              <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding HasActiveAgents}" />
+            </StackPanel>
+          </Button>
+          <Button Grid.Column="2" Classes="flat" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding IsProcessMonitorOn}">
             <TextBlock Text="Processes" FontWeight="{Binding IsProcessesPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
           </Button>
-          <Button Grid.Column="3" Classes="flat" Padding="6" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
+          <Button Grid.Column="4" Classes="flat" Padding="6" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
             <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
           </Button>
         </Grid>
@@ -378,6 +387,21 @@
               </ListBox.ItemTemplate>
             </ListBox>
           </DockPanel>
+
+          <!-- Agents (DESIGN.md §18, "Agent map"): the tree, and the selected agent's prompt and result -->
+          <Grid IsVisible="{Binding IsAgentsPage}" RowDefinitions="Auto,*,Auto,*">
+            <Grid Margin="12,0,6,6" ColumnDefinitions="*,Auto">
+              <TextBlock Classes="muted small" Text="{Binding AgentsHeader}" TextWrapping="Wrap" VerticalAlignment="Center" />
+              <Button Grid.Column="1" Classes="flat" Padding="6" ToolTip.Tip="Open the agent map in its own window" AutomationProperties.Name="Open the agent map in a window"
+                      Command="{Binding OpenAgentWindowCommand}">
+                <Path Data="{StaticResource IconOpenWindow}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.3" Width="10" Height="10" Stretch="Uniform" />
+              </Button>
+            </Grid>
+            <views:AgentTree Grid.Row="1" />
+            <GridSplitter Grid.Row="2" Height="5" Background="Transparent" ResizeDirection="Rows" IsVisible="{Binding HasAgents}"
+                          BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" />
+            <views:AgentDetails Grid.Row="3" IsVisible="{Binding HasAgents}" />
+          </Grid>
 
           <!-- Processes (DESIGN.md §4, "Process monitor") -->
           <DockPanel IsVisible="{Binding IsProcessesPage}">

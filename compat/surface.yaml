@@ -701,9 +701,9 @@ items:
   - id: "task_started"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/ViewModels/TabViewModel.Processes.cs
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.Processes.cs, src/Claudette.App/Conversation/AgentMap.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: SidePanelTests
+    test: SidePanelTests, AgentMapTests
   - id: "stop_task"
     kind: control
     status: documented
@@ -714,13 +714,13 @@ items:
   - id: "tool_progress"
     kind: message
     status: documented
-    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.Core/Sessions/ClaudeSession.cs
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/Conversation/AgentMap.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: MessageParserTests
+    test: MessageParserTests, AgentMapTests
   - id: "subagent_retry"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.App/Conversation/AgentMap.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: MessageParserTests
   - id: "heartbeat"
@@ -741,6 +741,110 @@ items:
     usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs
     test: TranscriptReaderTests
     fallback: Its toolUseId says which Agent call a subagent transcript belongs to. Without it, a restored tab's subagent groups are empty and the agent map shows only the top-level subagents, without their activity.
+  - id: "task_progress"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "task_notification"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "task_updated"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: 'task_type: "local_agent"'
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests, RealCliTests
+  - id: "is_backgrounded"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "agent_id"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs, src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests, RealCliTests
+    fallback: On can_use_tool it names the subagent asking (its task id); only the TypeScript option (agentID) and the matching field on permission_denied are documented. Without it, a prompt is matched to the subagent by its tool_use_id once the tool call arrives, else counted against the main agent.
+  - id: "subagent_type"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationItems.cs, src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "run_in_background"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: 'status: "async_launched"'
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationItems.cs, src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "totalTokens"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "totalToolUseCount"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "totalDurationMs"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "resolvedModel"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "agentType"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/AgentMap.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: AgentMapTests
+  - id: "[Subagent hand-back]"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.App/Conversation/ConversationItems.cs
+    test: AgentMapTests
+    fallback: The frame around a subagent's report in its Agent call's tool result text, read only for nested subagents, whose results have no tool_use_result. If it changes, the map uses the subagent's last text (it's forwarded with --forward-subagent-text), which is the report it hands back.
+  - id: "tool_result_meta"
+    kind: field
+    status: undocumented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    test: AgentMapTests
+    fallback: Marks an Agent call cut off by an interrupt or a stop (non_execution_kind "interrupted"). Without it, the "[Request interrupted" result text and the stopped task_notification still mark the subagent stopped.
+  - id: "stop_task (subagents)"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.Agents.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests, AgentMapTests
+    fallback: Documented for background tasks; in 2.1.284 it also stops a foreground subagent, with its nested ones, and the turn carries on. If that stops working, Stop on a subagent falls back to the whole-turn Stop (interrupt).
   - id: "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"
     kind: env
     status: documented

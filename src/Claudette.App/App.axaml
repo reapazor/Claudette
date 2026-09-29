@@ -129,11 +129,12 @@
       <Setter Property="Foreground" Value="{DynamicResource WarningTextBrush}" />
       <Setter Property="FontWeight" Value="Bold" />
     </Style>
-    <Style Selector="TextBlock.status.failed">
-      <Setter Property="Foreground" Value="{DynamicResource ErrorTextBrush}" />
-    </Style>
     <Style Selector="TextBlock.status.ok">
       <Setter Property="Foreground" Value="{DynamicResource OkTextBrush}" />
+    </Style>
+    <!-- After .ok: a failed tool call is also complete, and the failure is what should show. -->
+    <Style Selector="TextBlock.status.failed">
+      <Setter Property="Foreground" Value="{DynamicResource ErrorTextBrush}" />
     </Style>
     <Style Selector="TextBlock.status.unread">
       <Setter Property="Foreground" Value="{DynamicResource AccentStatusBrush}" />
@@ -198,6 +199,7 @@
       <StreamGeometry x:Key="IconChevronDown">M3,4.5 L6,7.5 L9,4.5</StreamGeometry>
       <StreamGeometry x:Key="IconChevronRight">M4.5,3 L7.5,6 L4.5,9</StreamGeometry>
       <StreamGeometry x:Key="IconUpdate">M6,10.5 L6,2 M2.5,5.5 L6,2 L9.5,5.5</StreamGeometry>
+      <StreamGeometry x:Key="IconOpenWindow">M7,1.5 L10.5,1.5 L10.5,5 M10.5,1.5 L6,6 M5,2.5 L1.5,2.5 L1.5,10.5 L9.5,10.5 L9.5,7</StreamGeometry>
       <StreamGeometry x:Key="IconRestart">M10.5,6 A4.5,4.5 0 1 1 9.18,2.82 M9.4,0.6 L9.18,2.82 L6.96,2.6</StreamGeometry>
 
       <!-- Claudette's color tokens, per theme. Views use only these, never Fluent's internal resource names. -->

@@ -75,7 +75,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _services = services;
         _shell = shell;
         State = state;
-        _conversation = new ConversationBuilder(Items, TodoList, ModelDisplayName) { ExpandThinking = services.Settings.Appearance.ExpandThinking };
+        Agents = new AgentMap(services.Time);
+        Agents.Changed += OnAgentsChanged;
+        _conversation = new ConversationBuilder(Items, TodoList, ModelDisplayName) { ExpandThinking = services.Settings.Appearance.ExpandThinking, Agents = Agents };
         _checkIns = new CheckInMonitor(services.Time, () => CheckInSettings, SendCheckInFromTimer, stuck => _services.Dispatcher.Post(() => IsPossiblyStuck = stuck));
         Status = TabStatus.NotStarted;
         _restoredTranscript = !isRestored;
@@ -252,6 +254,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             if (ContextDetail is { } context)
             {
                 rows.Add(new InfoRow("Context", $"{ContextText} ({context})"));
+            }
+            if (Agents.Summary is { } agents)
+            {
+                rows.Add(new InfoRow("Agents", agents));
             }
             rows.Add(new InfoRow("Status", StatusTip));
             return rows;
@@ -971,10 +977,15 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         try
         {
             var transcript = await TranscriptReader.ReadAsync(path);
+            // The agent map shows the finished tree, with no live status (DESIGN.md §18).
+            Agents.IsReplaying = true;
             foreach (var item in transcript.Items)
             {
                 switch (item)
                 {
+                    case TranscriptTaskNotification notification:
+                        Agents.OnTaskNotification(notification);
+                        break;
                     case TranscriptPrompt prompt:
                         _conversation.AddUserMessage(prompt.Text);
                         break;
@@ -1008,6 +1019,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         catch (Exception ex)
         {
             _conversation.AddNote($"Couldn't read the earlier conversation: {ex.Message}", NoteKind.Warning);
+        }
+        finally
+        {
+            Agents.FinishReplay();
         }
         return sessionId;
     }
@@ -1308,6 +1323,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     public async ValueTask CloseAsync(bool killProcesses)
     {
         _checkIns.Dispose();
+        StopAgentTicker();
         _services.Notifications.ClearTab(Id);
         ReleaseLease();
         await StopSessionAsync(killProcesses);

@@ -18,4 +18,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Claudette.App\Claudette.App.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Recorded Claude Code traffic, replayed through a tab (DESIGN.md §15, "Protocol fixtures"). -->
+    <None Include="..\Claudette.Core.Tests\Fixtures\protocol\**\*.jsonl" LinkBase="Fixtures\protocol" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
