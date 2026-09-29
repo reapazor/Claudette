@@ -1,3 +1,4 @@
+using System.Globalization;
 using Claudette.App.Controls;
 using Claudette.App.Services;
 using Claudette.Core.Sessions;
@@ -9,7 +10,27 @@ using CommunityToolkit.Mvvm.Input;
 namespace Claudette.App.ViewModels;
 
 /// <summary>A tab's tokens in the current session window, for "which tab is burning the most".</summary>
-public sealed record TabBurnRow(string Name, string Tokens, string Cost, string Turns, double Share);
+/// <param name="Share">The tab's part of all the tabs' tokens in the window, from 0 to 1.</param>
+public sealed record TabBurnRow(string Name, string Tokens, string Cost, string Turns, double Share)
+{
+    /// <summary>"41%", for the detailed header's busiest tabs (DESIGN.md §6).</summary>
+    public string ShareText => string.Create(CultureInfo.CurrentCulture, $"{Share * 100:0}%");
+
+    /// <summary>One row per tab, the heaviest first. <paramref name="tabName"/> names open tabs; the rest were closed.</summary>
+    public static IReadOnlyList<TabBurnRow> From(IReadOnlyList<TabTokenSum> sums, Func<string, string?> tabName)
+    {
+        var total = Math.Max(1, sums.Sum(s => s.Total));
+        return sums
+            .OrderByDescending(s => s.Total)
+            .Select(s => new TabBurnRow(
+                tabName(s.TabId) ?? "A closed tab",
+                TokenTotals.Short(s.Total),
+                $"${s.CostUsd:0.00}",
+                $"{s.Turns} turn{(s.Turns == 1 ? "" : "s")}",
+                (double)s.Total / total))
+            .ToArray();
+    }
+}
 
 /// <summary>A past session window or week, with the highest usage it reached.</summary>
 public sealed record PastWindowRow(string When, string Peak, double Percent);
@@ -118,18 +139,7 @@ public sealed partial class UsagePanelViewModel : ViewModelBase
 
         // Tokens per tab since the current session window started.
         var windowStart = snapshot?.Session?.ResetsAt is { } sessionReset ? sessionReset - SessionWindow : now - SessionWindow;
-        var sums = store.GetTokensByTab(windowStart);
-        var total = Math.Max(1, sums.Sum(s => s.Input + s.Output + s.CacheWrite + s.CacheRead));
-        Tabs = sums
-            .Select(s => (Sum: s, Tokens: s.Input + s.Output + s.CacheWrite + s.CacheRead))
-            .OrderByDescending(s => s.Tokens)
-            .Select(s => new TabBurnRow(
-                _tabName(s.Sum.TabId) ?? "A closed tab",
-                TokenTotals.Short(s.Tokens),
-                $"${s.Sum.CostUsd:0.00}",
-                $"{s.Sum.Turns} turn{(s.Sum.Turns == 1 ? "" : "s")}",
-                (double)s.Tokens / total))
-            .ToArray();
+        Tabs = TabBurnRow.From(store.GetTokensByTab(windowStart), _tabName);
         OnPropertyChanged(nameof(HasTabs));
 
         // Past windows, as far back as the history goes; the lists show a page at a time.

@@ -34,6 +34,12 @@ public sealed class AppState
     public double? SidebarWidth { get; set; }
 
     /// <summary>
+    /// The usage header is drawn taller, with charts of the session and the week (DESIGN.md §6, "Detailed header").
+    /// Its chevron and Settings → Appearance both set it. Kept per machine, like the sidebar's collapsed state.
+    /// </summary>
+    public bool DetailedUsageHeader { get; set; }
+
+    /// <summary>
     /// Where a project from another machine lives on this one, keyed by normalized git remote and path in the repo
     /// (DESIGN.md §9, "Restoring on another machine").
     /// </summary>

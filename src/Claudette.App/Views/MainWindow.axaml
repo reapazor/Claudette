@@ -36,13 +36,42 @@
     <Style Selector="Button.header:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
     </Style>
+    <!-- The detailed header's charts (DESIGN.md §6, "Detailed header") -->
+    <Style Selector="controls|UsageDetailChart">
+      <Setter Property="LineBrush" Value="{DynamicResource MeterBrush}" />
+      <Setter Property="ProjectionBrush" Value="{DynamicResource MutedTextBrush}" />
+      <Setter Property="WarnBrush" Value="{DynamicResource MeterWarningBrush}" />
+      <Setter Property="CriticalBrush" Value="{DynamicResource MeterCriticalBrush}" />
+      <Setter Property="GridBrush" Value="{DynamicResource DividerBrush}" />
+      <Setter Property="LabelBrush" Value="{DynamicResource MutedTextBrush}" />
+      <Setter Property="SurfaceBrush" Value="{DynamicResource ChartSurfaceBrush}" />
+      <Setter Property="SeriesBrush" Value="{DynamicResource ChartModelBrush}" />
+      <Setter Property="Series2Brush" Value="{DynamicResource ChartModel2Brush}" />
+    </Style>
+    <Style Selector="Border.swatch">
+      <Setter Property="Width" Value="10" />
+      <Setter Property="Height" Value="3" />
+      <Setter Property="CornerRadius" Value="1.5" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Background" Value="{DynamicResource MeterBrush}" />
+    </Style>
+    <Style Selector="Border.swatch.model1">
+      <Setter Property="Background" Value="{DynamicResource ChartModelBrush}" />
+    </Style>
+    <Style Selector="Border.swatch.model2">
+      <Setter Property="Background" Value="{DynamicResource ChartModel2Brush}" />
+    </Style>
+    <Style Selector="TextBlock.figure">
+      <Setter Property="FontSize" Value="18" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
   </Window.Styles>
 
   <Grid>
     <DockPanel>
       <!-- Header: usage meters (DESIGN.md §6) and the account -->
       <Border DockPanel.Dock="Top" Padding="10,6" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource DividerBrush}">
-        <Grid ColumnDefinitions="*,Auto">
+        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
           <TextBlock Text="Claudette" FontWeight="SemiBold" VerticalAlignment="Center" Margin="6,0"
                      IsVisible="{Binding !HasUsage}" />
 
@@ -97,6 +126,17 @@
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
             <TextBlock Classes="muted small" Text="{Binding UsageNote}" VerticalAlignment="Center"
                        IsVisible="{Binding UsageNote, Converter={x:Static ObjectConverters.IsNotNull}}" />
+            <!-- Draws the header taller with charts, and back (DESIGN.md §6, "Detailed header") -->
+            <Button Name="UsageDetailsToggle" Classes="flat" Padding="8" VerticalAlignment="Center" IsVisible="{Binding HasUsage}"
+                    Command="{Binding Usage.ToggleDetailsCommand, FallbackValue={x:Null}}"
+                    ToolTip.Tip="{Binding Usage.DetailsToggleText, FallbackValue=''}" AutomationProperties.Name="{Binding Usage.DetailsToggleText, FallbackValue=''}">
+              <Panel Width="12" Height="12">
+                <Path Data="{StaticResource IconChevronDown}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Stretch="Uniform"
+                      Width="11" Height="6" IsVisible="{Binding !Usage.IsDetailed, FallbackValue=True}" />
+                <Path Data="{StaticResource IconChevronUp}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Stretch="Uniform"
+                      Width="11" Height="6" IsVisible="{Binding Usage.IsDetailed, FallbackValue=False}" />
+              </Panel>
+            </Button>
             <!-- The account menu (DESIGN.md §11): the email and plan from claude auth status, and Sign out -->
             <Button Classes="header" IsVisible="{Binding Account.Status, Converter={x:Static ObjectConverters.IsNotNull}}"
                     ToolTip.Tip="Your Claude Code account" AutomationProperties.Name="Account">
@@ -129,6 +169,85 @@
               <TextBlock Classes="muted" Text="{Binding Account.HeaderPlan}" VerticalAlignment="Center" />
             </Button>
           </StackPanel>
+
+          <!-- The detailed header (DESIGN.md §6): charts of the session and the week, the burn rate and the busiest
+               tabs. Narrow windows leave out the busiest tabs, then the weekly chart. Click for the Usage panel. -->
+          <Button Name="UsageDetails" Grid.Row="1" Grid.ColumnSpan="2" Classes="header" Margin="0,6,0,2" HorizontalAlignment="Stretch"
+                  IsVisible="{Binding Usage.ShowDetails, FallbackValue=False}" Command="{Binding Usage.OpenPanelCommand, FallbackValue={x:Null}}"
+                  ToolTip.Tip="Usage details (click)" AutomationProperties.Name="Usage charts">
+            <Grid Height="150" ColumnDefinitions="3*,2*,Auto,Auto">
+              <!-- The session: usage from the window's start to its reset -->
+              <DockPanel Grid.ColumnSpan="{Binding Usage.SessionChartSpan, FallbackValue=1}" Margin="0,0,20,0">
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" ColumnSpacing="12" Margin="0,0,0,2">
+                  <TextBlock Classes="small" FontWeight="SemiBold" Text="This session" />
+                  <TextBlock Grid.Column="1" Classes="small warning" Text="{Binding Usage.CrossingText, FallbackValue=''}" HorizontalAlignment="Right"
+                             TextTrimming="CharacterEllipsis" IsVisible="{Binding Usage.HasCrossing, FallbackValue=False}" />
+                </Grid>
+                <controls:UsageDetailChart Name="SessionChart" Axis="Times"
+                                           Points="{Binding Usage.DetailSessionPoints}" Projection="{Binding Usage.SessionProjection}"
+                                           RangeStart="{Binding Usage.WindowStart}" RangeEnd="{Binding Usage.WindowEnd}"
+                                           Now="{Binding Usage.Now}" Marker="{Binding Usage.SessionCrossing}"
+                                           WarnLevel="{Binding Usage.WarnPercent}" CriticalLevel="{Binding Usage.CriticalPercent}" />
+              </DockPanel>
+
+              <!-- The week, with the model-specific weekly limits as thinner lines -->
+              <DockPanel Grid.Column="1" Margin="0,0,20,0" IsVisible="{Binding Usage.ShowWeekChart, FallbackValue=False}">
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" ColumnSpacing="12" Margin="0,0,0,2">
+                  <TextBlock Classes="small" FontWeight="SemiBold" Text="This week" />
+                  <ItemsControl Grid.Column="1" HorizontalAlignment="Right" ItemsSource="{Binding Usage.WeekLegend}"
+                                IsVisible="{Binding Usage.HasWeekLegend, FallbackValue=False}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="10" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="vm:ChartLegendItem">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                          <Border Classes="swatch" Classes.model1="{Binding IsFirstModel}" Classes.model2="{Binding IsSecondModel}" />
+                          <TextBlock Classes="small muted" Text="{Binding Label}" />
+                          <TextBlock Classes="small" Text="{Binding PercentText}" />
+                        </StackPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Grid>
+                <controls:UsageDetailChart Name="WeekChart" Axis="Days"
+                                           Points="{Binding Usage.WeekPoints}" Projection="{Binding Usage.WeekProjection}" Series="{Binding Usage.WeekModelSeries}"
+                                           RangeStart="{Binding Usage.WeekStart}" RangeEnd="{Binding Usage.WeekEnd}" Now="{Binding Usage.Now}"
+                                           WarnLevel="{Binding Usage.WarnPercent}" CriticalLevel="{Binding Usage.CriticalPercent}" />
+              </DockPanel>
+
+              <!-- The burn rate and the time to the limit -->
+              <StackPanel Grid.Column="2" Width="130" Margin="0,0,20,0">
+                <TextBlock Classes="small muted" Text="Burn rate" />
+                <TextBlock Classes="figure" Text="{Binding Usage.BurnRateText, FallbackValue=''}" />
+                <TextBlock Classes="small muted" Text="{Binding Usage.BurnRateNote, FallbackValue=''}" TextWrapping="Wrap" />
+                <TextBlock Classes="small muted" Text="Time to limit" Margin="0,10,0,0" />
+                <TextBlock Classes="figure" Classes.warning="{Binding Usage.IsProjectionWarning, FallbackValue=False}" Text="{Binding Usage.TimeToLimitText, FallbackValue=''}" />
+                <TextBlock Classes="small muted" Classes.warning="{Binding Usage.IsProjectionWarning, FallbackValue=False}" Text="{Binding Usage.TimeToLimitNote, FallbackValue=''}" TextWrapping="Wrap" />
+              </StackPanel>
+
+              <!-- The busiest tabs this window, by tokens -->
+              <StackPanel Name="BusiestTabs" Grid.Column="3" Width="200" Spacing="6" IsVisible="{Binding Usage.ShowBusiestTabs, FallbackValue=False}">
+                <TextBlock Classes="small" FontWeight="SemiBold" Text="Busiest tabs" />
+                <TextBlock Classes="small muted" Text="No turns yet in this window." TextWrapping="Wrap" IsVisible="{Binding !Usage.HasBusiestTabs, FallbackValue=True}" />
+                <ItemsControl ItemsSource="{Binding Usage.BusiestTabs}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:TabBurnRow">
+                      <StackPanel Spacing="3" Margin="0,0,0,7">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                          <TextBlock Classes="small" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Grid.Column="1" Classes="small muted" Text="{Binding ShareText}" />
+                        </Grid>
+                        <ProgressBar Classes="meter" Maximum="1" Height="4" MinHeight="4" Value="{Binding Share}" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Grid>
+          </Button>
         </Grid>
       </Border>
 

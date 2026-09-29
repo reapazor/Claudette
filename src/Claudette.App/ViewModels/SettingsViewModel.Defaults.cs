@@ -61,6 +61,7 @@ public sealed partial class SettingsViewModel
     {
         _settings.Appearance = new AppearanceSettings();
         Save();
+        DetailedUsageHeader = false;
         OnPropertyChanged(nameof(Theme));
         OnPropertyChanged(nameof(ConversationFontSize));
         OnPropertyChanged(nameof(CodeFontSize));

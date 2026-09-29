@@ -246,6 +246,9 @@
           <CheckBox Content="Show what Claude is doing while it works" IsChecked="{Binding ShowToolInWorkingLine}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                      Text="While a tool runs, the line says what it's doing instead, such as “Running dotnet test…” or “Reading TabView.axaml…”." />
+          <CheckBox Content="Detailed usage header" IsChecked="{Binding DetailedUsageHeader}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="Draws the usage header taller, with charts of the session and the week, the burn rate and the busiest tabs. The chevron at the header's right does the same. Kept on this machine, not synced." />
           <Button Content="Reset to defaults" Command="{Binding ResetAppearanceCommand}" />
         </StackPanel>
 

@@ -119,6 +119,92 @@ public sealed class BurnRateTests
         Assert.Equal("You've hit the limit.", projection.Describe());
     }
 
+    // ---- The detailed header (DESIGN.md §6, "Detailed header") ----------------------------------------------------
+
+    [Fact]
+    public void The_projection_says_when_it_crosses_the_critical_threshold()
+    {
+        // 60% an hour from 35%: 90% in 55 minutes, 1h 19m before the reset.
+        var reset = Now + new TimeSpan(2, 14, 0);
+        var projection = BurnRate.Project(Points((-30, 5), (-15, 20)), 35, reset, Now);
+
+        var crossing = BurnRate.FirstCrossing(projection, reset, Now, criticalPercent: 90)!;
+
+        Assert.Equal(90, crossing.Level);
+        Assert.Equal(Now.AddMinutes(55), crossing.At, TimeSpan.FromSeconds(1));
+        Assert.Equal(79, crossing.BeforeReset.TotalMinutes, 3);
+        Assert.Equal($"Hits 90% at {crossing.At.ToLocalTime():t}, 1h 19m before it resets.", crossing.Describe());
+    }
+
+    [Fact]
+    public void Past_the_critical_threshold_the_crossing_is_the_limit()
+    {
+        // 20% an hour from 92%: the limit in 24 minutes.
+        var reset = Now.AddHours(1);
+        var projection = BurnRate.Project(Points((-30, 82), (-15, 87)), 92, reset, Now);
+
+        var crossing = BurnRate.FirstCrossing(projection, reset, Now, criticalPercent: 90)!;
+
+        Assert.Equal(100, crossing.Level);
+        Assert.Equal(Now.AddMinutes(24), crossing.At, TimeSpan.FromSeconds(1));
+        Assert.StartsWith("Hits the limit at ", crossing.Describe(), StringComparison.Ordinal);
+        Assert.EndsWith(", 36m before it resets.", crossing.Describe(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_crossing_after_the_reset_or_without_a_rate_is_none()
+    {
+        var reset = Now.AddHours(3);
+        var slow = BurnRate.Project(Points((-30, 35), (-15, 37.5)), 40, reset, Now);
+        var idle = BurnRate.Project(Points((-30, 40), (-10, 40)), 40, reset, Now);
+        var unknown = BurnRate.Project([], 40, reset, Now);
+        var atLimit = BurnRate.Project(Points((-30, 90), (-15, 95)), 100, reset, Now);
+
+        // 10% an hour from 40% is at 70% by the reset: it crosses a threshold of 60%, but not 90%.
+        Assert.Null(BurnRate.FirstCrossing(slow, reset, Now, criticalPercent: 90));
+        Assert.NotNull(BurnRate.FirstCrossing(slow, reset, Now, criticalPercent: 60));
+        Assert.Null(BurnRate.FirstCrossing(idle, reset, Now, 90));
+        Assert.Null(BurnRate.FirstCrossing(unknown, reset, Now, 90));
+        Assert.Null(BurnRate.FirstCrossing(atLimit, reset, Now, 90));
+        Assert.Null(BurnRate.FirstCrossing(slow, null, Now, 90));
+    }
+
+    [Fact]
+    public void The_week_is_projected_at_its_average_pace()
+    {
+        // 30% in the first 3 days of the week: 10% a day, so 70% when it resets 4 days from now.
+        var start = Now.AddDays(-3);
+        var projection = BurnRate.ProjectAverage(30, start, Now.AddDays(4), Now);
+
+        Assert.Equal(10.0 / 24, projection.RatePerHour!.Value, 6);
+        Assert.False(projection.HitsLimitBeforeReset);
+        Assert.Equal(70, projection.PercentAtReset!.Value, 6);
+        Assert.Equal(Now.AddDays(7), projection.LimitAt!.Value, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public void A_fast_week_hits_its_limit_before_it_resets()
+    {
+        var projection = BurnRate.ProjectAverage(60, Now.AddDays(-3), Now.AddDays(4), Now);
+
+        Assert.True(projection.HitsLimitBeforeReset);
+        Assert.Equal(Now.AddDays(2), projection.LimitAt!.Value, TimeSpan.FromSeconds(1));
+        Assert.Equal(2, projection.MarginBeforeReset!.Value.TotalDays, 6);
+        Assert.Equal(100, projection.PercentAtReset);
+    }
+
+    [Fact]
+    public void An_unused_or_just_started_week_has_no_pace()
+    {
+        var unused = BurnRate.ProjectAverage(0, Now.AddDays(-2), Now.AddDays(5), Now);
+        var justStarted = BurnRate.ProjectAverage(5, Now.AddMinutes(-1), Now.AddDays(7), Now);
+
+        Assert.True(unused.IsIdle);
+        Assert.Equal(0, unused.PercentAtReset);
+        Assert.Null(justStarted.RatePerHour);
+        Assert.Null(justStarted.LimitAt);
+    }
+
     [Theory]
     [InlineData(0, UsageLevel.Normal)]
     [InlineData(74.9, UsageLevel.Normal)]

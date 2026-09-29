@@ -187,6 +187,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Appearance", "Show thinking expanded"),
         new("Appearance", "Show fun words while Claude works"),
         new("Appearance", "Show what Claude is doing while it works"),
+        new("Appearance", "Detailed usage header"),
         new("Usage", "Warn at (% of session used)"),
         new("Usage", "Alert at (% of session used)"),
         new("Usage", "Burn rate window (minutes)"),
@@ -477,6 +478,24 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         get => _settings.Appearance.ShowToolInWorkingLine;
         set => Set(value, v => _settings.Appearance.ShowToolInWorkingLine = v);
+    }
+
+    /// <summary>
+    /// The usage header drawn taller with charts (DESIGN.md §6, "Detailed header"), the same switch as its chevron. It's
+    /// this machine's state rather than a setting, like the sidebar's collapsed state, so it doesn't sync.
+    /// </summary>
+    public bool DetailedUsageHeader
+    {
+        get => _services.State.DetailedUsageHeader;
+        set
+        {
+            if (_services.State.DetailedUsageHeader != value)
+            {
+                _services.State.DetailedUsageHeader = value;
+                _services.SaveState();
+                OnPropertyChanged();
+            }
+        }
     }
 
     // ---- Sessions ------------------------------------------------------------------------------------------------

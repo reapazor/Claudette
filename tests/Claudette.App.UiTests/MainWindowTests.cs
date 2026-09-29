@@ -11,6 +11,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
 using Claudette.App.Services;
+using Claudette.App.Controls;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 using Claudette.App.Views;
@@ -44,6 +45,63 @@ public class MainWindowTests
         await UiText.SettleUntilAsync(window, () => UiText.Describe(window).Contains("Found two problems", StringComparison.Ordinal), "the reply");
 
         await Verify(UiText.Describe(window, (h.Root, "{root}")));
+    }
+
+    [AvaloniaFact]
+    public async Task The_chevron_draws_the_usage_header_taller_with_charts()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        await using var tracker = new UsageTracker(h.Services, new UsageStore(Path.Combine(h.Root, "usage.db"), h.Time));
+        using var usage = new UsageViewModel(h.Services, tracker);
+        tracker.OnRateLimitEvent(RateLimitEvent(0.62, h.Time.GetUtcNow().AddHours(2).AddMinutes(14), 0.38));
+        await TabTestHarness.Eventually(() => usage.HasData, "the meters");
+        var main = new MainWindowViewModel(h.Services) { CurrentPage = h.Shell, Usage = usage };
+        var window = new MainWindow { DataContext = main, Width = 1200, Height = 800 };
+        window.Show();
+        UiText.Settle(window);
+        var details = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "UsageDetails");
+        var chevron = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "UsageDetailsToggle");
+        Assert.False(details.IsEffectivelyVisible);
+        Assert.Equal("Expand the usage header", AutomationProperties.GetName(chevron));
+
+        Click(window, chevron);
+        await UiText.SettleUntilAsync(window, () => details.IsEffectivelyVisible, "the charts");
+
+        // The charts are made when the header first expands.
+        var sessionChart = details.GetVisualDescendants().OfType<UsageDetailChart>().Single(c => c.Name == "SessionChart");
+        var weekChart = details.GetVisualDescendants().OfType<UsageDetailChart>().Single(c => c.Name == "WeekChart");
+        var busiest = details.GetVisualDescendants().OfType<Control>().Single(c => c.Name == "BusiestTabs");
+        Assert.True(h.Services.State.DetailedUsageHeader);
+        Assert.Equal("Collapse the usage header", AutomationProperties.GetName(chevron));
+        Assert.True(sessionChart.IsEffectivelyVisible && weekChart.IsEffectivelyVisible && busiest.IsEffectivelyVisible);
+        // About 130 px of chart under each title, and the session gets the larger share of the width.
+        Assert.InRange(sessionChart.Bounds.Height, 120, 150);
+        Assert.Equal(sessionChart.Bounds.Height, weekChart.Bounds.Height);
+        Assert.True(sessionChart.Bounds.Width > weekChart.Bounds.Width, $"The session chart is {sessionChart.Bounds.Width} px wide, the week's {weekChart.Bounds.Width}.");
+        Assert.True(weekChart.Bounds.Width > 200, $"The weekly chart is {weekChart.Bounds.Width} px wide.");
+        var wide = sessionChart.Bounds.Width;
+        // They draw, empty or not.
+        foreach (var chart in new[] { sessionChart, weekChart })
+        {
+            using var bitmap = new RenderTargetBitmap(new PixelSize((int)chart.Bounds.Width, (int)chart.Bounds.Height));
+            bitmap.Render(chart);
+        }
+
+        // A narrow window leaves out the busiest tabs, then the weekly chart, and the session chart takes the room.
+        window.Width = UsageViewModel.DetailsTabsMinWidth - 20;
+        UiText.Settle(window);
+        Assert.False(busiest.IsEffectivelyVisible);
+        Assert.True(weekChart.IsEffectivelyVisible);
+        window.Width = UsageViewModel.DetailsWeekMinWidth - 20;
+        UiText.Settle(window);
+        Assert.False(weekChart.IsEffectivelyVisible);
+        Assert.True(sessionChart.IsEffectivelyVisible);
+        Assert.True(sessionChart.Bounds.Width > wide * 0.9, $"The session chart is {sessionChart.Bounds.Width} px wide.");
+
+        Click(window, chevron);
+        UiText.Settle(window);
+        Assert.False(details.IsEffectivelyVisible);
+        Assert.False(h.Services.State.DetailedUsageHeader);
     }
 
     [AvaloniaFact]
