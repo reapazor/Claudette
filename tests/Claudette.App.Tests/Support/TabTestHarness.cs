@@ -148,14 +148,24 @@ internal sealed class ScriptedSessionFactory(ScriptedTransport transport, TimePr
 
 internal sealed class InlineDispatcher : IUiDispatcher
 {
-    private readonly Lock _lock = new();
+    // Stands in for the one UI thread: every harness shares it, and tests read view model state under it too.
+    private static readonly Lock UiThread = new();
 
     public void Post(Action action)
     {
         // Serialize like a UI thread would.
-        lock (_lock)
+        lock (UiThread)
         {
             action();
+        }
+    }
+
+    /// <summary>Evaluates <paramref name="read"/> as if on the UI thread, so it can't see a collection mid-change.</summary>
+    public static T Read<T>(Func<T> read)
+    {
+        lock (UiThread)
+        {
+            return read();
         }
     }
 }
@@ -278,7 +288,7 @@ internal sealed class TabTestHarness : IAsyncDisposable
     {
         for (var i = 0; i < 200; i++)
         {
-            if (condition())
+            if (InlineDispatcher.Read(condition))
             {
                 return;
             }
