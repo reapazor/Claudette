@@ -161,6 +161,7 @@ public class AgentMapTests
         Assert.Equal(1020, nested.Tokens);
         // The conversation's groups say the same.
         Assert.True(top.Item!.IsComplete);
+        Assert.True(top.Item.IsSucceeded);
         Assert.False(top.Item.IsError);
         Assert.Equal("All found.", top.Item.ResultSummary);
         Assert.Equal("Nested done.", nested.Item!.ResultSummary);
@@ -262,6 +263,9 @@ public class AgentMapTests
         Assert.Equal(AgentStatus.Stopped, tab.Agents.Find("child")!.Status);
         Assert.False(tab.Agents.Find("child")!.Item!.IsError);
         Assert.Equal("Stopped", tab.Agents.Find("stop")!.Item!.ResultSummary);
+        // Its group's dot is neither done nor failed.
+        Assert.False(tab.Agents.Find("stop")!.Item!.IsSucceeded);
+        Assert.False(tab.Agents.Find("stop")!.Item!.IsError);
         // A foreground subagent can't outlive its turn.
         Assert.Equal(AgentStatus.Stopped, tab.Agents.Find("cut")!.Status);
         Assert.Equal(AgentStatus.Idle, tab.Agents.Root.Status);

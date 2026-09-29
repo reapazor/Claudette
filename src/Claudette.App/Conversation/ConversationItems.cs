@@ -254,6 +254,12 @@ public sealed partial class SubagentItem : ToolUseItem
     [ObservableProperty]
     public partial bool IsBackground { get; private set; }
 
+    /// <summary>Stopped, by the user or an interrupt: neither done nor failed, so its dot is muted.</summary>
+    public bool IsStopped { get; private set; }
+
+    /// <summary>Finished and returned its report: the green dot.</summary>
+    public bool IsSucceeded => IsComplete && !IsError && !IsStopped;
+
     public override void ApplyResult(string text, bool isError, JsonNode? toolUseResult)
     {
         if (!isError && toolUseResult is JsonObject result && Str(result, "status") is "async_launched" or "remote_launched")
@@ -268,6 +274,7 @@ public sealed partial class SubagentItem : ToolUseItem
         {
             ResultSummary = report;
         }
+        OnPropertyChanged(nameof(IsSucceeded));
     }
 
     /// <summary>How it ended, as the agent map sees it, so the group's status dot and result line agree with the map.</summary>
@@ -275,6 +282,9 @@ public sealed partial class SubagentItem : ToolUseItem
     {
         IsComplete = true;
         IsError = status == AgentStatus.Failed;
+        IsStopped = status == AgentStatus.Stopped;
+        OnPropertyChanged(nameof(IsStopped));
+        OnPropertyChanged(nameof(IsSucceeded));
         ResultSummary = status switch
         {
             AgentStatus.Stopped => "Stopped",

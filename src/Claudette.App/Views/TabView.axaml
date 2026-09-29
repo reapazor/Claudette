@@ -98,7 +98,7 @@
       <StackPanel Spacing="2">
         <Button Classes="flat row" Command="{Binding ToggleCommand}">
           <StackPanel Orientation="Horizontal" Spacing="8">
-            <TextBlock Classes="status" Classes.busy="{Binding !IsComplete}" Classes.ok="{Binding IsComplete}" Classes.failed="{Binding IsError}" Text="●" VerticalAlignment="Center" />
+            <TextBlock Classes="status" Classes.busy="{Binding !IsComplete}" Classes.ok="{Binding IsSucceeded}" Classes.failed="{Binding IsError}" Text="●" VerticalAlignment="Center" />
             <TextBlock Text="{Binding Icon}" Classes="muted" VerticalAlignment="Center" />
             <TextBlock FontWeight="SemiBold" Text="{Binding AgentType}" VerticalAlignment="Center" />
             <TextBlock Classes="muted" Text="{Binding Summary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
