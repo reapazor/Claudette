@@ -218,7 +218,11 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         try
         {
             var tracker = services.StartUsageTracking();
-            var usage = new UsageViewModel(services, tracker);
+            var usage = new UsageViewModel(services, tracker)
+            {
+                // The detailed header's busiest tabs, by name (DESIGN.md §6, "Detailed header").
+                TabName = id => _shell?.AllTabs.FirstOrDefault(t => t.Id == id)?.DisplayName,
+            };
             usage.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(UsageViewModel.HasData))

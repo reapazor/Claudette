@@ -225,6 +225,7 @@
       <StreamGeometry x:Key="IconSidebar">M1.5,2 L10.5,2 L10.5,10 L1.5,10 Z M4.5,2 L4.5,10</StreamGeometry>
       <StreamGeometry x:Key="IconChevronDown">M3,4.5 L6,7.5 L9,4.5</StreamGeometry>
       <StreamGeometry x:Key="IconChevronRight">M4.5,3 L7.5,6 L4.5,9</StreamGeometry>
+      <StreamGeometry x:Key="IconChevronUp">M3,7.5 L6,4.5 L9,7.5</StreamGeometry>
       <StreamGeometry x:Key="IconUpdate">M6,10.5 L6,2 M2.5,5.5 L6,2 L9.5,5.5</StreamGeometry>
       <StreamGeometry x:Key="IconOpenWindow">M7,1.5 L10.5,1.5 L10.5,5 M10.5,1.5 L6,6 M5,2.5 L1.5,2.5 L1.5,10.5 L9.5,10.5 L9.5,7</StreamGeometry>
       <StreamGeometry x:Key="IconRestart">M10.5,6 A4.5,4.5 0 1 1 9.18,2.82 M9.4,0.6 L9.18,2.82 L6.96,2.6</StreamGeometry>
@@ -284,6 +285,12 @@
           <SolidColorBrush x:Key="MeterBrush" Color="{DynamicResource SystemAccentColor}" />
           <SolidColorBrush x:Key="MeterWarningBrush" Color="#D98A00" />
           <SolidColorBrush x:Key="MeterCriticalBrush" Color="#C42B1C" />
+          <!-- The detailed usage header's charts (DESIGN.md §6): model-specific weekly limits beside the accent line, and
+               the page behind the charts, for the ring around a marker. Checked apart from the accent and each other,
+               also with color blindness. -->
+          <SolidColorBrush x:Key="ChartModelBrush" Color="#12946A" />
+          <SolidColorBrush x:Key="ChartModel2Brush" Color="#4A3AA7" />
+          <SolidColorBrush x:Key="ChartSurfaceBrush" Color="#FFFFFF" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
           <SolidColorBrush x:Key="MicaPageBrush" Color="#202020" />
@@ -318,6 +325,9 @@
           <SolidColorBrush x:Key="MeterBrush" Color="{DynamicResource SystemAccentColorLight2}" />
           <SolidColorBrush x:Key="MeterWarningBrush" Color="#F2B233" />
           <SolidColorBrush x:Key="MeterCriticalBrush" Color="#FF6B61" />
+          <SolidColorBrush x:Key="ChartModelBrush" Color="#199E70" />
+          <SolidColorBrush x:Key="ChartModel2Brush" Color="#9D6FE8" />
+          <SolidColorBrush x:Key="ChartSurfaceBrush" Color="#000000" />
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
     </ResourceDictionary>

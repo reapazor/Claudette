@@ -133,7 +133,7 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
 └──────────────────┴─────────────────────────────────────────────────────────┘
 ```
 
-1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. See [§6](#6-token-burn-awareness).
+1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. A chevron at its right draws it taller, with charts ([Detailed header](#detailed-header)). See [§6](#6-token-burn-awareness).
 2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder. **New tab** is at its top; **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
 3. **Conversation.** The selected tab's conversation. See [§5](#5-conversation-view).
 4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), and optionally its running processes ([§4](#process-monitor)).
@@ -458,6 +458,34 @@ This is Claudette's main feature: knowing how fast you're using your plan's limi
   - Past sessions and weeks, as far back as the stored [usage history](#usage-history) goes. Each past window shows the highest usage it reached. The lists show the latest 30 sessions and 12 weeks, with **Show more** for the next page.
 - Accounts without plan limits (an API key, for example) get no meters; the header just says Claudette.
 
+### Detailed header
+
+The header can be drawn taller, with charts, for keeping an eye on usage without opening the Usage panel.
+
+- **Turning it on.** A chevron at the header's right expands it, and collapses it again. Settings → Appearance → **Detailed usage header** is the same switch.
+  - The choice is remembered on this machine and doesn't sync, like the sidebar's collapsed state.
+  - Collapsed, the header is exactly as described above.
+- **Layout.** The one-line header stays on top. Under it, about 150 px high: the session chart, the weekly chart, the numbers and the busiest tabs, left to right.
+- **Session chart.** Usage over the current 5-hour window, from its start to its reset.
+  - Faint bands above the warning and critical thresholds (Settings → Usage), with a dashed line at each.
+  - The dotted projection from now, a "now" marker, and times at the start, now and the reset.
+  - When the projection crosses the critical threshold before the reset, that point is marked and the chart says when: "Hits 90% at 14:05, 1h 16m before it resets." Past the threshold, it marks the limit instead: "Hits the limit at …".
+- **Weekly chart.** Usage over the current 7-day window, with a tick at each midnight and the days' names, and the projection to the week's reset.
+  - The weekly projection uses the week's average pace so far, not the burn rate window: a week has nights and days off in it.
+  - Model-specific weekly limits are thinner lines, with a legend, when the model meters are on (Settings → Usage). Two get a line at most: more hues than that don't stay distinct beside the accent color.
+- **Numbers.**
+  - **Burn rate:** % per hour over the burn rate window, or *Idle*.
+  - **Time to limit** at that rate, and whether that's before the reset or the window resets first.
+  - **Busiest tabs:** the top three tabs by tokens this window, as "name 41%" with a small bar. It's the same count as the Usage panel's list of tabs.
+- Clicking the charts opens the Usage panel, as the header does.
+- **Narrow windows** leave out the busiest tabs first (below 960 px), then the weekly chart (below 700 px). The session chart takes the room.
+- Accounts without plan limits get no charts, as they get no meters.
+- **Data.**
+  - The session chart uses the same readings as the sparkline.
+  - The week and the busiest tabs are read from the [usage history](#usage-history), off the UI thread and only while the charts show: when they open, when a new sample may have been stored (at most once a minute) or a window reset, and after each turn.
+  - The charts draw the last value in each minute (session) or each 15 minutes (week), not every sample.
+- **Drawing.** Claudette draws the charts itself, with no charting package. They use the app's color tokens, so they follow the light and dark theme; the model lines' two colors were checked against the accent and each other, including for color blindness.
+
 ### Per-tab context
 
 Separate from plan limits, each tab shows how full its **context window** is (in the composer bar). It warns near the auto-compact threshold and has a quick **Compact** action.
@@ -517,7 +545,7 @@ Claudette stores usage data locally in a SQLite file in the app data folder, so 
 - Weekly (7-day) % used and its reset time.
 - Model-specific weekly % (for example Fable), if that meter is on.
 
-A sample is saved only when a value changes, and at most once a minute. These feed the trendline and projection, the weekly chart, and the header after a restart.
+A sample is saved only when a value changes, and at most once a minute. These feed the trendline and projection, the weekly charts (the Usage panel's and the [detailed header](#detailed-header)'s), and the header after a restart.
 
 **Per-turn token records** (per tab):
 
@@ -527,7 +555,7 @@ A sample is saved only when a value changes, and at most once a minute. These fe
 - Input, output, cache write and cache read tokens.
 - Estimated cost.
 
-These feed each tab's per-turn chart and the "which tab is burning the most" view.
+These feed each tab's per-turn chart, the "which tab is burning the most" view, and the detailed header's busiest tabs.
 
 **Not stored:** prompts, replies, code or any other conversation content. That stays in Claude Code's transcripts and the session library.
 
@@ -1089,7 +1117,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
 | Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. |
 | New tabs | Default model, effort level and permission mode. The model and effort lists are what Claude Code offered in its last `initialize` reply on this machine (the models and each one's effort levels, kept with the machine's state), with a built-in list only until a session has started; Tab settings… lists them the same way. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (**Add folder…**, **Move up**, **Move down**, **Remove**), in the order the new tab picker shows them. See [Opening a tab](#opening-a-tab). |
-| Appearance | Theme: follow system, light or dark. Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. Show fun words while Claude works (on by default; [Working line](#working-line)). |
+| Appearance | Theme: follow system, light or dark. Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. Show fun words while Claude works (on by default; [Working line](#working-line)). **Detailed usage header** (off by default): the same switch as the header's chevron, kept on this machine rather than synced ([Detailed header](#detailed-header)). |
 | Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
 | Quick suffixes | The list of suffixes: label, text and optional shortcut. Add, edit, reorder, delete. See [§5](#quick-suffixes). |
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
@@ -1130,7 +1158,7 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 **Sync settings through the session library** (Settings → Sessions, off by default) keeps Claudette's settings the same on every machine that uses the same library folder ([§9](#session-library-sync-across-machines)).
 
 - **What syncs:** appearance, new-tab defaults, usage thresholds, check-ins, quick suffixes, notifications, keyboard shortcuts and process monitor options.
-- **What stays on each machine:** the path to `claude`, this machine's name, the library folder itself, the diff tool (program paths differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
+- **What stays on each machine:** the path to `claude`, this machine's name, the library folder itself, the diff tool (program paths differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, the sidebar's and the usage header's collapsed or detailed state, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
 - The synced settings are stored as one file in the library. Each setting keeps the time it was last changed, and the newest change wins, so edits on two machines don't overwrite each other wholesale.
 - The first time sync is turned on and the library already has settings from another machine, Claudette asks: **Use synced settings** or **Replace them with this machine's**.
 - Turning sync off keeps the current values on this machine and stops syncing.
@@ -1431,6 +1459,8 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Updating Claudette ([§2](#updating-claudette)).** An installed Claudette checks its GitHub releases, downloads the package for its platform, checks it, and restarts into it with every tab as it was, through the source builds' handover. Settings → General has the version, the checks and pre-releases.
     - **Per-tab sync ([§9](#session-library-sync-across-machines)).** Syncing to the session library is opt-in per tab: **Sync to other machines** in the tab menu and **Tab settings…**, a sync icon on the tab's row, and **Sync new tabs to the session library** in Settings → Sessions (off by default). Sessions opened from the library keep syncing; a tab that doesn't sync writes nothing to the library and ignores leases.
     - **Working line ([§5](#working-line)).** A twinkling glyph, a fun verb, the turn's time and tokens above the composer while Claude works, with Claude Code's `spinnerVerbs`, and **Show fun words while Claude works** in Settings → Appearance.
+    - **Detailed header ([§6](#detailed-header)).** The header's chevron, or **Detailed usage header** in Settings → Appearance, draws the header taller: charts of the session and the week with the thresholds, projections and a mark where the session crosses the critical threshold, the burn rate, the time to the limit and the busiest tabs. Remembered on this machine.
+      - **Still to verify:** how it looks on real screens. So far it has only been rendered headlessly (Skia, light and dark, at several widths). Check it on Windows with Mica, on macOS, on high-DPI displays and with other accent colors.
     - **Still to verify:** installing an update on a real Windows and Mac, which needs signed packages from a published release.
 13. **Later.** New features go in [§18](#18-future-features) first.
 

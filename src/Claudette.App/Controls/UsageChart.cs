@@ -102,13 +102,6 @@ public sealed class UsageChart : Control
     {
         var points = Points ?? [];
         var projection = Projection ?? [];
-        var all = points.Concat(projection).ToArray();
-        var start = RangeStart ?? (all.Length > 0 ? all.Min(p => p.Time) : DateTimeOffset.MinValue);
-        var end = RangeEnd ?? (all.Length > 0 ? all.Max(p => p.Time) : DateTimeOffset.MinValue);
-        if (end <= start)
-        {
-            end = start + TimeSpan.FromMinutes(1);
-        }
 
         const double labelWidth = 34, labelHeight = 16;
         var plot = ShowAxes
@@ -118,16 +111,10 @@ public sealed class UsageChart : Control
         {
             return;
         }
-        var maximum = Maximum <= 0 ? 100 : Maximum;
-
-        Point At(ChartPoint p)
-        {
-            var x = plot.Left + plot.Width * ((p.Time - start).TotalSeconds / (end - start).TotalSeconds);
-            var y = plot.Bottom - plot.Height * Math.Clamp(p.Value / maximum, 0, 1);
-            return new Point(Math.Clamp(x, plot.Left, plot.Right), y);
-        }
-
-        double LevelY(double level) => plot.Bottom - plot.Height * Math.Clamp(level / maximum, 0, 1);
+        var geometry = ChartGeometry.Create(plot, points.Concat(projection), RangeStart, RangeEnd, Maximum);
+        var (start, end, maximum) = (geometry.Start, geometry.End, geometry.Maximum);
+        Point At(ChartPoint p) => geometry.At(p);
+        double LevelY(double level) => geometry.Y(level);
 
         if (ShowAxes && GridBrush is { } grid)
         {

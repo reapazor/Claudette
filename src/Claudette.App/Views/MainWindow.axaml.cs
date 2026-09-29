@@ -17,6 +17,8 @@ public partial class MainWindow : Window
         // Notifications are skipped for what's already in front of the user (DESIGN.md §10).
         Activated += (_, _) => _viewModel?.Services.Notifications.SetAppActive(true);
         Deactivated += (_, _) => _viewModel?.Services.Notifications.SetAppActive(false);
+        // A narrow window leaves the busiest tabs, then the weekly chart, out of the detailed header (DESIGN.md §6).
+        SizeChanged += (_, e) => _viewModel?.Usage?.SetDetailsWidth(e.NewSize.Width);
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -33,6 +35,10 @@ public partial class MainWindow : Window
             _viewModel.PropertyChanged += OnViewModelChanged;
             _viewModel.BringToFrontRequested += BringToFront;
             _viewModel.Services.Notifications.SetAppActive(IsActive);
+            if (_viewModel.Usage is { } usage)
+            {
+                UseUsage(usage);
+            }
         }
     }
 
@@ -40,7 +46,16 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainWindowViewModel.Usage) && _viewModel?.Usage is { } usage)
         {
-            usage.ShowUsagePanel = ShowUsagePanelAsync;
+            UseUsage(usage);
+        }
+    }
+
+    private void UseUsage(UsageViewModel usage)
+    {
+        usage.ShowUsagePanel = ShowUsagePanelAsync;
+        if (Bounds.Width > 0)
+        {
+            usage.SetDetailsWidth(Bounds.Width);
         }
     }
 

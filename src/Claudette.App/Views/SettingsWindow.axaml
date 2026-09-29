@@ -238,6 +238,9 @@
           <CheckBox Content="Show fun words while Claude works" IsChecked="{Binding FunWorkingWords}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                      Text="A twinkling line above the message box, such as “Noodling… 42s · 3.1k tokens”. Off, it says “Working…”. Verbs added to spinnerVerbs in Claude Code's settings show here too." />
+          <CheckBox Content="Detailed usage header" IsChecked="{Binding DetailedUsageHeader}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="Draws the usage header taller, with charts of the session and the week, the burn rate and the busiest tabs. The chevron at the header's right does the same. Kept on this machine, not synced." />
           <Button Content="Reset to defaults" Command="{Binding ResetAppearanceCommand}" />
         </StackPanel>
 
