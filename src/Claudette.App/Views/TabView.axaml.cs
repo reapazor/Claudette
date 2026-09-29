@@ -29,6 +29,15 @@ public partial class TabView : UserControl
 
     private TabViewModel? ViewModel => DataContext as TabViewModel;
 
+    /// <summary>The Perforce password prompt opened: type straight into it.</summary>
+    private void OnPerforcePasswordAttached(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        if (sender is TextBox box)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => box.Focus());
+        }
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
