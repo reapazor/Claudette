@@ -35,7 +35,8 @@ public sealed partial class MeterViewModel(string label) : ObservableObject
 
 /// <summary>
 /// The usage header (DESIGN.md §6, "Header meters" and "Burn trendline"): the session meter with its countdown,
-/// sparkline and projection, the weekly meters, and in-app usage alerts. Click to open the Usage panel.
+/// sparkline and projection, the weekly meters, and in-app usage alerts. Click to open the Usage panel. Its chevron
+/// draws it taller with charts: see <c>UsageViewModel.Details.cs</c>.
 /// </summary>
 public sealed partial class UsageViewModel : ViewModelBase, IDisposable
 {
@@ -52,11 +53,15 @@ public sealed partial class UsageViewModel : ViewModelBase, IDisposable
         _services = services;
         _tracker = tracker;
         _tracker.Updated += OnUpdated;
+        _tracker.TurnRecorded += OnTurnRecorded;
         _services.SettingsChanged += (_, _) => Refresh();
+        _services.StateChanged += OnStateChanged;
+        _services.UsageHistoryCleared += OnUsageHistoryCleared;
         // The countdown and projection move on even when nothing new arrives.
         _clock = services.Time.CreateTimer(_ => services.Dispatcher.Post(Refresh), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
         LoadHistory();
         Refresh();
+        IsDetailed = services.State.DetailedUsageHeader;
     }
 
     public MeterViewModel Session { get; } = new("Session");
@@ -65,6 +70,7 @@ public sealed partial class UsageViewModel : ViewModelBase, IDisposable
     public ObservableCollection<MeterViewModel> Weekly { get; } = [];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowDetails))]
     public partial bool HasData { get; set; }
 
     [ObservableProperty]
@@ -123,6 +129,7 @@ public sealed partial class UsageViewModel : ViewModelBase, IDisposable
             _history.RemoveAll(p => p.Time < cutoff);
         }
         Refresh();
+        QueryDetailsIfDue(snapshot);
         var usage = _services.Settings.Usage;
         foreach (var alert in _alerts.Observe(snapshot, Projection(snapshot), usage.WarnPercent, usage.CriticalPercent))
         {
@@ -168,18 +175,17 @@ public sealed partial class UsageViewModel : ViewModelBase, IDisposable
         var usage = _services.Settings.Usage;
         AsOfText = now - snapshot.AsOf > TimeSpan.FromMinutes(10) ? $"as of {snapshot.AsOf.ToLocalTime():t}" : null;
 
+        BurnProjection? projection = null;
         if (snapshot.Session is { } session)
         {
             Fill(Session, session, now, weekly: false);
-            var projection = Projection(snapshot)!;
+            projection = Projection(snapshot)!;
             ProjectionText = projection.Describe();
             HitsLimitBeforeReset = projection.HitsLimitBeforeReset;
             WindowEnd = session.ResetsAt;
             WindowStart = session.ResetsAt - SessionWindow;
             SessionPoints = _history.Select(p => new ChartPoint(p.Time, p.Percent)).Append(new ChartPoint(now, session.Percent)).ToArray();
-            SessionProjection = projection is { IsIdle: false, RatePerHour: > 0 } && session.ResetsAt is { } end
-                ? [new ChartPoint(now, session.Percent), new ChartPoint(projection.LimitAt is { } limit && limit < end ? limit : end, Math.Min(100, projection.PercentAtReset ?? 100))]
-                : [];
+            SessionProjection = ProjectionLine(projection, session.ResetsAt, now);
         }
 
         var weekly = new List<LimitReading>();
@@ -211,7 +217,21 @@ public sealed partial class UsageViewModel : ViewModelBase, IDisposable
             }
             Fill(meter, reading, now, weekly: true);
         }
+
+        if (IsDetailed)
+        {
+            RefreshDetails(snapshot, projection, now);
+        }
     }
+
+    /// <summary>
+    /// The dotted line that carries the rate on from now: to where it hits the limit, or to the reset. None when
+    /// there's no rate, or the reset isn't known.
+    /// </summary>
+    private static IReadOnlyList<ChartPoint> ProjectionLine(BurnProjection projection, DateTimeOffset? resetsAt, DateTimeOffset now) =>
+        projection is { IsIdle: false, RatePerHour: > 0 } && resetsAt is { } end
+            ? [new ChartPoint(now, projection.CurrentPercent), new ChartPoint(projection.LimitAt is { } limit && limit < end ? limit : end, Math.Min(100, projection.PercentAtReset ?? 100))]
+            : [];
 
     private void Fill(MeterViewModel meter, LimitReading reading, DateTimeOffset now, bool weekly)
     {
@@ -237,6 +257,11 @@ public sealed partial class UsageViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         _tracker.Updated -= OnUpdated;
+        _tracker.TurnRecorded -= OnTurnRecorded;
+        _services.StateChanged -= OnStateChanged;
+        _services.UsageHistoryCleared -= OnUsageHistoryCleared;
+        // A read of the history still running is dropped.
+        _detailsQueries++;
         _clock.Dispose();
     }
 }

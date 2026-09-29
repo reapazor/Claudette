@@ -21,7 +21,10 @@ public class SettingsDefaultsTests
         s.NewTabs.DefaultModel = "opus";
         s.NewTabs.RecentFolderLimit = 5;
         s.Appearance.Theme = ThemeChoice.Dark;
+        s.Appearance.Style = AppStyle.Claude;
         s.Appearance.CodeFont = "Fira Code";
+        s.Appearance.ShowContextOnTabs = false;
+        s.Appearance.Density = Density.Compact;
         s.DiffTool.Kind = "custom";
         s.DiffTool.CustomCommand = "meld {left} {right}";
         s.Advanced.ExtraArguments = "--verbose";
@@ -46,11 +49,36 @@ public class SettingsDefaultsTests
         Assert.Null(s.NewTabs.DefaultModel);
         Assert.Equal(20, s.NewTabs.RecentFolderLimit);
         Assert.Equal(ThemeChoice.System, s.Appearance.Theme);
+        Assert.Equal(AppStyle.Standard, s.Appearance.Style);
+        Assert.Equal("Standard", settings.Style.Label);
         Assert.Null(s.Appearance.CodeFont);
+        Assert.True(s.Appearance.ShowContextOnTabs);
+        Assert.True(settings.ShowContextOnTabs);
+        Assert.Equal(Density.Comfortable, s.Appearance.Density);
+        Assert.Equal(Density.Comfortable, settings.Density);
         Assert.Equal("builtIn", s.DiffTool.Kind);
         Assert.Equal("", s.Advanced.ExtraArguments);
         Assert.False(s.Advanced.LogProtocol);
         Assert.Equal("", settings.CodeFont);
+    }
+
+    [Fact]
+    public async Task Density_applies_at_once()
+    {
+        await using var h = new TabTestHarness();
+        var settings = new SettingsViewModel(h.Services, null);
+        Assert.Equal(Density.Comfortable, settings.Density);
+        Assert.Equal([Density.Comfortable, Density.Compact], settings.Densities);
+        Assert.False(h.Shell.IsCompact);
+
+        settings.Density = Density.Compact;
+
+        Assert.Equal(Density.Compact, h.Services.Settings.Appearance.Density);
+        Assert.True(h.Shell.IsCompact);
+
+        settings.ResetAppearanceCommand.Execute(null);
+
+        Assert.False(h.Shell.IsCompact);
     }
 
     [Fact]
@@ -129,4 +157,34 @@ public class SettingsDefaultsTests
         Assert.True(tab.HasOverrides);
         Assert.Contains(nameof(TabViewModel.HasOverrides), changed);
     }
+
+    [Fact]
+    public async Task Style_offers_Standard_and_Claude_and_saves_the_choice()
+    {
+        await using var h = new TabTestHarness();
+        var settings = new SettingsViewModel(h.Services, null) { SearchText = "style" };
+        var changed = 0;
+        h.Services.SettingsChanged += (_, _) => changed++;
+
+        Assert.Equal(["Standard", "Claude"], settings.StyleOptions.Select(o => o.ToString()));
+        Assert.Equal(AppStyle.Standard, settings.Style.Style);
+        Assert.False(h.Shell.IsClaudeStyle);
+        Assert.Contains(settings.SearchResults, r => r is { Category: "Appearance", Label: "Style" });
+
+        settings.Style = settings.StyleOptions[1];
+
+        Assert.Equal(AppStyle.Claude, h.Services.Settings.Appearance.Style);
+        Assert.Equal("Claude", settings.Style.Label);
+        Assert.True(changed > 0);
+        // The shell takes the "claude" class for the Claude apps' shapes.
+        Assert.True(h.Shell.IsClaudeStyle);
+    }
+
+    [Theory]
+    [InlineData(AppStyle.Standard, null, "$Default")]
+    [InlineData(AppStyle.Claude, null, "Charter")]
+    [InlineData(AppStyle.Claude, "Fira Sans", "Fira Sans")]
+    [InlineData(AppStyle.Standard, "Fira Sans", "Fira Sans")]
+    public void Replies_are_serif_in_the_Claude_style_unless_a_conversation_font_is_set(AppStyle style, string? font, string first) =>
+        Assert.Equal(first, Claudette.App.Themes.AppColors.ReplyFont(style, font).FamilyNames[0]);
 }

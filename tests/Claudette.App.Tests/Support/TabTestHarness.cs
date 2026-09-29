@@ -314,19 +314,31 @@ internal sealed class TabTestHarness : IAsyncDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"claudette-tabtest-{Guid.NewGuid():N}");
 
+    /// <summary>The version tests run as, unless they pass one.</summary>
+    public static readonly Core.Updates.AppVersion TestVersion = new(0, 1, 0);
+
     /// <param name="updater">Claude Code's installation, for update tests; when given, update checks are set up too.</param>
     /// <param name="launcher">Starts processes other than Claude Code, which the scripted sessions stand in for.</param>
     /// <param name="dispatcher">The UI thread: an inline stand-in for view model tests, Avalonia's own for rendered UI tests.</param>
     /// <param name="appInstaller">Installs Claudette's own updates; by default none can be.</param>
     /// <param name="http">Answers Claudette's own web requests; by default every request fails, so nothing reaches the network.</param>
+    /// <param name="appVersion">
+    /// Claudette's version; by default <see cref="TestVersion"/> rather than the built one, so the Settings snapshots
+    /// don't change when the version does.
+    /// </param>
+    /// <param name="loginShell">Stands in for the user's login shell (DESIGN.md §13); by default none is read.</param>
     public TabTestHarness(Action<AppSettings>? configure = null, FakeClaudeUpdater? updater = null, IProcessLauncher? launcher = null, IUiDispatcher? dispatcher = null,
-        Core.Updates.IAppInstaller? appInstaller = null, HttpMessageHandler? http = null, Core.Updates.AppVersion? appVersion = null)
+        Core.Updates.IAppInstaller? appInstaller = null, HttpMessageHandler? http = null, Core.Updates.AppVersion? appVersion = null, ILoginShell? loginShell = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "work"));
         Directory.CreateDirectory(ProjectsDirectory);
         Trees = new FakeProcessTreeTracker(Time);
+        // Other programs' folders (the Epic launcher's, Unity Hub's) are empty ones here, never the real ones (DESIGN.md §18).
+        var otherPrograms = new Core.ProjectTools.ProjectToolPaths(Path.Combine(_root, "home"), Path.Combine(_root, "appdata"), Path.Combine(_root, "localappdata"),
+            Path.Combine(_root, "programdata"), Path.Combine(_root, "programfiles"), Path.Combine(_root, "applications"));
         Services = new AppServices(AppPaths.Under(_root), launcher ?? new ProcessLauncher(), Time, Platform, dispatcher ?? new InlineDispatcher(), processTrees: Trees, notifier: Notifier,
-            appInstaller: appInstaller, httpHandler: http ?? new OfflineHandler(), appVersion: appVersion);
+            appInstaller: appInstaller, httpHandler: http ?? new OfflineHandler(), appVersion: appVersion ?? TestVersion, loginShell: loginShell,
+            projectToolPaths: otherPrograms);
         Services.Notifications.UseBadge(Notifier);
         configure?.Invoke(Services.Settings);
         if (updater is not null)
@@ -385,9 +397,14 @@ internal sealed class TabTestHarness : IAsyncDisposable
         return tab;
     }
 
+    /// <summary>
+    /// Waits until <paramref name="condition"/> holds, checking every 10 ms. The deadline is generous because some
+    /// waits are on real processes (git, for the file index), which a busy CI machine can take seconds to start.
+    /// </summary>
     public static async Task Eventually(Func<bool> condition, string? what = null)
     {
-        for (var i = 0; i < 200; i++)
+        var deadline = System.Diagnostics.Stopwatch.StartNew();
+        while (deadline.Elapsed < TimeSpan.FromSeconds(10))
         {
             if (InlineDispatcher.Read(condition))
             {

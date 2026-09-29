@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Claudette.Core.Claude;
+using Claudette.Core.Diffs;
 using Claudette.Core.Processes;
 
 namespace Claudette.Core.Installation;
@@ -22,7 +23,11 @@ public sealed record ClaudeLocateResult(ClaudeInstall? Install, ClaudeInstallPro
 }
 
 /// <summary>Finds the <c>claude</c> executable and checks its version (DESIGN.md §2, "Dependency").</summary>
-public sealed partial class ClaudeLocator(IProcessLauncher launcher, TimeProvider timeProvider)
+/// <param name="environment">
+/// The user environment: its <c>PATH</c> is searched and <c>claude --version</c> runs with it. Waiting for it is how
+/// the first <c>claude</c> start waits for the login shell (DESIGN.md §13, "Login shell environment").
+/// </param>
+public sealed partial class ClaudeLocator(IProcessLauncher launcher, TimeProvider timeProvider, UserEnvironment? environment = null)
 {
     /// <summary>The oldest Claude Code version Claudette supports (DESIGN.md §12, §16). Kept in step with compat/surface.yaml.</summary>
     public static readonly Version MinimumVersion = new(2, 1, 284);
@@ -37,10 +42,12 @@ public sealed partial class ClaudeLocator(IProcessLauncher launcher, TimeProvide
 
     public async Task<ClaudeLocateResult> LocateAsync(string? configuredPath, CancellationToken cancellationToken = default)
     {
-        var path = string.IsNullOrWhiteSpace(configuredPath) ? FindOnSystem() : configuredPath;
+        var userEnvironment = environment is null ? null : await environment.GetAsync(cancellationToken).ConfigureAwait(false);
+        var searchPath = userEnvironment?.GetValueOrDefault("PATH") ?? Environment.GetEnvironmentVariable("PATH");
+        var path = string.IsNullOrWhiteSpace(configuredPath) ? FindOnSystem(searchPath) : configuredPath;
         if (path is null)
         {
-            return OperatingSystem.IsWindows() && FindInPath("claude.cmd") is { } cmd
+            return OperatingSystem.IsWindows() && FileProbe.FindIn(searchPath, "claude.cmd") is { } cmd
                 ? new ClaudeLocateResult(null, ClaudeInstallProblem.UnsupportedLauncher,
                     "Claude Code was installed with npm, which Claudette can't start directly yet. Install the native build, or set the path to claude.exe in Settings.", cmd)
                 : new ClaudeLocateResult(null, ClaudeInstallProblem.NotFound, "Claude Code wasn't found.");
@@ -53,7 +60,7 @@ public sealed partial class ClaudeLocator(IProcessLauncher launcher, TimeProvide
         ProcessResult result;
         try
         {
-            var spec = new ProcessStartSpec(path, ["--version"]) { Environment = ClaudeEnvironment.Create() };
+            var spec = new ProcessStartSpec(path, ["--version"]) { Environment = ClaudeEnvironment.From(userEnvironment) };
             result = await ProcessRunner.RunAsync(launcher, spec, VersionTimeout, timeProvider, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is TimeoutException or System.ComponentModel.Win32Exception or InvalidOperationException)
@@ -87,13 +94,14 @@ public sealed partial class ClaudeLocator(IProcessLauncher launcher, TimeProvide
     }
 
     /// <summary>
-    /// Looks on <c>PATH</c>, then in the standard install locations. GUI apps on macOS don't inherit the shell's
-    /// <c>PATH</c>, so the known locations matter there.
+    /// Looks on <paramref name="searchPath"/>, then in the standard install locations. An app started from the Dock
+    /// or a desktop launcher doesn't get the shell's <c>PATH</c>; the login shell's usually fixes that (DESIGN.md §13),
+    /// and the known locations are there for when it doesn't.
     /// </summary>
-    private static string? FindOnSystem()
+    private static string? FindOnSystem(string? searchPath)
     {
         var name = OperatingSystem.IsWindows() ? "claude.exe" : "claude";
-        if (FindInPath(name) is { } onPath)
+        if (FileProbe.FindIn(searchPath, name) is { } onPath)
         {
             return onPath;
         }
@@ -102,27 +110,6 @@ public sealed partial class ClaudeLocator(IProcessLauncher launcher, TimeProvide
             ? [Path.Combine(home, ".local", "bin", "claude.exe")]
             : [Path.Combine(home, ".local", "bin", "claude"), "/opt/homebrew/bin/claude", "/usr/local/bin/claude", "/usr/bin/claude"];
         return known.FirstOrDefault(File.Exists);
-    }
-
-    private static string? FindInPath(string fileName)
-    {
-        var path = Environment.GetEnvironmentVariable("PATH") ?? "";
-        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            try
-            {
-                var candidate = Path.Combine(directory.Trim('"'), fileName);
-                if (File.Exists(candidate))
-                {
-                    return candidate;
-                }
-            }
-            catch (ArgumentException)
-            {
-                // A malformed PATH entry.
-            }
-        }
-        return null;
     }
 
     [GeneratedRegex(@"\d+\.\d+\.\d+")]

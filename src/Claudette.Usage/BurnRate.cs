@@ -63,6 +63,20 @@ public sealed record BurnProjection
     }
 }
 
+/// <summary>
+/// The moment the projection reaches <paramref name="Level"/> (DESIGN.md §6, "Detailed header"), and how long that is
+/// before the window resets.
+/// </summary>
+public sealed record LevelCrossing(double Level, DateTimeOffset At, TimeSpan BeforeReset)
+{
+    /// <summary>"Hits 90% at 14:05, 25m before it resets.", or "Hits the limit at …" for 100%.</summary>
+    public string Describe()
+    {
+        var what = Level >= 100 ? "the limit" : $"{Level:0}%";
+        return $"Hits {what} at {At.ToLocalTime():t}, {BurnRate.FormatDuration(BeforeReset)} before it resets.";
+    }
+}
+
 /// <summary>Session burn rate, projection and the wording around them (DESIGN.md §6, "Burn trendline").</summary>
 public static class BurnRate
 {
@@ -135,7 +149,45 @@ public static class BurnRate
         {
             return projection with { IsIdle = true, PercentAtReset = untilReset is null ? null : currentPercent };
         }
+        return Forward(projection, rate, now, untilReset);
+    }
 
+    /// <summary>
+    /// The week's projection (DESIGN.md §6, "Detailed header"): the average pace since <paramref name="since"/>, when
+    /// the window started, carried on to the reset. A week has nights and days off in it, so the last half hour's rate
+    /// says little about the rest of it.
+    /// </summary>
+    public static BurnProjection ProjectAverage(double currentPercent, DateTimeOffset since, DateTimeOffset? resetsAt, DateTimeOffset now)
+    {
+        var projection = new BurnProjection { CurrentPercent = currentPercent };
+        var elapsed = now - since;
+        var untilReset = resetsAt is { } r && r > now ? r - now : (TimeSpan?)null;
+        if (elapsed < MinimumSpan || !double.IsFinite(currentPercent))
+        {
+            return projection;
+        }
+        var rate = Math.Max(0, currentPercent) / elapsed.TotalHours;
+        projection = projection with { RatePerHour = rate };
+        if (currentPercent >= 100)
+        {
+            return projection with
+            {
+                LimitAt = now,
+                TimeToLimit = TimeSpan.Zero,
+                HitsLimitBeforeReset = untilReset is not null,
+                MarginBeforeReset = untilReset,
+                PercentAtReset = untilReset is null ? null : currentPercent,
+            };
+        }
+        return rate <= 0
+            ? projection with { IsIdle = true, PercentAtReset = untilReset is null ? null : currentPercent }
+            : Forward(projection, rate, now, untilReset);
+    }
+
+    /// <summary>Carries <paramref name="rate"/> on from now: when the limit is hit, and where usage is at the reset.</summary>
+    private static BurnProjection Forward(BurnProjection projection, double rate, DateTimeOffset now, TimeSpan? untilReset)
+    {
+        var currentPercent = projection.CurrentPercent;
         var toLimit = TimeSpan.FromHours((100 - currentPercent) / rate);
         projection = projection with { LimitAt = now + toLimit, TimeToLimit = toLimit };
         if (untilReset is not { } remaining)
@@ -146,6 +198,27 @@ public static class BurnRate
         return toLimit < remaining
             ? projection with { HitsLimitBeforeReset = true, MarginBeforeReset = remaining - toLimit, PercentAtReset = 100 }
             : projection with { PercentAtReset = Math.Min(100, atReset) };
+    }
+
+    /// <summary>
+    /// Where the projection first crosses a level before the window resets (DESIGN.md §6, "Detailed header"): the
+    /// critical threshold, or the limit once usage is past the threshold. Null when it crosses neither before the reset,
+    /// or when there's no rate to go on.
+    /// </summary>
+    public static LevelCrossing? FirstCrossing(BurnProjection projection, DateTimeOffset? resetsAt, DateTimeOffset now, double criticalPercent)
+    {
+        if (projection.IsIdle || projection.RatePerHour is not { } rate || rate <= IdleRatePerHour || resetsAt is not { } reset || reset <= now)
+        {
+            return null;
+        }
+        var current = projection.CurrentPercent;
+        var level = current < criticalPercent && criticalPercent < 100 ? criticalPercent : 100;
+        if (current >= level)
+        {
+            return null;
+        }
+        var at = now + TimeSpan.FromHours((level - current) / rate);
+        return at < reset ? new LevelCrossing(level, at, reset - at) : null;
     }
 
     public static UsageLevel Level(double percent, double warn = 75, double critical = 90) =>

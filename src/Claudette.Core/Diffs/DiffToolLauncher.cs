@@ -35,15 +35,21 @@ public sealed class DiffToolLauncher
     private readonly TimeProvider _timeProvider;
     private readonly IFileProbe _probe;
     private readonly DiffToolPlatform _platform;
+    private readonly UserEnvironment? _environment;
 
     /// <param name="probe">Finds preset tools. Defaults to the real file system.</param>
     /// <param name="platform">The OS whose preset variants are used. Defaults to this one.</param>
-    public DiffToolLauncher(IProcessLauncher launcher, TimeProvider timeProvider, IFileProbe? probe = null, DiffToolPlatform? platform = null)
+    /// <param name="environment">
+    /// The user environment the tool starts with, and whose <c>PATH</c> a custom command's program is found on
+    /// (DESIGN.md §13). Null: Claudette's own.
+    /// </param>
+    public DiffToolLauncher(IProcessLauncher launcher, TimeProvider timeProvider, IFileProbe? probe = null, DiffToolPlatform? platform = null, UserEnvironment? environment = null)
     {
         _launcher = launcher;
         _timeProvider = timeProvider;
-        _probe = probe ?? FileProbe.Instance;
+        _probe = probe ?? environment?.Probe ?? FileProbe.Instance;
         _platform = platform ?? DiffToolPresets.CurrentPlatform;
+        _environment = environment;
     }
 
     /// <summary>
@@ -104,7 +110,8 @@ public sealed class DiffToolLauncher
         IRunningProcess process;
         try
         {
-            process = _launcher.Start(new ProcessStartSpec(program, arguments) { WorkingDirectory = workingDirectory });
+            var spec = new ProcessStartSpec(program, arguments) { WorkingDirectory = workingDirectory };
+            process = _launcher.Start(_environment?.Apply(spec) ?? spec);
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
         {

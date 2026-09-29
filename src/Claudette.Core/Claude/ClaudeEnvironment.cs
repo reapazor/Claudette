@@ -37,13 +37,24 @@ public static class ClaudeEnvironment
     public static IReadOnlyDictionary<string, string> Create(IReadOnlyDictionary<string, string?>? overrides = null) =>
         Create(Environment.GetEnvironmentVariables(), overrides);
 
-    public static IReadOnlyDictionary<string, string> Create(IDictionary source, IReadOnlyDictionary<string, string?>? overrides = null)
+    public static IReadOnlyDictionary<string, string> Create(IDictionary source, IReadOnlyDictionary<string, string?>? overrides = null) =>
+        Build(Entries(source), overrides);
+
+    /// <summary>
+    /// The environment for a <c>claude</c> started from <paramref name="baseEnvironment"/>: the user environment, which
+    /// can hold the login shell's variables (DESIGN.md §13, "Login shell environment"). Null starts from this process's
+    /// environment. Either way the session variables are removed and <paramref name="overrides"/> applied on top.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> From(IReadOnlyDictionary<string, string>? baseEnvironment, IReadOnlyDictionary<string, string?>? overrides = null) =>
+        baseEnvironment is null ? Create(overrides) : Build(baseEnvironment, overrides);
+
+    private static IReadOnlyDictionary<string, string> Build(IEnumerable<KeyValuePair<string, string>> source, IReadOnlyDictionary<string, string?>? overrides)
     {
         var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var result = new Dictionary<string, string>(comparer);
-        foreach (DictionaryEntry entry in source)
+        foreach (var (key, value) in source)
         {
-            if (entry.Key is string key && entry.Value is string value && !SessionVariables.Contains(key))
+            if (!SessionVariables.Contains(key))
             {
                 result[key] = value;
             }
@@ -63,5 +74,16 @@ public static class ClaudeEnvironment
             }
         }
         return result;
+    }
+
+    private static IEnumerable<KeyValuePair<string, string>> Entries(IDictionary source)
+    {
+        foreach (DictionaryEntry entry in source)
+        {
+            if (entry.Key is string key && entry.Value is string value)
+            {
+                yield return new(key, value);
+            }
+        }
     }
 }

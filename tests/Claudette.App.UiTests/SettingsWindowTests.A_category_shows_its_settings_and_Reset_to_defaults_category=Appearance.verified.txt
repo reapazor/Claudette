@@ -1,6 +1,10 @@
 ﻿"Appearance"
 "Theme"
 [choice] "System"
+"Style"
+[choice] "Standard"
+"Density"
+[choice] "Comfortable"
 "Conversation font"
 [field] "Claudette's default"
 "Conversation font size"
@@ -15,4 +19,16 @@
 [field] "13"
 "Leave a font empty for the default. A font that isn't installed on this machine falls back to the default."
 [ ] Show thinking expanded
+[x] Show fun words while Claude works
+"A twinkling line above the message box, such as “Noodling… 42s · 3.1k tokens”. Off, it says “Working…”. Verbs added to spinnerVerbs in Claude Code's settings show here too."
+[x] Show what Claude is doing while it works
+"While a tool runs, the line says what it's doing instead, such as “Running dotnet test…” or “Reading TabView.axaml…”."
+[ ] Detailed usage header
+"Draws the usage header taller, with charts of the session and the week, the burn rate and the busiest tabs. The chevron at the header's right does the same. Kept on this machine, not synced."
+[x] Show context on tab rows
+"A small ring on each tab in the sidebar fills up with the tab's context window. It turns amber when Claude Code is about to compact the conversation, and red when it's nearly full."
 [button] Reset to defaults
+[button] Line up
+[button] Page up
+[button] Page down
+[button] Line down

@@ -26,8 +26,12 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         IsSidebarCollapsed = services.State.SidebarCollapsed;
         SidebarWidth = Math.Clamp(services.State.SidebarWidth ?? DefaultSidebarWidth, MinSidebarWidth, MaxSidebarWidth);
         _services.Notifications.SelectedTabId = () => SelectedTab?.Id;
+        IsCompact = services.Settings.Appearance.Density == Density.Compact;
+        IsClaudeStyle = services.Settings.Appearance.Style == AppStyle.Claude;
         _services.SettingsChanged += (_, _) =>
         {
+            IsCompact = _services.Settings.Appearance.Density == Density.Compact;
+            IsClaudeStyle = _services.Settings.Appearance.Style == AppStyle.Claude;
             foreach (var tab in AllTabs)
             {
                 tab.OnSettingsChanged();
@@ -127,9 +131,13 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         if (oldValue is not null)
         {
             oldValue.IsSelected = false;
+            oldValue.PropertyChanged -= OnSelectedTabPropertyChanged;
         }
+        OnPropertyChanged(nameof(Links));
+        OnPropertyChanged(nameof(HasLinks));
         if (newValue is not null)
         {
+            newValue.PropertyChanged += OnSelectedTabPropertyChanged;
             newValue.IsSelected = true;
             if (_services.Notifications.IsAppActive)
             {
@@ -779,6 +787,21 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         OnTabStatusChanged();
     }
 
+    /// <summary>
+    /// Settings → Appearance → Density is Compact (DESIGN.md §14): the view takes the <c>compact</c> class, whose styles
+    /// tighten the conversation, the sidebar's rows and the composer.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsCompact { get; private set; }
+
+    /// <summary>
+    /// Settings → Appearance → Style is Claude (DESIGN.md §3, "Visual style"): the view takes the <c>claude</c> class,
+    /// whose styles give the conversation the Claude apps' shapes: your messages in bubbles, a rounded composer with a
+    /// round send button, rounder code blocks and cards. The colors and the replies' serif are app-wide resources.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsClaudeStyle { get; private set; }
+
     // ---- Sidebar (DESIGN.md §4, "Sidebar") ------------------------------------------------------------------
 
     public const double DefaultSidebarWidth = 248;
@@ -853,7 +876,66 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     {
         if (tab is not null)
         {
-            TabSettings = new TabSettingsViewModel(_services, tab, () => TabSettings = null);
+            TabSettings = new TabSettingsViewModel(_services, tab, () => TabSettings = null, this) { EditAction = EditProjectAction };
+        }
+    }
+
+    // ---- Project tools (DESIGN.md §18) ------------------------------------------------------------------------
+
+    /// <summary>The small dialog for a custom project action, while it's open.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActionEditor))]
+    public partial ProjectActionEditorViewModel? ActionEditor { get; set; }
+
+    public bool HasActionEditor => ActionEditor is not null;
+
+    /// <summary>
+    /// Opens the custom action dialog: a new action when <paramref name="existing"/> is null. With
+    /// <paramref name="askForFile"/>, it asks which of the folder's project files the action goes in.
+    /// </summary>
+    internal void EditProjectAction(string folder, Core.ProjectTools.CustomProjectAction? existing, Action<Core.ProjectTools.CustomProjectAction, Core.ProjectTools.ProjectFileScope> save, bool askForFile = false) =>
+        ActionEditor = new ProjectActionEditorViewModel(folder, existing, save, () => ActionEditor = null) { AsksForFile = askForFile };
+
+    /// <summary>A folder's project files changed: every tab in that folder reads them again.</summary>
+    internal void OnProjectActionsChanged(string folder)
+    {
+        foreach (var tab in AllTabs.Where(t => FolderHistory.SamePath(t.Folder, folder)))
+        {
+            tab.ReloadCustomActions();
+        }
+    }
+
+    // ---- Links (DESIGN.md §18, "Links"): the selected tab's, in the sidebar ------------------------------------------
+
+    /// <summary>The selected tab's links, from its folder's claudette.json and claudette.local.json.</summary>
+    public IReadOnlyList<Core.ProjectTools.ResolvedLink> Links => SelectedTab?.Links ?? [];
+
+    public bool HasLinks => SelectedTab?.HasLinks == true;
+
+    /// <summary>The Links section is folded to its heading. Remembered on this machine.</summary>
+    public bool IsLinksCollapsed => _services.State.LinksCollapsed;
+
+    public bool IsLinksExpanded => !IsLinksCollapsed;
+
+    [RelayCommand]
+    private void ToggleLinks()
+    {
+        _services.State.LinksCollapsed = !_services.State.LinksCollapsed;
+        _services.SaveState();
+        OnPropertyChanged(nameof(IsLinksCollapsed));
+        OnPropertyChanged(nameof(IsLinksExpanded));
+    }
+
+    [RelayCommand]
+    private Task OpenLinkAsync(Core.ProjectTools.ResolvedLink? link) =>
+        link is { Url: { } url } ? _services.Platform.OpenUrlAsync(url) : Task.CompletedTask;
+
+    private void OnSelectedTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(TabViewModel.Links) or nameof(TabViewModel.HasLinks) or null or "")
+        {
+            OnPropertyChanged(nameof(Links));
+            OnPropertyChanged(nameof(HasLinks));
         }
     }
 

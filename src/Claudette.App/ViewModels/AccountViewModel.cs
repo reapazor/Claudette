@@ -24,6 +24,7 @@ public sealed partial class AccountViewModel(AppServices services) : ViewModelBa
     /// <summary>The latest <c>claude auth status</c>, or null before the first one.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsSignedIn), nameof(IsSignedOut), nameof(Email), nameof(PlanText), nameof(Organization), nameof(Summary), nameof(SettingsText), nameof(CanBeginSignIn))]
+    [NotifyPropertyChangedFor(nameof(BillingUrl), nameof(HasBilling), nameof(BillingText), nameof(BillingTip), nameof(HeaderName), nameof(HeaderPlan))]
     [NotifyCanExecuteChangedFor(nameof(SignOutCommand))]
     public partial AuthStatus? Status { get; set; }
 
@@ -42,6 +43,40 @@ public sealed partial class AccountViewModel(AppServices services) : ViewModelBa
     public string Summary => IsSignedIn
         ? string.Join(" · ", new[] { Email, PlanText }.Where(s => !string.IsNullOrEmpty(s))) is { Length: > 0 } text ? text : "Signed in"
         : "Not signed in";
+
+    // ---- Plan and billing (DESIGN.md §11, "Detecting") ------------------------------------------------------------
+
+    public const string ClaudeBillingUrl = "https://claude.ai/settings/billing";
+
+    public const string ConsoleBillingUrl = "https://platform.claude.com/settings/billing";
+
+    /// <summary>
+    /// Where this account's plan and billing are managed: claude.ai for a Claude plan, the Claude Console for an API
+    /// key or Console account. Null for a cloud provider (Bedrock, Vertex, Foundry), which bills through that provider.
+    /// </summary>
+    public string? BillingUrl => !IsSignedIn || Status!.AuthMethod == "third_party" || Status.ApiProvider is { Length: > 0 } provider && provider != "firstParty"
+        ? null
+        : !string.IsNullOrEmpty(Status.SubscriptionType) || Status.AuthMethod is "claude.ai" or "oauth_token"
+            ? ClaudeBillingUrl
+            : ConsoleBillingUrl;
+
+    public bool HasBilling => BillingUrl is not null;
+
+    /// <summary>The menu's link.</summary>
+    public string BillingText => BillingUrl == ConsoleBillingUrl ? "Console billing" : "Plan and billing";
+
+    public string BillingTip => BillingUrl == ConsoleBillingUrl
+        ? "Billing in the Claude Console, in your browser"
+        : "Your plan and billing on claude.ai, in your browser";
+
+    /// <summary>The header's account button: the email, which opens the menu. The plan beside it opens billing.</summary>
+    public string HeaderName => IsSignedIn && HasBilling && PlanText is not null ? Email ?? "Signed in" : Summary;
+
+    /// <summary>The plan in the header, as a link to billing; null when there's no plan or nowhere to manage it.</summary>
+    public string? HeaderPlan => IsSignedIn && HasBilling ? PlanText : null;
+
+    [RelayCommand]
+    private Task OpenBillingAsync() => BillingUrl is { } url ? services.Platform.OpenUrlAsync(url) : Task.CompletedTask;
 
     /// <summary>Settings → Claude Code's account line.</summary>
     public string SettingsText => IsSignedIn

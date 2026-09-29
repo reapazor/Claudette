@@ -34,6 +34,12 @@ public sealed class AppState
     public double? SidebarWidth { get; set; }
 
     /// <summary>
+    /// The usage header is drawn taller, with charts of the session and the week (DESIGN.md §6, "Detailed header").
+    /// Its chevron and Settings → Appearance both set it. Kept per machine, like the sidebar's collapsed state.
+    /// </summary>
+    public bool DetailedUsageHeader { get; set; }
+
+    /// <summary>
     /// Where a project from another machine lives on this one, keyed by normalized git remote and path in the repo
     /// (DESIGN.md §9, "Restoring on another machine").
     /// </summary>
@@ -71,6 +77,15 @@ public sealed class AppState
 
     /// <summary>The Claudette release the user chose to skip: not offered again until a newer one (DESIGN.md §2).</summary>
     public string? SkippedAppUpdate { get; set; }
+
+    /// <summary>
+    /// The project each folder uses and each project's choices (DESIGN.md §18, "Project tools"). Per machine: paths
+    /// differ between machines.
+    /// </summary>
+    public ProjectToolState ProjectTools { get; set; } = new();
+
+    /// <summary>The sidebar's Links section is collapsed (DESIGN.md §18, "Links").</summary>
+    public bool LinksCollapsed { get; set; }
 }
 
 /// <summary>What's saved for one tab (DESIGN.md §9, "Restore on launch").</summary>

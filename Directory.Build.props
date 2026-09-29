@@ -7,8 +7,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest</AnalysisLevel>
     <Deterministic>true</Deterministic>
-    <!-- Releases pass the real version: -p:Version=1.2.3 (packaging/). -->
-    <Version>0.7.0</Version>
+    <!-- The version being worked on, tagged vX.Y.Z when it's released. Releases pass it too: -p:Version=1.2.3 (packaging/).
+         Source builds also show the commit they were built from (DESIGN.md §14, "Version"). -->
+    <Version>0.1.0</Version>
     <Authors>Matthew Davey</Authors>
     <Product>Claudette</Product>
     <Copyright>Copyright (c) Matthew Davey</Copyright>

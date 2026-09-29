@@ -15,8 +15,18 @@ public partial class MainWindow : Window
         InitializeComponent();
         UseMicaOnWindows11();
         // Notifications are skipped for what's already in front of the user (DESIGN.md §10).
-        Activated += (_, _) => _viewModel?.Services.Notifications.SetAppActive(true);
+        Activated += (_, _) =>
+        {
+            _viewModel?.Services.Notifications.SetAppActive(true);
+            // Back from an editor, perhaps with claudette.json changed: the actions and links follow (DESIGN.md §18).
+            if (_viewModel?.Shell?.SelectedTab is { } tab)
+            {
+                _ = tab.RefreshProjectFileAsync();
+            }
+        };
         Deactivated += (_, _) => _viewModel?.Services.Notifications.SetAppActive(false);
+        // A narrow window leaves the busiest tabs, then the weekly chart, out of the detailed header (DESIGN.md §6).
+        SizeChanged += (_, e) => _viewModel?.Usage?.SetDetailsWidth(e.NewSize.Width);
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -33,6 +43,10 @@ public partial class MainWindow : Window
             _viewModel.PropertyChanged += OnViewModelChanged;
             _viewModel.BringToFrontRequested += BringToFront;
             _viewModel.Services.Notifications.SetAppActive(IsActive);
+            if (_viewModel.Usage is { } usage)
+            {
+                UseUsage(usage);
+            }
         }
     }
 
@@ -40,7 +54,28 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainWindowViewModel.Usage) && _viewModel?.Usage is { } usage)
         {
-            usage.ShowUsagePanel = ShowUsagePanelAsync;
+            UseUsage(usage);
+        }
+    }
+
+    private void UseUsage(UsageViewModel usage)
+    {
+        usage.ShowUsagePanel = ShowUsagePanelAsync;
+        if (Bounds.Width > 0)
+        {
+            usage.SetDetailsWidth(Bounds.Width);
+        }
+    }
+
+    /// <summary>
+    /// Asks for the Mica backdrop on Windows 11, or stops asking. Claude's colors (DESIGN.md §3, "Visual style") are
+    /// solid, so the warm sidebar and header aren't replaced by the desktop showing through.
+    /// </summary>
+    public void UseMica(bool use)
+    {
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+        {
+            TransparencyLevelHint = use ? [WindowTransparencyLevel.Mica] : [];
         }
     }
 
@@ -54,7 +89,7 @@ public partial class MainWindow : Window
         {
             return;
         }
-        TransparencyLevelHint = [WindowTransparencyLevel.Mica];
+        UseMica(true);
         PropertyChanged += (_, e) =>
         {
             if (e.Property == ActualTransparencyLevelProperty || e.Property == ActualThemeVariantProperty)

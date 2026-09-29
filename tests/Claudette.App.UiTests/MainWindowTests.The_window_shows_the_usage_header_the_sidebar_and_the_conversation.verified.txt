@@ -7,7 +7,9 @@
   [meter 38%]
   "38%"
   "Not enough data yet."
-[button] Account: me@example.com · Max plan
+[button] Expand the usage header
+[button] Account: me@example.com
+[button] Plan and billing: Max plan
 [button] New tab
 [button] Collapse the sidebar
 [button] work
@@ -19,6 +21,8 @@
 [button] History
 [button] Settings
 "Found two problems in Parser.cs."
+"12:00"
+[button] Copy message
 "Opus"
 [field] "Message Claude…  (Enter to send, Shift+Enter for a new line, Esc to stop)"
 [button] Attach a file

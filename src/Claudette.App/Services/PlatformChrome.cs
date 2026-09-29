@@ -24,6 +24,7 @@ public sealed class PlatformChrome : IDisposable
     private readonly NativeMenu? _dock;
     private readonly List<(NativeMenuItem Item, string CommandId)> _gestures = [];
     private string? _lastKey;
+    private readonly Lock _refreshLock = new();
 
     /// <param name="app">The application, for the macOS app and Dock menus; null in tests.</param>
     /// <param name="window">The main window, for the macOS menu bar; null in tests.</param>
@@ -83,12 +84,16 @@ public sealed class PlatformChrome : IDisposable
     public void Refresh()
     {
         var state = _services.State;
-        var key = string.Join('\n', state.FavoriteFolders.Concat(state.RecentFolders.Select(r => r.Path)));
-        if (key == _lastKey)
+        lock (_refreshLock)
         {
-            return;
+            // Checked and recorded together: two saves of the same change must not both rebuild the lists.
+            var key = string.Join('\n', state.FavoriteFolders.Concat(state.RecentFolders.Select(r => r.Path)));
+            if (key == _lastKey)
+            {
+                return;
+            }
+            _lastKey = key;
         }
-        _lastKey = key;
         Folders = FolderHistory.Shortlist(state, MaxRecent, Directory.Exists).Select(f => new RecentFolderEntry(f.Label, f.Path)).ToArray();
         foreach (var menu in new[] { _openRecent, _dock }.OfType<NativeMenu>())
         {

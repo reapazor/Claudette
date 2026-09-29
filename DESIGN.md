@@ -25,12 +25,12 @@ Claudette does not replace Claude Code. It runs the real `claude` CLI as a child
 |---|---|---|
 | Runtime | .NET 10 (LTS) | |
 | UI | Avalonia 12 | One codebase for Windows, macOS and Linux. |
-| Look & feel | Fluent theme on Windows, macOS-style theme on macOS | Follows the OS light/dark setting and accent color. Mica backdrop on Windows 11; native title bar, traffic lights and menu bar on macOS. Mica is used only once Windows grants it: the title bar, header and sidebar show it, and the page keeps an opaque background. The macOS-style theme isn't built yet; macOS uses the Fluent theme for now. |
+| Look & feel | Fluent theme on Windows, macOS-style theme on macOS | Follows the OS light/dark setting and accent color, or the Claude apps' look ([Visual style](#visual-style)). Mica backdrop on Windows 11 (not in the Claude style, which is solid); native title bar, traffic lights and menu bar on macOS. Mica is used only once Windows grants it: the title bar, header and sidebar show it, and the page keeps an opaque background. The macOS-style theme isn't built yet; macOS uses the Fluent theme for now. |
 | Pattern | MVVM with CommunityToolkit.Mvvm | |
 | Markdown | LiveMarkdown.Avalonia | For assistant messages. Built for streaming: text is appended as it arrives instead of re-rendering the whole message. Includes syntax-highlighted code blocks. (Markdown.Avalonia only had an alpha for Avalonia 12.) |
 | Diffs | Claudette's own line diff and diff view, highlighted with TextMateSharp | The TextMate grammars and themes LiveMarkdown already ships for code blocks. AvaloniaEdit was the plan, but a read-only diff doesn't need an editor. |
 | Usage history | SQLite (Microsoft.Data.Sqlite) | [§6](#usage-history) |
-| Dependency | Claude Code CLI | Must already be installed. Claudette finds `claude` on `PATH` (or a path set in Settings), checks its version on launch against a minimum supported version, and shows a setup screen if it is missing or too old. Sign-in is handled inside Claudette (see [§11](#11-sign-in)). |
+| Dependency | Claude Code CLI | Must already be installed. Claudette finds `claude` on `PATH` (on macOS and Linux, the login shell's `PATH`, [§13](#login-shell-environment)) or at a path set in Settings, checks its version on launch against a minimum supported version, and shows a setup screen if it is missing or too old. Sign-in is handled inside Claudette (see [§11](#11-sign-in)). |
 | Packaging | Windows: MSIX. macOS: signed, notarized `.app` in a `.dmg`. | [Below](#packaging-and-signing). |
 
 ### Packaging and signing
@@ -62,7 +62,7 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
   - At launch and every 6 hours, Claudette asks the GitHub REST API for `reapazor/Claudette`'s releases. It doesn't sign in, and the check sends nothing but the request.
   - It offers the newest release above the running version. Tags are versions such as `v1.3.0` or `v1.4.0-beta.1`, ordered as Semantic Versioning orders them.
   - Pre-releases count only with **Include pre-releases**. Drafts aren't visible without signing in to GitHub, so a release is offered once it's published: the package workflow's draft release becomes an update when it's published.
-  - **Check for Claudette updates automatically** turns this off. Both settings are in Settings → General, which also shows the version, when it last checked and **Check now**.
+  - **Check for Claudette updates automatically** turns this off. Both settings are in Settings → General, which also shows the version, when it last checked and **Check now**. The version is also at the foot of the Settings sidebar ([§14](#version)).
   - A source build never checks. Its new builds come from its checkout.
 - **Which package.** The release asset named for this install, as `package.yml` names them:
   - `Claudette-<version>-<x64|arm64>.msix` for an MSIX install.
@@ -133,22 +133,40 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
 └──────────────────┴─────────────────────────────────────────────────────────┘
 ```
 
-1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. See [§6](#6-token-burn-awareness).
-2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder. **New tab** is at its top; **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
+1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. A chevron at its right draws it taller, with charts ([Detailed header](#detailed-header)). See [§6](#6-token-burn-awareness).
+2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder. **New tab** is at its top; the selected tab's **Links** ([§18](#project-tools)), **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
 3. **Conversation.** The selected tab's conversation. See [§5](#5-conversation-view).
-4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), and optionally its running processes ([§4](#process-monitor)).
+4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), its project's tools and their output when it has any ([§18](#project-tools)), and optionally its running processes ([§4](#process-monitor)).
 5. **Composer.** Where you type to the selected tab, plus the Stop button and per-tab controls.
 
 ### Visual style
 
-The visual reference is Claude Code's own Visual Studio Code extension:
+Settings → Appearance → **Style** picks one of two looks, in light and dark alike. It changes at once, without a restart, and syncs with the other Appearance settings.
 
-- A dense, calm layout that follows the OS light or dark theme.
-- Tool calls are compact one-line rows with a small status dot (running, done, failed), expandable for detail, not heavy cards.
+**Standard** (the default) takes Claude Code's own Visual Studio Code extension as its reference:
+
+- A dense, calm layout that follows the OS light or dark theme, with neutral greys and the OS's accent color for selection, meters and checked boxes.
+- Tool calls are compact one-line rows with a small status dot (running, done, failed), expandable for detail, not heavy cards. A row's summary is cut to fit; hovering it shows it in full (a whole command, with its line breaks, or a file's whole path).
 - Diffs are inline, in red and green.
 - Thinking is a collapsed row.
 - User prompts sit in a subtle bordered box rather than a chat bubble.
 - The composer is a rounded box with the mode and model controls beside it, and a square Stop button.
+- Inline code and code blocks use VS Code's Light+ and Dark+ colors.
+
+**Claude** takes the Claude apps (the iOS app and claude.ai) as its reference. The layout, tool rows, diffs and every control stay the same; the look changes:
+
+- **Colors**, from the Claude apps' scale:
+  - Light: an ivory page (`#FAF9F5`), a warmer sidebar (`#F5F4ED`), white cards and composer, near-black text (`#141413`) and warm grey muted text (`#73726C`).
+  - Dark: a charcoal page (`#262624`), a darker sidebar (`#1F1E1D`), lighter cards and composer (`#30302E`), off-white text (`#FAF9F5`) and warm grey muted text.
+  - The accent is Claude's orange (`#D97757`), with a darker orange for accent text on light and a lighter one on dark, so it stays readable. The working line's glyph and verb are orange, like the Claude apps' spark.
+  - Cautions (a waiting prompt, a usage alert, "Needs your input") are warm tints of the accent rather than yellow. Errors, diffs, the charts' model lines and a tab group's own color keep their usual colors.
+- **Your messages are bubbles** on the right (rounded, filled, no border), and Claude's replies run full width beside them.
+- **Claude's replies are set in a serif**, as the Claude apps set them. Their typeface isn't available, so it's the closest installed one: Charter on macOS, Georgia or Cambria on Windows, and Charter, Noto Serif or DejaVu Serif on Linux. A conversation font set in Settings wins.
+- **The composer** is a big rounded box lifted a little off the page, and Send and Stop are round buttons; Send is an arrow.
+- **Rounder corners** on code blocks, prompts and the sidebar's rows.
+- **No Mica**, so the sidebar and header stay warm rather than showing the desktop through.
+
+How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette's own tokens, and `Themes/AppColors` swaps them in and gives Fluent a matching palette (the window background, text, controls, and the accent it derives its shades from). Fluent reads most palette colors only when its resources are first used, so switching loads a fresh Fluent theme with the palette already set. The shapes are styles under the `claude` class, which the main view takes, as Density's are under `compact`. The replies' font is the `ReplyFont` resource.
 
 ## 4. Tabs & Sessions
 
@@ -169,7 +187,7 @@ The visual reference is Claude Code's own Visual Studio Code extension:
   - The full folder path and git branch.
   - Model and effort.
   - When the session started (for a resumed session, its transcript's first entry; saved with the tab), tokens used and context %.
-  - Later features add rows here: the Perforce login and changelist ([§18](#perforce-ticket-handling)), for example.
+  - Later features add rows here: the Perforce login and changelist ([§18](#perforce-ticket-handling)), and the **Project** the tab's folder holds and whether Claude was told about it ([§18](#project-tools)), for example.
   - **Agents**, while the tab has subagents: how many are running or waiting on you, or how they ended ([§18](#agent-map)).
   - The same card opens from an **ⓘ** button in the composer bar, for the selected tab.
 - **Token stats per tab.** Each tab keeps a running count of the tokens it has used:
@@ -202,14 +220,19 @@ The tabs are listed in a sidebar on the left of the window, rather than a strip 
 - **A tab's row** has two lines:
   - The status icon, a pin icon if pinned, a sync icon if it syncs to the session library (muted, with the tip *"Synced to the session library"*), a gear while a process it started is busy ([Process monitor](#process-monitor)), and the name, cut short with an ellipsis if it doesn't fit. With **Show changelist on tabs** on, a `CL 12345` badge sits at the end of the line ([§18](#perforce-changelist-in-the-tab-title)).
   - The model and effort, or instead what needs attention: *Needs your input*, the error, or *Possibly stuck* when check-ins get no reply ([§5](#check-ins-on-long-turns)).
+  - **Context ring.** A small ring at the end of the row, level with the second line and under the close button, fills up with the tab's context window ([§6](#per-tab-context)).
+    - It's muted, amber when the context indicator warns (near auto-compact), and red from 95%.
+    - Its tip is the composer bar's context text and detail, for example *"Context 75% (150,000 of 200,000 tokens · auto-compacts at 160,000)"*.
+    - It's hidden until the tab has context data, so a tab that hasn't started has none. **Show context on tab rows** (Settings → Appearance, on by default) turns it off. The rail doesn't show it.
   - The close button shows on hover and on the selected tab. Hovering the row shows the tab info card; double-clicking renames it.
+- **A tab's menu** (right-click, in the full sidebar and the rail): Rename, Reset name, Pin, **Sync to other machines**, **Tab settings…**, the project's actions in a submenu named after the project (or **Add an action…** for a folder with none yet, [§18](#project-tools)), **Move up** and **Move down**, and Close.
 - **Top:** **New tab**, which opens the picker ([Opening a tab](#opening-a-tab)), and the button that collapses the sidebar.
-- **Foot:** **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), the Claudette update badge when there's a new release ([§2](#updating-claudette)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
+- **Foot:** the selected tab's **Links**, from its folder's `claudette.json`, when it has any ([§18](#project-tools)), **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), the Claudette update badge when there's a new release ([§2](#updating-claudette)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
 - **Resizing.** Drag the sidebar's edge to make it wider or narrower (180 to 420 pixels; 248 by default). Double-click the edge for the default width. The width is remembered.
 - **Collapsing.** The collapse button, or `Ctrl/Cmd+B`, shrinks the sidebar to a rail:
   - The rail shows each group's color, then a square per tab with the first letter of its name and a small status icon. Hovering a square shows the tab info card.
   - A collapsed group shows only its color and its most urgent status.
-  - New tab, History, the update badge and Settings stay as icons.
+  - New tab, Links, History, the update badge and Settings stay as icons.
   - Whether the sidebar is collapsed is remembered.
 - **Narrow windows.** Below 900 pixels wide the sidebar collapses to the rail by itself, and expands again when the window is widened. Expanding it by hand in a narrow window lasts until the window is widened, when the remembered choice applies again; neither changes that choice.
 
@@ -255,12 +278,13 @@ Using the picker:
 An optional view of the processes each tab has started, such as test runs, dev servers, builds and MCP servers, with their CPU and memory use. It's off by default and turned on in Settings → Processes. One tab can turn it on or off for itself in its **Tab settings…** ([§14](#per-tab-overrides)). Each tab shows its own processes on the Processes page of its side panel.
 
 - **Summary.** When it's on, the composer bar shows a compact summary for the tab, for example `3 procs · 42% CPU · 1.1 GB`, except while the side panel is open. The count leaves out `claude` itself. The tab itself gets a small activity icon while any child process is using noticeable CPU (5% or more).
-- **Processes panel.** A page of the side panel, next to Changed files and Agents. It shows a tree of the tab's processes, starting from its `claude` process, with these columns:
+- **Processes panel.** A page of the side panel, next to Changed files, Agents and Project. It shows a tree of the tab's processes, starting from its `claude` process, with these columns:
   - Name and PID.
   - CPU %, following the platform's convention: on Windows, 100% means all cores, as in Task Manager; on macOS, 100% means one core, as in Activity Monitor.
   - Memory (working set / resident size).
   - Running time.
   - **Command line.** Can be hidden in Settings, because command lines sometimes contain tokens or passwords. It's truncated in the table; hover for the full text, or use **Copy**.
+- **Project jobs.** A project action's job, such as a build ([§18](#project-tools)), is tracked from its own process and listed with the tab's, as a top-level process beside `claude`. **Stop** on one of its processes stops it within the job's tree.
 - **Link to the conversation.** When a process belongs to a Bash tool call or a background task, its row shows which one, and clicking it scrolls to that card in the conversation. Claude Code's `task_started` events give the task ID and tool call ID, and Claudette matches them to the new process.
 - **Actions.**
   - **Stop.** For a Claude Code background task, stop it through Claude Code (`stopTask`) so Claude knows it ended. Otherwise, end the process, first gracefully and then forcefully. Either way, confirm first.
@@ -288,8 +312,8 @@ The conversation is drawn from Claude Code's structured output stream, not from 
 
 | Item | How it's shown |
 |---|---|
-| User message | Right-aligned bubble; attached images as thumbnails. |
-| Assistant text | Markdown with syntax-highlighted code blocks and copy buttons. Streams in as it's generated. |
+| User message | Right-aligned bubble; attached images as thumbnails. Its time and **Copy** on hover ([below](#copy-and-times)). |
+| Assistant text | Markdown with syntax-highlighted code blocks, each with **Copy**. Streams in as it's generated. Its time and **Copy** on hover. |
 | Thinking | Collapsed "Thinking…" row; click to expand. |
 | Tool call | Compact card: tool icon, name and a one-line summary (file path, command, search pattern). Expand to see full input and output. |
 | Edit / Write | Card shows `+added −removed`; expand for an inline diff, or **Open diff** to see the file in the diff view ([§8](#8-file-changes--diff-view)): from before Claude's first change in this session to the file now, as Changed files shows it. |
@@ -302,6 +326,20 @@ The conversation is drawn from Claude Code's structured output stream, not from 
 
 Scrolling follows new output unless the user has scrolled up; a "Jump to latest" button appears when they have.
 
+### Copy and times
+
+- **Code blocks.** A code block has a header line with its language, **Wrap lines** and **Copy**.
+  - Copy puts the block's code on the clipboard, without the Markdown fences and with the OS's line endings, and the button says *Copied* for 1.5 seconds.
+  - The buttons are LiveMarkdown's, in Claudette's own template for the block. The tab does the copying, through the same clipboard as everything else. Code blocks in the agent map's prompts and reports work the same way.
+- **Messages.** Hovering a user message or a reply shows a small chip on its top-right corner: when it was sent, and **Copy message**.
+  - It also shows while the message has keyboard focus, so Tab reaches the button.
+  - A reply copies as its Markdown, as Claude wrote it. A user message copies as it was sent, with its quick suffixes after a blank line.
+  - The button says *Copied* for a moment, as on code blocks.
+- **Times.** The chip's time is short, in the current culture: *14:05* today, *Mon 14:05* in the week before, else the date and time. Its tooltip has the full date.
+  - A live message takes the time it was added: when it was sent, or when the reply started.
+  - A restored message takes its transcript entry's `timestamp`. An entry without one shows no time, rather than the time it was restored.
+  - Selecting a tab brings "today" up to date, for a tab left open overnight.
+
 ### Composer
 
 - Multi-line text box. `Enter` sends, `Shift+Enter` adds a new line.
@@ -309,7 +347,32 @@ Scrolling follows new output unless the user has scrolled up; a "Jump to latest"
 - You can type and send while Claude is working; the message is queued and delivered to the session.
 - `/` opens slash-command autocomplete (built-in plus the project's custom commands), and `@` file autocomplete for the tab's working folder. See [Autocomplete](#autocomplete).
 - Drag and drop, paste, or pick with the attach button images and files to attach them. See [Attachments](#attachments).
-- Per-tab controls in the bar above the composer: working folder (read-only), model, effort level, permission mode, context window usage %, tokens used.
+- Per-tab controls in the bar above the composer: working folder (read-only), model, effort level, permission mode, the project chip when the tab has project tools (`◆ NightOwl · UE 5.4 ▾`, [§18](#project-tools)), context window usage %, tokens used.
+
+### Working line
+
+While Claude works, a line above the composer says so, the way Claude Code's terminal spinner does: *"✻ Noodling… 42s · 3.1k tokens · Esc to stop"*.
+
+- **The glyph** twinkles through · ✢ ✳ ✶ ✻ ✽ and back, in the accent color.
+- **The verb** is picked at random and changes every 8 seconds, never to the same one twice in a row.
+- **Then:**
+  - how long the turn has run;
+  - its tokens so far (from each call's usage, as the tab's token count, [§6](#per-tab-context));
+  - the Stop shortcut, as currently bound.
+- **What Claude is doing.** While one of the main agent's tools runs, from its `tool_use` to its result, the verb gives way to what the tool is doing, then comes back:
+  - *"Running dotnet test…"*, *"Reading TabView.axaml…"*, *"Editing App.cs…"*, *"Searching for TODO…"*, *"Fetching code.claude.com…"*, *"Using create_issue (github)…"*;
+  - the newest call when several run at once, *"Reading b.cs and 2 more…"*, and *"Running 3 agents…"* for a fan-out;
+  - a subagent's own calls show on the agent map ([§18](#agent-map)), not here;
+  - hovering the line shows the running calls in full, one per line: *"Bash: dotnet test Claudette.slnx --filter …"*;
+  - **Show what Claude is doing while it works** (Settings → Appearance, on by default) turns it off, leaving the verb.
+- **When it shows.** From the turn's start to its end. It hides while a permission prompt, question or plan waits on the user, and the turn's time keeps running meanwhile.
+- **Verbs.** Claudette has its own list, since Claude Code doesn't publish its built-in one. Claude Code's documented `spinnerVerbs` setting changes it:
+  - `"append"` adds the user's verbs;
+  - `"replace"` shows only theirs (an empty list keeps the built-in ones).
+  - The setting is read from the tab's `.claude/settings.local.json`, then `.claude/settings.json`, then the user's `settings.json` in Claude Code's config folder (`configDirectory` from `claude auth status`). The first file that sets it wins; managed settings aren't read.
+  - It's read as the tab's session starts, so a change shows from the next session.
+- **Turning it off.** **Show fun words while Claude works** (Settings → Appearance, on by default). Off, the line says *"✻ Working…"* with a still glyph, and still shows the time, tokens and Stop shortcut.
+- Claude Code's spinner tips (`spinnerTipsEnabled`, `spinnerTipsOverride`) aren't shown.
 
 ### Autocomplete
 
@@ -439,12 +502,41 @@ This is Claudette's main feature: knowing how fast you're using your plan's limi
   - Past sessions and weeks, as far back as the stored [usage history](#usage-history) goes. Each past window shows the highest usage it reached. The lists show the latest 30 sessions and 12 weeks, with **Show more** for the next page.
 - Accounts without plan limits (an API key, for example) get no meters; the header just says Claudette.
 
+### Detailed header
+
+The header can be drawn taller, with charts, for keeping an eye on usage without opening the Usage panel.
+
+- **Turning it on.** A chevron at the header's right expands it, and collapses it again. Settings → Appearance → **Detailed usage header** is the same switch.
+  - The choice is remembered on this machine and doesn't sync, like the sidebar's collapsed state.
+  - Collapsed, the header is exactly as described above.
+- **Layout.** The one-line header stays on top. Under it, about 150 px high: the session chart, the weekly chart, the numbers and the busiest tabs, left to right.
+- **Session chart.** Usage over the current 5-hour window, from its start to its reset.
+  - Faint bands above the warning and critical thresholds (Settings → Usage), with a dashed line at each.
+  - The dotted projection from now, a "now" marker, and times at the start, now and the reset.
+  - When the projection crosses the critical threshold before the reset, that point is marked and the chart says when: "Hits 90% at 14:05, 1h 16m before it resets." Past the threshold, it marks the limit instead: "Hits the limit at …".
+- **Weekly chart.** Usage over the current 7-day window, with a tick at each midnight and the days' names, and the projection to the week's reset.
+  - The weekly projection uses the week's average pace so far, not the burn rate window: a week has nights and days off in it.
+  - Model-specific weekly limits are thinner lines, with a legend, when the model meters are on (Settings → Usage). Two get a line at most: more hues than that don't stay distinct beside the accent color.
+- **Numbers.**
+  - **Burn rate:** % per hour over the burn rate window, or *Idle*.
+  - **Time to limit** at that rate, and whether that's before the reset or the window resets first.
+  - **Busiest tabs:** the top three tabs by tokens this window, as "name 41%" with a small bar. It's the same count as the Usage panel's list of tabs.
+- Clicking the charts opens the Usage panel, as the header does.
+- **Narrow windows** leave out the busiest tabs first (below 960 px), then the weekly chart (below 700 px). The session chart takes the room.
+- Accounts without plan limits get no charts, as they get no meters.
+- **Data.**
+  - The session chart uses the same readings as the sparkline.
+  - The week and the busiest tabs are read from the [usage history](#usage-history), off the UI thread and only while the charts show: when they open, when a new sample may have been stored (at most once a minute) or a window reset, and after each turn.
+  - The charts draw the last value in each minute (session) or each 15 minutes (week), not every sample.
+- **Drawing.** Claudette draws the charts itself, with no charting package. They use the app's color tokens, so they follow the light and dark theme; the model lines' two colors were checked against the accent and each other, including for color blindness.
+
 ### Per-tab context
 
 Separate from plan limits, each tab shows how full its **context window** is (in the composer bar). It warns near the auto-compact threshold and has a quick **Compact** action.
 
 - Clicking the context indicator shows the detail and **Compact now**, which sends `/compact` to the session.
 - A `compact_boundary` message adds a "Conversation compacted" note, or says Claude Code compacted it by itself.
+- **On every tab's row.** A small ring in the sidebar shows the same percentage for each tab, so a tab nearing its limit stands out without selecting it ([§4](#sidebar)). It's muted, amber when the indicator warns, and red from 95%. It comes from the same `get_context_usage` reply, or the same estimate when that isn't available.
 
 ### Alerts
 
@@ -498,7 +590,7 @@ Claudette stores usage data locally in a SQLite file in the app data folder, so 
 - Weekly (7-day) % used and its reset time.
 - Model-specific weekly % (for example Fable), if that meter is on.
 
-A sample is saved only when a value changes, and at most once a minute. These feed the trendline and projection, the weekly chart, and the header after a restart.
+A sample is saved only when a value changes, and at most once a minute. These feed the trendline and projection, the weekly charts (the Usage panel's and the [detailed header](#detailed-header)'s), and the header after a restart.
 
 **Per-turn token records** (per tab):
 
@@ -508,7 +600,7 @@ A sample is saved only when a value changes, and at most once a minute. These fe
 - Input, output, cache write and cache read tokens.
 - Estimated cost.
 
-These feed each tab's per-turn chart and the "which tab is burning the most" view.
+These feed each tab's per-turn chart, the "which tab is burning the most" view, and the detailed header's busiest tabs.
 
 **Not stored:** prompts, replies, code or any other conversation content. That stays in Claude Code's transcripts and the session library.
 
@@ -596,7 +688,7 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 
 - In Settings → Diff tool, the user chooses how diffs open: **Built-in** (the default), a **preset**, or a **custom command**.
 - Once a tool is set, **Open in diff tool** appears on every changed file. Double-clicking a file in the changed files panel uses the external tool instead of the built-in view, and a single click only selects it; the built-in view stays in the file's menu.
-- **Presets** are found automatically: Claudette looks in each tool's standard install locations and on `PATH`, and a preset only appears if its tool is found.
+- **Presets** are found automatically: Claudette looks in each tool's standard install locations and on `PATH` (the login shell's, [§13](#login-shell-environment)), and a preset only appears if its tool is found.
 
   | Tool | Windows | macOS |
   |---|---|---|
@@ -757,6 +849,7 @@ Native OS notifications (Windows toast, macOS User Notifications). Each type can
 - Usage alerts (see [§6](#6-token-burn-awareness)).
 - Claude Code needs you to sign in (see [§11](#11-sign-in)).
 - A Claude Code update is ready (see [§12](#12-claude-code-updates)).
+- A project action finishes: a build or other long job ended or failed (see [§18](#project-tools)).
 
 Clicking a notification brings Claudette to the front and goes to the relevant tab or screen. Notifications are skipped when Claudette is focused and that tab is already selected. The Dock (macOS) and taskbar (Windows) show a badge with the number of tabs needing input.
 
@@ -764,12 +857,14 @@ Clicking a notification brings Claudette to the front and goes to the relevant t
   - **Finished:** the first line of Claude's reply. Only a turn that ends normally counts; one you stopped, or that ended with an error, doesn't.
   - **Needs input:** what's waiting, such as *"Allow this command? npm test"*, *"Claude has a question: Which database?"* or *"Claude has a plan for you to review."* Perforce uses it too ([§18](#perforce-ticket-handling)): *"Perforce needs your password to log in as matt @ ssl:perforce:1666."*, or *"Perforce needs you to log in: run p4 login in a terminal, or log in with P4V."*
   - **Errors:** *"Claude Code stopped unexpectedly (exit code 3)."*, or why it couldn't start.
+  - **Project actions:** *"Build editor failed (exit code 6)."* Only while Claudette isn't in front, whichever tab is selected, since the chip already shows the job; a job the user stopped doesn't notify.
   - **Check-ins:** Settings → Check-ins → **Notify me when a check-in is sent** (off by default), which Tab settings can override ([§5](#check-ins-on-long-turns)).
 - **Skipping.** App-wide notifications (usage alerts, sign-in, updates) are skipped while Claudette is focused, because the header, the sign-in banner or the sign-in screen already shows them. Usage alerts also keep their line under the header.
 - **One per subject.** A newer notification replaces an older one of the same kind for the same tab. A tab's notifications are taken away once you look at it; a waiting-prompt notification also goes once the prompt is answered. An update is announced once per version; the version last announced is saved with this machine's state, so a restart doesn't announce it again.
 - **Clicking.**
   - A tab notification selects the tab, expanding its group if it's collapsed.
   - A usage alert opens the Usage panel, an update opens the update dialog, and the sign-in notification opens the sign-in dialog ([§11](#signing-in)).
+  - A project action's notification selects its tab and opens its Project page.
 - **Badge.** Settings → Notifications → **Show the number of tabs needing input on the Dock or taskbar icon**. On Windows it's an overlay icon on the taskbar button, drawn by Claudette.
 - **How each OS does it** (the code is in `Claudette.Platform/Notifications`):
   - **Windows:** WinRT toasts (`ToastNotificationManager`), called through source-generated COM interop so the app stays a plain `net10.0` build. A click raises the toast's `Activated` event in the running Claudette. An MSIX install has package identity. Run unpackaged, Claudette sets its AppUserModelID (`reapazor.Claudette`) and registers it under `HKCU\Software\Classes\AppUserModelId`, as the Windows App SDK does. The badge uses `ITaskbarList3::SetOverlayIcon`.
@@ -808,7 +903,7 @@ Claude Code keeps its own credentials. Claudette never reads or stores them; it 
   - It opens the browser itself, at the address that finishes on its own, and prints the other one: `If the browser didn't open, visit: <url>`, then `Paste code here if prompted >`. Claudette takes the first web address in its output, with terminal escape codes removed.
   - **Open browser again** and **Enter a code instead** open that printed address, whose page shows a code, and show the code field. The code field writes the code to the command's input, which reads one `code#state` per line. A line without both halves gets *"Invalid code. Please make sure the full code was copied."* on its error output, which Claudette shows while the command keeps waiting.
   - It exits with 0 and prints `Login successful.` once signed in, and exits with 1 and prints `Login failed: …` (or the organization's message) if not. Claudette goes by the exit code, and `claude auth status` then has the last word.
-  - It's started through `IProcessLauncher` with `ClaudeEnvironment.Create`, like every `claude`, and stopped after 10 minutes.
+  - It's started through `IProcessLauncher` with an environment from `ClaudeEnvironment`, like every `claude` ([§13](#login-shell-environment)), and stopped after 10 minutes.
 - While it waits, Claudette shows *"Finish signing in in your browser"* and stays responsive. The screen has:
   - **Open browser again**, which reopens the same URL, in case the browser didn't open or the tab was closed.
   - **Enter a code instead**, as described above.
@@ -819,6 +914,10 @@ Claude Code keeps its own credentials. Claudette never reads or stores them; it 
 - **Messages sent while signed out** stay queued, with their attached images, and are delivered, in order, once sign-in completes. The message that found Claude Code signed out is one of them: a message nothing came back for before the sign-in error never reached the model, so it's sent again. One that was answered before the error isn't.
 - If sign-in fails (timed out, cancelled, organization not allowed), Claudette shows Claude Code's message, from the control request or the command, and a **Try again** button, which repeats the same kind of sign-in.
 - **Account menu** (in the header, on the right): the signed-in email, plan and organization from `claude auth status`, or how Claude Code is signed in when there's no plan (an API key, say), and **Sign out…**, which runs `claude auth logout`. Signed out, it offers **Sign in**.
+- **Plan and billing.** In the header, the plan beside the email (*"Max plan"*) is a link, and the account menu has the same link. It opens where the account's billing is managed, in the browser:
+  - a Claude plan, or a Claude account without one: `claude.ai/settings/billing`, **Plan and billing**;
+  - an API key or Console account: the Claude Console's billing page, **Console billing**;
+  - a cloud provider (Bedrock, Vertex, Foundry) bills through that provider, so there's no link, and the header shows the account as one piece.
   - Signing out asks for confirmation first, because every tab will stop working, and Claude Code is signed out in the terminal too.
   - Afterwards Claudette runs `claude auth status`. If Claude Code still reports a sign-in (an API key in the environment, which logging out doesn't remove), it says so. Otherwise the banner shows, without a notification, messages are held, and every tab that was running restarts on its session after the next sign-in, since that may be a different account.
 - **Settings → Claude Code** shows the same account with **Sign in** and **Sign out…**, wired to the same flows. Because Settings is a separate window, the sign-in screen and the confirmation show inside it.
@@ -910,9 +1009,9 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 │  Claude Code updates         │                                  │  Credential store │
 │  Source builds: copies, new  │                                  │  Update installers│
 │   builds, restart snapshots  │                                  │  (MSIX, .app)     │
-│  Claudette releases, updates │                                  └───────────────────┘
-│  Git: identity, working tree │
-│  Auth, install checks        │
+│  Claudette releases, updates │                                  │  Login shell's    │
+│  Git: identity, working tree │                                  │   environment     │
+│  Auth, install checks        │                                  └───────────────────┘
 │  Perforce: tickets, CLs      │
 │  Settings, state, sync       │
 └───────────────┬──────────────┘
@@ -924,7 +1023,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 
 - **Claudette.Core** has no UI dependencies, so it can be unit tested and could be reused by another front end. External diff tools live here rather than in Platform: they only look for files and start processes through `IProcessLauncher`. So does running a source build from a copy and restarting it into new builds ([§9](#working-on-claudette)), which is plain file copying and process starting on every OS.
 - **Claudette.Usage** holds the usage engine, with no UI: parsing, the SQLite history, the burn rate and projection, alerts and the polling schedule.
-- **Claudette.Platform** holds the OS-specific code: the process monitor, notifications with the Dock and taskbar badge ([§10](#10-notifications)), the OS credential store for a stored Perforce password ([§18](#perforce-ticket-handling)), and the installers for Claudette's own updates: the MSIX update through `PackageManager` on Windows, and swapping `Claudette.app` on macOS ([§2](#updating-claudette)). Their interfaces, `ICredentialStore` and `IAppInstaller`, are in Core, with the release feed and the downloader.
+- **Claudette.Platform** holds the OS-specific code: the process monitor, notifications with the Dock and taskbar badge ([§10](#10-notifications)), the OS credential store for a stored Perforce password ([§18](#perforce-ticket-handling)), the installers for Claudette's own updates: the MSIX update through `PackageManager` on Windows, and swapping `Claudette.app` on macOS ([§2](#updating-claudette)), and reading the login shell's environment ([below](#login-shell-environment)). Their interfaces, `ICredentialStore`, `IAppInstaller` and `ILoginShell`, are in Core, with the release feed, the downloader and `UserEnvironment`.
   - `ClaudeSession` owns one `claude` process. It turns the output stream into typed events (`AssistantDelta`, `ToolUse`, `ToolResult`, `PermissionRequest`, `TurnCompleted`, `TitleChanged`, `UsageUpdated`, `RateLimit`, `AuthRequired`, `Exited`…), and exposes commands such as `SendAsync`, `InterruptAsync`, `RespondToPermissionAsync`, `SetModelAsync`, `SetEffortAsync` and `SetPermissionModeAsync`.
 - **Threading.** Each session reads its process on a background task. Events go to the UI thread through a channel, and streaming text is batched so the UI isn't updated for every token.
 - **Resilience.** If a process exits unexpectedly, the tab shows an error with a **Restart** button that resumes the same session ID.
@@ -955,6 +1054,7 @@ claude -p --input-format stream-json --output-format stream-json --verbose
   - Claudette removes exactly those variables. The full list is `ClaudeEnvironment.SessionVariables`, tracked in `compat/surface.yaml`.
   - It doesn't strip by prefix, because variables like `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_USE_BEDROCK` are user configuration.
   - The real-CLI tests run from inside Claude Code confirmed that the list is enough.
+  - The environment it removes them from is the user environment, which on macOS and Linux can hold the login shell's variables ([below](#login-shell-environment)).
 
 **Startup.** The first thing Claudette sends is an `initialize` control request. The reply contains:
 
@@ -1052,6 +1152,34 @@ The conversation view and diff view use these instead of parsing the tool result
 - Watch for changes daily ([§16](#16-tracking-claude-code-changes)).
 - **Fallback:** if the wire protocol changes too often, swap in a small Node sidecar that runs the official TypeScript Agent SDK and relays to Claudette over a local pipe. This means shipping Node.
 
+### Login shell environment
+
+An app started from the Dock, Finder or a desktop launcher gets a minimal environment: on macOS its `PATH` is `/usr/bin:/bin:/usr/sbin:/sbin`. Homebrew's `PATH`, nvm, pyenv and the like are usually set in `~/.zprofile` or `~/.bashrc`. Claude Code's Bash tool sources the shell's startup file for aliases and functions, but environment variables come from Claude Code's own environment ([tools reference](https://code.claude.com/docs/en/tools-reference#what-persists-between-commands)). So Claude's commands in such a Claudette couldn't find `node`, `dotnet` or Homebrew's tools, which work in a terminal `claude`. Claudette reads the login shell's environment, as VS Code does.
+
+- **When.** On macOS and Linux, when **Use my login shell's environment** is on (Settings → Claude Code, on by default) and Claudette wasn't started from a terminal. Windows apps get the user's full environment, so Windows never needs it.
+  - **Started from a terminal** means `TERM` is set or Claudette has a controlling terminal (`/dev/tty` opens). Its environment came from a shell then, `dotnet run` included. An app started from the Dock, Finder, `open` or a desktop launcher has neither.
+  - Either one is enough. `TERM` without a terminal is left by a terminal that has closed, or by a desktop session started with `startx`, whose environment came from a login shell. And an interactive shell run while Claudette has a terminal would take that terminal over (bash opens `/dev/tty` for job control).
+- **How.** `LoginShellReader` (Claudette.Platform, behind `ILoginShell` in Core) runs the shell once per run:
+  - `$SHELL`, or `/bin/zsh` on macOS and `/bin/bash` on Linux.
+  - As a login, interactive shell: `-i -l -c` for bash, zsh, sh, dash, ksh, mksh and yash; `-l -i -c` for fish; `-i -c` for tcsh and csh. Other shells (nushell, xonsh, PowerShell) aren't run, and Diagnostics says so.
+  - The command prints the environment between random markers, so anything the rc files print is ignored. It prints it twice: `/usr/bin/env -0`, NUL-separated so values with line breaks stay whole, then plain `/usr/bin/env` for an `env` without `-0`, read a line at a time.
+  - It starts in the home folder, with Claudette's own environment minus Claude Code's session variables, plus `CLAUDETTE_RESOLVING_ENVIRONMENT=1`. An rc file can check that to skip slow or interactive setup, as with VS Code's `VSCODE_RESOLVING_ENVIRONMENT`.
+  - Through `IProcessLauncher`, with a 10-second timeout on the injected `TimeProvider`. A shell that times out is stopped. On a timeout or a failure Claudette logs a warning and carries on with its own environment.
+- **Not holding up the window.** Reading starts in the background at launch. The first `claude` start waits for it, up to the timeout: in practice the locator's `claude --version`, before the utility session and the first tab.
+- **The merge** (`UserEnvironment`, Core): Claudette's own environment with the login shell's on top, so the shell's values win. Except:
+  - `CLAUDETTE_*` variables always come from Claudette's own environment.
+  - Claude Code's session variables are never taken from the shell. `ClaudeEnvironment` strips them for `claude` anyway.
+  - The shell's bookkeeping about itself (`_`, `PWD`, `OLDPWD`, `SHLVL`) is left out.
+  - For `claude`, `ClaudeEnvironment` then removes the session variables and applies the changes for that launch on top.
+- **What gets it.** Every `claude` (tabs, the utility session, `--version`, `doctor`, `update` and `auth`), and the other programs Claudette runs for the user: git, `p4` and P4V, diff tools, Homebrew, and project tools' builds, editors and actions ([§18](#project-tools)).
+  - `claude` and the diff tool presets are looked for on the login shell's `PATH`. A bare program name (`git`, `p4`, a custom diff command's program) is found on it too, since .NET would search Claudette's own.
+  - That way `p4` sees the same `P4CONFIG` and `P4PORT` as Claude's own `p4` commands ([§18](#perforce-ticket-handling)), and git finds Git LFS and credential helpers installed with Homebrew.
+  - Claudette's own helpers keep Claudette's environment: `ps`, `notify-send`, `secret-tool`, the update installers and restarting Claudette. They're at fixed paths and don't depend on the user's setup.
+- **The setting** applies to processes started after the change. Turning it on reads the login shell then, if this run hasn't yet. Turning it off gives new processes Claudette's own environment. The `claude` found at launch stays until the next start.
+- **Diagnostics** (Settings → Advanced) say whether it was used, which shell, how long it took and the names of the variables it added or changed. Otherwise they say why not: turned off, started from a terminal, Windows, or the shell timed out, failed or isn't supported. Never a variable's value, since those can be secrets.
+
+> **Not yet tested on a real machine:** a Claudette started from the Dock on macOS, or from a desktop launcher on Linux. The tests run real bash and dash (and zsh and fish where installed) with a made-up home folder.
+
 ## 14. Settings
 
 A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where it is also **Settings…** in the app menu. It follows each platform's conventions:
@@ -1060,6 +1188,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 - Changes apply immediately; there is no Save button.
 - Each category has **Reset to defaults**. In Sessions it leaves the library folder and settings sync as they are, since changing either moves where sessions and settings live; in New tabs it leaves favorite and recent folders, which are this machine's data rather than settings.
 - A search box filters settings by name.
+- The foot of the sidebar shows Claudette's version and **Report an issue** ([Version](#version)).
 
 ### Categories
 
@@ -1068,21 +1197,22 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | General | Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. Claudette's version and updates: check for updates automatically (on by default), include pre-releases (off), **Check now**, and the update's actions. See [Updating Claudette](#updating-claudette). |
 | Sessions | Also restore unpinned tabs on launch (off by default; pinned tabs are always restored). Session library folder (with **Browse…** and **Move library…**, which copies existing sessions to the new folder). Sync new tabs to the session library (off by default; each tab can be switched with **Sync to other machines** in its menu). Name for this machine, as shown in History. How long to keep sessions in the library. Sync Claudette's settings through the library (off by default). See [§9](#session-library-sync-across-machines) and [Settings sync](#settings-sync-optional). |
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
-| Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. |
+| Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. Use my login shell's environment (macOS and Linux only, on by default; [§13](#login-shell-environment)). |
 | New tabs | Default model, effort level and permission mode. The model and effort lists are what Claude Code offered in its last `initialize` reply on this machine (the models and each one's effort levels, kept with the machine's state), with a built-in list only until a session has started; Tab settings… lists them the same way. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (**Add folder…**, **Move up**, **Move down**, **Remove**), in the order the new tab picker shows them. See [Opening a tab](#opening-a-tab). |
-| Appearance | Theme: follow system, light or dark. Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. |
+| Appearance | Theme: follow system, light or dark. Style: Standard (the default) or Claude, the Claude apps' look ([Visual style](#visual-style)). Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. Show fun words while Claude works, and show what Claude is doing while it works (both on by default; [Working line](#working-line)). **Detailed usage header** (off by default): the same switch as the header's chevron, kept on this machine rather than synced ([Detailed header](#detailed-header)). Show context on tab rows (on by default; [§4](#sidebar)). **Density**: Comfortable (the default) or Compact, which tightens the conversation's spacing, message and card padding and tool rows, the sidebar's rows, and the composer's padding. It applies at once and syncs with the other Appearance settings. |
 | Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
 | Quick suffixes | The list of suffixes: label, text and optional shortcut. Add, edit, reorder, delete. See [§5](#quick-suffixes). |
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
 | Diff tool | Built-in, a preset or a custom command, with **Test**. See [§8](#external-diff-tool). |
-| Notifications | On/off for each type in [§10](#10-notifications). Dock/taskbar badge on/off. |
+| Project tools | Unreal's default editor configuration (Development or DebugGame). Project files for Visual Studio, VS Code or Xcode (the OS's own by default). Tell Claude about Unreal projects (on by default). Unity's default code optimization (Release or Debug), and Tell Claude about Unity projects (on by default). The Godot executable (**Browse…**, **Detect**), and Tell Claude about Godot projects (on by default). Open solutions with the OS's app, Rider, Visual Studio, VS Code or another program (**Browse…**). See [§18](#project-tools). |
+| Notifications | On/off for each type in [§10](#10-notifications), including **A project action finishes**. Dock/taskbar badge on/off. |
 | Keyboard | List of shortcuts, each one rebindable ([below](#keyboard-shortcuts)). |
 | Perforce | Off by default. Keep Perforce logins fresh. Password source. Renew-before time. Tickets for all hosts. Show changelist on tabs. The stored password (**Save** / **Forget**). Per-folder server and user. See [§18](#perforce-ticket-handling). |
 | Advanced | Protocol logging and **Open log folder**. **Diagnostics** page ([§16](#staying-tolerant-at-runtime)). Extra command-line arguments passed to `claude`. Minimum supported Claude Code version (read-only). |
 
 ### Keyboard shortcuts
 
-Settings → Keyboard lists every shortcut Claudette handles, with its default from the section that describes it: new tab, close tab, next and previous tab, go to tab 1–9, History, Settings, collapsing the sidebar, Stop, the quick suffixes menu, and allowing or denying the waiting prompt.
+Settings → Keyboard lists every shortcut Claudette handles, with its default from the section that describes it: new tab, close tab, next and previous tab, go to tab 1–9, History, Settings, collapsing the sidebar, Stop, the quick suffixes menu, allowing or denying the waiting prompt, and running the project's main action (`Ctrl/Cmd+Shift+E`, [§18](#project-tools)).
 
 - **Rebinding.** Click a shortcut and press the new keys; Esc cancels. **Reset** puts one back, **Remove** clears it, and **Reset to defaults** restores them all.
 - **One key for both OSes.** Shortcuts are stored with a *Primary* modifier: Ctrl on Windows and Linux, Cmd on macOS. That way a shortcut synced between a Windows machine and a Mac means the same thing on both. Ctrl is its own modifier only on macOS; elsewhere it is Primary.
@@ -1094,9 +1224,18 @@ Settings → Keyboard lists every shortcut Claudette handles, with its default f
 
 **Search.** The box above the categories filters settings by name: it lists matching settings with their category, and picking one opens that category.
 
+### Version
+
+The foot of the Settings sidebar shows which Claudette this is, on every page: "Claudette 0.1.0".
+
+- **The version** is the one being worked on, set in `Directory.Build.props` and tagged `vX.Y.Z` when it's released ([§2](#updating-claudette)); releases pass it to the build too. The first release is `v0.1.0`.
+- **A source build** ([§9](#working-on-claudette)) adds the commit it was built from ("Claudette 0.1.0 · 842169b"), taken from the informational version the .NET SDK writes from the checkout, so a build of a checkout can be told from the release with the same version. An installed Claudette shows only the version.
+- **Clicking it** copies the versions for a bug report, one per line, and it says "Copied" for two seconds: Claudette's version and how it was installed (MSIX, `.dmg`, source build and its commit), Claude Code's version, the OS and its runtime identifier, and the .NET runtime. Only versions: never paths, names or account details, since it's meant to be posted. **Copy diagnostics** ([§16](#staying-tolerant-at-runtime)) starts with the same Claudette line.
+- **Report an issue** opens a new issue on Claudette's GitHub repository in the browser, with an outline (what happened, what you expected, steps to reproduce) and the same versions filled in. Nothing is sent until the user submits it there.
+
 ### Per-tab overrides
 
-Some settings can be changed for a single tab from the tab's right-click menu, under **Tab settings…**: model, effort level, permission mode, the process monitor ([§4](#process-monitor)), and the check-in settings. A tab with overrides shows a small dot next to its settings entry, and **Use defaults** clears them. Overrides are saved with the tab.
+Some settings can be changed for a single tab from the tab's right-click menu, under **Tab settings…**: model, effort level, permission mode, the process monitor ([§4](#process-monitor)), and the check-in settings. **Tab settings…** also edits the folder's custom project actions in its `claudette.json` files ([§18](#project-tools)); they belong to the folder, not the tab, and **Use defaults** leaves them alone. A tab with overrides shows a small dot next to its settings entry, and **Use defaults** clears them. Overrides are saved with the tab.
 
 **Tab settings…** also has **Sync to other machines** ([§9](#session-library-sync-across-machines)), the same switch as the tab menu's. It isn't an override: the new-tab setting only applies when a tab opens, **Use defaults** leaves it as it is, and it doesn't count toward the dot.
 
@@ -1111,7 +1250,7 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 **Sync settings through the session library** (Settings → Sessions, off by default) keeps Claudette's settings the same on every machine that uses the same library folder ([§9](#session-library-sync-across-machines)).
 
 - **What syncs:** appearance, new-tab defaults, usage thresholds, check-ins, quick suffixes, notifications, keyboard shortcuts and process monitor options.
-- **What stays on each machine:** the path to `claude`, this machine's name, the library folder itself, the diff tool (program paths differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
+- **What stays on each machine:** the path to `claude`, the login shell setting, this machine's name, the library folder itself, the diff tool and Settings → Project tools (program paths and installed IDEs differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, the sidebar's and the usage header's collapsed or detailed state, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
 - The synced settings are stored as one file in the library. Each setting keeps the time it was last changed, and the newest change wins, so edits on two machines don't overwrite each other wholesale.
 - The first time sync is turned on and the library already has settings from another machine, Claudette asks: **Use synced settings** or **Replace them with this machine's**.
 - Turning sync off keeps the current values on this machine and stops syncing.
@@ -1228,6 +1367,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 | Hook callbacks | `HookCallbackTests` (protocol), `PerforceIntegrationTests` (`fake-claude`'s `RUN_BASH`), and `RealCliTests` against the real CLI |
 | Perforce | A pretend `p4` (`tests/Claudette.Core.Tests/Support/FakeP4.cs`, also compiled into the App tests), `Perforce*Tests` in the Core and App tests, and a shell-script `p4` for a real pipe in `PerforceIntegrationTests`. Credential stores: `CredentialStoreTests`. |
 | Real-CLI checks of subagents and stopping one | `RealCliTests`, with the mock's `SUBAGENTS` and `LONG_AGENT` scripts; the `12-subagents` fixture was recorded from `SUBAGENTS` |
+| Login shell environment | `LoginShellTests` in `tests/Claudette.Platform.Tests/LoginShell/`: reading the output, the terminal rule, timeouts and failures with a fake launcher and `FakeTimeProvider`, and real bash, dash, zsh and fish (each where installed) with a made-up `HOME`, never the user's rc files. `UserEnvironmentTests` in Core (the merge, waiting, and the callers) and `LoginShellSettingsTests` in the App tests. |
 
 ## 16. Tracking Claude Code Changes
 
@@ -1295,7 +1435,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
 - A line that fails to parse never ends a session. It's logged, and Claudette moves on.
 - With protocol logging on, a skipped message appears in the conversation as a collapsed *"Unsupported message from Claude Code"* row that shows the raw JSON.
 - Features are detected with the `capabilities` list from `system/init`, not by comparing version numbers.
-- Settings → Advanced has a **Diagnostics** page. It shows the Claude Code version and counts of unknown messages and fields seen, and has **Copy diagnostics** for bug reports.
+- Settings → Advanced has a **Diagnostics** page. It shows the Claude Code version, counts of unknown messages and fields seen, and whether the login shell's environment was used ([§13](#login-shell-environment)), and has **Copy diagnostics** for bug reports.
 
 ### Handling a report
 
@@ -1408,15 +1548,34 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Still to verify:** a real Perforce server (including SSO and multi-factor), P4V, and the Windows and macOS credential stores in the running app.
 11. **Agent map.** ✅ Built 2026-09-29 ([§18](#agent-map)): the Agents page of the side panel and its own window, with live status, activity, running time, tool calls and tokens for each subagent, the prompt it was given and the report it returned, clicking through to its group or its waiting prompt, Stop for one subagent through `stop_task`, the info card's Agents row, and restored tabs replaying the finished tree from the subagents' own transcripts.
     - **Still to verify:** clicking through it in a real window, and `subagent_retry` against real API errors.
-12. **Updates and syncing by choice.** ✅ Built 2026-09-29.
+12. **Updates, syncing by choice, and the working line.** ✅ Built 2026-09-29.
     - **Updating Claudette ([§2](#updating-claudette)).** An installed Claudette checks its GitHub releases, downloads the package for its platform, checks it, and restarts into it with every tab as it was, through the source builds' handover. Settings → General has the version, the checks and pre-releases.
     - **Per-tab sync ([§9](#session-library-sync-across-machines)).** Syncing to the session library is opt-in per tab: **Sync to other machines** in the tab menu and **Tab settings…**, a sync icon on the tab's row, and **Sync new tabs to the session library** in Settings → Sessions (off by default). Sessions opened from the library keep syncing; a tab that doesn't sync writes nothing to the library and ignores leases.
-    - **Still to verify:** installing an update on a real Windows and Mac, which needs signed packages from a published release.
-13. **Later.** New features go in [§18](#18-future-features) first.
+    - **Working line ([§5](#working-line)).** A twinkling glyph, a fun verb (or what the running tool is doing), the turn's time and tokens above the composer while Claude works, with Claude Code's `spinnerVerbs`, and both options in Settings → Appearance.
+    - **Login shell environment ([§13](#login-shell-environment)).** On macOS and Linux, a Claudette not started from a terminal reads the login shell's environment once in the background, and `claude`, git, `p4`, diff tools and Homebrew start with it merged in. **Use my login shell's environment** in Settings → Claude Code (on by default), and a Diagnostics line saying which shell was used, or why not.
+    - **The Claude style ([§3](#visual-style)).** Settings → Appearance → Style: Standard (the default) or Claude, the Claude apps' look: their ivory, warm greys and orange, your messages in bubbles on the right, serif replies, a big rounded composer with a round Send arrow, in light and dark, switching without a restart. Code blocks and inline code now follow the light or dark theme in both styles (they were always dark).
+      - **Still to verify:** how it looks on a real Windows, macOS and Linux desktop, and next to the Claude iOS app. It has only been rendered headlessly so far.
+    - **Version ([§14](#version)).** The foot of the Settings sidebar shows Claudette's version (0.1.0, the first release), with the commit for a source build; clicking it copies the versions for a bug report, and **Report an issue** opens a new GitHub issue with them filled in.
+    - **Detailed header ([§6](#detailed-header)).** The header's chevron, or **Detailed usage header** in Settings → Appearance, draws the header taller: charts of the session and the week with the thresholds, projections and a mark where the session crosses the critical threshold, the burn rate, the time to the limit and the busiest tabs. Remembered on this machine.
+      - **Still to verify:** how it looks on real screens. So far it has only been rendered headlessly (Skia, light and dark, at several widths). Check it on Windows with Mica, on macOS, on high-DPI displays and with other accent colors.
+    - **Conversation and sidebar polish.**
+      - A context ring on each tab's row, with **Show context on tab rows** in Settings → Appearance ([§4](#sidebar), [§6](#per-tab-context)).
+      - **Copy** on code blocks, user messages and replies, and each message's time on hover, from the clock live and from the transcript when restored ([§5](#copy-and-times)).
+      - **Density** in Settings → Appearance: Comfortable or Compact ([§14](#categories)).
+    - **Still to verify:** installing an update on a real Windows and Mac, which needs signed packages from a published release; the login shell's environment in a Claudette started from the Dock on macOS and from a desktop launcher on Linux.
+13. **Project tools.** ✅ Built 2026-09-29 ([§18](#project-tools)).
+    - **Unreal Engine:** finding the project (in the folder, below and above it) and its engine (a parent folder, `LauncherInstalled.dat`, the registry, `Install.ini`, a chosen folder), Launch editor with Development or DebugGame per project, Generate project files, Build editor, Build and launch, Open solution with a chosen IDE, Open latest log, Clean intermediates and Kill all Unreal editors.
+    - **Unity:** the editor for the project's version from Unity Hub's folders and lists, Open in Unity with Release or Debug code optimization, EditMode tests with their counts, regenerating the C# solution, the solution and logs, Clean Library, Kill all Unity editors, and the lock file rules.
+    - **Godot:** finding the executable (a pick, Settings, the `PATH`, `Godot.app`, Scoop and WinGet) and checking for the .NET build, Open in Godot, Run project, Build C#, Open solution, Clean `.godot` or `.import`, and Kill all Godot editors.
+    - **The chip** in the composer bar, the project's submenu in the tab menu, the **Project** page with the job's output and Stop, the notification, and `Ctrl/Cmd+Shift+E`.
+    - **claudette.json** and **claudette.local.json:** a folder's own actions (shared ones run on a click, without a confirmation) and links, the links in the sidebar, and the in-app editor.
+    - **Settings → Project tools**, and the notes to Claude about Unreal, Unity and Godot projects.
+    - **Still to verify:** everything on machines with Unreal, Unity and Godot installed, on Windows, macOS and Linux (see [§18](#project-tools)).
+14. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features
 
-Features beyond v1. All three below are built (milestones 10 and 11); new ones go here first, each with a fuller design before it's built.
+Features beyond v1. All four below are built (milestones 10, 11 and 13); new ones go here first, each with a fuller design before it's built.
 
 ### Perforce ticket handling
 
@@ -1543,6 +1702,226 @@ A live view of what a tab's subagents are doing. When Claude fans work out to se
   - `tool_progress` for a foreground subagent: a heartbeat every 30 seconds (`heartbeat: true`), and `subagent_retry` while it waits out an API error, which its row shows as *"Retrying after a rate limit (attempt 2 of 10)…"*.
   - `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`, user configuration that passes through to `claude` ([§13](#integration-with-claude-code)), limits nesting (three layers by default), so on some machines the tree is shallower.
 - **Tests.** `AgentMapTests` (the view model, including the recorded fixture replayed through a tab), `ReplayTests`, `TranscriptReaderTests`, `FakeClaudeTests` (`fake-claude`'s `SUBAGENTS` prompt, and stopping a subagent while it waits on a prompt) and `RealCliTests` (the mock's `SUBAGENTS` and `LONG_AGENT` scripts against the real CLI).
+
+### Project tools
+
+✅ Built 2026-09-29.
+
+A tab can do things for the project in its folder: launch the editor, generate project files, build, open the solution. Which things depends on the project. Claudette knows Unreal Engine, Unity and Godot projects; a folder can also have its own actions and links, in a `claudette.json` beside the project.
+
+**Where the actions are.**
+
+- **The project chip** in the composer bar ([§5](#composer)), for example `◆ NightOwl · UE 5.4 ▾`. It shows only when the tab has project tools: a detected project, or custom actions. With custom actions and no project it reads `◆ Actions ▾`. While a job runs, it shows a busy dot and the job's name instead (`● Build editor… ▾`). Its menu has:
+  - a header: the project's name and kind, the engine's version and kind, and the engine's folder, or what's wrong ("The engine for EngineAssociation "5.9" wasn't found on this machine");
+  - entries of `claudette.json` that were skipped, and why;
+  - **Projects in this folder**, when there are several, as radio items; the pick is remembered per tab folder on this machine;
+  - the project's actions;
+  - the project's choice, such as Unreal's **Editor configuration** (Development or DebugGame), as radio items;
+  - **Choose engine folder…** (or **Choose another engine folder…**);
+  - the folder's custom actions, then its **Links**;
+  - **Show output…**, which opens the Project page, **Add an action…** and **Refresh**.
+  - Disabled items say why in their tooltip ("Generate project files first"). The menu looks at the project's files again each time it opens, so it's current.
+- **The tab's menu in the sidebar** ([§4](#sidebar)) has the same entries in a submenu named after the project (`NightOwl (UE 5.4)`), in the full sidebar and the rail. A folder with no project tools gets **Add an action…** there instead, so the first one can be added.
+- **The Project page** of the side panel ([§3](#3-main-window)), beside Changed files, Agents and Processes. Its button shows a busy dot while a job runs. It shows:
+  - the project's details: its file, the engine's version, folder and kind, the editor target and the configuration;
+  - a button per action;
+  - the running or last job: its status (running, succeeded, failed with its exit code, stopped), **Stop**, which ends the job's whole process tree, and **Copy**;
+  - the job's output, monospace and scrollable, following the newest line. It keeps the last 5,000 lines and says how many were dropped.
+- **The keyboard.** **Run the project's main action**, `Ctrl/Cmd+Shift+E` by default and rebindable ([§14](#keyboard-shortcuts)): Launch editor for Unreal, Open in Unity, Open in Godot, else the folder's first custom action.
+
+**How it's built.** `Claudette.Core/ProjectTools`:
+
+- An `IProjectToolProvider` finds its kind of project for a folder and describes it as a `ProjectInfo`: kind, name, root, details, actions, a per-project choice, a fix (**Choose engine folder…**) and the note for Claude.
+- A `ProjectAction` has an id, a label, a description and one of four kinds:
+  - **Launch**: a program that outlives Claudette, such as the editor. It starts detached, and nothing of it is tracked.
+  - **Run**: a long job. Its output goes to the Project page, **Stop** ends it, and its end is notified. One job runs at a time per tab; the other jobs are disabled until it ends.
+  - **Open**: a file or folder, opened with the OS's app, or for a solution with the IDE chosen in Settings.
+  - **Destructive**: confirmed first, such as deleting folders.
+- Every command is built by a pure function that takes the OS, so all three OSes' commands are tested on any machine.
+- **Detection** runs off the UI thread when a tab opens and before its session starts, when its folder changes, when the chip menu opens, and on **Refresh**. It's cheap: a bounded walk and a few small files.
+  - The tab's folder, its subfolders two levels down (for `Game/NightOwl/NightOwl.uproject`), and its parent folders up to the repository's root: a folder with `.git` (a folder, or a worktree's file), `.p4config` or the file `P4CONFIG` names, or six levels up (for a tab opened on `Source/`).
+  - It never looks into `Intermediate`, `Saved`, `DerivedDataCache`, `Binaries`, `Content`, `Plugins`, `Source`, `Config`, `Engine`, `Templates`, `Library`, `Temp`, `obj`, `bin`, `node_modules`, hidden folders or links, and at most 2,000 folders.
+  - Several projects are listed nearest first: the folder, then its subfolders, then its parents.
+- **Jobs** start through `IProcessLauncher` with `TrackProcessTree`, so they show in the process monitor ([§4](#process-monitor)) and **Stop** ends everything they started (UnrealBuildTool starts children). Closing the tab stops a running job with the tab's other processes, unless they're kept.
+- **Environment.** Jobs and launches get the user's environment: on macOS and Linux, with the login shell's merged in ([Login shell environment](#login-shell-environment)), so a build finds `dotnet`, the editor or a Homebrew tool on the same `PATH` as a terminal, and a bare program name is looked up on that `PATH`. Claude Code's session variables are removed ([§13](#integration-with-claude-code)), so a command that runs `claude` behaves as it would in a terminal. `ProjectToolEnvironment` is the one place this is built.
+- **Remembered on this machine**, in `state.json`: the project a folder uses when it has several, each project's choices (Unreal's configuration and engine folder, keyed by its `.uproject`; Unity's code optimization and editor; Godot's executable). None of it syncs.
+- **The note to Claude.** Each provider has its own note, added through `--append-system-prompt` when Settings says so, before Perforce's note when both apply.
+
+**Unreal Engine.**
+
+- **Finding the project.** `*.uproject` files, found as above.
+- **The `.uproject`** is JSON, read tolerantly: comments, trailing commas and unknown fields are fine, and a file that isn't JSON still counts as a project.
+  - `EngineAssociation` says which engine it uses.
+  - The editor target comes from `Source/*Editor.Target.cs`: `<Name>Editor` when there's one, else the first; `<Name>Editor` when there are none.
+  - A project with no `Source` targets and no `Modules` has no C++ code: it has no project files to generate, and nothing to build with an installed engine.
+  - Enabled `Plugins` are listed on the Project page.
+- **Finding the engine** (`UnrealEngineLocator`). An engine only counts when it has `Engine/Build/Build.version`.
+  - A folder chosen for the project with **Choose engine folder…** comes first. The pick is checked for `Build.version` (the `Engine` folder itself is accepted too) and remembered per project.
+  - **Empty or missing association:** the engine is in a parent folder, the "native" layout. Claudette walks up from the project looking for `Engine/Build/Build.version`.
+  - **A version such as `5.4`:** a launcher install. On Windows, `%ProgramData%\Epic\UnrealEngineLauncher\LauncherInstalled.dat` (JSON: an `InstallationList` of `AppName` `UE_5.4` and `InstallLocation`), then the registry, `HKLM\SOFTWARE\EpicGames\Unreal Engine\5.4`, value `InstalledDirectory`, in the 64-bit and then the 32-bit view. On macOS, `~/Library/Application Support/Epic/UnrealEngineLauncher/LauncherInstalled.dat`. Linux has no launcher.
+  - **Anything else, usually a GUID:** a build registered by UnrealVersionSelector. On Windows, `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds`, where each value's name is a build's id and its data the engine's folder. On Linux, `~/.config/Epic/UnrealEngine/Install.ini`, and on macOS `~/Library/Application Support/Epic/UnrealEngine/Install.ini`: the `[Installations]` section's `{GUID}=path` lines. GUIDs are compared with and without braces, ignoring case.
+  - The registry is read in `Claudette.Platform` (`WindowsUnrealEngineRegistry`), behind `IUnrealEngineRegistry`.
+  - **The version** is `Build.version`'s `MajorVersion`, `MinorVersion` and `PatchVersion` (and `BranchName`), shown as "Unreal Engine 5.4.2". The chip shows `UE 5.4`, from the association when the engine isn't found.
+  - **Its kind:** "launcher install", "source build", "installed build" (one with `Engine/Build/InstalledBuild.txt` that isn't the launcher's), "engine in a parent folder", or "chosen by you".
+  - **Unreal Engine 4** calls its editor `UE4Editor`; the build scripts are the same.
+  - **Not found:** the menu says so, the engine's actions are disabled ("The engine wasn't found: choose its folder in this menu"), and **Choose engine folder…** is offered.
+- **Actions.**
+  - **Launch editor** (the main action), detached: `Engine/Binaries/Win64/UnrealEditor.exe "<uproject>"`, `Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor "<uproject>"` or `Engine/Binaries/Linux/UnrealEditor "<uproject>"`. DebugGame adds `-debug`, which loads the DebugGame module DLLs, and the label says "Launch editor (DebugGame)". Disabled when the editor isn't built yet.
+  - **Generate project files**, a job: `Engine/Build/BatchFiles/Build.bat -projectfiles -project="<uproject>" -game -progress`, or `Mac/Build.sh` or `Linux/Build.sh` under `BatchFiles`. This is what UnrealVersionSelector runs, and `Build.bat` is in launcher installs as well as source builds (`GenerateProjectFiles.bat` is only in source builds). VS Code adds `-vscode`. Visual Studio and Xcode are UnrealBuildTool's defaults on Windows and macOS, so they add nothing, which leaves the user's `BuildConfiguration.xml` in charge.
+  - **Build editor**, a job: `Build.bat <EditorTarget> Win64 <Development|DebugGame> -Project="<uproject>" -WaitMutex`, with `Build.sh` and `Mac` or `Linux` elsewhere. A project without code builds `UnrealEditor` with a source build.
+  - **Build and launch**: Build editor, then Launch editor if the build succeeded.
+  - **Open solution**: `<Name>.sln` for Visual Studio, `<Name> (Mac).xcworkspace` or `<Name>.xcworkspace` for Xcode (a folder, which macOS opens as a document), `<Name>.code-workspace` for VS Code, in the project's folder. Disabled with "Generate project files first" when it's missing. It opens with the OS's app, or the IDE chosen in Settings:
+    - Rider: `rider64.exe` on the `PATH`, the Toolbox's `rider.cmd`, or the newest `%ProgramFiles%\JetBrains\JetBrains Rider*\bin\rider64.exe` on Windows; `open -a Rider` on macOS; `rider` or the Toolbox's script on Linux. Rider opens the `.sln`, or can open the `.uproject` itself.
+    - Visual Studio: the newest `%ProgramFiles%\Microsoft Visual Studio\*\*\Common7\IDE\devenv.exe` on Windows; `open -a "Visual Studio"` on macOS.
+    - VS Code: `Code.exe` in `%LOCALAPPDATA%\Programs` or `%ProgramFiles%`, else `code.cmd` on the `PATH`, on Windows; `open -a "Visual Studio Code"` on macOS; `code` on Linux.
+    - Another program, given the solution's path.
+    - When the IDE isn't found, the OS's app opens it and a note says so.
+  - **Open latest log**: `Saved/Logs/<Name>.log`, disabled when there's none yet.
+  - **Clean intermediates…**, destructive. It deletes `Binaries` and `Intermediate` in the project, and in each plugin under `Plugins/` (a folder with a `.uplugin`, however deeply nested). Nothing else: not `Saved`, `DerivedDataCache`, `Content` or `Config`.
+    - The confirmation lists the folders and their total size. It warns when an editor seems to have the project open: an `UnrealEditor`, `UnrealEditor-Cmd`, `UE4Editor` or `UE4Editor-Cmd` process whose command line names the `.uproject`. Where command lines can't be read, it doesn't guess.
+    - The folders are deleted off the UI thread, as a job with its lines on the Project page. Read-only files are made writable first, and links inside are removed without following them.
+  - **Kill all Unreal editors…**, destructive. It ends every running Unreal editor, not just this project's, and each one's process tree, which takes ShaderCompileWorker and the like with it.
+    - The editors are `UnrealEditor`, `UnrealEditor-Cmd`, `UE4Editor` and `UE4Editor-Cmd` (`.exe` on Windows; on macOS, the executable inside `UnrealEditor.app`).
+    - The confirmation says how many are running and lists each with its PID and, when its command line shows it, its project: "End 2 Unreal editors?", "• UnrealEditor (PID 501): NightOwl".
+    - It's disabled with "No Unreal editor is running" when none is found. The menu checks each time it opens; where processes can't be listed, it stays enabled and doesn't guess.
+- **Processes by name** (`ISystemProcesses` in Core, `SystemProcesses` in `Claudette.Platform`), shared by every provider, with the process monitor's own ways of reading processes: a Toolhelp snapshot and `NtQueryInformationProcess` for command lines on Windows, `/proc` on Linux (the `exe` link, else the first argument, since `comm` is cut to 15 characters), and one `ps` run on macOS, where a program's path can have spaces (`/Users/Shared/Epic Games/…`), so its name is taken from the longest start of the command line that is a file. Claudette itself is never listed. Ending a tree uses .NET's `Process.Kill(entireProcessTree: true)`.
+- **Running `.bat` files on Windows.** They run as `cmd.exe /d /s /c ""<bat>" <args>"`: `/d` skips AutoRun, and `/s` takes off only the outer quotes. cmd doesn't read its command line by the rules .NET quotes arguments with, so `CommandLines.BatchFile` builds it and the launcher passes it as it is (`ProcessStartSpec.CommandLine`). An argument is quoted when it has a space or a character cmd treats specially; an option such as `-project=<path>` has only its value quoted, as Unreal's tools write it. An argument with a quote or a line break is refused. `.sh` files run through `/bin/bash`.
+- **Telling Claude.** With **Tell Claude about Unreal projects** on (the default), a session that starts in a detected project gets a note through `--append-system-prompt`, before Perforce's note when both apply ([§18](#perforce-ticket-handling)):
+  > This is an Unreal Engine 5.4 project, NightOwl, at D:\Games\NightOwl\NightOwl.uproject.
+  > The engine is at C:\Program Files\Epic Games\UE_5.4 (a launcher install).
+  > To build the editor, run: "C:\Program Files\Epic Games\UE_5.4\Engine\Build\BatchFiles\Build.bat" NightOwlEditor Win64 Development -Project="D:\Games\NightOwl\NightOwl.uproject" -WaitMutex
+  > To regenerate project files, run: "C:\…\Build.bat" -projectfiles -project="D:\Games\NightOwl\NightOwl.uproject" -game -progress
+  > Don't start the editor or packaging unless asked.
+  - It's about 550 characters for typical paths. The build command uses the project's configuration as the session starts.
+  - The tab info card ([§4](#4-tabs--sessions)) gets a **Project** row: "NightOwl: Unreal Engine 5.4.2 · launcher install. Claude was told how to build it."
+
+**Unity.**
+
+- **Finding the project.** A folder with `ProjectSettings/ProjectVersion.txt` and `Assets/`, found as above. Its name is the folder's (the C# solution is named after it); `productName` and `companyName` from `ProjectSettings/ProjectSettings.asset` are shown and name the player log's folder.
+- **The version** is `m_EditorVersion` (`2022.3.20f1`), with the changeset from `m_EditorVersionWithRevision` when it's there. The chip shows `Unity 2022.3`.
+- **Finding the editor** for that exact version (`UnityEditors`). Only an editor that exists counts.
+  - A pick remembered for the project, from **Choose Unity editor…**: the executable, or a version's folder or `Unity.app` that holds it.
+  - Unity Hub's default folder: `C:\Program Files\Unity\Hub\Editor\<version>\Editor\Unity.exe`, `/Applications/Unity/Hub/Editor/<version>/Unity.app/Contents/MacOS/Unity`, `~/Unity/Hub/Editor/<version>/Editor/Unity`.
+  - Hub's custom install folder, `secondaryInstallPath.json` (a JSON string) in Hub's config folder: `%APPDATA%\UnityHub`, `~/Library/Application Support/UnityHub` or `~/.config/UnityHub`.
+  - Editors added to Hub by hand: `editors-v2.json` (`{ "data": [ { "version", "location" } ] }`) or the older `editors.json` (`{ "<version>": { "version", "location" } }`) in the same folder, read tolerantly; a location can be a string or a list.
+  - When the version isn't installed, the chip menu's header says so and offers **Choose Unity editor…**.
+- **Whether Unity has the project open.** `Temp/UnityLockfile` exists and a `Unity` process's command line names the project. A lock left by a crashed editor doesn't count. Where processes can't be listed, or a Unity process's command line can't be read, the lock file alone counts, since Unity refuses a locked project anyway.
+- **Actions.**
+  - **Open in Unity** (the main action), detached: `Unity -projectPath "<path>"`. The per-project radio **Code optimization: Release / Debug** (its default from Settings, Release) adds `-debugCodeOptimization` for Debug, and the label says "Open in Unity (Debug)". While the project is open it reads **Unity has this project open**, disabled.
+  - **Run EditMode tests**, a job: `Unity -batchmode -projectPath "<path>" -runTests -testPlatform EditMode -testResults "<results>" -logFile -`. Unity quits by itself when the tests are done. The results file is in Claudette's data folder (`project-jobs/`), deleted before each run; when the job ends, its status adds the counts from the NUnit XML: *"Run EditMode tests failed (exit code 2). 11 passed, 1 failed."*
+  - **Regenerate the C# solution**, a job: `Unity -batchmode -quit -projectPath "<path>" -executeMethod <method> -logFile -`. The method comes from the IDE package in `Packages/manifest.json`: `com.jetbrains.rider`'s `Packages.Rider.Editor.RiderScriptEditor.SyncSolution`, or `com.unity.ide.visualstudio`'s `Microsoft.Unity.VisualStudio.Editor.VisualStudioEditor.SyncAll`, which a project with the old `com.unity.ide.vscode` package also uses when it has it. Rider's comes first when Settings opens solutions with Rider. Without either package, it's disabled and says why.
+  - **Open solution**: `<FolderName>.sln` in the project's folder, disabled when missing, opened like Unreal's with the IDE from Settings.
+  - **Open Editor log**: `%LOCALAPPDATA%\Unity\Editor\Editor.log`, `~/Library/Logs/Unity/Editor.log` or `~/.config/unity3d/Editor.log`.
+  - **Open Player log**: `%USERPROFILE%\AppData\LocalLow\<company>\<product>\Player.log`, `~/Library/Logs/<company>/<product>/Player.log` or `~/.config/unity3d/<company>/<product>/Player.log`. Disabled when missing.
+  - **Clean Library…**, destructive: deletes `Library`, `Temp` and `obj` in the project, and nothing else. The confirmation warns that Unity reimports every asset next time, which can take a long while, and shows the size.
+  - **Kill all Unity editors…**, destructive: every `Unity` process (`Unity.exe` on Windows) and its tree, with the project from its `-projectPath`, as Unreal's. Not Unity Hub, and not Unity's own helpers such as `UnityShaderCompiler`, whose names differ.
+  - While Unity has the project open, EditMode tests, regenerating the solution and Clean are refused: "Unity has this project open, and locks it while it does: close the editor first."
+- **Telling Claude.** With **Tell Claude about Unity projects** on (the default):
+  > This is a Unity 2022.3.20f1 project, NightOwl, at /g/NightOwl.
+  > The editor is at /opt/Unity/Hub/Editor/2022.3.20f1/Editor/Unity.
+  > To run the EditMode tests, with the editor closed, run: /opt/Unity/Hub/Editor/2022.3.20f1/Editor/Unity -batchmode -projectPath /g/NightOwl -runTests -testPlatform EditMode -testResults /g/NightOwl/Logs/EditModeResults.xml -logFile -
+  > Library/, Temp/ and obj/ are generated: don't edit them.
+  > A .meta file must move and be renamed with its asset.
+  > Don't open the editor unless asked.
+
+> **Still to verify with Unity installed:** each Hub layout and file as Hub writes them; the lock file with a real editor; regenerating the solution with each IDE package in batch mode (the methods are the packages' public entry points, but running them with `-executeMethod` hasn't been tried); the results file of `-runTests`; and the logs' places on each OS.
+
+**Godot.**
+
+- **Finding the project.** A folder with `project.godot`, found as above. It's a Godot `ConfigFile`, read line by line and tolerantly:
+  - `config_version`: 5 is Godot 4, 4 is Godot 3.
+  - `config/name` under `[application]`, else the folder's name.
+  - `config/features`, such as `PackedStringArray("4.3", "C#", "Forward Plus")` (`PoolStringArray` in Godot 3): its first version is the project's (`Godot 4.3`), else `config_version` gives `Godot 4` or `Godot 3`.
+  - It's a C# project when its features have `C#`, it has a `[dotnet]` or `[mono]` section, or its folder has a `.sln` or `.csproj`.
+- **Finding Godot** (`GodotExecutables`). There's no standard install, so in order:
+  1. a pick remembered for the project, from **Choose Godot executable…**;
+  2. the path in Settings → Project tools;
+  3. `godot`, `godot4`, `Godot` or `godot-mono` on the `PATH`;
+  4. on macOS, `/Applications/Godot.app` or `/Applications/Godot_mono.app`;
+  5. on Windows, Scoop's shims (`~\scoop\shims\godot.exe`, `godot-mono.exe`), WinGet's `Links\godot.exe`, and the newest `Godot*.exe` in WinGet's `GodotEngine.GodotEngine*` package folder, not the console one.
+  - **Detect** in Settings runs 3–5 and fills in the path.
+  - A C# project needs the .NET ("mono") build of Godot: one whose name has `mono` in it, or with a `GodotSharp` folder beside it (in `Contents/Resources` on macOS). When the Godot found isn't one, the chip menu's header says so.
+- **Actions.**
+  - **Open in Godot** (the main action), detached: `godot --editor --path "<folder>"`.
+  - **Run project**, detached: `godot --path "<folder>"`.
+  - **Build C#**, a job, for C# projects: `dotnet build "<Name>.sln"`, or the `.csproj` when there's no `.sln`. Disabled until Godot has made them.
+  - **Open solution**, for C# projects: the `.sln`, disabled when missing.
+  - **Clean .godot…** (Godot 4) or **Clean .import…** (Godot 3), destructive: deletes that folder, with a confirmation that Godot reimports every asset next time.
+  - **Kill all Godot editors…**, destructive: every process whose name starts with `godot` (any build, such as `Godot_v4.3-stable_mono_win64`), with the project from its `--path`, never Claudette itself.
+- **Telling Claude.** With **Tell Claude about Godot projects** on (the default):
+  > This is a Godot 4.3 project (C#), Night Owl, at /g/owl.
+  > To check it without the editor, run: /opt/godot-mono --headless --path /g/owl --quit
+  > To check one script, run: /opt/godot-mono --headless --path /g/owl --check-only --script res://path/to/script.gd
+  > To build the C# code, run: dotnet build '/g/owl/Night Owl.sln'
+  > Don't open the editor unless asked.
+
+> **Still to verify with Godot installed:** each place Godot is looked for, the .NET build check, `--check-only` on Godot 3 and 4, and Kill all Godot editors with real editors.
+
+**claudette.json.** A folder's own actions and links are in two files in the tab's folder (only there; they aren't looked for elsewhere):
+
+- `claudette.json` is shared: committed with the project.
+- `claudette.local.json` is personal, and belongs in `.gitignore`. It has the same shape, and its entries come after the shared file's.
+- Both are read tolerantly, like everything else Claudette reads: comments and trailing commas are fine, unknown fields are ignored, and a bad entry is skipped with a reason, which the chip menu and the Project page show ("claudette.json: actions[2] has no command, so it was skipped."). A file that isn't JSON is skipped whole, with the parser's reason. A missing file means nothing.
+
+```json
+{
+  "actions": [
+    { "name": "Run tests", "command": "dotnet test", "folder": "src", "mode": "output" },
+    { "name": "Open Grafana", "command": "start https://grafana.example", "mode": "launch", "os": ["windows"] }
+  ],
+  "links": [
+    { "name": "Board", "url": "https://example.atlassian.net/jira/software/projects/ABC/boards/1" },
+    { "name": "Pull request", "url": "https://github.com/org/repo/compare/{branch}?expand=1" }
+  ]
+}
+```
+
+- **Actions.**
+  - `name` and `command` are required.
+  - `folder` is relative to the tab's folder; the tab's folder by default.
+  - `mode` is `output` (the default: output on the Project page, **Stop**, and the notification) or `launch` (started and left alone).
+  - `os` is optional: `windows`, `macos` or `linux`. An action whose `os` leaves out this machine isn't shown.
+  - Commands run through the user's shell: `cmd.exe /d /s /c "<command>"` on Windows, `$SHELL -c` (or `/bin/sh -c`) elsewhere. Otherwise they run like built-in actions.
+  - An action's id is its file and position, such as `shared:0`, which Stop and the notification use.
+  - They're listed in the chip menu after the project's actions, under a separator.
+- **Picking up edits.** The files are read again when the tab is selected, when Claudette comes to the front, when a turn ends (Claude may have edited them), when the chip menu opens, and after the in-app editor saves. Claudette doesn't watch them with the file system: a watcher per tab runs into the OS's limits (128 inotify instances per user on many Linux machines) and doesn't work on some network drives, and these moments cover when an edit can matter.
+- **The in-app editor.**
+  - **Add an action…** opens a small dialog: name, command, working folder, **Run with output** or **Launch and forget**, and which file it goes in, **Just me (claudette.local.json)** (the default) or **Shared with the project (claudette.json)**.
+  - **Tab settings…** has a **Project actions** section: a choice of the two files, and the chosen file's actions with **Add…**, **Edit…**, **Remove**, **Move up**, **Move down** and **Open file**. Entries for other OSes are listed, marked "only on …", and entries that can't be read are listed with their reason and can only be removed. Nothing is written until **Apply**.
+  - Saving reads the file as JSON, replaces only `actions`, keeps every other key and each entry's other fields (such as `os`), and writes it indented. The dialog says so: saving rewrites the file, so comments in it are dropped. A file that isn't valid JSON is never overwritten; the editor says to fix it by hand first.
+- **No confirmation.** Actions from `claudette.json` run on a click, exactly like those from `claudette.local.json`: the user chose not to be asked first, although a project from someone else can put any command behind a friendly name. Nothing in either file runs on its own: only an explicit click runs an action, and hovering one shows its whole command first.
+  - `claudette.local.json` is the user's own file, so its actions run without asking.
+  - Nothing from these files runs except on an explicit click or the main action's shortcut: no automatic runs and no hooks.
+
+**Links.**
+
+- **In the sidebar**, a **Links** section above History shows the selected tab's links: the shared file's, then the local file's. It's hidden when the tab has none. It can be folded to its heading, which is remembered. On the rail it's one globe icon with the links in a flyout. The chip menu lists them too, under **Links**.
+- **Opening.** A click opens the link in the browser (`IPlatformServices.OpenUrlAsync`). Hovering shows the address it opens. Links have a globe icon; favicons would need network requests, so there are none.
+- **Allowed schemes.** Only `https`, `http` and `mailto`. Anything else (`file:`, `javascript:`, an app's own scheme) is shown disabled with the reason, and never opened. So is an address that isn't absolute.
+- **Placeholders**, filled from the selected tab and URL-escaped: `{branch}` (the git branch), `{changelist}` (the Perforce changelist Claude is working in, [§18](#perforce-changelist-in-the-tab-title)) and `{folderName}`. A link whose placeholder can't be filled right now is disabled and says why ("No git branch").
+- **Updates.** Links follow the selected tab, and are read again as its files are.
+
+**Notifications.** When a job finishes or fails and Claudette isn't in front, a notification says so: *"Build editor failed (exit code 6)."* A stopped job doesn't notify. Clicking it selects the tab and opens its Project page. Settings → Notifications → **A project action finishes**, on by default ([§10](#10-notifications)).
+
+**Settings → Project tools** ([§14](#14-settings)), kept on each machine like the diff tool:
+
+- Default editor configuration for Unreal: Development (the default) or DebugGame. A project's own choice in the chip menu wins.
+- Project files for: Visual Studio, VS Code or Xcode. The default is Visual Studio on Windows, Xcode on macOS and VS Code on Linux.
+- Open solutions with: the OS's default app, Rider, Visual Studio, VS Code, or another program (with **Browse…**).
+- Tell Claude about Unreal projects: on by default.
+- Unity: the default code optimization, Release (the default) or Debug; a project's own choice wins. Tell Claude about Unity projects: on by default.
+- Godot: the executable's path, empty to find it, with **Browse…** and **Detect**. Tell Claude about Godot projects: on by default.
+- **Reset to defaults**, and search entries for each.
+
+**Testing.** No test runs a real engine: engines are a few files in temporary folders, the registry and running processes are fakes, and every process is a fake launcher's. `ProjectDiscoveryTests`, `UnrealEngineTests`, `UnrealCommandTests`, `CommandLineTests`, `UnrealProviderTests`, `UnityProviderTests`, `GodotProviderTests`, `ProjectJobTests` and `ProjectFileTests` in Core; `SystemProcessesTests` in Platform; `ProjectToolsTests` for the tab; and `ProjectToolsUiTests` for the rendered chip, its menu, the tab menu's submenu and the Links section.
+
+> **Still to verify on a machine with Unreal installed:**
+> - Launching the editor and building from a launcher install and a source build on Windows, macOS and Linux, including DebugGame and `-debug`.
+> - `Build.bat -projectfiles` in an installed build, and the format each OS gets without a switch.
+> - The registry entries and `Install.ini` as UnrealVersionSelector writes them.
+> - That Stop ends UnrealBuildTool and its compilers, and the process monitor lists them.
+> - Opening a `.xcworkspace` and each IDE for real.
+> - The editor-open warning, and Kill all Unreal editors, with real editors on each OS (on macOS, reading their command lines through `ps`).
 
 ## 19. Open Questions
 

@@ -25,6 +25,8 @@ public partial class TabView : UserControl
         AddHandler(KeyDownEvent, OnPromptKeyDown, RoutingStrategies.Tunnel);
         Composer.AddHandler(KeyDownEvent, OnComposerKeyDown, RoutingStrategies.Tunnel);
         ConversationScroll.ScrollChanged += OnConversationScrollChanged;
+        // Copy on a code block goes through the tab and says "Copied" (DESIGN.md §5, "Copy and times").
+        CodeBlockCopy.Attach(this);
         WireComposerAssist();
     }
 
@@ -140,6 +142,7 @@ public partial class TabView : UserControl
             _tab.DiffRequested -= OnDiffRequested;
             _tab.ScrollToRequested -= OnScrollToRequested;
             _tab.AgentWindowRequested -= OnAgentWindowRequested;
+            _tab.ProjectOutput.CollectionChanged -= OnProjectOutputChanged;
         }
         _tab = ViewModel;
         if (_tab is not null)
@@ -147,6 +150,7 @@ public partial class TabView : UserControl
             _tab.DiffRequested += OnDiffRequested;
             _tab.ScrollToRequested += OnScrollToRequested;
             _tab.AgentWindowRequested += OnAgentWindowRequested;
+            _tab.ProjectOutput.CollectionChanged += OnProjectOutputChanged;
         }
     }
 
@@ -268,6 +272,27 @@ public partial class TabView : UserControl
         {
             tab.IsProcessesPage = true;
             tab.IsSidePanelOpen = true;
+        }
+    }
+
+    /// <summary>
+    /// The project chip's menu opened: look at the project's files again, so what's enabled is current (a solution
+    /// generated from a terminal, say). The menu updates in place when that's done.
+    /// </summary>
+    private void OnProjectMenuOpened(object? sender, EventArgs e) => ViewModel?.RefreshProjectCommand.Execute(null);
+
+    /// <summary>A project job's output follows its newest line, as a terminal does.</summary>
+    private void OnProjectOutputChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && ProjectOutputList.IsEffectivelyVisible)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (ProjectOutputList.ItemCount > 0)
+                {
+                    ProjectOutputList.ScrollIntoView(ProjectOutputList.ItemCount - 1);
+                }
+            }, Avalonia.Threading.DispatcherPriority.Background);
         }
     }
 

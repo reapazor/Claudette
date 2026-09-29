@@ -31,6 +31,12 @@ public sealed class ConversationBuilder
     private bool _textDeltasSinceAssistant;
     private bool _thinkingDeltasSinceAssistant;
 
+    // Replaying a transcript: messages take the entry's time rather than now (DESIGN.md §5, "Copy and times").
+    // A subagent's builder asks the builder that made it, so a replay reaches every level.
+    private ConversationBuilder? _parent;
+    private bool _replaying;
+    private DateTimeOffset? _replayTime;
+
     /// <param name="todoList">The pinned to-do list; null for subagent groups, whose to-dos aren't shown.</param>
     /// <param name="modelName">Turns a model id into a display name for turn summaries.</param>
     public ConversationBuilder(ObservableCollection<ConversationItem> items, TodoList? todoList = null, Func<string?, string?>? modelName = null)
@@ -44,6 +50,12 @@ public sealed class ConversationBuilder
 
     /// <summary>Show thinking expanded rather than collapsed (Settings → Appearance).</summary>
     public bool ExpandThinking { get; set; }
+
+    /// <summary>
+    /// The clock that says when a message was sent, and what "today" is when its time is shown (DESIGN.md §5). Without
+    /// one, messages have no time.
+    /// </summary>
+    public TimeProvider? Time { get; init; }
 
     /// <summary>Show messages Claudette skipped as rows with their JSON: protocol logging is on (DESIGN.md §16).</summary>
     public bool ShowUnsupportedMessages { get; set; }
@@ -61,12 +73,54 @@ public sealed class ConversationBuilder
         }
     }
 
-    public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null)
+    public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null) =>
+        AddUser(new UserMessageItem(text, suffixText, isCheckIn) { Images = images ?? [] }, Now());
+
+    /// <summary>A prompt from a transcript, sent at <paramref name="sentAt"/>: null when its entry has no time.</summary>
+    public UserMessageItem ReplayUserMessage(string text, IReadOnlyList<MessageImage> images, DateTimeOffset? sentAt) =>
+        AddUser(new UserMessageItem(text) { Images = images }, sentAt);
+
+    private UserMessageItem AddUser(UserMessageItem item, DateTimeOffset? sentAt)
     {
         CloseOpen();
-        var item = new UserMessageItem(text, suffixText, isCheckIn) { Images = images ?? [] };
+        Stamp(item, sentAt);
         Items.Add(item);
         return item;
+    }
+
+    /// <summary>
+    /// Applies an event from a transcript: the messages it adds were sent at <paramref name="sentAt"/> (null when its
+    /// entry has no time), not now.
+    /// </summary>
+    public void Replay(SessionEvent sessionEvent, DateTimeOffset? sentAt)
+    {
+        _replaying = true;
+        _replayTime = sentAt;
+        try
+        {
+            Apply(sessionEvent);
+        }
+        finally
+        {
+            _replaying = false;
+            _replayTime = null;
+        }
+    }
+
+    /// <summary>When a message built now was sent: now, or the transcript entry's time during a replay.</summary>
+    private DateTimeOffset? Now() =>
+        _parent is not null ? _parent.Now()
+        : _replaying ? _replayTime
+        : Time?.GetUtcNow();
+
+    private TimeProvider? Clock => _parent?.Clock ?? Time;
+
+    private void Stamp(MessageItem item, DateTimeOffset? sentAt)
+    {
+        if (Clock is { } clock)
+        {
+            item.Stamp(sentAt, clock);
+        }
     }
 
     public void AddNote(string text, NoteKind kind = NoteKind.Info)
@@ -266,7 +320,7 @@ public sealed class ConversationBuilder
                     if (toolUse.Name is "Agent" or "Task")
                     {
                         var subagent = new SubagentItem(toolUse.Id, toolUse.Name, toolUse.Input);
-                        var child = new ConversationBuilder(subagent.Items, todoList: null, _modelName) { ExpandThinking = ExpandThinking };
+                        var child = new ConversationBuilder(subagent.Items, todoList: null, _modelName) { ExpandThinking = ExpandThinking, _parent = this };
                         // Its traffic fills its group and its node in the agent map, under this agent.
                         child._agents = _agents;
                         child._agent = _agent is not null ? _agents?.Add(_agent, subagent) : null;
@@ -423,6 +477,7 @@ public sealed class ConversationBuilder
         if (_openText is null)
         {
             _openText = new AssistantTextItem();
+            Stamp(_openText, Now());
             Items.Add(_openText);
         }
         _openText.Append(text);

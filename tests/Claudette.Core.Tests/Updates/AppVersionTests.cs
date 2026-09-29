@@ -10,7 +10,7 @@ public class AppVersionTests
     [InlineData("v1.2.3", "1.2.3")]
     [InlineData("1.2", "1.2.0")]
     [InlineData("1.2.3.0", "1.2.3")]
-    [InlineData("0.7.0+2b8ce618c24d", "0.7.0")]
+    [InlineData("0.1.0+2b8ce618c24d", "0.1.0")]
     [InlineData("1.3.0-beta.2", "1.3.0-beta.2")]
     [InlineData(" V2.0.0-rc.1+abc ", "2.0.0-rc.1")]
     public void Versions_are_read_from_tags_and_build_metadata_is_dropped(string text, string expected) =>

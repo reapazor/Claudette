@@ -41,6 +41,7 @@ public sealed partial class SettingsViewModel
         Save();
         OnPropertyChanged(nameof(CheckForUpdates));
         OnPropertyChanged(nameof(ClaudePath));
+        OnPropertyChanged(nameof(UseLoginShellEnvironment));
     }
 
     /// <summary>New tabs → <b>Reset to defaults</b>. Favorites and recent folders are this machine's data, not settings.</summary>
@@ -60,12 +61,18 @@ public sealed partial class SettingsViewModel
     {
         _settings.Appearance = new AppearanceSettings();
         Save();
+        DetailedUsageHeader = false;
         OnPropertyChanged(nameof(Theme));
+        OnPropertyChanged(nameof(Style));
         OnPropertyChanged(nameof(ConversationFontSize));
         OnPropertyChanged(nameof(CodeFontSize));
         OnPropertyChanged(nameof(ConversationFont));
         OnPropertyChanged(nameof(CodeFont));
         OnPropertyChanged(nameof(ExpandThinking));
+        OnPropertyChanged(nameof(FunWorkingWords));
+        OnPropertyChanged(nameof(ShowToolInWorkingLine));
+        OnPropertyChanged(nameof(ShowContextOnTabs));
+        OnPropertyChanged(nameof(Density));
     }
 
     [RelayCommand]

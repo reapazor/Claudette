@@ -18,6 +18,12 @@ public sealed record DiffToolOption(string Kind, string? PresetId, string Label)
 /// <summary>A setting found by the Settings search box (DESIGN.md §14).</summary>
 public sealed record SettingsSearchResult(string Category, string Label);
 
+/// <summary>A Style choice in Settings → Appearance (DESIGN.md §3, "Visual style").</summary>
+public sealed record StyleOption(AppStyle Style, string Label)
+{
+    public override string ToString() => Label;
+}
+
 /// <summary>A retention option in a dropdown.</summary>
 public sealed record RetentionChoice(RetentionPeriod Period)
 {
@@ -118,7 +124,7 @@ public sealed partial class QuickSuffixEditor(QuickSuffix suffix, Action changed
 public sealed partial class SettingsViewModel : ViewModelBase
 {
     public static readonly IReadOnlyList<string> AllCategories =
-        ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Notifications", "Keyboard", "Perforce", "Advanced"];
+        ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Project tools", "Notifications", "Keyboard", "Perforce", "Advanced"];
 
     private readonly AppServices _services;
     private readonly AppSettings _settings;
@@ -172,6 +178,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Claude Code", "Sign in"),
         new("Claude Code", "Sign out"),
         new("Claude Code", "Path to claude"),
+        .. LoginShellSearchEntries(),
         new("New tabs", "Default model"),
         new("New tabs", "Default effort"),
         new("New tabs", "Default permission mode"),
@@ -179,11 +186,17 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("New tabs", "Clear recent folders"),
         new("New tabs", "Favorite folders"),
         new("Appearance", "Theme"),
+        new("Appearance", "Style"),
         new("Appearance", "Conversation font"),
         new("Appearance", "Conversation font size"),
         new("Appearance", "Code font"),
         new("Appearance", "Code font size"),
         new("Appearance", "Show thinking expanded"),
+        new("Appearance", "Show fun words while Claude works"),
+        new("Appearance", "Show what Claude is doing while it works"),
+        new("Appearance", "Detailed usage header"),
+        new("Appearance", "Show context on tab rows"),
+        new("Appearance", "Density"),
         new("Usage", "Warn at (% of session used)"),
         new("Usage", "Alert at (% of session used)"),
         new("Usage", "Burn rate window (minutes)"),
@@ -201,12 +214,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Diff tool", "Diff tool"),
         new("Diff tool", "Custom diff command"),
         new("Diff tool", "Test the diff tool"),
+        .. ProjectToolsSearchEntries(),
         new("Notifications", "A tab finishes its turn"),
         new("Notifications", "A tab needs permission or an answer"),
         new("Notifications", "A tab's Claude Code stops with an error"),
         new("Notifications", "Usage alerts"),
         new("Notifications", "Claude Code needs me to sign in"),
         new("Notifications", "A Claude Code update is ready"),
+        new("Notifications", "A project action finishes"),
         new("Notifications", "Dock or taskbar badge"),
         .. KeyboardShortcuts.All.Select(c => new SettingsSearchResult("Keyboard", $"{c.Label} shortcut")),
         .. PerforceSearchEntries(),
@@ -260,7 +275,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsGeneral), nameof(IsClaudeCode), nameof(IsNewTabs), nameof(IsAppearance), nameof(IsSessions), nameof(IsCheckIns), nameof(IsQuickSuffixes), nameof(IsAdvanced))]
-    [NotifyPropertyChangedFor(nameof(IsUsage), nameof(IsProcesses), nameof(IsDiffTool), nameof(IsNotifications), nameof(IsKeyboard))]
+    [NotifyPropertyChangedFor(nameof(IsUsage), nameof(IsProcesses), nameof(IsDiffTool), nameof(IsNotifications), nameof(IsKeyboard), nameof(IsProjectTools))]
     public partial string SelectedCategory { get; set; }
 
     public bool IsKeyboard => SelectedCategory == "Keyboard";
@@ -361,6 +376,22 @@ public sealed partial class SettingsViewModel : ViewModelBase
         ? $"Claude Code {install.Version} at {install.Path}. Last tested with {ClaudeLocator.LastTestedVersion}{(install.Version > ClaudeLocator.LastTestedVersion ? " (this version is newer)" : "")}."
         : "Claude Code wasn't found.";
 
+    /// <summary>
+    /// Settings → Claude Code → <b>Use my login shell's environment</b> (DESIGN.md §13, "Login shell environment"). Turning
+    /// it on reads the login shell then, if this run hasn't yet; either way it applies to processes started after.
+    /// </summary>
+    public bool UseLoginShellEnvironment
+    {
+        get => _settings.ClaudeCode.UseLoginShellEnvironment;
+        set => Set(value, v => _settings.ClaudeCode.UseLoginShellEnvironment = v);
+    }
+
+    /// <summary>Only macOS and Linux have the setting: on Windows, apps get the user's full environment.</summary>
+    public static bool ShowLoginShellSetting => !OperatingSystem.IsWindows();
+
+    private static IEnumerable<SettingsSearchResult> LoginShellSearchEntries() =>
+        ShowLoginShellSetting ? [new("Claude Code", "Use my login shell's environment")] : [];
+
     /// <summary>Null (empty) finds Claude Code automatically. Takes effect the next time Claudette starts.</summary>
     public string ClaudePath
     {
@@ -428,6 +459,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
         set => Set(value, v => _settings.Appearance.Theme = v);
     }
 
+    /// <summary>Settings → Appearance → Style (DESIGN.md §3, "Visual style"), named as the list shows them.</summary>
+    public IReadOnlyList<StyleOption> StyleOptions { get; } =
+        [new(AppStyle.Standard, "Standard"), new(AppStyle.Claude, "Claude")];
+
+    public StyleOption Style
+    {
+        get => StyleOptions.FirstOrDefault(o => o.Style == _settings.Appearance.Style) ?? StyleOptions[0];
+        set => Set(value, v => _settings.Appearance.Style = v?.Style ?? AppStyle.Standard);
+    }
+
     public decimal? ConversationFontSize
     {
         get => (decimal)_settings.Appearance.ConversationFontSize;
@@ -444,6 +485,54 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         get => _settings.Appearance.ExpandThinking;
         set => Set(value, v => _settings.Appearance.ExpandThinking = v);
+    }
+
+    /// <summary>The working line's twinkling glyph and fun verbs (DESIGN.md §5, "Working line").</summary>
+    public bool FunWorkingWords
+    {
+        get => _settings.Appearance.FunWorkingWords;
+        set => Set(value, v => _settings.Appearance.FunWorkingWords = v);
+    }
+
+    /// <summary>The working line says what the running tool is doing (DESIGN.md §5, "Working line").</summary>
+    public bool ShowToolInWorkingLine
+    {
+        get => _settings.Appearance.ShowToolInWorkingLine;
+        set => Set(value, v => _settings.Appearance.ShowToolInWorkingLine = v);
+    }
+
+    /// <summary>
+    /// The usage header drawn taller with charts (DESIGN.md §6, "Detailed header"), the same switch as its chevron. It's
+    /// this machine's state rather than a setting, like the sidebar's collapsed state, so it doesn't sync.
+    /// </summary>
+    public bool DetailedUsageHeader
+    {
+        get => _services.State.DetailedUsageHeader;
+        set
+        {
+            if (_services.State.DetailedUsageHeader != value)
+            {
+                _services.State.DetailedUsageHeader = value;
+                _services.SaveState();
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    /// <summary>The context ring on each tab's row (DESIGN.md §4, "Sidebar").</summary>
+    public bool ShowContextOnTabs
+    {
+        get => _settings.Appearance.ShowContextOnTabs;
+        set => Set(value, v => _settings.Appearance.ShowContextOnTabs = v);
+    }
+
+    public IReadOnlyList<Density> Densities { get; } = [Density.Comfortable, Density.Compact];
+
+    /// <summary>Compact tightens the conversation, the sidebar's rows and the composer (DESIGN.md §14).</summary>
+    public Density Density
+    {
+        get => _settings.Appearance.Density;
+        set => Set(value, v => _settings.Appearance.Density = v);
     }
 
     // ---- Sessions ------------------------------------------------------------------------------------------------
@@ -630,7 +719,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public IReadOnlyList<DiffToolOption> DiffToolOptions => _diffToolOptions ??=
     [
         new DiffToolOption("builtIn", null, "Built-in diff view"),
-        .. DiffToolDetector.Detect(FileProbe.Instance).Select(d => new DiffToolOption("preset", d.Preset.Id, $"{d.Preset.Name}  ({d.ExecutablePath})")),
+        .. DiffToolDetector.Detect(_services.UserEnvironment.Probe).Select(d => new DiffToolOption("preset", d.Preset.Id, $"{d.Preset.Name}  ({d.ExecutablePath})")),
         new DiffToolOption("custom", null, "Custom command…"),
     ];
 
@@ -692,7 +781,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             : new DiffToolChoice(DiffToolKind.Preset, settings.PresetId);
         try
         {
-            await new DiffToolLauncher(_services.Launcher, _services.Time).TestAsync(choice, Path.Combine(_services.Paths.DiffTempDirectory, "test"));
+            await new DiffToolLauncher(_services.Launcher, _services.Time, environment: _services.UserEnvironment).TestAsync(choice, Path.Combine(_services.Paths.DiffTempDirectory, "test"));
             DiffToolTestResult = "Opened a sample diff. If nothing appeared, check the command.";
         }
         catch (Exception ex)
@@ -917,6 +1006,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         OnPropertyChanged(nameof(NotifyUsageAlerts));
         OnPropertyChanged(nameof(NotifySignIn));
         OnPropertyChanged(nameof(NotifyUpdateReady));
+        OnPropertyChanged(nameof(NotifyProjectActions));
         OnPropertyChanged(nameof(ShowBadge));
     }
 
@@ -1154,6 +1244,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public string InstalledVersionText => _services.InstalledClaudeVersion?.ToString() ?? "Not found";
 
+    /// <summary>Whether the login shell's environment is used, which shell and how long it took, or why not. Never values.</summary>
+    public string LoginShellText => _services.UserEnvironment.Describe();
+
     /// <summary>What Claude Code has sent this run that Claudette doesn't know, in words.</summary>
     public string DiagnosticsText => DiagnosticsReport(includeHeader: false);
 
@@ -1162,6 +1255,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(DiagnosticsText));
         OnPropertyChanged(nameof(InstalledVersionText));
+        OnPropertyChanged(nameof(LoginShellText));
     }
 
     [RelayCommand]
@@ -1174,10 +1268,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
         var lines = new List<string>();
         if (includeHeader)
         {
-            lines.Add($"Claudette {typeof(SettingsViewModel).Assembly.GetName().Version}");
+            lines.Add($"Claudette {_services.Build.Description}");
             lines.Add($"OS: {System.Runtime.InteropServices.RuntimeInformation.OSDescription} ({System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier})");
             lines.Add($"Claude Code: {InstalledVersionText}{(_services.Install is { } install ? $" at {install.Path}" : "")}");
             lines.Add($"Minimum supported Claude Code: {MinimumVersionText}");
+            lines.Add($"Login shell environment: {LoginShellText}");
             lines.Add($"Protocol logging: {(LogProtocol ? "on" : "off")}");
             lines.Add("");
         }

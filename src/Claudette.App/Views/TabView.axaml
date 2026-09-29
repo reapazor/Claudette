@@ -9,12 +9,115 @@
              xmlns:protocol="using:Claudette.Core.Protocol"
              xmlns:services="using:Claudette.App.Services"
              xmlns:views="using:Claudette.App.Views"
+             xmlns:tools="using:Claudette.Core.ProjectTools"
              x:Class="Claudette.App.Views.TabView"
              x:DataType="vm:TabViewModel"
              FontSize="{DynamicResource ConversationFontSize}"
              FontFamily="{DynamicResource ConversationFont}">
 
+  <UserControl.Resources>
+    <!-- A message's time and Copy button (DESIGN.md §5, "Copy and times"): a small chip on its top-right corner, shown
+         on hover and while it has keyboard focus. -->
+    <DataTemplate x:Key="MessageTools" x:DataType="conv:MessageItem">
+      <StackPanel Orientation="Horizontal" Spacing="2">
+        <TextBlock Classes="muted small" Background="Transparent" Text="{Binding TimeText}" ToolTip.Tip="{Binding TimeTip}" IsVisible="{Binding HasTime}"
+                   VerticalAlignment="Center" Margin="6,0,2,0" />
+        <Button Classes="flat" Padding="5,3" VerticalAlignment="Center" ToolTip.Tip="Copy message" AutomationProperties.Name="Copy message"
+                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyMessageCommand}" CommandParameter="{Binding}">
+          <Panel>
+            <Path Data="{StaticResource IconCopy}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.1" StrokeJoin="Round"
+                  Width="12" Height="12" Stretch="None" IsVisible="{Binding !IsCopied}" />
+            <TextBlock Classes="muted small" Text="Copied" IsVisible="{Binding IsCopied}" />
+          </Panel>
+        </Button>
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.Resources>
+
   <UserControl.Styles>
+    <!-- The chip with a message's time and Copy button: quiet until the message is hovered or focused. -->
+    <Style Selector="ContentControl.messagetools">
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Margin" Value="0,-10,4,0" />
+      <Setter Property="Padding" Value="1" />
+      <Setter Property="Background" Value="{DynamicResource DialogBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Opacity" Value="0" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style Selector="Panel.message:pointerover > ContentControl.messagetools, Panel.message:focus-within > ContentControl.messagetools">
+      <Setter Property="Opacity" Value="1" />
+      <Setter Property="IsHitTestVisible" Value="True" />
+    </Style>
+
+    <!-- Settings → Appearance → Density (DESIGN.md §14): ShellView takes the "compact" class. -->
+    <Style Selector="ItemsControl#ConversationItems">
+      <Setter Property="Margin" Value="24,16,24,24" />
+    </Style>
+    <Style Selector=".compact ItemsControl#ConversationItems">
+      <Setter Property="Margin" Value="20,10,20,14" />
+    </Style>
+    <Style Selector="StackPanel.conversation">
+      <Setter Property="Spacing" Value="8" />
+    </Style>
+    <Style Selector=".compact StackPanel.conversation">
+      <Setter Property="Spacing" Value="3" />
+    </Style>
+    <Style Selector="Border.usermessage">
+      <Setter Property="Background" Value="{DynamicResource UserBoxBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource UserBoxBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="12,8" />
+      <Setter Property="Margin" Value="0,6,0,2" />
+    </Style>
+    <Style Selector=".compact Border.usermessage">
+      <Setter Property="Padding" Value="10,4" />
+      <Setter Property="Margin" Value="0,3,0,1" />
+    </Style>
+    <!-- Settings → Appearance → Style → Claude (DESIGN.md §3): your messages are bubbles on the right, as in the Claude
+         apps, and Claude's replies run full width beside them. -->
+    <Style Selector=".claude Border.usermessage">
+      <Setter Property="CornerRadius" Value="18" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="14,9" />
+      <Setter Property="Margin" Value="72,10,0,6" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+    <Style Selector=".claude.compact Border.usermessage">
+      <Setter Property="Padding" Value="12,5" />
+      <Setter Property="Margin" Value="72,4,0,2" />
+    </Style>
+    <Style Selector="StackPanel.toolcard">
+      <Setter Property="Spacing" Value="4" />
+    </Style>
+    <Style Selector=".compact StackPanel.toolcard">
+      <Setter Property="Spacing" Value="1" />
+    </Style>
+    <!-- Tool, thinking and subagent rows -->
+    <Style Selector=".compact StackPanel.conversation Button.row">
+      <Setter Property="Padding" Value="4,0" />
+    </Style>
+    <Style Selector="StackPanel.composerarea">
+      <Setter Property="Margin" Value="16,4,16,12" />
+      <Setter Property="Spacing" Value="6" />
+    </Style>
+    <Style Selector=".compact StackPanel.composerarea">
+      <Setter Property="Margin" Value="12,2,12,6" />
+      <Setter Property="Spacing" Value="3" />
+    </Style>
+    <Style Selector="TextBox#Composer">
+      <Setter Property="MinHeight" Value="40" />
+      <Setter Property="Padding" Value="2,6" />
+    </Style>
+    <Style Selector=".compact TextBox#Composer">
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="2,3" />
+    </Style>
+
     <Style Selector="Border.diffline.added">
       <Setter Property="Background" Value="{DynamicResource DiffAddedBrush}" />
     </Style>
@@ -30,6 +133,12 @@
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="8,6" />
+    </Style>
+    <Style Selector=".compact Border.codeblock">
+      <Setter Property="Padding" Value="6,3" />
+    </Style>
+    <Style Selector=".claude Border.codeblock">
+      <Setter Property="CornerRadius" Value="10" />
     </Style>
     <Style Selector="TextBlock.done">
       <Setter Property="TextDecorations" Value="Strikethrough" />
@@ -53,6 +162,38 @@
       <Setter Property="Margin" Value="0,2" />
       <Setter Property="BorderBrush" Value="{DynamicResource CautionBorderBrush}" />
       <Setter Property="Background" Value="{DynamicResource CautionBackgroundBrush}" />
+    </Style>
+    <Style Selector=".compact Border.prompt">
+      <Setter Property="Padding" Value="10,6" />
+      <Setter Property="Margin" Value="0,1" />
+    </Style>
+    <Style Selector=".claude Border.prompt">
+      <Setter Property="CornerRadius" Value="14" />
+    </Style>
+
+    <!-- Send and Stop. In the Claude style they're round, with an arrow for Send, as in the Claude apps. -->
+    <Style Selector="Button.send">
+      <Setter Property="Padding" Value="14,4" />
+    </Style>
+    <Style Selector="Button.stop">
+      <Setter Property="Padding" Value="12,4" />
+    </Style>
+    <Style Selector="Button.send Path.sendarrow">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector=".claude Button.send, .claude Button.stop">
+      <Setter Property="CornerRadius" Value="16" />
+      <Setter Property="Width" Value="32" />
+      <Setter Property="Height" Value="32" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector=".claude Button.send TextBlock.sendlabel">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector=".claude Button.send Path.sendarrow">
+      <Setter Property="IsVisible" Value="True" />
     </Style>
     <Style Selector="Border.prompt.question">
       <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
@@ -83,6 +224,11 @@
     <Style Selector="Border.composer.dropping">
       <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
     </Style>
+    <!-- A project job's output (DESIGN.md §18): dense lines, like a terminal -->
+    <Style Selector="ListBox#ProjectOutputList ListBoxItem">
+      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
     <!-- The / and @ autocomplete (DESIGN.md §5, "Composer") -->
     <Style Selector="Button.completion.selected /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource SelectedRowBrush}" />
@@ -93,35 +239,40 @@
   <UserControl.DataTemplates>
 
     <DataTemplate DataType="conv:UserMessageItem">
-      <Border Background="{DynamicResource UserBoxBrush}" BorderBrush="{DynamicResource UserBoxBorderBrush}" BorderThickness="1"
-              CornerRadius="8" Padding="12,8" Margin="0,6,0,2">
-        <StackPanel Spacing="4">
-          <TextBlock Classes="muted small" Text="Automatic check-in" IsVisible="{Binding IsCheckIn}" />
-          <!-- Attached images (DESIGN.md §5, "Attachments") -->
-          <ItemsControl ItemsSource="{Binding Images}" IsVisible="{Binding HasImages}">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <WrapPanel ItemSpacing="6" LineSpacing="6" />
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate DataType="protocol:MessageImage">
-                <Border Classes="thumbnail">
-                  <Image Source="{Binding Data, Converter={x:Static services:ImageFiles.Thumbnail}}" Height="72" MaxWidth="160" Stretch="UniformToFill"
-                         AutomationProperties.Name="Attached image" />
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-          <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" IsVisible="{Binding Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-          <SelectableTextBlock Classes="muted small" Text="{Binding SuffixText}" TextWrapping="Wrap" IsVisible="{Binding HasSuffix}" />
-        </StackPanel>
-      </Border>
+      <Panel Classes="message">
+        <Border Classes="usermessage">
+          <StackPanel Spacing="4">
+            <TextBlock Classes="muted small" Text="Automatic check-in" IsVisible="{Binding IsCheckIn}" />
+            <!-- Attached images (DESIGN.md §5, "Attachments") -->
+            <ItemsControl ItemsSource="{Binding Images}" IsVisible="{Binding HasImages}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel ItemSpacing="6" LineSpacing="6" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="protocol:MessageImage">
+                  <Border Classes="thumbnail">
+                    <Image Source="{Binding Data, Converter={x:Static services:ImageFiles.Thumbnail}}" Height="72" MaxWidth="160" Stretch="UniformToFill"
+                           AutomationProperties.Name="Attached image" />
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" IsVisible="{Binding Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <SelectableTextBlock Classes="muted small" Text="{Binding SuffixText}" TextWrapping="Wrap" IsVisible="{Binding HasSuffix}" />
+          </StackPanel>
+        </Border>
+        <ContentControl Classes="messagetools" Content="{Binding}" ContentTemplate="{StaticResource MessageTools}" />
+      </Panel>
     </DataTemplate>
 
     <DataTemplate DataType="conv:AssistantTextItem">
-      <md:MarkdownRenderer MarkdownBuilder="{Binding Markdown}"
-                           LinkCommand="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenLinkCommand}" />
+      <Panel Classes="message">
+        <md:MarkdownRenderer MarkdownBuilder="{Binding Markdown}"
+                             LinkCommand="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenLinkCommand}" />
+        <ContentControl Classes="messagetools" Content="{Binding}" ContentTemplate="{StaticResource MessageTools}" />
+      </Panel>
     </DataTemplate>
 
     <DataTemplate DataType="conv:ThinkingItem">
@@ -152,7 +303,7 @@
                 IsVisible="{Binding IsExpanded}">
           <StackPanel Spacing="6">
             <SelectableTextBlock Classes="muted small" Text="{Binding Detail}" TextWrapping="Wrap" MaxHeight="120" IsVisible="{Binding HasDetail}" />
-            <ItemsControl ItemsSource="{Binding Items}">
+            <ItemsControl ItemsSource="{Binding Items}" ClipToBounds="False">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <StackPanel Spacing="6" />
@@ -165,7 +316,7 @@
     </DataTemplate>
 
     <DataTemplate DataType="conv:ToolUseItem">
-      <StackPanel Spacing="4">
+      <StackPanel Classes="toolcard">
         <Grid ColumnDefinitions="*,Auto">
           <Button Classes="flat row" Command="{Binding ToggleCommand}" IsHitTestVisible="{Binding CanExpand}">
             <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
@@ -173,7 +324,8 @@
                          Text="●" VerticalAlignment="Center" Margin="0,0,8,0" />
               <Path Grid.Column="1" Classes="toolicon" Data="{Binding IconKey, Converter={x:Static conv:ToolIcons.Geometry}}" Margin="0,0,6,0" />
               <TextBlock Grid.Column="2" FontWeight="SemiBold" Text="{Binding Name}" VerticalAlignment="Center" Margin="0,0,8,0" />
-              <TextBlock Grid.Column="3" Classes="mono muted" Text="{Binding Summary}" MaxWidth="560" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="3" Classes="mono muted" Text="{Binding Summary}" MaxWidth="560" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                         ToolTip.Tip="{Binding FullSummary}" />
               <TextBlock Grid.Column="5" Classes="mono small" Text="{Binding DiffStats}" IsVisible="{Binding HasDiff}" VerticalAlignment="Center" Margin="12,0,0,0" />
             </Grid>
           </Button>
@@ -383,11 +535,11 @@
 
   <Grid RowDefinitions="*,Auto" ColumnDefinitions="*,Auto">
 
-    <!-- Side panel (DESIGN.md §3): changed files, agents and, when the monitor is on, processes -->
+    <!-- Side panel (DESIGN.md §3): changed files, agents, the project's tools and, when the monitor is on, processes -->
     <Border Grid.Column="1" Grid.RowSpan="2" Width="340" IsVisible="{Binding IsSidePanelOpen}"
             BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1,0,0,0" Background="{DynamicResource SubtleBrush}">
       <DockPanel>
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="8,6">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="8,6">
           <Button Classes="flat" Command="{Binding ShowFilesPageCommand}">
             <TextBlock Text="Changed files" FontWeight="{Binding IsFilesPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
           </Button>
@@ -398,10 +550,17 @@
               <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding HasActiveAgents}" />
             </StackPanel>
           </Button>
-          <Button Grid.Column="2" Classes="flat" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding IsProcessMonitorOn}">
+          <!-- Project tools (DESIGN.md §18); a busy dot while a job runs -->
+          <Button Grid.Column="2" Classes="flat" Command="{Binding ShowProjectPageCommand}" IsVisible="{Binding HasProjectTools}" ToolTip.Tip="{Binding ProjectHeaderTitle}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <TextBlock Text="Project" FontWeight="{Binding IsProjectPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
+              <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding IsProjectJobRunning}" />
+            </StackPanel>
+          </Button>
+          <Button Grid.Column="3" Classes="flat" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding IsProcessMonitorOn}">
             <TextBlock Text="Processes" FontWeight="{Binding IsProcessesPage, Converter={x:Static vm:Converters.BoldIfTrue}}" />
           </Button>
-          <Button Grid.Column="4" Classes="flat" Padding="6" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
+          <Button Grid.Column="5" Classes="flat" Padding="6" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
             <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
           </Button>
         </Grid>
@@ -462,6 +621,59 @@
                           BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" />
             <views:AgentDetails Grid.Row="3" IsVisible="{Binding HasAgents}" />
           </Grid>
+
+          <!-- Project (DESIGN.md §18, "Project tools"): the project's details, its actions, and the running or last job -->
+          <DockPanel x:Name="ProjectPage" IsVisible="{Binding IsProjectPage}">
+            <StackPanel DockPanel.Dock="Top" Margin="12,0,12,6" Spacing="8">
+              <TextBlock Text="{Binding ProjectHeaderTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <ItemsControl ItemsSource="{Binding ProjectFileProblems}" IsVisible="{Binding HasProjectFileProblems}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="x:String">
+                    <TextBlock Classes="small warning" Text="{Binding}" TextWrapping="Wrap" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <ItemsControl ItemsSource="{Binding ProjectDetails}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="tools:ProjectDetail">
+                    <Grid ColumnDefinitions="84,*" Margin="0,1">
+                      <TextBlock Classes="muted small" Text="{Binding Label}" />
+                      <SelectableTextBlock Grid.Column="1" Classes="small" Text="{Binding Value}" TextWrapping="Wrap" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <ItemsControl ItemsSource="{Binding ProjectActions}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel ItemSpacing="6" LineSpacing="6" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="tools:ProjectAction">
+                    <Button Content="{Binding Label}" IsEnabled="{Binding IsEnabled}" ToolTip.Tip="{Binding Tip}" ToolTip.ShowOnDisabled="True"
+                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RunProjectActionCommand}" CommandParameter="{Binding}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" IsVisible="{Binding HasProjectJob}">
+                <TextBlock Classes="small" Classes.error="{Binding ProjectJobFailed}" Text="{Binding ProjectJobStatus}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Content="Stop" Command="{Binding StopProjectJobCommand}" IsVisible="{Binding IsProjectJobRunning}"
+                        ToolTip.Tip="Ends the job and every process it started" />
+                <Button Grid.Column="2" Content="Copy" Command="{Binding CopyProjectOutputCommand}" ToolTip.Tip="Copy the output" />
+              </Grid>
+              <TextBlock Classes="muted small" Text="{Binding ProjectOutputNote}" TextWrapping="Wrap"
+                         IsVisible="{Binding ProjectOutputNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+            <ListBox x:Name="ProjectOutputList" ItemsSource="{Binding ProjectOutput}" Background="Transparent" Margin="8,0,8,8"
+                     IsVisible="{Binding HasProjectJob}" AutomationProperties.Name="Output">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <TextBlock Classes="mono small" Text="{Binding}" />
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
 
           <!-- Processes (DESIGN.md §4, "Process monitor") -->
           <DockPanel IsVisible="{Binding IsProcessesPage}">
@@ -532,10 +744,11 @@
         </Border>
 
         <ScrollViewer x:Name="ConversationScroll" HorizontalScrollBarVisibility="Disabled">
-          <ItemsControl x:Name="ConversationItems" ItemsSource="{Binding Items}" Margin="24,16,24,24" MaxWidth="900">
+          <!-- Not clipped, so the first message's time and Copy chip can sit over its top edge (DESIGN.md §5). -->
+          <ItemsControl x:Name="ConversationItems" ItemsSource="{Binding Items}" MaxWidth="900" ClipToBounds="False">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
-                <StackPanel Spacing="8" />
+                <StackPanel Classes="conversation" />
               </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
           </ItemsControl>
@@ -602,7 +815,17 @@
     </Grid>
 
     <!-- Composer (DESIGN.md §5) -->
-    <StackPanel Grid.Row="1" Margin="16,4,16,12" MaxWidth="948" Spacing="6">
+    <StackPanel Grid.Row="1" Classes="composerarea" MaxWidth="948">
+
+      <!-- Working line (DESIGN.md §5): a twinkling glyph, a fun verb, the turn's time and tokens -->
+      <Panel x:Name="WorkingLine" Margin="4,0,4,-2" IsVisible="{Binding IsWorkingLineShown}">
+        <StackPanel Orientation="Horizontal" Spacing="8" DataContext="{Binding Working}" x:DataType="vm:WorkingLine"
+                    Background="Transparent" ToolTip.Tip="{Binding ActivityDetail}">
+          <TextBlock Classes="working-glyph" Text="{Binding Glyph}" Width="14" TextAlignment="Center" VerticalAlignment="Center" />
+          <TextBlock Classes="working-verb" Text="{Binding Verb}" VerticalAlignment="Center" />
+          <TextBlock Classes="muted small" Text="{Binding Detail}" VerticalAlignment="Center" />
+        </StackPanel>
+      </Panel>
 
       <!-- Possibly stuck (check-ins) -->
       <Border Classes="codeblock" IsVisible="{Binding IsPossiblyStuck}">
@@ -706,8 +929,7 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
 
-          <TextBox x:Name="Composer" Grid.Row="1" Text="{Binding ComposerText}" AcceptsReturn="True" TextWrapping="Wrap"
-                   MinHeight="40" MaxHeight="240" Padding="2,6"
+          <TextBox x:Name="Composer" Grid.Row="1" Text="{Binding ComposerText}" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="240"
                    PlaceholderText="{Binding Tips.ComposerPlaceholder}" />
 
           <!-- / and @ autocomplete (DESIGN.md §5, "Composer"): keyboard first, the text box keeps focus -->
@@ -838,6 +1060,57 @@
                   </Flyout>
                 </Button.Flyout>
               </Button>
+
+              <!-- Project tools (DESIGN.md §18): "◆ NightOwl · UE 5.4 ▾", or "◆ Actions ▾" for a folder's own actions -->
+              <Button x:Name="ProjectChip" Classes="flat" IsVisible="{Binding HasProjectTools}" ToolTip.Tip="{Binding ProjectChipTip}"
+                      AutomationProperties.Name="Project tools">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Classes="muted small" Text="◆" VerticalAlignment="Center" IsVisible="{Binding !IsProjectJobRunning}" />
+                  <TextBlock Classes="status busy" Text="●" FontSize="9" VerticalAlignment="Center" IsVisible="{Binding IsProjectJobRunning}" />
+                  <TextBlock Classes="muted small" Text="{Binding ProjectChipText, StringFormat='{}{0} ▾'}" MaxWidth="240" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <Button.Flyout>
+                  <Flyout Placement="TopEdgeAlignedLeft" Opened="OnProjectMenuOpened">
+                    <StackPanel x:Name="ProjectMenu" MinWidth="300" MaxWidth="440" Spacing="1">
+                      <TextBlock Text="{Binding ProjectHeaderTitle}" FontWeight="SemiBold" Margin="8,2,8,0" />
+                      <ItemsControl ItemsSource="{Binding ProjectHeaderLines}" Margin="8,0,8,2">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="x:String">
+                            <TextBlock Classes="muted small" Text="{Binding}" TextWrapping="Wrap" />
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <!-- Entries of claudette.json that were skipped, and why (DESIGN.md §18) -->
+                      <ItemsControl ItemsSource="{Binding ProjectFileProblems}" Margin="8,0,8,2" IsVisible="{Binding HasProjectFileProblems}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="x:String">
+                            <TextBlock Classes="small warning" Text="{Binding}" TextWrapping="Wrap" />
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <Separator Margin="0,2" />
+                      <ItemsControl ItemsSource="{Binding ProjectMenu}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="vm:ProjectMenuEntry">
+                            <Panel>
+                              <Separator Margin="0,3" IsVisible="{Binding IsSeparator}" />
+                              <TextBlock Classes="muted small" Text="{Binding Label}" Margin="8,4,8,1" IsVisible="{Binding IsHeader}" />
+                              <Button Classes="flat row" IsVisible="{Binding IsButton}" IsEnabled="{Binding IsEnabled}" HorizontalContentAlignment="Stretch"
+                                      ToolTip.Tip="{Binding Tip}" ToolTip.ShowOnDisabled="True" Click="OnFlyoutItemPicked"
+                                      Command="{Binding Command}" CommandParameter="{Binding Parameter}">
+                                <Grid ColumnDefinitions="16,*">
+                                  <TextBlock Classes="small" Text="{Binding Mark}" VerticalAlignment="Center" IsVisible="{Binding HasMark}" />
+                                  <TextBlock Grid.Column="1" Text="{Binding Label}" />
+                                </Grid>
+                              </Button>
+                            </Panel>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Flyout>
+                </Button.Flyout>
+              </Button>
             </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
@@ -950,8 +1223,14 @@
                 </Button.Flyout>
               </Button>
 
-              <Button Classes="accent" Content="Send" Padding="14,4" Margin="6,0,0,0" Command="{Binding SendCommand}" IsVisible="{Binding !IsWorking}" />
-              <Button Content="■" Padding="12,4" Margin="6,0,0,0" ToolTip.Tip="Stop (Esc)" AutomationProperties.Name="Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsWorking}" />
+              <Button Classes="accent send" Margin="6,0,0,0" Command="{Binding SendCommand}" IsVisible="{Binding !IsWorking}" AutomationProperties.Name="Send">
+                <Panel>
+                  <TextBlock Classes="sendlabel" Text="Send" />
+                  <Path Classes="sendarrow" Data="{StaticResource IconSendArrow}" Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8"
+                        StrokeLineCap="Round" StrokeJoin="Round" Width="14" Height="14" Stretch="None" />
+                </Panel>
+              </Button>
+              <Button Classes="stop" Content="■" Margin="6,0,0,0" ToolTip.Tip="Stop (Esc)" AutomationProperties.Name="Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsWorking}" />
             </StackPanel>
           </Grid>
         </Grid>

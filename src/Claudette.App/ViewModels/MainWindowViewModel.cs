@@ -178,6 +178,8 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         Account.OnSignedIn(status);
         services.ProjectsDirectory = status.ProjectsDirectory
             ?? (status.ConfigDirectory is { } config ? Path.Combine(config, "projects") : null);
+        services.ClaudeConfigDirectory = status.ConfigDirectory
+            ?? (status.ProjectsDirectory is { } projects ? Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(projects)) : null);
         if (_shell is null)
         {
             _shell = new ShellViewModel(services, ShowSignIn);
@@ -216,7 +218,11 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         try
         {
             var tracker = services.StartUsageTracking();
-            var usage = new UsageViewModel(services, tracker);
+            var usage = new UsageViewModel(services, tracker)
+            {
+                // The detailed header's busiest tabs, by name (DESIGN.md §6, "Detailed header").
+                TabName = id => _shell?.AllTabs.FirstOrDefault(t => t.Id == id)?.DisplayName,
+            };
             usage.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(UsageViewModel.HasData))
@@ -300,6 +306,13 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
                     Account.ShowSignIn();
                 }
                 break;
+            case NotificationKind.ProjectAction:
+                // The tab's Project page, with the job's output (DESIGN.md §18, "Project tools").
+                if (target.TabId is { } jobTab && CurrentPage == _shell && _shell?.SelectTab(jobTab) == true)
+                {
+                    _shell.SelectedTab?.OpenProjectPageCommand.Execute(null);
+                }
+                break;
             default:
                 if (target.TabId is { } tabId && CurrentPage == _shell)
                 {
@@ -332,6 +345,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     public void UseDevelopmentBuild(DevelopmentBuild build, Action? stopListening = null, Action? resumeListening = null)
     {
         _development = build;
+        services.IsSourceBuild = true;
         UseSingleInstance(stopListening, resumeListening);
     }
 

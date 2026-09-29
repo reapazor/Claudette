@@ -30,6 +30,9 @@ public sealed class AppSettings
 
     public DiffToolSettings DiffTool { get; set; } = new();
 
+    /// <summary>Settings → Project tools (DESIGN.md §18). Per machine, like the diff tool.</summary>
+    public ProjectToolSettings ProjectTools { get; set; } = new();
+
     public NotificationSettings Notifications { get; set; } = new();
 
     public KeyboardSettings Keyboard { get; set; } = new();
@@ -60,6 +63,9 @@ public sealed class NotificationSettings
     public bool SignIn { get; set; } = true;
 
     public bool UpdateReady { get; set; } = true;
+
+    /// <summary>A long project action, such as a build, finished or failed (DESIGN.md §18, "Project tools").</summary>
+    public bool ProjectActions { get; set; } = true;
 
     /// <summary>The number of tabs needing input on the Dock icon or taskbar button.</summary>
     public bool Badge { get; set; } = true;
@@ -163,6 +169,12 @@ public sealed class ClaudeCodeSettings
 
     /// <summary>Check for Claude Code updates at launch and every few hours (DESIGN.md §12).</summary>
     public bool CheckForUpdates { get; set; } = true;
+
+    /// <summary>
+    /// On macOS and Linux, give Claude and the tools Claudette runs the login shell's environment when Claudette wasn't
+    /// started from a terminal (DESIGN.md §13, "Login shell environment").
+    /// </summary>
+    public bool UseLoginShellEnvironment { get; set; } = true;
 }
 
 public sealed class NewTabSettings
@@ -184,9 +196,22 @@ public enum ThemeChoice
     Dark,
 }
 
+/// <summary>Settings → Appearance → Style (DESIGN.md §3, "Visual style").</summary>
+public enum AppStyle
+{
+    /// <summary>Claudette's own look, after Claude Code's VS Code extension: neutral greys and the OS's accent color.</summary>
+    Standard,
+
+    /// <summary>The Claude apps' look: ivory and warm greys, Claude's orange, message bubbles and serif replies.</summary>
+    Claude,
+}
+
 public sealed class AppearanceSettings
 {
     public ThemeChoice Theme { get; set; } = ThemeChoice.System;
+
+    /// <summary>The look, in light and dark alike (DESIGN.md §3, "Visual style").</summary>
+    public AppStyle Style { get; set; } = AppStyle.Standard;
 
     public double ConversationFontSize { get; set; } = 14;
 
@@ -199,6 +224,25 @@ public sealed class AppearanceSettings
     public string? CodeFont { get; set; }
 
     public bool ExpandThinking { get; set; }
+
+    /// <summary>The working line's twinkling glyph and fun verbs (DESIGN.md §5, "Working line"); off shows "Working…".</summary>
+    public bool FunWorkingWords { get; set; } = true;
+
+    /// <summary>The working line says what the running tool is doing, such as "Running dotnet test…".</summary>
+    public bool ShowToolInWorkingLine { get; set; } = true;
+
+    /// <summary>A small ring on each tab's row showing how full its context is (DESIGN.md §4, "Sidebar").</summary>
+    public bool ShowContextOnTabs { get; set; } = true;
+
+    /// <summary>How much room the conversation, the sidebar's rows and the composer take (DESIGN.md §14).</summary>
+    public Density Density { get; set; } = Density.Comfortable;
+}
+
+/// <summary>Settings → Appearance → Density: Compact tightens spacing and padding (DESIGN.md §14).</summary>
+public enum Density
+{
+    Comfortable,
+    Compact,
 }
 
 public sealed class SessionSettings

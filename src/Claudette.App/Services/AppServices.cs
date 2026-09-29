@@ -4,6 +4,8 @@ using Claudette.Core.Credentials;
 using Claudette.Core.Git;
 using Claudette.Core.Installation;
 using Claudette.Core.Processes;
+using Claudette.Core.ProjectTools;
+using Claudette.Core.ProjectTools.Unreal;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
@@ -42,6 +44,13 @@ public sealed class AppServices : IAsyncDisposable
     /// <param name="appInstaller">Installs Claudette's own updates (DESIGN.md §2, "Updating Claudette"). Null can't.</param>
     /// <param name="httpHandler">Sends Claudette's own web requests: the update check and download. Tests pass a fake.</param>
     /// <param name="appVersion">This Claudette's version; by default, the one it was built with.</param>
+    /// <param name="loginShell">
+    /// Reads the login shell's environment for the user's processes (DESIGN.md §13, "Login shell environment"). Null
+    /// never reads one: tests.
+    /// </param>
+    /// <param name="systemProcesses">Every running process by name, for project tools (DESIGN.md §18). Null can't tell.</param>
+    /// <param name="unrealRegistry">Unreal's Windows registry entries. Null has none.</param>
+    /// <param name="projectToolPaths">Where other programs keep their files; by default the current user's folders.</param>
     public AppServices(
         AppPaths paths,
         IProcessLauncher launcher,
@@ -54,10 +63,15 @@ public sealed class AppServices : IAsyncDisposable
         ICredentialStore? credentials = null,
         IAppInstaller? appInstaller = null,
         HttpMessageHandler? httpHandler = null,
-        AppVersion? appVersion = null)
+        AppVersion? appVersion = null,
+        ILoginShell? loginShell = null,
+        ISystemProcesses? systemProcesses = null,
+        IUnrealEngineRegistry? unrealRegistry = null,
+        ProjectToolPaths? projectToolPaths = null)
     {
         AppInstaller = appInstaller ?? new NoAppInstaller();
         AppVersion = appVersion ?? BuiltVersion();
+        BuildCommit = AppBuild.CommitOf(InformationalVersion());
         Http = new HttpClient(httpHandler ?? new SocketsHttpHandler { AutomaticDecompression = System.Net.DecompressionMethods.All }, disposeHandler: true)
         {
             Timeout = TimeSpan.FromSeconds(60),
@@ -69,20 +83,24 @@ public sealed class AppServices : IAsyncDisposable
         Dispatcher = dispatcher;
         Loggers = loggerFactory ?? NullLoggerFactory.Instance;
         ProcessTrees = processTrees;
-        Locator = new ClaudeLocator(launcher, timeProvider);
         _settingsStore = new JsonFileStore<AppSettings>(paths.SettingsFile, Loggers.CreateLogger("Settings"));
         _stateStore = new JsonFileStore<AppState>(paths.StateFile, Loggers.CreateLogger("State"));
         Settings = _settingsStore.Load();
         State = _stateStore.Load();
-        Git = new GitWorkingTree(launcher, timeProvider);
+        UserEnvironment = new UserEnvironment(loginShell, () => Settings.ClaudeCode.UseLoginShellEnvironment, Loggers.CreateLogger("LoginShell"));
+        Locator = new ClaudeLocator(launcher, timeProvider, UserEnvironment);
+        Git = new GitWorkingTree(launcher, timeProvider, environment: UserEnvironment);
         Library = new LibraryService(this);
         ProtocolLog.DeleteOld(paths.ProtocolLogDirectory, timeProvider.GetUtcNow());
         Notifications = new NotificationService(this, notifier ?? NullNotifier.Instance);
         Tips = new ShortcutTips(Settings);
         Perforce = new PerforceService(this, credentials ?? new UnavailableCredentialStore());
-        UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time);
+        ProjectTools = new ProjectToolsService(this, systemProcesses, unrealRegistry ?? NoUnrealEngineRegistry.Instance, projectToolPaths ?? ProjectToolPaths.ForCurrentUser());
+        UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time, UserEnvironment.Probe, userEnvironment: UserEnvironment);
         SettingsChanged += (_, _) =>
         {
+            // Turning Use my login shell's environment on reads it now, if this run hasn't yet.
+            UserEnvironment.Start();
             Library.OnSettingsChanged();
             ClaudeUpdates?.OnSettingsChanged();
             Notifications.OnSettingsChanged();
@@ -105,21 +123,39 @@ public sealed class AppServices : IAsyncDisposable
     /// <summary>What Claudette's web requests call themselves.</summary>
     public string UserAgent => $"Claudette/{AppVersion}";
 
+    /// <summary>The commit this Claudette was built from, shortened, or null when the build didn't record one.</summary>
+    internal string? BuildCommit { get; set; }
+
+    /// <summary>
+    /// Runs from a source build (DESIGN.md §9, "Working on Claudette"), set at launch: its version is the checkout's,
+    /// so the commit tells it from the release.
+    /// </summary>
+    public bool IsSourceBuild { get; set; }
+
+    /// <summary>This copy of Claudette, for the foot of the Settings sidebar and bug reports (DESIGN.md §14, "Version").</summary>
+    public AppBuild Build => new(AppVersion, IsSourceBuild ? AppInstallKind.SourceBuild : AppInstaller.Kind, BuildCommit);
+
     /// <summary>The version the running app was built with (<c>-p:Version=…</c> in packaging/), without build metadata.</summary>
-    private static AppVersion BuiltVersion()
-    {
-        var informational = typeof(AppServices).Assembly
+    private static AppVersion BuiltVersion() =>
+        AppVersion.TryParse(InformationalVersion())
+        ?? AppVersion.TryParse(typeof(AppServices).Assembly.GetName().Version?.ToString(3))
+        ?? new AppVersion(0, 0, 0);
+
+    /// <summary>Such as <c>0.1.0+842169b…</c>: the version, and the commit the .NET SDK records from the checkout.</summary>
+    private static string? InformationalVersion() =>
+        typeof(AppServices).Assembly
             .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
             .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
             .FirstOrDefault()?.InformationalVersion;
-        return AppVersion.TryParse(informational) ?? AppVersion.TryParse(typeof(AppServices).Assembly.GetName().Version?.ToString(3)) ?? new AppVersion(0, 0, 0);
-    }
 
     /// <summary>OS notifications and the Dock/taskbar badge (DESIGN.md §10).</summary>
     public NotificationService Notifications { get; }
 
     /// <summary>Perforce ticket handling and changelists, shared by the tabs (DESIGN.md §18).</summary>
     public PerforceService Perforce { get; }
+
+    /// <summary>Project tools: detecting a tab's project and running its actions (DESIGN.md §18).</summary>
+    public ProjectToolsService ProjectTools { get; }
 
     /// <summary>Makes the updater for a <c>claude</c> path (DESIGN.md §12). Tests replace it.</summary>
     internal Func<string, IClaudeUpdater> UpdaterFactory { get; set; }
@@ -147,6 +183,12 @@ public sealed class AppServices : IAsyncDisposable
 
     /// <summary>Starts processes (DESIGN.md §15): <c>claude</c>, git, diff tools.</summary>
     public IProcessLauncher Launcher => _launcher;
+
+    /// <summary>
+    /// The environment of the user's processes, <c>claude</c>, git, <c>p4</c> and diff tools, with the login shell's
+    /// merged in when it's used (DESIGN.md §13, "Login shell environment"). The app starts reading it at launch.
+    /// </summary>
+    public UserEnvironment UserEnvironment { get; }
 
     public IPlatformServices Platform { get; }
 
@@ -190,6 +232,12 @@ public sealed class AppServices : IAsyncDisposable
     /// <summary>Where Claude Code keeps transcripts, from <c>claude auth status</c> (DESIGN.md §11).</summary>
     public string? ProjectsDirectory { get; set; }
 
+    /// <summary>Claude Code's config folder, from <c>claude auth status</c>: where its user settings are.</summary>
+    public string? ClaudeConfigDirectory { get; set; }
+
+    /// <summary>For the working line's verbs (DESIGN.md §5). Tests give it a seed.</summary>
+    public Random Random { get; set; } = Random.Shared;
+
     /// <summary>The local usage history (DESIGN.md §6), once usage tracking has started.</summary>
     public UsageStore? UsageHistory { get; private set; }
 
@@ -211,8 +259,8 @@ public sealed class AppServices : IAsyncDisposable
     public void UseInstall(ClaudeInstall install)
     {
         Install = install;
-        Sessions = new ClaudeSessionFactory(install.Path, _launcher, Time, Loggers, Diagnostics);
-        Auth = new ClaudeAuth(install.Path, _launcher, Time);
+        Sessions = new ClaudeSessionFactory(install.Path, _launcher, Time, Loggers, Diagnostics, UserEnvironment);
+        Auth = new ClaudeAuth(install.Path, _launcher, Time, userEnvironment: UserEnvironment);
         ClaudeUpdates = new ClaudeUpdateService(this, CreateUpdater(install.Path), install.Version);
     }
 

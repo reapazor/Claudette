@@ -45,6 +45,19 @@ public class TranscriptReaderTests
     }
 
     [Fact]
+    public void Each_item_carries_the_time_of_its_entry()
+    {
+        // As Claude Code 2.1.284 writes it: every entry has an ISO 8601 timestamp in UTC.
+        var items = Load().Items;
+
+        var prompt = items.OfType<TranscriptPrompt>().First();
+        Assert.Equal(DateTimeOffset.Parse("2026-09-28T22:37:25.604Z", System.Globalization.CultureInfo.InvariantCulture), prompt.Time);
+        Assert.All(items, i => Assert.NotNull(i.Time));
+        // An entry without one has no time.
+        Assert.Null(Assert.Single(TranscriptReader.Read(["""{"type":"user","message":{"role":"user","content":"hello"}}"""]).Items).Time);
+    }
+
+    [Fact]
     public void Prompts_have_injected_reminders_removed()
     {
         var prompts = Load().Items.OfType<TranscriptPrompt>().Select(p => p.Text);
