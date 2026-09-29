@@ -846,14 +846,37 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     // ---- Sign-in ----------------------------------------------------------------------------------------------
 
-    internal void OnAuthenticationRequired() => _onAuthenticationRequired();
+    /// <summary>
+    /// Claude Code needs a sign-in (DESIGN.md §11): tabs hold the messages sent meanwhile, and deliver them once
+    /// signed in again.
+    /// </summary>
+    public bool NeedsSignIn { get; private set; }
 
+    /// <summary>A tab found Claude Code signed out.</summary>
+    internal void OnAuthenticationRequired()
+    {
+        NeedsSignIn = true;
+        _onAuthenticationRequired();
+    }
+
+    /// <summary>
+    /// Signed out from the account menu or Settings. The next sign-in may be a different account, so every tab that's
+    /// running restarts on its session then.
+    /// </summary>
+    public void OnSignedOut()
+    {
+        NeedsSignIn = true;
+        foreach (var tab in AllTabs)
+        {
+            tab.OnSignedOut();
+        }
+    }
+
+    /// <summary>Signed in again: tabs that failed restart with <c>--resume</c>, and held messages go out.</summary>
     public async Task OnSignedInAgainAsync()
     {
-        foreach (var tab in AllTabs.ToArray())
-        {
-            await tab.OnSignedInAgainAsync();
-        }
+        NeedsSignIn = false;
+        await Task.WhenAll(AllTabs.ToArray().Select(t => t.OnSignedInAgainAsync()));
     }
 
     // ---- Persistence ------------------------------------------------------------------------------------------

@@ -43,6 +43,11 @@ internal sealed class FakeProcess : IRunningProcess
 
     public void WriteError(string line) => _stderr.Writer.TryWrite(line);
 
+    public void WriteOutput(string line) => _stdout.Writer.TryWrite(line);
+
+    /// <summary>Lines written to standard input.</summary>
+    public List<string> Input { get; } = [];
+
     public void Exit(int code)
     {
         _stdout.Writer.TryComplete();
@@ -50,7 +55,14 @@ internal sealed class FakeProcess : IRunningProcess
         _exited.TrySetResult(code);
     }
 
-    public ValueTask WriteLineAsync(string line, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    public ValueTask WriteLineAsync(string line, CancellationToken cancellationToken = default)
+    {
+        lock (Input)
+        {
+            Input.Add(line);
+        }
+        return ValueTask.CompletedTask;
+    }
 
     public void CloseStandardInput()
     {

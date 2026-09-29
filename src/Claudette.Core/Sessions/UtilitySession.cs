@@ -86,7 +86,13 @@ public sealed class UtilitySession : IAsyncDisposable
         }
     }
 
-    /// <summary>Starts sign-in and returns the URLs. Claude Code doesn't open a browser itself. Undocumented request.</summary>
+    /// <summary>
+    /// Starts sign-in and returns the URLs. Claude Code doesn't open a browser itself. Undocumented request.
+    /// </summary>
+    /// <param name="claudeAiAccount">
+    /// <c>loginWithClaudeAi</c>: true for a Claude subscription, false for an Anthropic Console account (DESIGN.md §11,
+    /// "More options"). Claude Code refuses a choice that managed settings' <c>forceLoginMethod</c> rules out.
+    /// </param>
     public async Task<SignInUrls> StartSignInAsync(bool claudeAiAccount = true, CancellationToken cancellationToken = default)
     {
         var response = await _session.SendControlRequestAsync(
@@ -96,15 +102,18 @@ public sealed class UtilitySession : IAsyncDisposable
     }
 
     /// <summary>
-    /// Waits until sign-in through <see cref="SignInUrls.AutomaticUrl"/> finishes. Undocumented request; its
-    /// behaviour on success hasn't been observed yet (the milestone 1 spike never completed a sign-in).
+    /// Waits until the sign-in started by <see cref="StartSignInAsync"/> finishes, by either URL. Undocumented request.
+    /// In Claude Code 2.1.284's source it answers with the new <c>account</c> once signed in, and with the sign-in's
+    /// error (for example an organization that isn't allowed) if it fails; no real sign-in has completed through it yet.
     /// </summary>
     public Task<JsonObject> WaitForSignInAsync(CancellationToken cancellationToken = default) =>
         _session.SendControlRequestAsync(new JsonObject { ["subtype"] = "claude_oauth_wait_for_completion" }, SignInTimeout, cancellationToken);
 
     /// <summary>
     /// Completes sign-in with the code from the <see cref="SignInUrls.ManualUrl"/> page. The page shows
-    /// <c>code#state</c>; both parts are sent. Undocumented request, not yet verified end to end.
+    /// <c>code#state</c>; both parts are sent, as <c>authorizationCode</c> and <c>state</c> like the TypeScript SDK's
+    /// <c>claudeOAuthCallback</c>. Answers once the sign-in has finished, like
+    /// <see cref="WaitForSignInAsync"/>. Undocumented request, not yet verified end to end.
     /// </summary>
     public Task<JsonObject> SubmitSignInCodeAsync(string pastedCode, CancellationToken cancellationToken = default)
     {

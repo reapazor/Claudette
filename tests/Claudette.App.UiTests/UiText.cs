@@ -95,7 +95,8 @@ public static class UiText
     }));
 
     private static string Label(ContentControl control) =>
-        AutomationProperties.GetName(control) is { Length: > 0 } name ? name
+        AutomationProperties.GetName(control) is { Length: > 0 } name
+            ? SingleText(control) is { } shown && shown != name ? $"{name}: {shown}" : name
         : SingleText(control) is { } text ? text
         : control.GetVisualDescendants().OfType<TextBlock>().Any(t => t.IsEffectivelyVisible && TextOf(t) is { Length: > 0 }) ? "(parts below)"
         : "(icon)";

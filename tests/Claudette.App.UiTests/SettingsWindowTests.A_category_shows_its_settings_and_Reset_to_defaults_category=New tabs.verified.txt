@@ -14,8 +14,8 @@
 "Favorite folders"
 "api"
 "{root}/projects-favorite/api"
-[button] Move up
-[button] Move down
+[button] Move up: ↑
+[button] Move down: ↓
 [button] Remove
 [button] Add folder…
 [button] Reset to defaults

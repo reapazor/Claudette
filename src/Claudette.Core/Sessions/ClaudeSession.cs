@@ -282,7 +282,7 @@ public sealed class ClaudeSession : IAsyncDisposable
                 break;
 
             case AssistantMessage assistant:
-                if (assistant.Error == "authentication_failed")
+                if (Auth.SignInErrors.IsSignInCategory(assistant.Error))
                 {
                     Publish(new AuthenticationRequired(assistant.Content.OfType<TextBlock>().FirstOrDefault()?.Text));
                 }
@@ -311,6 +311,8 @@ public sealed class ClaudeSession : IAsyncDisposable
                 break;
 
             case AuthStatusMessage auth:
+                // Only sent with the hidden --enable-auth-status flag, which Claudette doesn't pass; it reports cloud
+                // credential helpers such as awsAuthRefresh. One that failed still means Claude Code can't sign in.
                 if (auth.Error is not null)
                 {
                     Publish(new AuthenticationRequired(auth.Error));

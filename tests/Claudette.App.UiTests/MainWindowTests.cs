@@ -9,6 +9,7 @@ using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 using Claudette.App.Views;
+using Claudette.Core.Auth;
 using Claudette.Usage;
 
 namespace Claudette.App.UiTests;
@@ -29,7 +30,8 @@ public class MainWindowTests
         using var usage = new UsageViewModel(h.Services, tracker);
         tracker.OnRateLimitEvent(RateLimitEvent(0.62, h.Time.GetUtcNow().AddHours(2).AddMinutes(14), 0.38));
         await TabTestHarness.Eventually(() => usage.HasData && h.Shell.SelectedTab!.Status != TabStatus.Working, "the meters and the reply");
-        var main = new MainWindowViewModel(h.Services) { CurrentPage = h.Shell, Usage = usage, AccountText = "me@example.com · Max" };
+        var main = new MainWindowViewModel(h.Services) { CurrentPage = h.Shell, Usage = usage };
+        main.Account.Status = new AuthStatus(true, "claude.ai", null, "me@example.com", null, "max", null, null);
 
         var window = new MainWindow { DataContext = main, Width = 1200, Height = 800 };
         window.Show();

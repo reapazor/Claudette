@@ -7,7 +7,7 @@
   [meter 38%]
   "38%"
   "Not enough data yet."
-"me@example.com · Max"
+[button] Account: me@example.com · Max plan
 [button] New tab
 [button] Collapse the sidebar
 [button] work

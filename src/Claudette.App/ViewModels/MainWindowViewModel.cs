@@ -16,8 +16,15 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     [ObservableProperty]
     public partial ViewModelBase CurrentPage { get; set; } = new BusyViewModel("Starting…");
 
+    /// <summary>The account menu, the sign-in banner and its dialog, and signing out (DESIGN.md §11).</summary>
+    public AccountViewModel Account { get; } = new(services);
+
+    /// <summary>The signed-in email and plan, or null when signed out.</summary>
+    public string? AccountText => Account.IsSignedIn ? Account.Summary : null;
+
+    /// <summary>Why the usage header is missing, when usage tracking couldn't start.</summary>
     [ObservableProperty]
-    public partial string? AccountText { get; set; }
+    public partial string? UsageNote { get; set; }
 
     /// <summary>The usage header (DESIGN.md §6), once signed in.</summary>
     [ObservableProperty]
@@ -41,6 +48,21 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
     public Task StartAsync()
     {
         services.Notifications.Activated += OnNotificationActivated;
+        Account.CheckSignIn = CheckSignInAsync;
+        // Signed out from the account menu or Settings: the tabs wait for the next sign-in (DESIGN.md §11), and the
+        // utility session starts again when next needed, without the old account.
+        Account.SignedOut += () =>
+        {
+            _shell?.OnSignedOut();
+            _ = services.StopUtilitySessionAsync();
+        };
+        Account.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AccountViewModel.Status))
+            {
+                OnPropertyChanged(nameof(AccountText));
+            }
+        };
         return CheckInstallAsync(services.Settings.ClaudeCode.ClaudePath);
     }
 
@@ -101,9 +123,14 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         }
     }
 
+    /// <summary>
+    /// Runs <c>claude auth status</c> (DESIGN.md §11, "Detecting"). At launch, signed out shows the sign-in screen
+    /// instead of the tabs; later, it keeps the banner and the dialog that's open.
+    /// </summary>
     private async Task CheckSignInAsync()
     {
-        if (CurrentPage is not SignInViewModel)
+        var midSession = _shell is not null;
+        if (!midSession && CurrentPage is not SignInViewModel)
         {
             CurrentPage = new BusyViewModel("Checking your sign-in…");
         }
@@ -114,24 +141,43 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         }
         catch (Exception ex)
         {
-            CurrentPage = new SignInViewModel(services, CheckSignInAsync) { Error = $"Couldn't check your sign-in: {ex.Message}" };
+            var message = $"Couldn't check your sign-in: {ex.Message}";
+            if (midSession)
+            {
+                Account.SignIn?.ShowCheckFailed(message);
+            }
+            else if (CurrentPage is SignInViewModel page)
+            {
+                page.ShowCheckFailed(message);
+            }
+            else
+            {
+                CurrentPage = new SignInViewModel(services, CheckSignInAsync) { Error = message };
+            }
             return;
         }
 
+        Account.Status = status;
         if (!status.LoggedIn)
         {
-            AccountText = null;
-            if (CurrentPage is not SignInViewModel)
+            if (midSession)
+            {
+                Account.SignIn?.ShowStillSignedOut();
+            }
+            else if (CurrentPage is SignInViewModel page)
+            {
+                page.ShowStillSignedOut();
+            }
+            else
             {
                 CurrentPage = new SignInViewModel(services, CheckSignInAsync);
             }
             return;
         }
 
-        services.Notifications.Clear(NotificationKind.SignIn);
+        Account.OnSignedIn(status);
         services.ProjectsDirectory = status.ProjectsDirectory
             ?? (status.ConfigDirectory is { } config ? Path.Combine(config, "projects") : null);
-        AccountText = string.Join(" · ", new[] { status.Email, PlanName(status.SubscriptionType) }.Where(s => !string.IsNullOrEmpty(s)));
         if (_shell is null)
         {
             _shell = new ShellViewModel(services, ShowSignIn);
@@ -156,6 +202,8 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         else
         {
             CurrentPage = _shell;
+            // Like the tabs, the utility session (plan usage) starts again, with the new sign-in.
+            await services.StopUtilitySessionAsync();
             await _shell.OnSignedInAgainAsync();
         }
     }
@@ -181,7 +229,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         }
         catch (Exception ex)
         {
-            AccountText = $"{AccountText} · usage unavailable ({ex.Message})";
+            UsageNote = $"Usage unavailable ({ex.Message})";
         }
     }
 
@@ -199,14 +247,16 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
         updates.Start();
     }
 
-    /// <summary>A tab reported that Claude Code needs a sign-in.</summary>
+    /// <summary>
+    /// A tab reported that Claude Code needs a sign-in (DESIGN.md §11): a banner across all tabs, which stay open, and
+    /// an OS notification if Claudette isn't in front. The account menu catches up with <c>claude auth status</c>.
+    /// </summary>
     private void ShowSignIn()
     {
-        if (CurrentPage is not SignInViewModel)
+        if (!Account.NeedsSignIn)
         {
-            CurrentPage = new SignInViewModel(services, CheckSignInAsync);
-            // DESIGN.md §11: if Claudette isn't in front, an OS notification too.
-            services.Notifications.Notify(NotificationKind.SignIn, "Claude Code needs you to sign in", "Your tabs are paused until you sign in again.");
+            Account.RequireSignIn();
+            _ = Account.RefreshAsync();
         }
     }
 
@@ -242,7 +292,11 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
                 Updates?.RequestOpen();
                 break;
             case NotificationKind.SignIn:
-                // The sign-in screen is already showing.
+                // At launch the sign-in screen is already showing; later, the banner's dialog, ready to start.
+                if (Account.NeedsSignIn)
+                {
+                    Account.ShowSignIn();
+                }
                 break;
             default:
                 if (target.TabId is { } tabId && CurrentPage == _shell)
@@ -252,14 +306,6 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
                 break;
         }
     }
-
-    private static string? PlanName(string? subscriptionType) => subscriptionType switch
-    {
-        null or "" => null,
-        "max" => "Max",
-        "pro" => "Pro",
-        _ => subscriptionType,
-    };
 
     // ---- Restarting into a new build (DESIGN.md §9, "Working on Claudette") -----------------------------------
 

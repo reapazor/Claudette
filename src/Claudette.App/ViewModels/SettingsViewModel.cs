@@ -163,6 +163,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Claude Code", "Check for Claude Code updates automatically"),
         new("Claude Code", "Update Claude Code"),
         new("Claude Code", "Signed-in account"),
+        new("Claude Code", "Sign in"),
+        new("Claude Code", "Sign out"),
         new("Claude Code", "Path to claude"),
         new("New tabs", "Default model"),
         new("New tabs", "Default effort"),
@@ -306,6 +308,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
     // ---- Claude Code -----------------------------------------------------------------------------------------
 
     public string AccountText { get; }
+
+    /// <summary>The account, with <b>Sign in</b> and <b>Sign out</b> wired to the header's (DESIGN.md §11). Null in some tests.</summary>
+    public AccountViewModel? Account { get; init; }
+
+    public bool HasAccount => Account is not null;
 
     /// <summary>Version, install method, update checks and <b>Update now</b> (DESIGN.md §12, §14). Null before Claude Code is found.</summary>
     public ClaudeUpdateViewModel? Updates { get; }
