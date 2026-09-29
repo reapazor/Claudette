@@ -81,9 +81,20 @@ public sealed class AvaloniaPlatformServices(Func<TopLevel?> topLevel) : IPlatfo
         return items.Select(item => item.TryGetLocalPath()).OfType<string>().ToArray();
     }
 
-    public async Task<bool> ClipboardHasTextAsync() =>
-        topLevel()?.Clipboard is { } clipboard && !string.IsNullOrEmpty(await clipboard.TryGetTextAsync());
+    public async Task<string?> GetClipboardTextAsync() =>
+        topLevel()?.Clipboard is { } clipboard ? await clipboard.TryGetTextAsync() : null;
 
+    /// <remarks>
+    /// Avalonia 12 finds the image the way each OS puts one on the clipboard and gives it as a bitmap, which is sent as
+    /// PNG, or JPEG when the PNG is too big (DESIGN.md §5, "Attachments").
+    /// <list type="bullet">
+    /// <item>Windows: <c>image/png</c> or <c>PNG</c>, then <c>CF_DIB</c>, <c>CF_DIBV5</c> or <c>CF_BITMAP</c>, so a
+    /// Snipping Tool screenshot works.</item>
+    /// <item>macOS: <c>public.png</c>, with <c>public.tiff</c> or <c>public.jpeg</c> converted to PNG when that's all
+    /// there is.</item>
+    /// <item>Linux (X11): <c>image/png</c> or <c>image/jpeg</c>.</item>
+    /// </list>
+    /// </remarks>
     public async Task<byte[]?> GetClipboardImageAsync()
     {
         if (topLevel()?.Clipboard is not { } clipboard || await clipboard.TryGetBitmapAsync() is not { } bitmap)
@@ -92,7 +103,7 @@ public sealed class AvaloniaPlatformServices(Func<TopLevel?> topLevel) : IPlatfo
         }
         using (bitmap)
         {
-            return ImageFiles.ToPng(bitmap);
+            return ImageFiles.Encode(bitmap);
         }
     }
 }

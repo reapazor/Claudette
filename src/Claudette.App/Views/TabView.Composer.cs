@@ -208,7 +208,7 @@ public partial class TabView
         {
             using (bitmap)
             {
-                tab.AddImage(ImageFiles.ToPng(bitmap), "Dropped image");
+                tab.AddImage(ImageFiles.Encode(bitmap), "Dropped image");
             }
         }
     }

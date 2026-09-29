@@ -1,6 +1,8 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Avalonia.Media.Imaging;
 using Claudette.App.Conversation;
+using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 
@@ -337,6 +339,88 @@ public partial class ComposerTests
 
         h.Platform.ClipboardImage = null;
         Assert.Null(await tab.PasteAttachmentsAsync());
+    }
+
+    [Fact]
+    public async Task A_pasted_screenshot_is_sent_before_the_text_and_leaves_the_composer()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        h.Platform.ClipboardImage = Png;
+
+        Assert.Equal("", await tab.PasteAttachmentsAsync());
+        Assert.Equal("Pasted image", Assert.Single(tab.Attachments).Name);
+        Assert.True(tab.SendCommand.CanExecute(null));
+        tab.ComposerText = "The walk cycle takes half the screen here";
+        await tab.SendCommand.ExecuteAsync(null);
+
+        var content = h.Transport.Sent.Single(m => m["type"]?.GetValue<string>() == "user")["message"]!["content"]!.AsArray();
+        Assert.Equal(["image", "text"], content.Select(b => b!["type"]!.GetValue<string>()));
+        Assert.Equal("base64", content[0]!["source"]!["type"]!.GetValue<string>());
+        Assert.Equal(Convert.ToBase64String(Png), content[0]!["source"]!["data"]!.GetValue<string>());
+        Assert.Equal("The walk cycle takes half the screen here", content[1]!["text"]!.GetValue<string>());
+        Assert.Empty(tab.Attachments);
+        Assert.Equal("", tab.ComposerText);
+        Assert.False(tab.SendCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Text_that_is_only_white_space_does_not_keep_an_image_from_pasting()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        // Some apps put a line break or a space on the clipboard with a copied picture.
+        await h.Platform.SetClipboardTextAsync("\r\n");
+        h.Platform.ClipboardImage = Png;
+
+        Assert.Equal("", await tab.PasteAttachmentsAsync());
+        Assert.Single(tab.Attachments);
+
+        // Without an image, the white space pastes as text as usual.
+        h.Platform.ClipboardImage = null;
+        Assert.Null(await tab.PasteAttachmentsAsync());
+        Assert.Single(tab.Attachments);
+    }
+
+    [Fact]
+    public async Task A_pasted_image_that_is_too_big_or_unreadable_says_why()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        var huge = new byte[Core.Composer.Attachments.MaxImageBytes + 1];
+        Png.CopyTo(huge, 0);
+        h.Platform.ClipboardImage = huge;
+
+        Assert.Equal("", await tab.PasteAttachmentsAsync());
+
+        Assert.Empty(tab.Attachments);
+        // Rounded up, so it doesn't read "20 MB; images can be up to 20 MB".
+        Assert.Matches(@"^Pasted image is 20[.,]1 MB; images can be up to 20 MB\.$", tab.AttachmentError);
+        Assert.False(tab.SendCommand.CanExecute(null));
+
+        h.Platform.ClipboardImage = [0x42, 0x4D, 0, 0];
+        await tab.PasteAttachmentsAsync();
+        Assert.Equal("Pasted image isn't an image Claude can read. Use PNG, JPEG, GIF or WebP.", tab.AttachmentError);
+    }
+
+    [Fact]
+    public void A_pasted_bitmap_is_PNG_unless_that_is_too_big_then_JPEG()
+    {
+        // A screenshot: PNG, and nothing else is tried.
+        Assert.Same(Png, ImageFiles.Encode(options => options is PngBitmapEncoderOptions ? Png : throw new InvalidOperationException("Only PNG was needed.")));
+
+        // A photo-like 5K frame can be 20 MB or more as PNG (22.6 MB measured with Skia); as JPEG it's a tenth of that.
+        var tried = new List<BitmapEncoderOptions>();
+        byte[] jpeg = [0xFF, 0xD8, 0xFF, 0xE0];
+        var encoded = ImageFiles.Encode(options =>
+        {
+            tried.Add(options);
+            return options is PngBitmapEncoderOptions ? new byte[Core.Composer.Attachments.MaxImageBytes + 1] : jpeg;
+        });
+
+        Assert.Same(jpeg, encoded);
+        Assert.Equal(90, Assert.IsType<JpegBitmapEncoderOptions>(tried[1]).Quality);
+        Assert.Equal("image/jpeg", Core.Protocol.MessageImage.DetectMediaType(encoded));
     }
 
     [Fact]

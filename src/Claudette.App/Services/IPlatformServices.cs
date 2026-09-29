@@ -17,10 +17,10 @@ public interface IPlatformServices
     /// <summary>Files copied in Finder or Explorer, as local paths, for pasting into the composer (DESIGN.md §5).</summary>
     Task<IReadOnlyList<string>> GetClipboardFilesAsync();
 
-    /// <summary>Whether the clipboard has text, which a paste prefers over an image of the same thing.</summary>
-    Task<bool> ClipboardHasTextAsync();
+    /// <summary>The clipboard's text, which a paste prefers over an image of the same thing; null when there's none.</summary>
+    Task<string?> GetClipboardTextAsync();
 
-    /// <summary>An image on the clipboard, such as a screenshot, as PNG bytes; null when there's none.</summary>
+    /// <summary>An image on the clipboard, such as a screenshot, as PNG bytes (JPEG when that's too big); null when there's none.</summary>
     Task<byte[]?> GetClipboardImageAsync();
 
     /// <summary>Opens a file in the app the OS uses for it, for example the user's editor (DESIGN.md §8).</summary>

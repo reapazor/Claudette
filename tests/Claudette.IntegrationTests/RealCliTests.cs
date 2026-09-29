@@ -209,6 +209,22 @@ public sealed class RealCliTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_image_with_no_text_is_a_message_too()
+    {
+        await using var session = await StartAsync();
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+
+        // A pasted screenshot sent on its own (DESIGN.md §5, "Attachments"): only image blocks, no text block.
+        await session.SendUserMessageAsync("", [new Core.Protocol.MessageImage("image/png", png)], TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.False(done.Result.IsError);
+        Assert.Equal("pong", done.Result.Result);
+        var request = _api.Requests.Last(r => r.Reply == "text");
+        Assert.Equal("image/png", Assert.Single(request.LastUserImages!).MediaType);
+    }
+
+    [Fact]
     public async Task Claude_code_scales_a_large_image_down_itself()
     {
         await using var session = await StartAsync();
@@ -219,6 +235,23 @@ public sealed class RealCliTests : IAsyncLifetime
 
         var image = Assert.Single(_api.Requests.Last(r => r.Reply == "text").LastUserImages!);
         Assert.True(image.Width <= 2000 && image.Height <= 2000, $"Expected at most 2000 px, got {image.Width}×{image.Height}.");
+    }
+
+    [Fact]
+    public async Task Claude_code_brings_a_large_file_under_the_api_size_limit()
+    {
+        await using var session = await StartAsync();
+        // About 12 MB and within 2000 px, so only its size is too big for the API (5 MB an image).
+        var png = Gradient(2000, 2000, noisy: true);
+        Assert.True(png.Length > 10 * 1024 * 1024, $"Expected over 10 MB, got {png.Length} bytes.");
+
+        // The 20 MB Claudette allows relies on this (DESIGN.md §5, "Attachments").
+        await session.SendUserMessageAsync("hello, a heavy one", [new Core.Protocol.MessageImage("image/png", png)], TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.False(done.Result.IsError);
+        var image = Assert.Single(_api.Requests.Last(r => r.Reply == "text").LastUserImages!);
+        Assert.True(image.Bytes * 4L / 3 <= 5 * 1024 * 1024, $"Expected at most 5 MB as base64, got {image.Bytes} bytes ({image.MediaType}).");
     }
 
     [Fact]
@@ -288,13 +321,22 @@ public sealed class RealCliTests : IAsyncLifetime
         Assert.True(File.Exists(Path.Combine(library, $"{sessionId}.jsonl")), "The continued transcript should be written next to the resumed file (DESIGN.md §9).");
     }
 
-    /// <summary>An RGB PNG with a gradient, which compresses well, so a big one stays small.</summary>
-    private static byte[] Gradient(int width, int height)
+    /// <summary>
+    /// An RGB PNG with a gradient, which compresses well, so a big one stays small. With <paramref name="noisy"/> each
+    /// pixel is random instead, so it barely compresses, like a large photo-like screenshot.
+    /// </summary>
+    private static byte[] Gradient(int width, int height, bool noisy = false)
     {
         var rows = new byte[(width * 3 + 1) * height];
+        var random = new Random(1);
         for (var y = 0; y < height; y++)
         {
             var row = y * (width * 3 + 1);
+            if (noisy)
+            {
+                random.NextBytes(rows.AsSpan(row + 1, width * 3));
+                continue;
+            }
             for (var x = 0; x < width; x++)
             {
                 rows[row + 1 + x * 3] = (byte)x;

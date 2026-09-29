@@ -114,5 +114,6 @@ public static class Attachments
         return inside ? relative.Replace(Path.DirectorySeparatorChar, '/') : full;
     }
 
-    private static string Megabytes(long bytes) => $"{bytes / (1024.0 * 1024):0.#} MB";
+    /// <summary>Rounded up to a tenth, so an image just over the limit never reads as the limit itself.</summary>
+    private static string Megabytes(long bytes) => $"{Math.Ceiling(bytes * 10 / (1024.0 * 1024)) / 10:0.#} MB";
 }

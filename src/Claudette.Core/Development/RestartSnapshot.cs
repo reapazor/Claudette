@@ -69,8 +69,11 @@ public sealed class RestartSnapshot
     }
 }
 
-/// <summary>A tab's unsent message: the text and the one-off quick suffixes added to it (DESIGN.md §5).</summary>
-public sealed record TabDraft(string Text, IReadOnlyList<string> SuffixIds);
+/// <summary>A tab's unsent message: the text, the one-off quick suffixes added to it, and its attached images (DESIGN.md §5).</summary>
+public sealed record TabDraft(string Text, IReadOnlyList<string> SuffixIds, IReadOnlyList<DraftImage>? Images = null);
+
+/// <summary>An image attached to an unsent message, with the name its thumbnail shows (DESIGN.md §5, "Attachments").</summary>
+public sealed record DraftImage(string Name, byte[] Data);
 
 /// <summary>The main window's position and size, in device-independent pixels except the position.</summary>
 public sealed record WindowPlacement(int X, int Y, double Width, double Height, bool IsMaximized);

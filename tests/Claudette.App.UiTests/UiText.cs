@@ -10,7 +10,7 @@ using Avalonia.VisualTree;
 namespace Claudette.App.UiTests;
 
 /// <summary>
-/// What a view shows, as indented text for snapshot tests: the visible text, buttons, fields and meters, in tree order.
+/// What a view shows, as indented text for snapshot tests: the visible text, buttons, fields, meters and images, in tree order.
 /// Positions and pixels are left out, so a snapshot only changes when what the user sees or can do changes.
 /// </summary>
 public static class UiText
@@ -98,6 +98,7 @@ public static class UiText
         Button button => $"[button] {Label(button)}",
         SplitButton split => $"[split button] {Label(split)}",
         ProgressBar bar => $"[meter {bar.Value:0}%]",
+        Image image => AutomationProperties.GetName(image) is { Length: > 0 } name ? $"[image] {Quote(name)}" : "[image]",
         TextBlock block when !IsInside<TextBox>(visual) && TextOf(block) is { Length: > 0 } text => Quote(text),
         _ => null,
     };

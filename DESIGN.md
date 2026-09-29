@@ -287,16 +287,26 @@ Scrolling follows new output unless the user has scrolled up; a "Jump to latest"
 
 - Images and files can be dropped on the composer, pasted into it, or picked with the attach button (the paper clip).
 - **Images.** PNG, JPEG, GIF and WebP, recognized by their first bytes.
-  - They show as thumbnails above the text box, each with a `×` to remove it.
-  - They're sent as base64 `image` content blocks in the `user` message, before the text. A message can be only images.
-  - Each can be up to 20 MB, and a message can have up to 20.
-  - Claude Code scales images down itself before they reach the API: 2.1.284 fits them in 2000 px and re-encodes large ones as JPEG. So Claudette sends them as they are, and the API's own size limits don't apply to what's attached.
+  - They show as thumbnails above the text box, 56 px high and at most 120 px wide, each with a `×` (**Remove image**) to remove it. A thumbnail is decoded at thumbnail size, so a large image doesn't cost its full size to show.
+  - They're sent as base64 `image` content blocks in the `user` message, before the text. A message can be only images: **Send** is enabled with just an image attached. Sending clears them from the composer.
+  - Each can be up to 20 MB, and a message can have up to 20. Past either limit, a note under the composer says why: *"Pasted image is 20.1 MB; images can be up to 20 MB."* or *"A message can have up to 20 images."* Sizes are rounded up, so an image just over the limit never reads as the limit itself.
+  - Claude Code scales images down itself before they reach the API: 2.1.284 fits them in 2000 px and re-encodes large ones as JPEG: a 20 MB PNG reaches the API under 5 MB. So Claudette sends them as they are, and the API's own size limits don't apply to what's attached.
 - **Other files and folders** become `@path` mentions, inserted at the caret. The path is relative to the working folder when the file is in it, and the full path otherwise. Claude Code reads them when the message is sent (see [Autocomplete](#autocomplete)), which covers text, PDFs and notebooks, and the message still says what was attached.
   - Binary files Claude can't read are refused with a note under the composer, rather than becoming a mention Claude Code would silently drop. A file is treated as binary when its first 8 KB contain a zero byte, except PDFs.
   - Images over 20 MB and other image formats (such as BMP) are refused the same way.
-- **Pasting.** Copied files are attached. Otherwise, text on the clipboard pastes as text, even when an image comes with it, since apps often add a picture of the same text. An image on its own, such as a screenshot, is attached.
+- **Pasting.** `Ctrl+V` or `Shift+Insert` (`Cmd+V` on macOS), or **Paste** on the text box's right-click menu.
+  - Copied files are attached.
+  - Otherwise, text on the clipboard pastes as text, even when an image comes with it, since apps often add a picture of the same text. Text that's only white space doesn't count: some apps add a line break to a copied picture.
+  - An image on its own, such as a screenshot, is attached. Claudette reads it the way each OS puts one on the clipboard (Avalonia does this; checked against 12.1.3's source):
+    - Windows: `PNG` or `image/png`, else a bitmap (`CF_DIB`, `CF_DIBV5` or `CF_BITMAP`), which is what Snipping Tool and `Win+Shift+S` put there.
+    - macOS: `public.png`, else `public.tiff` or `public.jpeg`, converted to PNG.
+    - Linux: `image/png` or `image/jpeg`.
+  - A pasted or dropped picture is sent as PNG. When the PNG would be over 20 MB, as a photo-like screenshot of a 5K screen can be, it's sent as JPEG at quality 90 instead, about a tenth of the size.
 - **In the conversation.** A sent message shows its images as thumbnails above its text. Claude Code stores them in the transcript, so a restored tab shows them too.
-- Attachments aren't kept with a tab's draft when Claudette restarts into a new build ([§9](#working-on-claudette)).
+- **Drafts.** Attached images stay with the message until it's sent.
+  - A message sent while Claude Code needs a sign-in waits with its images, and they go with it after the sign-in ([§11](#signing-in)).
+  - Restarting into a new build keeps them with the tab's draft, in `restart.json`, and so does taking the tabs back when the new build doesn't start ([§9](#working-on-claudette)).
+  - They aren't saved anywhere else: closing Claudette with an unsent message loses them, as it loses the text.
 
 ### Quick suffixes
 
@@ -665,7 +675,7 @@ Claudette can host the Claude Code session that works on Claudette's own source.
   - **Restart into new builds by itself when no tab is working**, remembered on this machine. With it on, a Claude Code session that rebuilds Claudette sees the restart as soon as its turn ends.
 - **What's kept:**
   - Every open tab, pinned or not, in order, with its session, name, overrides, kept suffixes and token stats.
-  - The message typed in each tab, with its one-off suffixes.
+  - The message typed in each tab, with its one-off suffixes and attached images.
   - The selected tab, and the window's position and size.
   - Tabs whose Claude Code was running start again straight away and resume their sessions. The others start when selected, as on launch.
   - Processes the tabs started are stopped, as when Claudette closes ([Process monitor](#process-monitor)).
@@ -744,7 +754,7 @@ Claude Code keeps its own credentials. Claudette never reads or stores them; it 
   - **More options**: sign in with an Anthropic Console account for API usage billing (`claude_authenticate` with `loginWithClaudeAi: false`, or `claude auth login --console`), or with SSO (`claude auth login --sso`; the control request has no option for it). The screen offers them before signing in, too.
 - **I've already signed in**, for a sign-in done in a terminal, runs `claude auth status` again, and says so if Claude Code still reports no sign-in.
 - When sign-in succeeds, Claudette runs `claude auth status` again, shows the account, and restarts the utility session, so plan usage comes from the new sign-in. Any tab that failed is restarted with `--resume`. A tab that couldn't start isn't tried again until then, but still takes messages.
-- **Messages sent while signed out** stay queued and are delivered, in order, once sign-in completes. The message that found Claude Code signed out is one of them: a message nothing came back for before the sign-in error never reached the model, so it's sent again. One that was answered before the error isn't.
+- **Messages sent while signed out** stay queued, with their attached images, and are delivered, in order, once sign-in completes. The message that found Claude Code signed out is one of them: a message nothing came back for before the sign-in error never reached the model, so it's sent again. One that was answered before the error isn't.
 - If sign-in fails (timed out, cancelled, organization not allowed), Claudette shows Claude Code's message, from the control request or the command, and a **Try again** button, which repeats the same kind of sign-in.
 - **Account menu** (in the header, on the right): the signed-in email, plan and organization from `claude auth status`, or how Claude Code is signed in when there's no plan (an API key, say), and **Sign out…**, which runs `claude auth logout`. Signed out, it offers **Sign in**.
   - Signing out asks for confirmation first, because every tab will stop working, and Claude Code is signed out in the terminal too.
@@ -1069,7 +1079,7 @@ These apply from milestone 1:
 | Protocol replay | Turning Claude Code's output into events, and what Claudette writes back: messages, interrupts, permission replies, model and effort changes | Recorded stream-json traffic from real sessions, checked in as fixture files and replayed through a fake transport | None |
 | Fake CLI | Process handling: launch flags, stdin/stdout, interrupts, crashes, hangs, sign-in failures, `--version` and `doctor` output, child processes for the process monitor | A small `fake-claude` test program that speaks the stream-json protocol, scripted by the prompt and environment variables. Claudette points at it through the "path to `claude`" setting. | None |
 | Real CLI, fake model | End to end against the real `claude` binary: real tools, permission prompts, file edits, transcripts and resume | A local mock server that implements the Anthropic Messages API and returns scripted replies. `claude` points at it with `ANTHROPIC_BASE_URL` and a dummy `ANTHROPIC_API_KEY`. | None |
-| UI | View models, and views: sidebar, composer, chips, permission cards, meters | View-model tests with no UI; Avalonia.Headless for rendering and input; snapshot tests with Verify. A snapshot is a text form of what a view shows (text, buttons, fields, meters, in tree order), not pixels, so it reads the same on every OS and only changes when what the user sees changes. | None |
+| UI | View models, and views: sidebar, composer, chips, permission cards, meters | View-model tests with no UI; Avalonia.Headless for rendering and input; snapshot tests with Verify. A snapshot is a text form of what a view shows (text, buttons, fields, meters, images by their accessible name, in tree order), not pixels, so it reads the same on every OS and only changes when what the user sees changes. | None |
 | Live (opt-in) | What only the real service can confirm: `rate_limits` data, sign-in, real model output | Tests tagged `Live`, excluded by default and run manually before a release | A few cents |
 
 ### Protocol fixtures

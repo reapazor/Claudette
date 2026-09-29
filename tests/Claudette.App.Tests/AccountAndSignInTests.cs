@@ -125,6 +125,39 @@ public class AccountAndSignInTests
     }
 
     [Fact]
+    public async Task Held_messages_keep_their_images()
+    {
+        await using var h = new TabTestHarness();
+        Track(h);
+        var tab = await h.OpenTabAsync();
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+        tab.AddImage(png, "Pasted image");
+        await SendAsync(tab, "look at this");
+        h.Transport.Emit(Init);
+        h.Transport.Emit(SignedOutReply);
+        h.Transport.Emit(SignedOutResult);
+        await TabTestHarness.Eventually(() => tab.IsWaitingForSignIn, "the sign-in error");
+
+        // An image on its own, sent while waiting.
+        tab.AddImage(png, "Pasted image");
+        await tab.SendCommand.ExecuteAsync(null);
+        Assert.Equal(["look at this", ""], InlineDispatcher.Read(() => tab.HeldMessages.ToArray()));
+        Assert.Empty(tab.Attachments);
+
+        await h.Shell.OnSignedInAgainAsync();
+        await TabTestHarness.Eventually(() => UserMessages(h).Length == 3, "the held messages");
+
+        var resent = UserMessages(h)[1..];
+        Assert.Equal(["image", "text"], resent[0].Select(b => b!["type"]!.GetValue<string>()));
+        Assert.Equal("look at this", resent[0][1]!["text"]!.GetValue<string>());
+        Assert.Equal(["image"], resent[1].Select(b => b!["type"]!.GetValue<string>()));
+        Assert.All(resent, content => Assert.Equal(Convert.ToBase64String(png), content[0]!["source"]!["data"]!.GetValue<string>()));
+
+        static JsonArray[] UserMessages(TabTestHarness h) =>
+            [.. h.Transport.Sent.Where(m => m["type"]?.GetValue<string>() == "user").Select(m => m["message"]!["content"]!.AsArray())];
+    }
+
+    [Fact]
     public async Task A_message_that_was_answered_is_not_sent_again()
     {
         await using var h = new TabTestHarness();

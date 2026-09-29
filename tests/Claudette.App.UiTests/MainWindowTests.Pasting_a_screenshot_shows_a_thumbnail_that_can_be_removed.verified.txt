@@ -1,0 +1,3 @@
+﻿[image] "Pasted image"
+[button] Remove image
+[field] "The walk takes half the screen"

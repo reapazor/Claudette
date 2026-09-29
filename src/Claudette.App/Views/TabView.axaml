@@ -107,7 +107,8 @@
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="protocol:MessageImage">
                 <Border Classes="thumbnail">
-                  <Image Source="{Binding Data, Converter={x:Static services:ImageFiles.Thumbnail}}" Height="72" MaxWidth="160" Stretch="UniformToFill" />
+                  <Image Source="{Binding Data, Converter={x:Static services:ImageFiles.Thumbnail}}" Height="72" MaxWidth="160" Stretch="UniformToFill"
+                         AutomationProperties.Name="Attached image" />
                 </Border>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -681,7 +682,7 @@
       <Border x:Name="ComposerBox" Classes="composer" Classes.bypass="{Binding IsBypassMode}" DragDrop.AllowDrop="True">
         <Grid RowDefinitions="Auto,Auto,Auto">
           <!-- Attached images, removable (DESIGN.md §5, "Attachments") -->
-          <ItemsControl ItemsSource="{Binding Attachments}" IsVisible="{Binding Attachments.Count}" Margin="0,4,0,2">
+          <ItemsControl x:Name="AttachmentList" ItemsSource="{Binding Attachments}" IsVisible="{Binding Attachments.Count}" Margin="0,4,0,2">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
                 <WrapPanel ItemSpacing="6" LineSpacing="6" />
@@ -691,7 +692,8 @@
               <DataTemplate DataType="vm:ComposerAttachment">
                 <Panel ToolTip.Tip="{Binding Name}">
                   <Border Classes="thumbnail">
-                    <Image Source="{Binding Data, Converter={x:Static services:ImageFiles.Thumbnail}}" Height="56" MaxWidth="120" Stretch="UniformToFill" />
+                    <Image Source="{Binding Data, Converter={x:Static services:ImageFiles.Thumbnail}}" Height="56" MaxWidth="120" Stretch="UniformToFill"
+                           AutomationProperties.Name="{Binding Name}" />
                   </Border>
                   <Button Classes="flat" Padding="4" Margin="3" HorizontalAlignment="Right" VerticalAlignment="Top" CornerRadius="9"
                           Background="{DynamicResource ComposerBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1"

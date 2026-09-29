@@ -1,10 +1,13 @@
 using System.Text.Json.Nodes;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
+using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
@@ -144,6 +147,80 @@ public class MainWindowTests
         Assert.DoesNotContain(h.Transport.Sent, m => m["type"]?.GetValue<string>() == "user");
         await Verify(listed);
     }
+
+    [AvaloniaFact]
+    public async Task Pasting_a_screenshot_shows_a_thumbnail_that_can_be_removed()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        var composer = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "Composer");
+        var strip = window.GetVisualDescendants().OfType<ItemsControl>().Single(c => c.Name == "AttachmentList");
+        Assert.False(strip.IsVisible);
+        h.Platform.ClipboardImage = Png;
+
+        composer.Focus();
+        window.KeyTextInput("The walk takes half the screen");
+        PressPaste(window);
+        await UiText.SettleUntilAsync(window, () => strip.IsVisible && strip.GetVisualDescendants().OfType<Image>().Any(), "the thumbnail");
+
+        var thumbnail = strip.GetVisualDescendants().OfType<Image>().Single();
+        Assert.IsType<Bitmap>(thumbnail.Source);
+        // Shown small whatever the image's size: 56 px high, at most 120 wide.
+        Assert.Equal(56, thumbnail.Bounds.Height);
+        Assert.True(thumbnail.Bounds.Width <= 120, $"The thumbnail is {thumbnail.Bounds.Width} px wide.");
+        Assert.Equal("The walk takes half the screen", composer.Text);
+        Assert.True(tab.SendCommand.CanExecute(null));
+        var shown = UiText.Describe(strip) + UiText.Describe(composer);
+
+        var remove = strip.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Remove image");
+        Click(window, remove);
+
+        Assert.Empty(tab.Attachments);
+        Assert.False(strip.IsVisible);
+        Assert.Empty(strip.GetVisualDescendants().OfType<Image>());
+        Assert.Equal("The walk takes half the screen", composer.Text);
+        // Verify resumes off the UI thread, so it comes last.
+        await Verify(shown);
+    }
+
+    [AvaloniaFact]
+    public async Task Pasting_text_that_comes_with_a_picture_of_it_pastes_the_text()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        var composer = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "Composer");
+        // The text box pastes text from the window's own clipboard; the tab looks at the fake one.
+        await window.Clipboard!.SetTextAsync("=SUM(A1:A3)");
+        await h.Platform.SetClipboardTextAsync("=SUM(A1:A3)");
+        h.Platform.ClipboardImage = Png;
+
+        composer.Focus();
+        PressPaste(window);
+        await UiText.SettleUntilAsync(window, () => composer.Text == "=SUM(A1:A3)", "the pasted text");
+
+        Assert.Empty(tab.Attachments);
+        // Paste on the text box's context menu calls the same method as the shortcut.
+        await h.Platform.SetClipboardTextAsync("");
+        composer.Paste();
+        await UiText.SettleUntilAsync(window, () => tab.Attachments.Count == 1, "the pasted image");
+        Assert.Equal("=SUM(A1:A3)", composer.Text);
+    }
+
+    /// <summary>The text box's own paste shortcut, as the platform defines it: Ctrl+V, or Cmd+V on macOS.</summary>
+    private static void PressPaste(Window window)
+    {
+        var paste = Application.Current!.PlatformSettings!.HotkeyConfiguration.Paste[0];
+        Assert.Equal(Key.V, paste.Key);
+        // KeyModifiers and RawInputModifiers use the same bits.
+        var modifiers = (RawInputModifiers)(int)paste.KeyModifiers;
+        window.KeyPressQwerty(PhysicalKey.V, modifiers);
+        window.KeyReleaseQwerty(PhysicalKey.V, modifiers);
+        UiText.Settle(window);
+    }
+
+    private static readonly byte[] Png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
 
     private static void Click(Window window, Control target)
     {

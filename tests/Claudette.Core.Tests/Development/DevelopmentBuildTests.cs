@@ -214,7 +214,7 @@ public class DevelopmentBuildTests
             CreatedAt = now,
             Tabs = [new TabState { Id = "t1", Folder = "/work/api", UserName = "refactor" }],
             SelectedTabId = "t1",
-            Drafts = { ["t1"] = new TabDraft("half-typed", ["clarify"]) },
+            Drafts = { ["t1"] = new TabDraft("half-typed", ["clarify"], [new DraftImage("Pasted image", [0x89, 0x50, 0x4E, 0x47])]), ["t2"] = new TabDraft("text only", []) },
             RunningTabIds = ["t1"],
             Window = new WindowPlacement(10, 20, 1200, 800, IsMaximized: false),
         }.Save(path);
@@ -225,6 +225,10 @@ public class DevelopmentBuildTests
         Assert.Equal("refactor", loaded.Tabs.Single().UserName);
         Assert.Equal("half-typed", loaded.Drafts["t1"].Text);
         Assert.Equal(["clarify"], loaded.Drafts["t1"].SuffixIds);
+        var image = Assert.Single(loaded.Drafts["t1"].Images!);
+        Assert.Equal("Pasted image", image.Name);
+        Assert.Equal([0x89, 0x50, 0x4E, 0x47], image.Data);
+        Assert.Null(loaded.Drafts["t2"].Images);
         Assert.Equal(["t1"], loaded.RunningTabIds);
         Assert.Equal(new WindowPlacement(10, 20, 1200, 800, false), loaded.Window);
         Assert.Null(RestartSnapshot.Load(path, "other", now));
