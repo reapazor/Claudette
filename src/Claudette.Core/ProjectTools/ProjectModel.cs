@@ -53,6 +53,12 @@ public sealed record ProjectAction(string Id, string Label, ProjectActionKind Ki
     /// <summary>Reads what a finished <see cref="ProjectActionKind.Run"/> job produced, for its status line.</summary>
     public Func<int, string?>? Summarize { get; init; }
 
+    /// <summary>
+    /// A file the job writes for <see cref="Summarize"/> to read, such as Unity's test results. It's deleted before the
+    /// job starts, so an old one is never read, and its folder is made.
+    /// </summary>
+    public string? ResultFile { get; init; }
+
     /// <summary>The command line, for the Project page and tooltips.</summary>
     public string? CommandText => Process is { } spec ? CommandLines.Display(spec) : null;
 

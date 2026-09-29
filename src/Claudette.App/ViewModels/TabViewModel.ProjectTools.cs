@@ -765,6 +765,12 @@ public sealed partial class TabViewModel
         ProjectJob job;
         try
         {
+            if (action.ResultFile is { } result)
+            {
+                // A fresh result each time, so the summary never reads an old one.
+                Directory.CreateDirectory(Path.GetDirectoryName(result)!);
+                File.Delete(result);
+            }
             job = _services.ProjectTools.StartJob(action.Label, spec);
         }
         catch (Exception ex) when (IsStartFailure(ex))

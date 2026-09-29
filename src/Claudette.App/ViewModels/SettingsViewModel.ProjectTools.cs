@@ -21,6 +21,8 @@ public sealed partial class SettingsViewModel
         new("Project tools", "Project files for"),
         new("Project tools", "Open solutions with"),
         new("Project tools", "Tell Claude about Unreal projects"),
+        new("Project tools", "Unity: default code optimization"),
+        new("Project tools", "Tell Claude about Unity projects"),
     ];
 
     public IReadOnlyList<SettingChoice<UnrealConfiguration>> UnrealConfigurationChoices { get; } =
@@ -106,6 +108,31 @@ public sealed partial class SettingsViewModel
         set => Set(value, v => _settings.ProjectTools.TellClaudeAboutUnreal = v);
     }
 
+    public IReadOnlyList<SettingChoice<UnityCodeOptimization>> UnityOptimizationChoices { get; } =
+    [
+        new(UnityCodeOptimization.Release, "Release"),
+        new(UnityCodeOptimization.Debug, "Debug (-debugCodeOptimization, for stepping through scripts)"),
+    ];
+
+    /// <summary>The code optimization a Unity project opens with until it's given its own in the chip menu.</summary>
+    public SettingChoice<UnityCodeOptimization> SelectedUnityOptimization
+    {
+        get => UnityOptimizationChoices.First(c => c.Value == _settings.ProjectTools.UnityCodeOptimization);
+        set
+        {
+            if (value is not null)
+            {
+                Set(value.Value, v => _settings.ProjectTools.UnityCodeOptimization = v);
+            }
+        }
+    }
+
+    public bool TellClaudeAboutUnity
+    {
+        get => _settings.ProjectTools.TellClaudeAboutUnity;
+        set => Set(value, v => _settings.ProjectTools.TellClaudeAboutUnity = v);
+    }
+
     /// <summary>Notifications → A project action finishes.</summary>
     public bool NotifyProjectActions
     {
@@ -124,5 +151,7 @@ public sealed partial class SettingsViewModel
         OnPropertyChanged(nameof(IsCustomIde));
         OnPropertyChanged(nameof(CustomIdePath));
         OnPropertyChanged(nameof(TellClaudeAboutUnreal));
+        OnPropertyChanged(nameof(SelectedUnityOptimization));
+        OnPropertyChanged(nameof(TellClaudeAboutUnity));
     }
 }

@@ -17,6 +17,13 @@ public enum ProjectFileFormat
     Xcode,
 }
 
+/// <summary>How Unity compiles scripts in the editor: Debug adds <c>-debugCodeOptimization</c> (DESIGN.md §18).</summary>
+public enum UnityCodeOptimization
+{
+    Release,
+    Debug,
+}
+
 /// <summary>What <b>Open solution</b> opens a solution or workspace with.</summary>
 public enum SolutionOpener
 {
@@ -48,6 +55,18 @@ public sealed class ProjectToolSettings
 
     /// <summary>Add a note about a detected Unreal project to Claude's system prompt.</summary>
     public bool TellClaudeAboutUnreal { get; set; } = true;
+
+    /// <summary>The code optimization a Unity project opens with until it's given its own in the chip menu.</summary>
+    public UnityCodeOptimization UnityCodeOptimization { get; set; } = UnityCodeOptimization.Release;
+
+    /// <summary>Add a note about a detected Unity project to Claude's system prompt.</summary>
+    public bool TellClaudeAboutUnity { get; set; } = true;
+
+    /// <summary>The Godot executable; null finds it (DESIGN.md §18, "Godot").</summary>
+    public string? GodotPath { get; set; }
+
+    /// <summary>Add a note about a detected Godot project to Claude's system prompt.</summary>
+    public bool TellClaudeAboutGodot { get; set; } = true;
 
     /// <summary>The format in effect on <paramref name="os"/>.</summary>
     public ProjectFileFormat FormatFor(ToolOS os) => ProjectFileFormat ?? DefaultFormat(os);

@@ -1109,7 +1109,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Quick suffixes | The list of suffixes: label, text and optional shortcut. Add, edit, reorder, delete. See [§5](#quick-suffixes). |
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
 | Diff tool | Built-in, a preset or a custom command, with **Test**. See [§8](#external-diff-tool). |
-| Project tools | Unreal's default editor configuration (Development or DebugGame). Project files for Visual Studio, VS Code or Xcode (the OS's own by default). Open solutions with the OS's app, Rider, Visual Studio, VS Code or another program (**Browse…**). Tell Claude about Unreal projects (on by default). See [§18](#project-tools). |
+| Project tools | Unreal's default editor configuration (Development or DebugGame). Project files for Visual Studio, VS Code or Xcode (the OS's own by default). Tell Claude about Unreal projects (on by default). Unity's default code optimization (Release or Debug), and Tell Claude about Unity projects (on by default). Open solutions with the OS's app, Rider, Visual Studio, VS Code or another program (**Browse…**). See [§18](#project-tools). |
 | Notifications | On/off for each type in [§10](#10-notifications), including **A project action finishes**. Dock/taskbar badge on/off. |
 | Keyboard | List of shortcuts, each one rebindable ([below](#keyboard-shortcuts)). |
 | Perforce | Off by default. Keep Perforce logins fresh. Password source. Renew-before time. Tickets for all hosts. Show changelist on tabs. The stored password (**Save** / **Forget**). Per-folder server and user. See [§18](#perforce-ticket-handling). |
@@ -1450,10 +1450,11 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **Still to verify:** installing an update on a real Windows and Mac, which needs signed packages from a published release.
 13. **Project tools.** ✅ Built 2026-09-29 ([§18](#project-tools)).
     - **Unreal Engine:** finding the project (in the folder, below and above it) and its engine (a parent folder, `LauncherInstalled.dat`, the registry, `Install.ini`, a chosen folder), Launch editor with Development or DebugGame per project, Generate project files, Build editor, Build and launch, Open solution with a chosen IDE, Open latest log, Clean intermediates and Kill all Unreal editors.
+    - **Unity:** the editor for the project's version from Unity Hub's folders and lists, Open in Unity with Release or Debug code optimization, EditMode tests with their counts, regenerating the C# solution, the solution and logs, Clean Library, Kill all Unity editors, and the lock file rules.
     - **The chip** in the composer bar, the project's submenu in the tab menu, the **Project** page with the job's output and Stop, the notification, and `Ctrl/Cmd+Shift+E`.
     - **claudette.json** and **claudette.local.json:** a folder's own actions (with trust for the shared file's commands) and links, the links in the sidebar, and the in-app editor.
-    - **Settings → Project tools**, and the note to Claude about Unreal projects.
-    - **Still to verify:** everything on a machine with Unreal installed, on Windows, macOS and Linux (see [§18](#project-tools)).
+    - **Settings → Project tools**, and the notes to Claude about Unreal and Unity projects.
+    - **Still to verify:** everything on machines with Unreal and Unity installed, on Windows, macOS and Linux (see [§18](#project-tools)).
 14. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features
@@ -1590,7 +1591,7 @@ A live view of what a tab's subagents are doing. When Claude fans work out to se
 
 ✅ Built 2026-09-29.
 
-A tab can do things for the project in its folder: launch the editor, generate project files, build, open the solution. Which things depends on the project. Unreal Engine is the first kind Claudette knows; a folder can also have its own actions and links, in a `claudette.json` beside the project.
+A tab can do things for the project in its folder: launch the editor, generate project files, build, open the solution. Which things depends on the project. Claudette knows Unreal Engine and Unity projects; a folder can also have its own actions and links, in a `claudette.json` beside the project.
 
 **Where the actions are.**
 
@@ -1677,6 +1678,37 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - It's about 550 characters for typical paths. The build command uses the project's configuration as the session starts.
   - The tab info card ([§4](#4-tabs--sessions)) gets a **Project** row: "NightOwl: Unreal Engine 5.4.2 · launcher install. Claude was told how to build it."
 
+**Unity.**
+
+- **Finding the project.** A folder with `ProjectSettings/ProjectVersion.txt` and `Assets/`, found as above. Its name is the folder's (the C# solution is named after it); `productName` and `companyName` from `ProjectSettings/ProjectSettings.asset` are shown and name the player log's folder.
+- **The version** is `m_EditorVersion` (`2022.3.20f1`), with the changeset from `m_EditorVersionWithRevision` when it's there. The chip shows `Unity 2022.3`.
+- **Finding the editor** for that exact version (`UnityEditors`). Only an editor that exists counts.
+  - A pick remembered for the project, from **Choose Unity editor…**: the executable, or a version's folder or `Unity.app` that holds it.
+  - Unity Hub's default folder: `C:\Program Files\Unity\Hub\Editor\<version>\Editor\Unity.exe`, `/Applications/Unity/Hub/Editor/<version>/Unity.app/Contents/MacOS/Unity`, `~/Unity/Hub/Editor/<version>/Editor/Unity`.
+  - Hub's custom install folder, `secondaryInstallPath.json` (a JSON string) in Hub's config folder: `%APPDATA%\UnityHub`, `~/Library/Application Support/UnityHub` or `~/.config/UnityHub`.
+  - Editors added to Hub by hand: `editors-v2.json` (`{ "data": [ { "version", "location" } ] }`) or the older `editors.json` (`{ "<version>": { "version", "location" } }`) in the same folder, read tolerantly; a location can be a string or a list.
+  - When the version isn't installed, the chip menu's header says so and offers **Choose Unity editor…**.
+- **Whether Unity has the project open.** `Temp/UnityLockfile` exists and a `Unity` process's command line names the project. A lock left by a crashed editor doesn't count. Where processes can't be listed, or a Unity process's command line can't be read, the lock file alone counts, since Unity refuses a locked project anyway.
+- **Actions.**
+  - **Open in Unity** (the main action), detached: `Unity -projectPath "<path>"`. The per-project radio **Code optimization: Release / Debug** (its default from Settings, Release) adds `-debugCodeOptimization` for Debug, and the label says "Open in Unity (Debug)". While the project is open it reads **Unity has this project open**, disabled.
+  - **Run EditMode tests**, a job: `Unity -batchmode -projectPath "<path>" -runTests -testPlatform EditMode -testResults "<results>" -logFile -`. Unity quits by itself when the tests are done. The results file is in Claudette's data folder (`project-jobs/`), deleted before each run; when the job ends, its status adds the counts from the NUnit XML: *"Run EditMode tests failed (exit code 2). 11 passed, 1 failed."*
+  - **Regenerate the C# solution**, a job: `Unity -batchmode -quit -projectPath "<path>" -executeMethod <method> -logFile -`. The method comes from the IDE package in `Packages/manifest.json`: `com.jetbrains.rider`'s `Packages.Rider.Editor.RiderScriptEditor.SyncSolution`, or `com.unity.ide.visualstudio`'s `Microsoft.Unity.VisualStudio.Editor.VisualStudioEditor.SyncAll`, which a project with the old `com.unity.ide.vscode` package also uses when it has it. Rider's comes first when Settings opens solutions with Rider. Without either package, it's disabled and says why.
+  - **Open solution**: `<FolderName>.sln` in the project's folder, disabled when missing, opened like Unreal's with the IDE from Settings.
+  - **Open Editor log**: `%LOCALAPPDATA%\Unity\Editor\Editor.log`, `~/Library/Logs/Unity/Editor.log` or `~/.config/unity3d/Editor.log`.
+  - **Open Player log**: `%USERPROFILE%\AppData\LocalLow\<company>\<product>\Player.log`, `~/Library/Logs/<company>/<product>/Player.log` or `~/.config/unity3d/<company>/<product>/Player.log`. Disabled when missing.
+  - **Clean Library…**, destructive: deletes `Library`, `Temp` and `obj` in the project, and nothing else. The confirmation warns that Unity reimports every asset next time, which can take a long while, and shows the size.
+  - **Kill all Unity editors…**, destructive: every `Unity` process (`Unity.exe` on Windows) and its tree, with the project from its `-projectPath`, as Unreal's. Not Unity Hub, and not Unity's own helpers such as `UnityShaderCompiler`, whose names differ.
+  - While Unity has the project open, EditMode tests, regenerating the solution and Clean are refused: "Unity has this project open, and locks it while it does: close the editor first."
+- **Telling Claude.** With **Tell Claude about Unity projects** on (the default):
+  > This is a Unity 2022.3.20f1 project, NightOwl, at /g/NightOwl.
+  > The editor is at /opt/Unity/Hub/Editor/2022.3.20f1/Editor/Unity.
+  > To run the EditMode tests, with the editor closed, run: /opt/Unity/Hub/Editor/2022.3.20f1/Editor/Unity -batchmode -projectPath /g/NightOwl -runTests -testPlatform EditMode -testResults /g/NightOwl/Logs/EditModeResults.xml -logFile -
+  > Library/, Temp/ and obj/ are generated: don't edit them.
+  > A .meta file must move and be renamed with its asset.
+  > Don't open the editor unless asked.
+
+> **Still to verify with Unity installed:** each Hub layout and file as Hub writes them; the lock file with a real editor; regenerating the solution with each IDE package in batch mode (the methods are the packages' public entry points, but running them with `-executeMethod` hasn't been tried); the results file of `-runTests`; and the logs' places on each OS.
+
 **claudette.json.** A folder's own actions and links are in two files in the tab's folder (only there; they aren't looked for elsewhere):
 
 - `claudette.json` is shared: committed with the project.
@@ -1731,9 +1763,10 @@ A tab can do things for the project in its folder: launch the editor, generate p
 - Project files for: Visual Studio, VS Code or Xcode. The default is Visual Studio on Windows, Xcode on macOS and VS Code on Linux.
 - Open solutions with: the OS's default app, Rider, Visual Studio, VS Code, or another program (with **Browse…**).
 - Tell Claude about Unreal projects: on by default.
+- Unity: the default code optimization, Release (the default) or Debug; a project's own choice wins. Tell Claude about Unity projects: on by default.
 - **Reset to defaults**, and search entries for each.
 
-**Testing.** No test runs a real engine: engines are a few files in temporary folders, the registry and running processes are fakes, and every process is a fake launcher's. `ProjectDiscoveryTests`, `UnrealEngineTests`, `UnrealCommandTests`, `CommandLineTests`, `UnrealProviderTests`, `ProjectJobTests` and `ProjectFileTests` in Core; `SystemProcessesTests` in Platform; `ProjectToolsTests` for the tab; and `ProjectToolsUiTests` for the rendered chip, its menu, the tab menu's submenu and the Links section.
+**Testing.** No test runs a real engine: engines are a few files in temporary folders, the registry and running processes are fakes, and every process is a fake launcher's. `ProjectDiscoveryTests`, `UnrealEngineTests`, `UnrealCommandTests`, `CommandLineTests`, `UnrealProviderTests`, `UnityProviderTests`, `ProjectJobTests` and `ProjectFileTests` in Core; `SystemProcessesTests` in Platform; `ProjectToolsTests` for the tab; and `ProjectToolsUiTests` for the rendered chip, its menu, the tab menu's submenu and the Links section.
 
 > **Still to verify on a machine with Unreal installed:**
 > - Launching the editor and building from a launcher install and a source build on Windows, macOS and Linux, including DebugGame and `-debug`.

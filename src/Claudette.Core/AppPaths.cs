@@ -38,6 +38,9 @@ public sealed record AppPaths(string DataDirectory, string SettingsDirectory)
     /// <summary>Where the new build says it has started.</summary>
     public string RestartReadyFile => Path.Combine(DataDirectory, "restart-ready");
 
+    /// <summary>Files project actions write for Claudette to read, such as Unity's test results (DESIGN.md §18).</summary>
+    public string ProjectJobsDirectory => Path.Combine(DataDirectory, "project-jobs");
+
     /// <summary>Downloaded Claudette releases, one folder per version (DESIGN.md §2, "Updating Claudette").</summary>
     public string UpdatesDirectory => Path.Combine(DataDirectory, "updates");
 

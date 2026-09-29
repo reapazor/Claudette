@@ -437,6 +437,39 @@ public class ProjectToolsTests
         await TabTestHarness.Eventually(() => !Entry(tab, "Kill all Unreal editors…").IsEnabled, "none left");
     }
 
+    // ---- Unity ---------------------------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task A_Unity_project_gets_its_chip_and_note_and_its_tests_report_their_counts()
+    {
+        var launcher = new FakeLauncher();
+        await using var h = new TabTestHarness(launcher: launcher);
+        h.Services.ProjectTools.OS = ToolOSExtensions.Current == ToolOS.Windows ? ToolOS.Windows : ToolOS.Linux;
+        h.Services.ProjectTools.Paths = new ProjectToolPaths(Path.Combine(h.Root, "home"), ProgramFiles: Path.Combine(h.Root, "programs"));
+        Write(Path.Combine(h.WorkFolder, "ProjectSettings", "ProjectVersion.txt"), "m_EditorVersion: 2022.3.20f1\n");
+        Directory.CreateDirectory(Path.Combine(h.WorkFolder, "Assets"));
+        var editor = OperatingSystem.IsWindows()
+            ? Path.Combine(h.Root, "programs", "Unity", "Hub", "Editor", "2022.3.20f1", "Editor", "Unity.exe")
+            : Path.Combine(h.Root, "home", "Unity", "Hub", "Editor", "2022.3.20f1", "Editor", "Unity");
+        Write(editor, "");
+
+        var tab = await OpenWithProjectAsync(h);
+
+        Assert.Equal("work · Unity 2022.3", tab.ProjectChipText);
+        Assert.StartsWith("This is a Unity 2022.3.20f1 project, work, at ", h.Factory.Launches.Single().AppendSystemPrompt, StringComparison.Ordinal);
+        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "run-editmode-tests"));
+        var spec = launcher.Started.Last();
+        Assert.Equal(editor, spec.FileName);
+        var results = Action(tab, "run-editmode-tests").ResultFile!;
+        Assert.StartsWith(h.Services.Paths.ProjectJobsDirectory, results, StringComparison.Ordinal);
+        Assert.True(Directory.Exists(Path.GetDirectoryName(results)));
+        File.WriteAllText(results, """<test-run total="12" passed="11" failed="1" skipped="0" />""");
+        launcher.Processes.Last().Exit(2);
+        await TabTestHarness.Eventually(() => tab.ProjectJobState == ProjectJobState.Failed, "the tests");
+
+        Assert.Equal("Run EditMode tests failed (exit code 2). 11 passed, 1 failed.", tab.ProjectJobStatus);
+    }
+
     // ---- Custom actions (claudette.json and claudette.local.json) ----------------------------------------------------------
 
     [Fact]

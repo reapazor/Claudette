@@ -12,7 +12,7 @@ namespace Claudette.App.Services;
 /// </summary>
 public sealed class ProjectToolsService(AppServices services, ISystemProcesses? processes, IUnrealEngineRegistry registry, ProjectToolPaths paths)
 {
-    public ProjectToolDetector Detector { get; } = new([new UnrealProvider()]);
+    public ProjectToolDetector Detector { get; } = new([new UnrealProvider(), new Core.ProjectTools.Unity.UnityProvider()]);
 
     /// <summary>Running processes by name; null when this machine can't tell.</summary>
     public ISystemProcesses? Processes { get; internal set; } = processes;
@@ -46,6 +46,7 @@ public sealed class ProjectToolsService(AppServices services, ISystemProcesses? 
         Probe = Probe,
         Shell = Shell,
         P4ConfigName = Environment.GetEnvironmentVariable("P4CONFIG"),
+        JobsDirectory = services.Paths.ProjectJobsDirectory,
     };
 
     /// <summary>Finds the project for <paramref name="folder"/>, off the UI thread.</summary>

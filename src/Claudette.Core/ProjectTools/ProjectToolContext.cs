@@ -27,7 +27,8 @@ public interface IProjectToolProvider
 /// <param name="LocalAppData"><c>%LOCALAPPDATA%</c> on Windows.</param>
 /// <param name="ProgramData"><c>%ProgramData%</c> on Windows, where the Epic launcher lists its installs.</param>
 /// <param name="ProgramFiles"><c>%ProgramFiles%</c> on Windows.</param>
-public sealed record ProjectToolPaths(string Home, string? AppData = null, string? LocalAppData = null, string? ProgramData = null, string? ProgramFiles = null)
+/// <param name="Applications">macOS's <c>/Applications</c>.</param>
+public sealed record ProjectToolPaths(string Home, string? AppData = null, string? LocalAppData = null, string? ProgramData = null, string? ProgramFiles = null, string Applications = "/Applications")
 {
     public static ProjectToolPaths ForCurrentUser()
     {
@@ -84,4 +85,7 @@ public sealed class ProjectToolContext
 
     /// <summary>The name of Perforce's config file (<c>P4CONFIG</c>), which marks a workspace's root like <c>.git</c>.</summary>
     public string? P4ConfigName { get; init; }
+
+    /// <summary>Where jobs can write files for Claudette to read afterwards, such as Unity's test results. In Claudette's data folder.</summary>
+    public string? JobsDirectory { get; init; }
 }
