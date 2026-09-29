@@ -156,6 +156,10 @@
     <Style Selector="Button.flat:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
     </Style>
+    <!-- Disabled, a flat button is just its muted text: Fluent's disabled background would draw a grey pill. -->
+    <Style Selector="Button.flat:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
     <Style Selector="Button.row">
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="HorizontalContentAlignment" Value="Left" />

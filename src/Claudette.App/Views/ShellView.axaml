@@ -328,7 +328,7 @@
             <!-- Links from the selected tab's claudette.json files (DESIGN.md §18, "Links") -->
             <StackPanel x:Name="LinksSection" Spacing="1" IsVisible="{Binding HasLinks}">
               <StackPanel Spacing="1" IsVisible="{Binding IsSidebarExpanded}">
-                <Button Classes="flat side" Command="{Binding ToggleLinksCommand}" AutomationProperties.Name="Links"
+                <Button Classes="flat side" Command="{Binding ToggleLinksCommand}" AutomationProperties.Name="Links" HorizontalContentAlignment="Stretch"
                         ToolTip.Tip="Links for this tab's folder, from its claudette.json" ToolTip.Placement="Right">
                   <DockPanel>
                     <Panel DockPanel.Dock="Right" VerticalAlignment="Center">
