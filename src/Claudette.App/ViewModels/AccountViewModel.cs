@@ -28,6 +28,9 @@ public sealed partial class AccountViewModel(AppServices services) : ViewModelBa
     [NotifyCanExecuteChangedFor(nameof(SignOutCommand))]
     public partial AuthStatus? Status { get; set; }
 
+    /// <summary>Whether this account can use Remote Control follows what <c>claude auth status</c> says (DESIGN.md §18).</summary>
+    partial void OnStatusChanged(AuthStatus? value) => services.RemoteControl.UseAccount(value);
+
     public bool IsSignedIn => Status is { LoggedIn: true };
 
     public bool IsSignedOut => !IsSignedIn;

@@ -175,6 +175,15 @@ public sealed class ClaudeCodeSettings
     /// started from a terminal (DESIGN.md §13, "Login shell environment").
     /// </summary>
     public bool UseLoginShellEnvironment { get; set; } = true;
+
+    /// <summary>
+    /// New tabs start with <see cref="TabState.RemoteControl"/> on, connected to the Claude app (DESIGN.md §18, "Remote
+    /// Control"). Off by default; it never changes open tabs.
+    /// </summary>
+    public bool ConnectNewTabsToClaudeApp { get; set; }
+
+    /// <summary>Keep the computer from sleeping while a tab is connected to the Claude app (DESIGN.md §18). The display can still sleep.</summary>
+    public bool KeepAwakeWhileConnected { get; set; } = true;
 }
 
 public sealed class NewTabSettings

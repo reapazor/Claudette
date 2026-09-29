@@ -54,6 +54,14 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
                 }
             };
         }
+        // Signing in with another account can make Remote Control available, or not (DESIGN.md §18).
+        _services.RemoteControl.AvailabilityChanged += () =>
+        {
+            foreach (var tab in AllTabs)
+            {
+                tab.OnRemoteControlAvailabilityChanged();
+            }
+        };
         _services.UsageHistoryCleared += (_, resetTabTotals) =>
         {
             if (resetTabTotals)
@@ -231,7 +239,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>
     /// Opens a new tab in <paramref name="folder"/> and selects it, which starts its session. Every way to a new tab
     /// comes here (the picker, a group's <c>+</c>, <c>--folder</c>, Open Recent, the jump list, a dropped folder), so
-    /// each starts syncing or not as Settings → Sessions says (DESIGN.md §9, "Session library").
+    /// each starts syncing or not as Settings → Sessions says (DESIGN.md §9, "Session library"), and connected to the
+    /// Claude app or not as Settings → Claude Code says (DESIGN.md §18, "Remote Control").
     /// </summary>
     public Task OpenFolderAsync(string folder)
     {
@@ -241,7 +250,12 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         var normalized = FolderHistory.Normalize(folder);
         FolderHistory.Touch(_services.State, normalized, _services.Time.GetUtcNow(), _services.Settings.NewTabs.RecentFolderLimit);
-        var state = new TabState { Folder = normalized, SyncToLibrary = _services.Settings.Sessions.SyncNewTabs };
+        var state = new TabState
+        {
+            Folder = normalized,
+            SyncToLibrary = _services.Settings.Sessions.SyncNewTabs,
+            RemoteControl = _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp,
+        };
         var tab = new TabViewModel(_services, this, state, isRestored: false);
         AddTab(tab);
         SelectedTab = tab;
@@ -375,7 +389,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         {
             _services.Library.Leases.Acquire(entry.SessionId, _services.Library.Library.GetSessionFolder(entry.SessionId));
         }
-        OpenSession(NewState(entry, folder, transcriptPath: null, fork));
+        OpenSession(NewState(entry, folder, transcriptPath: null, fork, _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp));
     }
 
     /// <summary>
@@ -436,7 +450,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         {
             library.Leases.Acquire(entry.SessionId, library.Library.GetSessionFolder(entry.SessionId));
         }
-        OpenSession(NewState(entry, folder, transcript, fork));
+        OpenSession(NewState(entry, folder, transcript, fork, _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp));
     }
 
     /// <summary>
@@ -472,7 +486,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         return picked;
     }
 
-    private static TabState NewState(HistoryEntry entry, string folder, string? transcriptPath, bool fork)
+    /// <param name="remoteControl">Settings → Claude Code → <b>Connect new tabs to the Claude app</b> (DESIGN.md §18).</param>
+    private static TabState NewState(HistoryEntry entry, string folder, string? transcriptPath, bool fork, bool remoteControl)
     {
         var record = entry.Record;
         var state = new TabState
@@ -486,6 +501,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             // A session someone synced keeps syncing wherever it's opened, a copy of one too; one that only ever lived
             // on this machine stays here (DESIGN.md §9, "Session library").
             SyncToLibrary = record is not null,
+            // A tab opened from History is a new tab here; the phone connection belongs to this machine, not the record.
+            RemoteControl = remoteControl,
         };
         if (record is not null)
         {

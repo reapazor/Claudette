@@ -13,8 +13,8 @@ public sealed class ProtocolDiagnostics
     /// </summary>
     private static readonly Dictionary<string, HashSet<string>> KnownFields = new(StringComparer.Ordinal)
     {
-        ["assistant"] = Fields("aborted", "error", "is_api_error_message", "message", "parent_tool_use_id", "session_id", "subagent_type", "task_description",
-            "timestamp", "type", "uuid"),
+        ["assistant"] = Fields("aborted", "error", "is_api_error_message", "local_command_outcome", "local_command_source", "message", "parent_tool_use_id",
+            "session_id", "subagent_type", "task_description", "timestamp", "type", "uuid"),
         ["user"] = Fields("isReplay", "isSynthetic", "message", "parent_tool_use_id", "session_id", "subagent_type", "task_description", "timestamp",
             "tool_result_meta", "tool_use_result", "type", "uuid"),
         ["result"] = Fields("api_error_status", "duration_api_ms", "duration_ms", "errors", "fast_mode_disabled_reason", "fast_mode_state",

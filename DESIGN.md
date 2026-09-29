@@ -187,7 +187,7 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
   - The full folder path and git branch.
   - Model and effort.
   - When the session started (for a resumed session, its transcript's first entry; saved with the tab), tokens used and context %.
-  - Later features add rows here: the Perforce login and changelist ([§18](#perforce-ticket-handling)), and the **Project** the tab's folder holds and whether Claude was told about it ([§18](#project-tools)), for example.
+  - Later features add rows here: the Perforce login and changelist ([§18](#perforce-ticket-handling)), the **Project** the tab's folder holds and whether Claude was told about it ([§18](#project-tools)), and the **Claude app** connection: connected at the session's address, connecting, or why not ([§18](#remote-control-the-claude-app)), for example.
   - **Agents**, while the tab has subagents: how many are running or waiting on you, or how they ended ([§18](#agent-map)).
   - The same card opens from an **ⓘ** button in the composer bar, for the selected tab.
 - **Token stats per tab.** Each tab keeps a running count of the tokens it has used:
@@ -211,6 +211,7 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
   - Closing a pinned tab asks *"This tab is pinned. Close and unpin it?"*
   - Unpinned tabs aren't restored unless **Also restore unpinned tabs** is on in Settings. See [§9](#restore-on-launch) for what's restored.
 - **Syncing.** **Sync to other machines** in the tab's right-click menu (a check item), or in its **Tab settings…**, turns copying the tab's session to the session library on or off ([§9](#session-library-sync-across-machines)). It's off for a new tab unless Settings → Sessions says otherwise. A tab that syncs shows a small sync icon in its row.
+- **The Claude app.** **Connect to the Claude app** in the tab's right-click menu (a check item), or in its **Tab settings…**, connects the tab to the Claude app with Remote Control whenever its session runs ([§18](#remote-control-the-claude-app)). It's off for a new tab unless Settings → Claude Code says otherwise. A connected tab shows a small phone icon in its row, and **Open in the Claude app** in its menu.
 - Keyboard: `Ctrl/Cmd+T` new tab, `Ctrl/Cmd+W` close, `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle, `Ctrl/Cmd+1…9` jump to a tab, `Ctrl/Cmd+B` collapse or expand the sidebar.
 
 ### Sidebar
@@ -218,14 +219,14 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
 The tabs are listed in a sidebar on the left of the window, rather than a strip across the top, so long session names, a status line and many tabs all fit.
 
 - **A tab's row** has two lines:
-  - The status icon, a pin icon if pinned, a sync icon if it syncs to the session library (muted, with the tip *"Synced to the session library"*), a gear while a process it started is busy ([Process monitor](#process-monitor)), and the name, cut short with an ellipsis if it doesn't fit. With **Show changelist on tabs** on, a `CL 12345` badge sits at the end of the line ([§18](#perforce-changelist-in-the-tab-title)).
+  - The status icon, a pin icon if pinned, a sync icon if it syncs to the session library (muted, with the tip *"Synced to the session library"*), a phone icon while it's connected to the Claude app (*"Connected to the Claude app"*, dimmed while it connects or reconnects; [§18](#remote-control-the-claude-app)), a gear while a process it started is busy ([Process monitor](#process-monitor)), and the name, cut short with an ellipsis if it doesn't fit. With **Show changelist on tabs** on, a `CL 12345` badge sits at the end of the line ([§18](#perforce-changelist-in-the-tab-title)).
   - The model and effort, or instead what needs attention: *Needs your input*, the error, or *Possibly stuck* when check-ins get no reply ([§5](#check-ins-on-long-turns)).
   - **Context ring.** A small ring at the end of the row, level with the second line and under the close button, fills up with the tab's context window ([§6](#per-tab-context)).
     - It's muted, amber when the context indicator warns (near auto-compact), and red from 95%.
     - Its tip is the composer bar's context text and detail, for example *"Context 75% (150,000 of 200,000 tokens · auto-compacts at 160,000)"*.
     - It's hidden until the tab has context data, so a tab that hasn't started has none. **Show context on tab rows** (Settings → Appearance, on by default) turns it off. The rail doesn't show it.
   - The close button shows on hover and on the selected tab. Hovering the row shows the tab info card; double-clicking renames it.
-- **A tab's menu** (right-click, in the full sidebar and the rail): Rename, Reset name, Pin, **Sync to other machines**, **Tab settings…**, the project's actions in a submenu named after the project (or **Add an action…** for a folder with none yet, [§18](#project-tools)), **Move up** and **Move down**, and Close.
+- **A tab's menu** (right-click, in the full sidebar and the rail): Rename, Reset name, Pin, **Sync to other machines**, **Connect to the Claude app** (disabled, with the reason as its tip, when the account can't use it) and **Open in the Claude app** while it's connected ([§18](#remote-control-the-claude-app)), **Tab settings…**, the project's actions in a submenu named after the project (or **Add an action…** for a folder with none yet, [§18](#project-tools)), **Move up** and **Move down**, and Close.
 - **Top:** **New tab**, which opens the picker ([Opening a tab](#opening-a-tab)), and the button that collapses the sidebar.
 - **Foot:** the selected tab's **Links**, from its folder's `claudette.json`, when it has any ([§18](#project-tools)), **History** ([§9](#history)), the Claude Code update badge when there is one ([§12](#applying-it)), the Claudette update badge when there's a new release ([§2](#updating-claudette)), **New build ready** when a source build of Claudette has a new build ([§9](#working-on-claudette)), and **Settings** ([§14](#14-settings)). Later features add their own entries here.
 - **Resizing.** Drag the sidebar's edge to make it wider or narrower (180 to 420 pixels; 248 by default). Double-click the edge for the default width. The width is remembered.
@@ -632,6 +633,7 @@ Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
 - When Claude Code suggests a mode switch instead of a rule (for a file edit it suggests `acceptEdits` for the session), the card offers **Allow all edits this session** in place of **Always allow**.
 - When Claude Code marks a request `suppressAlwaysAllowRule` (the rule would grant more than this request), **Always allow** isn't offered.
 - A prompt from inside a subagent names it (*"Asked by the Explore subagent: Find the auth code"*), and the agent map highlights that subagent ([§18](#agent-map)).
+- A prompt answered in the Claude app, on a tab connected with Remote Control, is withdrawn by Claude Code; its card closes and reads *"Answered in the Claude app"* ([§18](#remote-control-the-claude-app)).
 - A tab with a waiting prompt gets the "Needs input" status. If Claudette isn't focused or the tab isn't selected, it also sends an OS notification ([§10](#10-notifications)).
 - Keyboard: `Ctrl/Cmd+Enter` allows, `Ctrl/Cmd+Backspace` denies the oldest waiting prompt in the tab.
   - Not while typing in one of the prompt's own fields, and `Ctrl/Cmd+Backspace` still deletes a word in a field with text.
@@ -853,6 +855,8 @@ Native OS notifications (Windows toast, macOS User Notifications). Each type can
 
 Clicking a notification brings Claudette to the front and goes to the relevant tab or screen. Notifications are skipped when Claudette is focused and that tab is already selected. The Dock (macOS) and taskbar (Windows) show a badge with the number of tabs needing input.
 
+**Pushes to the phone.** Every `claude` Claudette starts gets `CLAUDE_CLIENT_PRESENCE_FILE`, naming `presence` in the data folder. The file exists only while Claudette's window is in front, so Claude Code's Remote Control pushes reach the phone only while you're away from Claudette ([§18](#remote-control-the-claude-app)).
+
 - **What each one says.** Tab notifications carry the tab's name as their title:
   - **Finished:** the first line of Claude's reply. Only a turn that ends normally counts; one you stopped, or that ended with an error, doesn't.
   - **Needs input:** what's waiting, such as *"Allow this command? npm test"*, *"Claude has a question: Which database?"* or *"Claude has a plan for you to review."* Perforce uses it too ([§18](#perforce-ticket-handling)): *"Perforce needs your password to log in as matt @ ssl:perforce:1666."*, or *"Perforce needs you to log in: run p4 login in a terminal, or log in with P4V."*
@@ -1023,7 +1027,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 
 - **Claudette.Core** has no UI dependencies, so it can be unit tested and could be reused by another front end. External diff tools live here rather than in Platform: they only look for files and start processes through `IProcessLauncher`. So does running a source build from a copy and restarting it into new builds ([§9](#working-on-claudette)), which is plain file copying and process starting on every OS.
 - **Claudette.Usage** holds the usage engine, with no UI: parsing, the SQLite history, the burn rate and projection, alerts and the polling schedule.
-- **Claudette.Platform** holds the OS-specific code: the process monitor, notifications with the Dock and taskbar badge ([§10](#10-notifications)), the OS credential store for a stored Perforce password ([§18](#perforce-ticket-handling)), the installers for Claudette's own updates: the MSIX update through `PackageManager` on Windows, and swapping `Claudette.app` on macOS ([§2](#updating-claudette)), and reading the login shell's environment ([below](#login-shell-environment)). Their interfaces, `ICredentialStore`, `IAppInstaller` and `ILoginShell`, are in Core, with the release feed, the downloader and `UserEnvironment`.
+- **Claudette.Platform** holds the OS-specific code: the process monitor, notifications with the Dock and taskbar badge ([§10](#10-notifications)), the OS credential store for a stored Perforce password ([§18](#perforce-ticket-handling)), the installers for Claudette's own updates: the MSIX update through `PackageManager` on Windows, and swapping `Claudette.app` on macOS ([§2](#updating-claudette)), reading the login shell's environment ([below](#login-shell-environment)), and keeping the computer awake while tabs are connected to the Claude app ([§18](#remote-control-the-claude-app)). Their interfaces, `ICredentialStore`, `IAppInstaller`, `ILoginShell` and `ISleepBlocker`, are in Core, with the release feed, the downloader and `UserEnvironment`.
   - `ClaudeSession` owns one `claude` process. It turns the output stream into typed events (`AssistantDelta`, `ToolUse`, `ToolResult`, `PermissionRequest`, `TurnCompleted`, `TitleChanged`, `UsageUpdated`, `RateLimit`, `AuthRequired`, `Exited`…), and exposes commands such as `SendAsync`, `InterruptAsync`, `RespondToPermissionAsync`, `SetModelAsync`, `SetEffortAsync` and `SetPermissionModeAsync`.
 - **Threading.** Each session reads its process on a background task. Events go to the UI thread through a channel, and streaming text is batched so the UI isn't updated for every token.
 - **Resilience.** If a process exits unexpectedly, the tab shows an error with a **Restart** button that resumes the same session ID.
@@ -1092,6 +1096,7 @@ The `system/init` message that follows gives `session_id`, `model`, `permissionM
 | Plan usage limits | `get_usage` ([§6](#data-source)) | **No** (marked experimental) |
 | Sign-in | `claude_authenticate`, `claude_oauth_wait_for_completion`, `claude_oauth_callback` ([§11](#signing-in)) | **No** |
 | Session title | `generate_session_title`, `rename_session` (below) | **No** |
+| Remote Control | `remote_control` with `enabled` and `name`; `system/bridge_state` reports the connection, and `system/worker_shutting_down` its end ([§18](#remote-control-the-claude-app)) | **No** (`worker_shutting_down` yes) |
 | Resume | `--resume <session-id>`, or `--resume <path to a .jsonl>` ([§9](#session-library-sync-across-machines)) | Yes |
 | Feature detection | The `capabilities` array on `system/init`. Check this instead of comparing version numbers. | Yes |
 
@@ -1197,7 +1202,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | General | Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. Claudette's version and updates: check for updates automatically (on by default), include pre-releases (off), **Check now**, and the update's actions. See [Updating Claudette](#updating-claudette). |
 | Sessions | Also restore unpinned tabs on launch (off by default; pinned tabs are always restored). Session library folder (with **Browse…** and **Move library…**, which copies existing sessions to the new folder). Sync new tabs to the session library (off by default; each tab can be switched with **Sync to other machines** in its menu). Name for this machine, as shown in History. How long to keep sessions in the library. Sync Claudette's settings through the library (off by default). See [§9](#session-library-sync-across-machines) and [Settings sync](#settings-sync-optional). |
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
-| Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. Use my login shell's environment (macOS and Linux only, on by default; [§13](#login-shell-environment)). |
+| Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. Use my login shell's environment (macOS and Linux only, on by default; [§13](#login-shell-environment)). **Claude app (Remote Control)**: Connect new tabs to the Claude app (off by default; each tab has its own switch), with what it does, the privacy note and how to get pushes on the phone, and Keep this computer awake while tabs are connected (on by default). Disabled, with the reason, when the account can't use it ([§18](#remote-control-the-claude-app)). |
 | New tabs | Default model, effort level and permission mode. The model and effort lists are what Claude Code offered in its last `initialize` reply on this machine (the models and each one's effort levels, kept with the machine's state), with a built-in list only until a session has started; Tab settings… lists them the same way. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (**Add folder…**, **Move up**, **Move down**, **Remove**), in the order the new tab picker shows them. See [Opening a tab](#opening-a-tab). |
 | Appearance | Theme: follow system, light or dark. Style: Standard (the default) or Claude, the Claude apps' look ([Visual style](#visual-style)). Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. Show fun words while Claude works, and show what Claude is doing while it works (both on by default; [Working line](#working-line)). **Detailed usage header** (off by default): the same switch as the header's chevron, kept on this machine rather than synced ([Detailed header](#detailed-header)). Show context on tab rows (on by default; [§4](#sidebar)). **Density**: Comfortable (the default) or Compact, which tightens the conversation's spacing, message and card padding and tool rows, the sidebar's rows, and the composer's padding. It applies at once and syncs with the other Appearance settings. |
 | Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
@@ -1237,7 +1242,7 @@ The foot of the Settings sidebar shows which Claudette this is, on every page: "
 
 Some settings can be changed for a single tab from the tab's right-click menu, under **Tab settings…**: model, effort level, permission mode, the process monitor ([§4](#process-monitor)), and the check-in settings. **Tab settings…** also edits the folder's custom project actions in its `claudette.json` files ([§18](#project-tools)); they belong to the folder, not the tab, and **Use defaults** leaves them alone. A tab with overrides shows a small dot next to its settings entry, and **Use defaults** clears them. Overrides are saved with the tab.
 
-**Tab settings…** also has **Sync to other machines** ([§9](#session-library-sync-across-machines)), the same switch as the tab menu's. It isn't an override: the new-tab setting only applies when a tab opens, **Use defaults** leaves it as it is, and it doesn't count toward the dot.
+**Tab settings…** also has **Sync to other machines** ([§9](#session-library-sync-across-machines)) and **Connect to the Claude app** ([§18](#remote-control-the-claude-app)), the same switches as the tab menu's. Neither is an override: the new-tab settings only apply when a tab opens, **Use defaults** leaves them as they are, and they don't count toward the dot.
 
 ### Storage
 
@@ -1250,7 +1255,7 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 **Sync settings through the session library** (Settings → Sessions, off by default) keeps Claudette's settings the same on every machine that uses the same library folder ([§9](#session-library-sync-across-machines)).
 
 - **What syncs:** appearance, new-tab defaults, usage thresholds, check-ins, quick suffixes, notifications, keyboard shortcuts and process monitor options.
-- **What stays on each machine:** the path to `claude`, the login shell setting, this machine's name, the library folder itself, the diff tool and Settings → Project tools (program paths and installed IDEs differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, the sidebar's and the usage header's collapsed or detailed state, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
+- **What stays on each machine:** the path to `claude`, the login shell setting, the Claude app settings, this machine's name, the library folder itself, the diff tool and Settings → Project tools (program paths and installed IDEs differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, the sidebar's and the usage header's collapsed or detailed state, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
 - The synced settings are stored as one file in the library. Each setting keeps the time it was last changed, and the newest change wins, so edits on two machines don't overwrite each other wholesale.
 - The first time sync is turned on and the library already has settings from another machine, Claudette asks: **Use synced settings** or **Replace them with this machine's**.
 - Turning sync off keeps the current values on this machine and stops syncing.
@@ -1435,7 +1440,7 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
 - A line that fails to parse never ends a session. It's logged, and Claudette moves on.
 - With protocol logging on, a skipped message appears in the conversation as a collapsed *"Unsupported message from Claude Code"* row that shows the raw JSON.
 - Features are detected with the `capabilities` list from `system/init`, not by comparing version numbers.
-- Settings → Advanced has a **Diagnostics** page. It shows the Claude Code version, counts of unknown messages and fields seen, and whether the login shell's environment was used ([§13](#login-shell-environment)), and has **Copy diagnostics** for bug reports.
+- Settings → Advanced has a **Diagnostics** page. It shows the Claude Code version, counts of unknown messages and fields seen, whether the login shell's environment was used ([§13](#login-shell-environment)), and whether the computer is being kept awake for tabs connected to the Claude app, or why not ([§18](#remote-control-the-claude-app)), and has **Copy diagnostics** for bug reports.
 
 ### Handling a report
 
@@ -1571,11 +1576,23 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **claudette.json** and **claudette.local.json:** a folder's own actions (shared ones run on a click, without a confirmation) and links, the links in the sidebar, and the in-app editor.
     - **Settings → Project tools**, and the notes to Claude about Unreal, Unity and Godot projects.
     - **Still to verify:** everything on machines with Unreal, Unity and Godot installed, on Windows, macOS and Linux (see [§18](#project-tools)).
-14. **Later.** New features go in [§18](#18-future-features) first.
+14. **Remote Control.** ✅ Built 2026-09-29 ([§18](#remote-control-the-claude-app)).
+    - **The switch:** **Connect to the Claude app** per tab, in its menu and **Tab settings…**, saved with the tab so it reconnects after restarts; **Connect new tabs to the Claude app** in Settings → Claude Code; disabled with the reason for an account that can't use it.
+    - **Connecting:** the `remote_control` control request, as SDK hosts send it, right after the session starts and before any prompt, or when the running turn ends; `enabled: false` to disconnect, with a restart on the same session when that fails; the hidden `/remote-control` command as the fallback for a Claude Code without the request.
+    - **What the tab shows:** the connection from the answer, `bridge_state` and `worker_shutting_down`; a note with the session's link, a phone icon on the row, the info card's **Claude app** row, and **Open in the Claude app**; prompts answered in the app read *"Answered in the Claude app"*.
+    - **Around it:** `CLAUDE_CLIENT_PRESENCE_FILE` for every `claude`, present while Claudette is in front; keeping the computer awake while a tab is connected (Windows, macOS, Linux); the Diagnostics line.
+    - **Still to verify** (needs a claude.ai subscription, a phone and the Claude app; nothing here has connected for real):
+      - A real connection: the answer's `session_url` and `connect_url`, the `bridge_state` sequence (ready, connected, reconnecting), and the session showing in the Claude app under the tab's name.
+      - The connected answer's exact content, and whether the session's title follows a later rename (`rename_session`) or an AI title.
+      - A permission prompt, question and plan answered on the phone closing their cards here.
+      - Push delivery to the phone, and the presence file holding pushes off while Claudette is in front.
+      - `enabled: false` disconnecting cleanly, and a restarted or restored tab reconnecting.
+      - Keeping the computer awake on real Windows, macOS and Linux machines (the Windows call and `caffeinate` only run in CI).
+15. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features
 
-Features beyond v1. All four below are built (milestones 10, 11 and 13); new ones go here first, each with a fuller design before it's built.
+Features beyond v1. All five below are built (milestones 10, 11, 13 and 14); new ones go here first, each with a fuller design before it's built.
 
 ### Perforce ticket handling
 
@@ -1922,6 +1939,65 @@ A tab can do things for the project in its folder: launch the editor, generate p
 > - That Stop ends UnrealBuildTool and its compilers, and the process monitor lists them.
 > - Opening a `.xcworkspace` and each IDE for real.
 > - The editor-open warning, and Kill all Unreal editors, with real editors on each OS (on macOS, reading their command lines through `ps`).
+
+### Remote Control (the Claude app)
+
+✅ Built 2026-09-29.
+
+A tab can be used from the Claude app on a phone, or at claude.ai/code, while Claudette keeps running it on this computer: at home on the desk, say, with the phone on the couch. Claude Code's [Remote Control](https://code.claude.com/docs/en/remote-control) does the work. The tab's `claude` connects out to claude.ai over HTTPS (no inbound ports), and the app shows the conversation, sends messages and answers prompts, while every tool keeps running here. The phone can get a push when a tab needs an answer.
+
+- **Why per tab.** Claude Code gives each `claude` process one remote session, and Claudette runs one process per tab, so each tab is its own session in the app. While a tab is connected, its transcript is stored on Anthropic's servers, so connecting is a choice each tab makes; it's off unless the user turns it on.
+- **The switch.**
+  - **Connect to the Claude app** in the tab's menu (a check item) and in **Tab settings…** ([§4](#4-tabs--sessions)). It's `TabState.RemoteControl`, saved with the tab and in restart snapshots, so a connected tab reconnects by itself whenever its session starts: restored, resumed, or restarted after a sign-in or into a new build. It's the tab's own state like **Sync to other machines**, not an override, so **Use defaults** leaves it.
+  - Turning it on connects straight away, or when the running turn ends; a tab that isn't running connects when it starts. Turning it off disconnects the same way.
+- **Settings → Claude Code → Claude app (Remote Control)**, kept on this machine and not synced, like the rest of the category:
+  - **Connect new tabs to the Claude app** (off by default) sets the switch for tabs opened afterwards (the picker, History, `--folder`), like **Sync new tabs**. Turning it on or off never changes open tabs.
+  - What it does, the privacy note, and that it needs a claude.ai subscription sign-in.
+  - How to get pushes: turn on **Push when actions required** (`inputNeededNotifEnabled`), and if you like **Push when Claude decides** (`agentPushNotifEnabled`), in Claude Code's `/config`, with a link to the docs' [mobile push notifications](https://code.claude.com/docs/en/remote-control#mobile-push-notifications). Claudette doesn't edit `~/.claude/settings.json` for them.
+  - **Keep this computer awake while tabs are connected** (on by default; see "Keeping the computer awake" below).
+- **An account that can't use it.** From `claude auth status` and the environment Claudette gives `claude`: signed in with an API key or an API key helper, through a cloud provider (`authMethod` `third_party`, or an `apiProvider` other than `firstParty`), or with `ANTHROPIC_BASE_URL` pointing somewhere other than `api.anthropic.com`. The setting and every tab's switch are disabled then, with the reason, and a tab whose switch is on says why and doesn't ask; it can still be turned off. Claude Code checks everything else itself when a tab connects (the plan, an organization's policy, feature flags), and the tab shows its reason.
+
+**How a tab connects.** Confirmed against Claude Code 2.1.284 with the mock Messages API; a real connection hasn't been made yet (below).
+
+- **The request.** As SDK hosts such as the VS Code extension do, Claudette sends the `remote_control` control request right after `initialize`, before any prompt goes out: `{"subtype":"remote_control","enabled":true,"name":"<the tab's name>"}`. The name becomes the session's title in the app.
+  - Claude Code runs its eligibility checks, registers the session with claude.ai and answers with `session_url`, `connect_url`, `environment_id`, `bridge_session_id` and `bridge_epoch`. Claudette uses `session_url` (else `connect_url`) and ignores the rest.
+  - When it can't connect, the answer is an error with Claude Code's reason. Against the mock that's *"Remote Control is only available when using Claude via api.anthropic.com. ANTHROPIC_BASE_URL is set…"*.
+  - `{"subtype":"remote_control","enabled":false}` disconnects, and the session carries on here. If that fails, Claudette restarts the tab's `claude` on the same session (the conversation carries on) with the switch off, so it doesn't connect again.
+- **Why not `/remote-control`.** The docs have VS Code users type `/remote-control`, but the extension sends the request above. Sent as a message in `-p` mode, 2.1.284 answers the command locally with *"/remote-control isn't available in this environment."*, whatever the account: the reply's `local_command_outcome.kind` is `unavailable_headless`, "an interactive-panel command this session cannot open". The `--remote-control` flag is accepted and does nothing visible in `-p` mode.
+- **Undocumented, so there's a fallback.** A Claude Code that rejects the request as unsupported (*"Unsupported control request subtype: remote_control"*) gets `/remote-control <the tab's name>` instead, as a message of its own, sent only while Claude isn't working so the next turn to end is its answer. It isn't shown as something the user sent, and its reply is shown as a note rather than a reply, read tolerantly: a claude.ai/code address means connected; *isn't available*, *requires*, *disabled* and the like mean not available, with the reply as the reason; anything else counts as connected, with the reply as the note. With 2.1.284 the fallback only says why the tab isn't connected.
+- **What Claude Code reports afterwards.**
+  - `system/bridge_state` (undocumented), with `state` and `detail`: `ready` and `connected` bring a dropped connection back; `reconnecting` keeps the tab connected, with its icon dimmed; `failed` disconnects it, with the reason; `policy_disabled` makes it not available. A state Claudette doesn't know changes nothing.
+  - `system/worker_shutting_down` (documented): a connected tab is disconnected, with its reason (`host_exit`, `remote_control_disabled`…). One that arrives while the tab isn't connected is ignored, since a resumed session can replay old ones.
+  - The process exiting disconnects the tab.
+
+**States.** Not connected, Connecting, Connected (with the session's address, when Claude Code gave it) and Not available (with Claude Code's reason). What the tab shows:
+
+- A note in the conversation: *"Connected to the Claude app."* with the session's address as a link, or *"Couldn't connect to the Claude app: <reason>"*, *"Disconnected from the Claude app."* and so on.
+- A phone icon on the tab's row while it's connected, dimmed while it connects or reconnects, with the tip *"Connected to the Claude app"* ([§4](#sidebar)).
+- A **Claude app** row on the tab info card: *"Connected: <address>"*, *"Connecting…"*, *"Connects when Claude finishes this turn"*, *"Connects when the tab starts"*, or why it isn't connected.
+- **Open in the Claude app** in the tab's menu while it's connected with an address. It opens the session at claude.ai/code in the browser; on a phone, the same link opens the app.
+- **Renaming.** A rename still goes to Claude Code as `rename_session` when **Also rename the session in Claude Code** is on ([§13](#integration-with-claude-code)). The docs say the remote title follows `/rename`, but also that a name given when connecting comes first, and the tab gives one; which wins hasn't been seen yet.
+
+**Prompts answered on the phone.** When the app answers a permission prompt, question or plan, Claude Code 2.1.284 withdraws Claudette's copy with a `control_cancel_request` for its `can_use_tool` request (from its source: the app's answer is injected as if Claudette had answered). The card closes, and reads *"Answered in the Claude app"* while the tab is connected and Claudette didn't stop the turn or a subagent itself; otherwise *"No longer needed"*, as before. It isn't an error: the tab's *Needs input* status and notification go. Permission prompts and questions have no deadline; `dialogExpiry` only governs other dialogs Claude Code forwards.
+
+**Pushes and the presence file.** Claude Code pushes to the phone when the user turned that on in `/config` (above). It skips pushes while the file named by `CLAUDE_CLIENT_PRESENCE_FILE` exists, so every `claude` Claudette starts (tabs, the utility session, `auth`, `--version`, `update`) gets it, naming `presence` in the data folder (`AppPaths.PresenceFile`). Claudette creates the file while its main window is active and deletes it when the window isn't, at exit, and at launch (one left by a Claudette that didn't close cleanly). So the phone buzzes only when you're away from Claudette. Claudette's own OS notifications ([§10](#10-notifications)) are unchanged.
+
+**Keeping the computer awake.** A sleeping computer can't be reached from the phone, so while at least one tab is connected and **Keep this computer awake while tabs are connected** is on, Claudette holds off system sleep. The display can still sleep. It lets go when no tab is connected, when the setting is turned off, and at exit. `ISleepBlocker` in Core; the implementations are in `Claudette.Platform/Power`:
+
+- **Windows:** `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` on a thread of its own that lives until Claudette closes, since the state belongs to the thread that set it; `ES_CONTINUOUS` alone clears it.
+- **macOS:** `caffeinate -i -w <Claudette's pid>` through `IProcessLauncher`, ended to let go. `-w` ends it with Claudette, even one that crashed.
+- **Linux:** `systemd-inhibit --what=sleep --who=Claudette --why="Tabs are connected to the Claude app" --mode=block sleep infinity`, ended to let go. Without `systemd-inhibit`, nothing is kept awake. A helper that stops by itself (logind refusing, say) no longer blocks anything. A Claudette that's killed rather than closed leaves it running, as it does the tabs' processes ([§4](#process-monitor)).
+- Diagnostics (Settings → Advanced) says how many tabs are connected and whether the computer is being kept awake, or why not.
+
+**Requirements.** From the docs: a claude.ai subscription (Pro, Max, Team or Enterprise; on Team and Enterprise an Owner turns Remote Control on), signed in through claude.ai with a full-scope login. Not an API key, `ANTHROPIC_AUTH_TOKEN`, a long-lived token from `claude setup-token`, Bedrock, Google Cloud or Foundry, a custom `ANTHROPIC_BASE_URL`, or `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`. Claudette checks what it can know beforehand, and Claude Code's own answer covers the rest.
+
+**Privacy.** While a tab is connected, its transcript (messages, replies and tool activity) is stored on Anthropic's servers, under the same data usage policy. Execution and files stay on this computer. That's why the switch is per tab and off by default, and the setting says so.
+
+**Code.** `Claudette.Core/RemoteControl` (the request and its replies, eligibility, the presence file, `ISleepBlocker`), `ClaudeSession.EnableRemoteControlAsync` and `DisableRemoteControlAsync`, `Services/RemoteControlService.cs` (eligibility, the presence file and keeping awake, shared by the tabs), and `TabViewModel.RemoteControl.cs`.
+
+**Tests.** `RemoteControlProtocolTests` in Core (the wire format, replies, states and eligibility); `SleepBlockerTests` in Platform (fakes, the process mechanics with a harmless `sleep`, and the Windows call and `caffeinate` on their own OS); `RemoteControlTests` for the tab with the scripted transport (the switch, connecting before any prompt, the fallback, `bridge_state`, `worker_shutting_down`, the restart, restoring, eligibility, prompts answered in the app, the presence file and keeping awake); `RemoteControlUiTests` for the rendered menu, row icon, Tab settings and Settings block; and the RealCli tests: the real `claude` answering `remote_control` with its eligibility check and `/remote-control` with *"isn't available"* (`RealCliTests`), and a tab whose switch is turned on ending *Not available* with the reason (`RemoteControlRealCliTests`). No test connects for real.
+
+> **Not yet tried for real** (needs a claude.ai subscription, a phone and the Claude app): a real connection and what its answer and `bridge_state` messages hold; the session's title in the app, and whether it follows renames; prompts answered on the phone closing their cards here; pushes arriving, and the presence file holding them off; disconnecting with `enabled: false`; a restarted or restored tab reconnecting to a new session in the app; and keeping real Windows, macOS and Linux machines awake. A later version could pass `bridge_session_id` back as `reattach_session_id` so a restarted tab keeps its session in the app.
 
 ## 19. Open Questions
 

@@ -120,8 +120,9 @@ public sealed partial class QuickSuffixEditor(QuickSuffix suffix, Action changed
 /// <summary>
 /// The Settings window (DESIGN.md §14). Changes apply immediately; there's no Save button. Categories for later
 /// milestones (usage, diff tool, notifications, processes, keyboard, Perforce) arrive with those milestones.
+/// Dispose it when the window closes.
 /// </summary>
-public sealed partial class SettingsViewModel : ViewModelBase
+public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 {
     public static readonly IReadOnlyList<string> AllCategories =
         ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Project tools", "Notifications", "Keyboard", "Perforce", "Advanced"];
@@ -146,7 +147,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
         LoadFavorites();
         SelectedCategory = AllCategories[0];
         FillPerforceLogin();
+        // Signing in from this window can make the Claude app available, or not (DESIGN.md §18).
+        _services.RemoteControl.AvailabilityChanged += OnRemoteControlAvailabilityChanged;
     }
+
+    public void Dispose() => _services.RemoteControl.AvailabilityChanged -= OnRemoteControlAvailabilityChanged;
 
     public IReadOnlyList<string> Categories => AllCategories;
 
@@ -179,6 +184,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Claude Code", "Sign out"),
         new("Claude Code", "Path to claude"),
         .. LoginShellSearchEntries(),
+        new("Claude Code", "Connect new tabs to the Claude app (Remote Control)"),
+        new("Claude Code", "Push notifications on your phone"),
+        new("Claude Code", "Keep this computer awake while tabs are connected"),
         new("New tabs", "Default model"),
         new("New tabs", "Default effort"),
         new("New tabs", "Default permission mode"),
@@ -391,6 +399,46 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     private static IEnumerable<SettingsSearchResult> LoginShellSearchEntries() =>
         ShowLoginShellSetting ? [new("Claude Code", "Use my login shell's environment")] : [];
+
+    // ---- The Claude app (DESIGN.md §18, "Remote Control") --------------------------------------------------------
+
+    /// <summary>The docs' steps for pushes to the phone. Claudette doesn't change Claude Code's settings for them.</summary>
+    public const string PushNotificationsDocs = "https://code.claude.com/docs/en/remote-control#mobile-push-notifications";
+
+    /// <summary>
+    /// <b>Connect new tabs to the Claude app</b>: the switch new tabs start with, like <b>Sync new tabs</b>. Open tabs
+    /// keep theirs; each has <b>Connect to the Claude app</b> in its menu.
+    /// </summary>
+    public bool ConnectNewTabsToClaudeApp
+    {
+        get => _settings.ClaudeCode.ConnectNewTabsToClaudeApp;
+        set => Set(value, v => _settings.ClaudeCode.ConnectNewTabsToClaudeApp = v);
+    }
+
+    /// <summary><b>Keep this computer awake while tabs are connected</b>: system sleep only; the display can still sleep.</summary>
+    public bool KeepAwakeWhileConnected
+    {
+        get => _settings.ClaudeCode.KeepAwakeWhileConnected;
+        set => Set(value, v => _settings.ClaudeCode.KeepAwakeWhileConnected = v);
+    }
+
+    /// <summary>The account can use Remote Control. When it can't, the setting and the tabs' switches are disabled.</summary>
+    public bool CanUseRemoteControl => _services.RemoteControl.IsAvailable;
+
+    /// <summary>Why the account can't use Remote Control, from <c>claude auth status</c> and the environment.</summary>
+    public string? RemoteControlUnavailableText => _services.RemoteControl.UnavailableReason is { } reason ? $"Not available: {reason}" : null;
+
+    public bool HasRemoteControlUnavailableText => RemoteControlUnavailableText is not null;
+
+    [RelayCommand]
+    private Task OpenPushNotificationsDocsAsync() => _services.Platform.OpenUrlAsync(PushNotificationsDocs);
+
+    private void OnRemoteControlAvailabilityChanged()
+    {
+        OnPropertyChanged(nameof(CanUseRemoteControl));
+        OnPropertyChanged(nameof(RemoteControlUnavailableText));
+        OnPropertyChanged(nameof(HasRemoteControlUnavailableText));
+    }
 
     /// <summary>Null (empty) finds Claude Code automatically. Takes effect the next time Claudette starts.</summary>
     public string ClaudePath
@@ -1247,6 +1295,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>Whether the login shell's environment is used, which shell and how long it took, or why not. Never values.</summary>
     public string LoginShellText => _services.UserEnvironment.Describe();
 
+    /// <summary>Whether the computer is kept awake for tabs connected to the Claude app, or why not (DESIGN.md §18).</summary>
+    public string KeepAwakeText => _services.RemoteControl.DescribeKeepAwake();
+
     /// <summary>What Claude Code has sent this run that Claudette doesn't know, in words.</summary>
     public string DiagnosticsText => DiagnosticsReport(includeHeader: false);
 
@@ -1256,6 +1307,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         OnPropertyChanged(nameof(DiagnosticsText));
         OnPropertyChanged(nameof(InstalledVersionText));
         OnPropertyChanged(nameof(LoginShellText));
+        OnPropertyChanged(nameof(KeepAwakeText));
     }
 
     [RelayCommand]
@@ -1273,6 +1325,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
             lines.Add($"Claude Code: {InstalledVersionText}{(_services.Install is { } install ? $" at {install.Path}" : "")}");
             lines.Add($"Minimum supported Claude Code: {MinimumVersionText}");
             lines.Add($"Login shell environment: {LoginShellText}");
+            lines.Add($"Claude app (Remote Control): new tabs {(ConnectNewTabsToClaudeApp ? "connect" : "don't connect")}; "
+                + (RemoteControlUnavailableText ?? "available for this account") + ".");
+            lines.Add($"Keeping the computer awake: {KeepAwakeText}");
             lines.Add($"Protocol logging: {(LogProtocol ? "on" : "off")}");
             lines.Add("");
         }

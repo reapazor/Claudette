@@ -112,10 +112,14 @@ public sealed class NotificationService : IDisposable
         }
     }
 
-    /// <summary>Claudette's window came to the front or went to the back.</summary>
+    /// <summary>
+    /// Claudette's window came to the front or went to the back. The presence file follows it, so Remote Control pushes
+    /// to the phone only while the user is away from Claudette (DESIGN.md §10).
+    /// </summary>
     public void SetAppActive(bool active)
     {
         IsAppActive = active;
+        _services.RemoteControl.SetAppActive(active);
         if (active && SelectedTabId() is { } selected)
         {
             ClearTab(selected);

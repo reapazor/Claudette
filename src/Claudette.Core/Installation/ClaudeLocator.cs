@@ -27,7 +27,12 @@ public sealed record ClaudeLocateResult(ClaudeInstall? Install, ClaudeInstallPro
 /// The user environment: its <c>PATH</c> is searched and <c>claude --version</c> runs with it. Waiting for it is how
 /// the first <c>claude</c> start waits for the login shell (DESIGN.md §13, "Login shell environment").
 /// </param>
-public sealed partial class ClaudeLocator(IProcessLauncher launcher, TimeProvider timeProvider, UserEnvironment? environment = null)
+/// <param name="environmentOverrides">Applied on top of the cleaned environment of <c>claude --version</c>, as for every <c>claude</c>.</param>
+public sealed partial class ClaudeLocator(
+    IProcessLauncher launcher,
+    TimeProvider timeProvider,
+    UserEnvironment? environment = null,
+    IReadOnlyDictionary<string, string?>? environmentOverrides = null)
 {
     /// <summary>The oldest Claude Code version Claudette supports (DESIGN.md §12, §16). Kept in step with compat/surface.yaml.</summary>
     public static readonly Version MinimumVersion = new(2, 1, 284);
@@ -60,7 +65,7 @@ public sealed partial class ClaudeLocator(IProcessLauncher launcher, TimeProvide
         ProcessResult result;
         try
         {
-            var spec = new ProcessStartSpec(path, ["--version"]) { Environment = ClaudeEnvironment.From(userEnvironment) };
+            var spec = new ProcessStartSpec(path, ["--version"]) { Environment = ClaudeEnvironment.From(userEnvironment, environmentOverrides) };
             result = await ProcessRunner.RunAsync(launcher, spec, VersionTimeout, timeProvider, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is TimeoutException or System.ComponentModel.Win32Exception or InvalidOperationException)

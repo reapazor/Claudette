@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using Claudette.Core.Protocol;
+using Claudette.Core.RemoteControl;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -148,6 +149,19 @@ public sealed class ClaudeSession : IAsyncDisposable
     /// <summary>Saves a custom session name, so <c>claude --resume &lt;name&gt;</c> finds it. Undocumented request.</summary>
     public Task RenameSessionAsync(string title, CancellationToken cancellationToken = default) =>
         SendControlRequestAsync(new JsonObject { ["subtype"] = "rename_session", ["title"] = title, ["source"] = "host" }, cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Connects the session to claude.ai and the Claude app, as SDK hosts such as the VS Code extension do (DESIGN.md
+    /// §18, "Remote Control"). Claude Code checks the account first, then registers the session: the answer has its
+    /// address (<see cref="RemoteControlProtocol.FromEnabled"/>), and an error says why it can't. Undocumented request.
+    /// </summary>
+    /// <param name="name">The session's title on claude.ai and in the Claude app.</param>
+    public Task<JsonObject> EnableRemoteControlAsync(string? name, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(RemoteControlProtocol.EnableRequest(name), RemoteControlProtocol.Timeout, cancellationToken);
+
+    /// <summary>Disconnects the session from claude.ai; it carries on here. Undocumented request.</summary>
+    public Task DisableRemoteControlAsync(CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(RemoteControlProtocol.DisableRequest(), RemoteControlProtocol.Timeout, cancellationToken);
 
     /// <summary>How full the context window is. Claude Code counts tokens with the API's free counting endpoint.</summary>
     public async Task<ContextUsage> GetContextUsageAsync(CancellationToken cancellationToken = default) =>

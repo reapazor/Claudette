@@ -442,6 +442,11 @@ public sealed partial class NoteItem(string text, NoteKind kind) : ConversationI
 
     public NoteKind Kind { get; } = kind;
 
+    /// <summary>An address to open from the note, such as the tab's session in the Claude app (DESIGN.md §18).</summary>
+    public string? Link { get; init; }
+
+    public bool HasLink => Link is not null;
+
     public bool IsError => Kind == NoteKind.Error;
 
     public bool IsWarning => Kind == NoteKind.Warning;

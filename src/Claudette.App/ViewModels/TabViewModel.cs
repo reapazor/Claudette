@@ -97,6 +97,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             Agents = Agents,
             Time = services.Time,
         };
+        // A prompt the phone answered is withdrawn by Claude Code (DESIGN.md §18, "Remote Control").
+        _conversation.WithdrawnOutcome = WithdrawnPromptOutcome;
         _checkIns = new CheckInMonitor(services.Time, () => CheckInSettings, SendCheckInFromTimer, stuck => _services.Dispatcher.Post(() => IsPossiblyStuck = stuck));
         Status = TabStatus.NotStarted;
         _restoredTranscript = !isRestored;
@@ -284,6 +286,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             }
             AddProjectRows(rows);
             AddPerforceRows(rows);
+            AddRemoteControlRows(rows);
             rows.Add(new InfoRow("Status", StatusTip));
             return rows;
         }
@@ -867,6 +870,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             return;
         }
+        _stoppedHere = true;
         try
         {
             await _session.InterruptAsync();
@@ -1049,6 +1053,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 PermissionMode = State.Overrides.PermissionMode ?? settings.NewTabs.DefaultPermissionMode,
                 AdditionalArguments = settings.Advanced.ExtraArguments.Split(' ', StringSplitOptions.RemoveEmptyEntries),
                 ProtocolLogPath = _services.ProtocolLogPath(FolderName),
+                // The presence file, among others: no pushes to the phone while Claudette is in front (DESIGN.md §10).
+                EnvironmentOverrides = _services.RemoteControl.ClaudeVariables,
             })));
             _session = session;
             _ = LoadSpinnerVerbsAsync();
@@ -1074,6 +1080,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             Status = TabStatus.Idle;
             _pump = PumpAsync(session);
             _contextRefresh = RefreshContextUsageAsync(session);
+            // Before any prompt goes out, so the phone sees the whole turn (DESIGN.md §18, "Remote Control").
+            ConnectRemoteOnStart(session);
         }
         catch (Exception ex) when (Core.Auth.SignInErrors.IsSignInFailure(ex))
         {
@@ -1349,6 +1357,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         foreach (var sessionEvent in events)
         {
+            if (InterceptRemoteCommand(sessionEvent))
+            {
+                continue;
+            }
             _conversation.Apply(sessionEvent);
             RecordFileChanges(sessionEvent);
             TrackReplies(sessionEvent);
@@ -1406,6 +1418,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     // Claude Code reports mode changes it makes itself, such as leaving plan mode.
                     PermissionMode = session.PermissionMode ?? PermissionMode;
                     break;
+                case SystemNotice { Message.Subtype: "bridge_state" or "worker_shutting_down" } remote:
+                    OnRemoteNotice(remote.Message);
+                    break;
                 case RateLimitUpdated rateLimit:
                     _services.Usage?.OnRateLimitEvent(rateLimit.Message);
                     break;
@@ -1430,6 +1445,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     }
                     // Claude may have edited claudette.json or switched branches: the actions and links follow.
                     _ = RefreshProjectFileAsync();
+                    _stoppedHere = false;
+                    // The switch changed while Claude worked (DESIGN.md §18, "Remote Control").
+                    RunWaitingRemoteChange(session);
                     break;
                 case ConversationReset:
                     _callUsage.ContextReset();
@@ -1446,6 +1464,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     break;
                 case SessionExited exited:
                     _session = null;
+                    ResetRemote();
                     SetRunningVersion(null);
                     _checkIns.TurnEnded();
                     _pendingPermissions = 0;
@@ -1578,6 +1597,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     {
         var session = _session;
         _session = null;
+        ResetRemote();
         SetRunningVersion(null);
         if (session is null)
         {
