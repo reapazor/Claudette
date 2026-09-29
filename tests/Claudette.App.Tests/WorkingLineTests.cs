@@ -37,7 +37,8 @@ public class WorkingLineTests
         Assert.True(line.IsActive);
         Assert.Equal("Noodling…", line.Verb);
         Assert.Equal("·", line.Glyph);
-        Assert.Equal("0s · Esc to stop", line.Detail);
+        // The Stop shortcut as it reads on this OS: "Esc", or "⎋" on macOS.
+        Assert.Equal($"0s · {Stop(h)} to stop", line.Detail);
 
         h.Time.Advance(WorkingLine.FrameInterval);
         Assert.Equal("✢", line.Glyph);
@@ -59,8 +60,10 @@ public class WorkingLineTests
 
         h.Transport.Emit("""{"type":"assistant","message":{"id":"m1","model":"claude-opus-5-5","content":[{"type":"text","text":"a"}],"usage":{"input_tokens":3000,"output_tokens":100}}}""");
 
-        await TabTestHarness.Eventually(() => tab.Working.Detail == "0s · 3.1k tokens · Esc to stop", "the tokens");
+        await TabTestHarness.Eventually(() => tab.Working.Detail == $"0s · 3.1k tokens · {Stop(h)} to stop", "the tokens");
     }
+
+    private static string Stop(TabTestHarness h) => h.Services.Tips.Text(Core.Settings.KeyboardShortcuts.Stop)!;
 
     [Fact]
     public async Task The_verb_changes_every_few_seconds()

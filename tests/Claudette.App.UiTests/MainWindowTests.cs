@@ -149,7 +149,9 @@ public class MainWindowTests
         await tab.SendCommand.ExecuteAsync(null);
         await UiText.SettleUntilAsync(window, () => line.IsEffectivelyVisible, "the working line");
 
-        Assert.Equal("· Noodling… 0s · Esc to stop", string.Join(' ', line.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text)));
+        // The Stop shortcut as it reads on this OS: "Esc", or "⎋" on macOS.
+        var stop = h.Services.Tips.Text(KeyboardShortcuts.Stop);
+        Assert.Equal($"· Noodling… 0s · {stop} to stop", string.Join(' ', line.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text)));
 
         h.Transport.Emit("""{"type":"result","subtype":"success","is_error":false,"session_id":"s1"}""");
         await UiText.SettleUntilAsync(window, () => !line.IsEffectivelyVisible, "the end of the turn");
