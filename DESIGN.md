@@ -144,7 +144,7 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
 The visual reference is Claude Code's own Visual Studio Code extension:
 
 - A dense, calm layout that follows the OS light or dark theme.
-- Tool calls are compact one-line rows with a small status dot (running, done, failed), expandable for detail, not heavy cards.
+- Tool calls are compact one-line rows with a small status dot (running, done, failed), expandable for detail, not heavy cards. A row's summary is cut to fit; hovering it shows it in full (a whole command, with its line breaks, or a file's whole path).
 - Diffs are inline, in red and green.
 - Thinking is a collapsed row.
 - User prompts sit in a subtle bordered box rather than a chat bubble.
@@ -325,6 +325,7 @@ While Claude works, a line above the composer says so, the way Claude Code's ter
   - *"Running dotnet test…"*, *"Reading TabView.axaml…"*, *"Editing App.cs…"*, *"Searching for TODO…"*, *"Fetching code.claude.com…"*, *"Using create_issue (github)…"*;
   - the newest call when several run at once, *"Reading b.cs and 2 more…"*, and *"Running 3 agents…"* for a fan-out;
   - a subagent's own calls show on the agent map ([§18](#agent-map)), not here;
+  - hovering the line shows the running calls in full, one per line: *"Bash: dotnet test Claudette.slnx --filter …"*;
   - **Show what Claude is doing while it works** (Settings → Appearance, on by default) turns it off, leaving the verb.
 - **When it shows.** From the turn's start to its end. It hides while a permission prompt, question or plan waits on the user, and the turn's time keeps running meanwhile.
 - **Verbs.** Claudette has its own list, since Claude Code doesn't publish its built-in one. Claude Code's documented `spinnerVerbs` setting changes it:
@@ -843,6 +844,10 @@ Claude Code keeps its own credentials. Claudette never reads or stores them; it 
 - **Messages sent while signed out** stay queued, with their attached images, and are delivered, in order, once sign-in completes. The message that found Claude Code signed out is one of them: a message nothing came back for before the sign-in error never reached the model, so it's sent again. One that was answered before the error isn't.
 - If sign-in fails (timed out, cancelled, organization not allowed), Claudette shows Claude Code's message, from the control request or the command, and a **Try again** button, which repeats the same kind of sign-in.
 - **Account menu** (in the header, on the right): the signed-in email, plan and organization from `claude auth status`, or how Claude Code is signed in when there's no plan (an API key, say), and **Sign out…**, which runs `claude auth logout`. Signed out, it offers **Sign in**.
+- **Plan and billing.** In the header, the plan beside the email (*"Max plan"*) is a link, and the account menu has the same link. It opens where the account's billing is managed, in the browser:
+  - a Claude plan, or a Claude account without one: `claude.ai/settings/billing`, **Plan and billing**;
+  - an API key or Console account: the Claude Console's billing page, **Console billing**;
+  - a cloud provider (Bedrock, Vertex, Foundry) bills through that provider, so there's no link, and the header shows the account as one piece.
   - Signing out asks for confirmation first, because every tab will stop working, and Claude Code is signed out in the terminal too.
   - Afterwards Claudette runs `claude auth status`. If Claude Code still reports a sign-in (an API key in the environment, which logging out doesn't remove), it says so. Otherwise the banner shows, without a notification, messages are held, and every tab that was running restarts on its session after the next sign-in, since that may be a different account.
 - **Settings → Claude Code** shows the same account with **Sign in** and **Sign out…**, wired to the same flows. Because Settings is a separate window, the sign-in screen and the confirmation show inside it.

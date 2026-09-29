@@ -57,7 +57,8 @@ public sealed partial class TabViewModel
         }
         if (changed)
         {
-            Working.SetActivity(ToolActivity.Describe([.. _runningTools.Select(t => (t.Name, t.Input))]));
+            (string Name, JsonObject Input)[] running = [.. _runningTools.Select(t => (t.Name, t.Input))];
+            Working.SetActivity(ToolActivity.Describe(running), ToolActivity.Details(running));
         }
     }
 

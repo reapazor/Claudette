@@ -100,7 +100,7 @@
             <!-- The account menu (DESIGN.md §11): the email and plan from claude auth status, and Sign out -->
             <Button Classes="header" IsVisible="{Binding Account.Status, Converter={x:Static ObjectConverters.IsNotNull}}"
                     ToolTip.Tip="Your Claude Code account" AutomationProperties.Name="Account">
-              <TextBlock Classes="muted" Text="{Binding Account.Summary}" VerticalAlignment="Center" />
+              <TextBlock Classes="muted" Text="{Binding Account.HeaderName}" VerticalAlignment="Center" />
               <Button.Flyout>
                 <Flyout Placement="BottomEdgeAlignedRight">
                   <StackPanel Spacing="10" Width="300" Margin="4" DataContext="{Binding Account}" x:DataType="vm:AccountViewModel">
@@ -115,11 +115,18 @@
                     </StackPanel>
                     <TextBlock Text="Claude Code isn't signed in." IsVisible="{Binding IsSignedOut}" />
                     <TextBlock Classes="error small" Text="{Binding SignOutError}" TextWrapping="Wrap" IsVisible="{Binding HasSignOutError}" />
+                    <Button Classes="flat" Content="{Binding BillingText}" Command="{Binding OpenBillingCommand}" IsVisible="{Binding HasBilling}"
+                            ToolTip.Tip="{Binding BillingTip}" HorizontalAlignment="Left" Padding="0,2" />
                     <Button Content="Sign out…" Command="{Binding SignOutCommand}" IsVisible="{Binding IsSignedIn}" HorizontalAlignment="Left" />
                     <Button Classes="accent" Content="Sign in" Command="{Binding BeginSignInCommand}" IsVisible="{Binding CanBeginSignIn}" HorizontalAlignment="Left" />
                   </StackPanel>
                 </Flyout>
               </Button.Flyout>
+            </Button>
+            <!-- The plan beside the email opens billing in the browser (DESIGN.md §11) -->
+            <Button Classes="header" Command="{Binding Account.OpenBillingCommand}" IsVisible="{Binding Account.HeaderPlan, Converter={x:Static ObjectConverters.IsNotNull}}"
+                    ToolTip.Tip="{Binding Account.BillingTip}" AutomationProperties.Name="Plan and billing">
+              <TextBlock Classes="muted" Text="{Binding Account.HeaderPlan}" VerticalAlignment="Center" />
             </Button>
           </StackPanel>
         </Grid>

@@ -55,6 +55,10 @@ public sealed partial class WorkingLine(
     [ObservableProperty]
     public partial string Verb { get; private set; } = "Working…";
 
+    /// <summary>The running tools in full (a whole command, a file's path) for the line's tooltip, or null.</summary>
+    [ObservableProperty]
+    public partial string? ActivityDetail { get; private set; }
+
     /// <summary>"42s · 3.1k tokens · Esc to stop".</summary>
     [ObservableProperty]
     public partial string Detail { get; private set; } = "";
@@ -78,9 +82,10 @@ public sealed partial class WorkingLine(
     }
 
     /// <summary>What the running tools are doing (<see cref="Conversation.ToolActivity"/>), or null when none is running.</summary>
-    public void SetActivity(string? activity)
+    public void SetActivity(string? activity, string? detail = null)
     {
         _activity = activity;
+        ActivityDetail = activity is null ? null : detail;
         if (IsActive)
         {
             Update();
@@ -97,6 +102,7 @@ public sealed partial class WorkingLine(
         }
         IsActive = false;
         _activity = null;
+        ActivityDetail = null;
     }
 
     /// <summary>Shows the latest tokens straight away, rather than on the next tick.</summary>

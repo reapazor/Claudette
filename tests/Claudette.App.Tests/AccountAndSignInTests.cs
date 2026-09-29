@@ -425,6 +425,47 @@ public class AccountAndSignInTests
         Assert.Equal(expected, account.Summary);
     }
 
+    [Theory]
+    [InlineData("claude.ai", "firstParty", "max", AccountViewModel.ClaudeBillingUrl, "Plan and billing")]
+    [InlineData("claude.ai", "firstParty", null, AccountViewModel.ClaudeBillingUrl, "Plan and billing")]
+    [InlineData("oauth_token", "firstParty", null, AccountViewModel.ClaudeBillingUrl, "Plan and billing")]
+    [InlineData("api_key", "firstParty", null, AccountViewModel.ConsoleBillingUrl, "Console billing")]
+    [InlineData("third_party", "bedrock", null, null, null)]
+    [InlineData("api_key", "vertex", null, null, null)]
+    public async Task The_plan_links_to_where_its_billing_is_managed(string method, string provider, string? plan, string? url, string? label)
+    {
+        await using var h = new TabTestHarness();
+        var account = new AccountViewModel(h.Services) { Status = new AuthStatus(true, method, provider, "me@example.com", null, plan, null, null) };
+
+        Assert.Equal(url, account.BillingUrl);
+        Assert.Equal(url is not null, account.HasBilling);
+        if (label is not null)
+        {
+            Assert.Equal(label, account.BillingText);
+            await account.OpenBillingCommand.ExecuteAsync(null);
+            Assert.Equal([url!], h.Platform.OpenedUrls);
+        }
+    }
+
+    [Fact]
+    public async Task In_the_header_the_email_opens_the_menu_and_the_plan_beside_it_opens_billing()
+    {
+        await using var h = new TabTestHarness();
+        var account = new AccountViewModel(h.Services) { Status = new AuthStatus(true, "claude.ai", "firstParty", "me@example.com", null, "max", null, null) };
+
+        Assert.Equal("me@example.com", account.HeaderName);
+        Assert.Equal("Max plan", account.HeaderPlan);
+
+        // With nowhere to manage billing, the header reads as before.
+        account.Status = new AuthStatus(true, "third_party", "bedrock", null, null, null, null, null);
+        Assert.Equal("Cloud provider", account.HeaderName);
+        Assert.Null(account.HeaderPlan);
+
+        account.Status = new AuthStatus(false, "none", "firstParty", null, null, null, null, null);
+        Assert.Equal("Not signed in", account.HeaderName);
+        Assert.Null(account.HeaderPlan);
+    }
+
     [Fact]
     public async Task The_account_catches_up_with_claude_auth_status()
     {

@@ -43,4 +43,29 @@ public class ToolActivityTests
         Assert.Equal("Reading b.cs and 1 more", ToolActivity.Describe([("Read", Input("""{"file_path":"a.cs"}""")), ("Read", Input("""{"file_path":"b.cs"}"""))]));
         Assert.Equal("Running 3 agents", ToolActivity.Describe([.. Enumerable.Repeat(("Agent", Input("""{"description":"x"}""")), 3)]));
     }
+
+    [Fact]
+    public void The_tooltip_has_each_running_call_in_full()
+    {
+        var command = "dotnet test Claudette.slnx \\\n  --filter \"Category!=Live\"";
+        var details = ToolActivity.Details([
+            ("Bash", new JsonObject { ["command"] = command }),
+            ("Read", Input("""{"file_path":"/repo/src/Claudette.App/Views/TabView.axaml"}""")),
+        ]);
+
+        Assert.Equal("Bash: dotnet test Claudette.slnx \\\n  --filter \"Category!=Live\"\nRead: /repo/src/Claudette.App/Views/TabView.axaml", details);
+        Assert.Null(ToolActivity.Details([]));
+    }
+
+    [Fact]
+    public void A_tool_rows_tooltip_has_the_whole_command_or_path()
+    {
+        var longPath = "/repo/" + string.Join('/', Enumerable.Repeat("very-long-folder-name", 12)) + "/File.cs";
+        var bash = new ToolUseItem("t1", "Bash", Input("""{"command":"cd src &&\n  dotnet build"}"""));
+        var read = new ToolUseItem("t2", "Read", Input($$"""{"file_path":"{{longPath}}"}"""));
+
+        Assert.Equal("cd src &&\n  dotnet build", bash.FullSummary);
+        Assert.EndsWith("…", read.Summary, StringComparison.Ordinal);
+        Assert.Equal(longPath, read.FullSummary);
+    }
 }

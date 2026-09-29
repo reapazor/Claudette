@@ -54,6 +54,25 @@ public static class ToolActivity
         return running.Count > 1 ? Cut(newest, $" and {running.Count - 1} more") : newest;
     }
 
+    /// <summary>
+    /// The running calls in full, one per line, for the working line's tooltip: a command as it was given, a file's
+    /// whole path. Null when none is running.
+    /// </summary>
+    public static string? Details(IReadOnlyList<(string Name, JsonObject Input)> running)
+    {
+        if (running.Count == 0)
+        {
+            return null;
+        }
+        return string.Join("\n", running.Select(r =>
+        {
+            var full = r.Name is "Bash" or "PowerShell" && r.Input["command"] is JsonValue value && value.TryGetValue<string>(out var command)
+                ? command.Trim()
+                : ToolUseItem.Summarize(r.Name, r.Input, int.MaxValue);
+            return full.Length > 0 ? $"{r.Name}: {full}" : r.Name;
+        }));
+    }
+
     /// <summary>The command's first line.</summary>
     private static string? Command(JsonObject input) =>
         input["command"] is JsonValue value && value.TryGetValue<string>(out var command)

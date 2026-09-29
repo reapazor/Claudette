@@ -97,6 +97,11 @@ public partial class ToolUseItem : ConversationItem
 
     public string Summary { get; }
 
+    /// <summary>The summary in full, for its tooltip: a command keeps its line breaks.</summary>
+    public string FullSummary => Name is "Bash" or "PowerShell" && Str(Input, "command") is { } command
+        ? command.Trim()
+        : Summarize(Name, Input, int.MaxValue);
+
     public string Icon => Name switch
     {
         "Read" => "▤",
@@ -200,7 +205,7 @@ public partial class ToolUseItem : ConversationItem
     }
 
     /// <summary>The most telling input field, such as the file path or command.</summary>
-    public static string Summarize(string name, JsonObject input)
+    public static string Summarize(string name, JsonObject input, int maxLength = 140)
     {
         var summary = name switch
         {
@@ -225,7 +230,7 @@ public partial class ToolUseItem : ConversationItem
             }
         }
         summary = (summary ?? "").ReplaceLineEndings(" ");
-        return summary.Length > 140 ? summary[..137] + "…" : summary;
+        return summary.Length > maxLength ? summary[..(maxLength - 3)] + "…" : summary;
     }
 
     private static string? DetailText(string name, JsonObject input) => name switch

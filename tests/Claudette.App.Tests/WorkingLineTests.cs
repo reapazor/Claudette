@@ -155,12 +155,14 @@ public class WorkingLineTests
 
         h.Transport.Emit(ToolUse("t1", "Bash", """{"command":"dotnet test"}"""));
         await TabTestHarness.Eventually(() => tab.Working.Verb == "Running dotnet test…", "the tool");
+        Assert.Equal("Bash: dotnet test", tab.Working.ActivityDetail);
 
         // A subagent's own calls show on the agent map, not here.
         h.Transport.Emit(ToolUse("s1", "Read", """{"file_path":"/x/secret.cs"}""", parent: "t0"));
         h.Transport.Emit(ToolResult("t1"));
 
         await TabTestHarness.Eventually(() => tab.Working.Verb == "Noodling…", "the verb again");
+        Assert.Null(tab.Working.ActivityDetail);
     }
 
     [Fact]
