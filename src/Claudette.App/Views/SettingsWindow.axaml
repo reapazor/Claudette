@@ -231,7 +231,7 @@
           <!-- Session library (DESIGN.md §9) -->
           <TextBlock Text="Session library folder" FontWeight="SemiBold" Margin="0,8,0,0" />
           <TextBlock Classes="muted small" TextWrapping="Wrap"
-                     Text="Claudette copies each session's transcript here after every turn. Point it at a folder Google Drive, Dropbox or OneDrive keeps in sync, and your other machines can find and continue the same sessions in History." />
+                     Text="Tabs that sync copy their session's transcript here after every turn. Point it at a folder Google Drive, Dropbox or OneDrive keeps in sync, and your other machines can find and continue those sessions in History." />
           <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
             <TextBox Text="{Binding LibraryFolder, Mode=OneWay}" IsReadOnly="True" />
             <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseLibraryFolderCommand}" ToolTip.Tip="Use another folder from now on" />
@@ -248,6 +248,9 @@
             </StackPanel>
           </Border>
           <TextBlock Classes="muted small" Text="{Binding LibraryStatus}" TextWrapping="Wrap" IsVisible="{Binding LibraryStatus, Converter={x:Static ObjectConverters.IsNotNull}}" />
+          <CheckBox Content="Sync new tabs to the session library" IsChecked="{Binding SyncNewTabs}" Margin="0,8,0,0" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="Any tab can be switched on or off with Sync to other machines in its menu. Sessions opened from the library keep syncing." />
 
           <!-- Settings sync (DESIGN.md §14) -->
           <CheckBox Content="Sync Claudette's settings through the library" IsChecked="{Binding SyncSettings}" Margin="0,8,0,0" />

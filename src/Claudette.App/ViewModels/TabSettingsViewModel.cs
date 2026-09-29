@@ -61,6 +61,7 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
         QuietTimeMinutes = checkIns.QuietTimeMinutes;
         CheckInMessage = checkIns.Message;
         NotifyOnCheckIn = checkIns.Notify;
+        SyncToLibrary = tab.State.SyncToLibrary;
     }
 
     public string Title => $"Settings for \"{_tab.DisplayName}\"";
@@ -107,6 +108,13 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
     [ObservableProperty]
     public partial bool NotifyOnCheckIn { get; set; }
 
+    /// <summary>
+    /// <b>Sync to other machines</b> (DESIGN.md §9, "Session library"). The tab's own state rather than an override, so
+    /// <b>Use defaults</b> leaves it as it is.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool SyncToLibrary { get; set; }
+
     [RelayCommand]
     private async Task ApplyAsync()
     {
@@ -129,6 +137,7 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
                 : null,
         };
         _close();
+        _tab.SetSyncToLibrary(SyncToLibrary);
         await _tab.ApplyOverridesAsync(previous);
     }
 

@@ -146,6 +146,11 @@
                                 <DockPanel>
                                   <Path DockPanel.Dock="Left" Data="{StaticResource IconPin}" Fill="{DynamicResource MutedTextBrush}" Width="8" Height="10" Stretch="Uniform"
                                         IsVisible="{Binding IsPinned}" VerticalAlignment="Center" Margin="0,0,5,0" />
+                                  <!-- The tab copies its session to the session library (DESIGN.md §9); the border gives the tip somewhere to hover -->
+                                  <Border DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding SyncToLibrary}" VerticalAlignment="Center" Margin="0,0,5,0"
+                                          ToolTip.Tip="Synced to the session library" AutomationProperties.Name="Synced to the session library">
+                                    <Path Data="{StaticResource IconSync}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="9" Height="9" Stretch="Uniform" />
+                                  </Border>
                                   <TextBlock DockPanel.Dock="Left" Classes="status busy small" Text="⚙" IsVisible="{Binding HasBusyProcesses}" VerticalAlignment="Center" Margin="0,0,5,0"
                                              ToolTip.Tip="A process this tab started is using CPU" />
                                   <!-- The Perforce changelist (DESIGN.md §18): separate from the name, so renaming keeps it -->
@@ -180,6 +185,9 @@
                                 <MenuItem Header="Rename" Command="{Binding StartRenameCommand}" />
                                 <MenuItem Header="Reset name" Command="{Binding ResetNameCommand}" IsVisible="{Binding HasUserName}" />
                                 <MenuItem Header="{Binding PinMenuText}" Command="{Binding TogglePinCommand}" />
+                                <!-- The item ticks itself as it's clicked, then runs the command, so the binding stays one-way -->
+                                <MenuItem Header="Sync to other machines" ToggleType="CheckBox" IsChecked="{Binding SyncToLibrary, Mode=OneWay}"
+                                          Command="{Binding ToggleSyncToLibraryCommand}" />
                                 <MenuItem Header="Tab settings…" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).OpenTabSettingsCommand}" CommandParameter="{Binding}">
                                   <MenuItem.Icon>
                                     <Ellipse Width="6" Height="6" Fill="{DynamicResource AccentStatusBrush}" IsVisible="{Binding HasOverrides}"
@@ -254,6 +262,8 @@
                             <ContextMenu>
                               <MenuItem Header="Rename" Command="{Binding StartRenameCommand}" />
                               <MenuItem Header="{Binding PinMenuText}" Command="{Binding TogglePinCommand}" />
+                              <MenuItem Header="Sync to other machines" ToggleType="CheckBox" IsChecked="{Binding SyncToLibrary, Mode=OneWay}"
+                                        Command="{Binding ToggleSyncToLibraryCommand}" />
                               <MenuItem Header="Tab settings…" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).OpenTabSettingsCommand}" CommandParameter="{Binding}">
                                   <MenuItem.Icon>
                                     <Ellipse Width="6" Height="6" Fill="{DynamicResource AccentStatusBrush}" IsVisible="{Binding HasOverrides}"

@@ -911,7 +911,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             resume = localCopy;
         }
         var fork = State.ForkOnNextStart && resume is not null;
-        if (resume is not null && !fork && !await ClaimLeaseAsync())
+        // Only a tab that syncs takes part in leases (DESIGN.md §9, "One machine at a time").
+        if (resume is not null && !fork && State.SyncToLibrary && !await ClaimLeaseAsync())
         {
             return;
         }
@@ -940,6 +941,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 // The copy gets a new session id with its first turn; it no longer writes to the original.
                 State.ForkOnNextStart = false;
                 State.TranscriptPath = null;
+                _forkAwaitingId = true;
                 _conversation.AddNote("Opened as a copy. The original session is left as it was.");
             }
             AttachProcessTree(session);
@@ -1215,6 +1217,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     break;
                 case TurnStarted started:
                     State.SessionId = started.Init.SessionId;
+                    _forkAwaitingId = false;
                     if (started.Init.ClaudeCodeVersion is { } reported && Version.TryParse(reported, out var version))
                     {
                         SetRunningVersion(version);
@@ -1263,10 +1266,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     State.Tokens.Add(completed.Result);
                     _callUsage.TurnEnded(completed.Result);
                     _services.Usage?.OnTurnCompleted(Id, completed.Result);
-                    if (State.SessionId is not null)
-                    {
-                        _ = _services.Library.SaveAfterTurnAsync(LibraryRecord(), State.TranscriptPath);
-                    }
+                    // Only a tab that syncs writes to the library (DESIGN.md §9, "Session library").
+                    CopyToLibrary();
                     RefreshTokens();
                     _services.SaveState();
                     _ = RefreshContextUsageAsync(session);

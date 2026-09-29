@@ -34,6 +34,11 @@
         <CheckBox Grid.Row="4" Grid.Column="1" Content="Notify me when a check-in is sent" IsChecked="{Binding NotifyOnCheckIn}" />
       </Grid>
 
+      <!-- The session library (DESIGN.md §9): the tab's own choice, not an override, so Use defaults leaves it -->
+      <CheckBox Content="Sync to other machines" IsChecked="{Binding SyncToLibrary}" />
+      <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                 Text="Copies this session to the session library after each turn, so another machine can open it from History." />
+
       <Grid ColumnDefinitions="*,Auto">
         <Button Content="Use defaults" Command="{Binding UseDefaultsCommand}" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">

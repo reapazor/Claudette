@@ -156,6 +156,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new("Sessions", "Keep library sessions for"),
         new("Sessions", "Session library folder"),
         new("Sessions", "Move library"),
+        new("Sessions", "Sync new tabs to the session library"),
         new("Sessions", "Sync Claudette's settings through the library"),
         new("Processes", "Show the process monitor"),
         new("Processes", "Refresh the panel every (seconds)"),
@@ -441,6 +442,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
     }
 
     public string MachineNamePlaceholder => Environment.MachineName;
+
+    /// <summary>New tabs start syncing to the session library (DESIGN.md §9). Each tab can change it from its menu.</summary>
+    public bool SyncNewTabs
+    {
+        get => _settings.Sessions.SyncNewTabs;
+        set => Set(value, v => _settings.Sessions.SyncNewTabs = v);
+    }
 
     // ---- Session library (DESIGN.md §9) ----------------------------------------------------------------------------
 

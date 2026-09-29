@@ -14,6 +14,7 @@ public class SettingsDefaultsTests
         var s = h.Services.Settings;
         s.Sessions.RestoreUnpinnedTabs = true;
         s.Sessions.MachineName = "DESK";
+        s.Sessions.SyncNewTabs = true;
         s.Sessions.LibraryFolder = Path.Combine(h.Root, "library");
         s.ClaudeCode.CheckForUpdates = false;
         s.ClaudeCode.ClaudePath = "/opt/claude";
@@ -36,6 +37,8 @@ public class SettingsDefaultsTests
 
         Assert.False(s.Sessions.RestoreUnpinnedTabs);
         Assert.Null(s.Sessions.MachineName);
+        Assert.False(s.Sessions.SyncNewTabs);
+        Assert.False(settings.SyncNewTabs);
         // Where the library lives is its own decision, not a reset.
         Assert.Equal(Path.Combine(h.Root, "library"), s.Sessions.LibraryFolder);
         Assert.True(s.ClaudeCode.CheckForUpdates);

@@ -198,8 +198,9 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         {
             _ = tab.EnsureStartedAsync();
         }
-        // Library retention and settings sync, at launch (DESIGN.md §9, §14).
-        var keep = state.Tabs.Select(t => t.SessionId).OfType<string>().ToHashSet();
+        // Library retention and settings sync, at launch (DESIGN.md §9, §14). Retention keeps the sessions of open tabs
+        // that sync; a tab that doesn't sync has no part in the library.
+        var keep = state.Tabs.Where(t => t.SyncToLibrary).Select(t => t.SessionId).OfType<string>().ToHashSet();
         _ = Task.Run(() => _services.Library.Prune(keep));
         _ = _services.Library.SyncSettingsAsync();
         if (initialFolder is not null)
@@ -219,7 +220,11 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     public void ClosePicker() => Picker = null;
 
-    /// <summary>Opens a new tab in <paramref name="folder"/> and selects it, which starts its session.</summary>
+    /// <summary>
+    /// Opens a new tab in <paramref name="folder"/> and selects it, which starts its session. Every way to a new tab
+    /// comes here (the picker, a group's <c>+</c>, <c>--folder</c>, Open Recent, the jump list, a dropped folder), so
+    /// each starts syncing or not as Settings → Sessions says (DESIGN.md §9, "Session library").
+    /// </summary>
     public Task OpenFolderAsync(string folder)
     {
         if (!Directory.Exists(folder))
@@ -228,7 +233,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         var normalized = FolderHistory.Normalize(folder);
         FolderHistory.Touch(_services.State, normalized, _services.Time.GetUtcNow(), _services.Settings.NewTabs.RecentFolderLimit);
-        var tab = new TabViewModel(_services, this, new TabState { Folder = normalized }, isRestored: false);
+        var state = new TabState { Folder = normalized, SyncToLibrary = _services.Settings.Sessions.SyncNewTabs };
+        var tab = new TabViewModel(_services, this, state, isRestored: false);
         AddTab(tab);
         SelectedTab = tab;
         SaveTabs();
@@ -469,6 +475,9 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             UserName = fork ? null : record?.UserName,
             TranscriptPath = transcriptPath,
             ForkOnNextStart = fork,
+            // A session someone synced keeps syncing wherever it's opened, a copy of one too; one that only ever lived
+            // on this machine stays here (DESIGN.md §9, "Session library").
+            SyncToLibrary = record is not null,
         };
         if (record is not null)
         {

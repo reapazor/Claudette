@@ -87,6 +87,13 @@ public sealed class TabState
 
     public bool IsPinned { get; set; }
 
+    /// <summary>
+    /// Copy this tab's session to the session library after each turn, so another machine can open it from History
+    /// (DESIGN.md §9, "Session library"). Off unless the tab opted in: new tabs take Settings → Sessions → Sync new
+    /// tabs, and sessions opened from the library keep syncing. Not a per-tab override: it's the tab's own state.
+    /// </summary>
+    public bool SyncToLibrary { get; set; }
+
     public TabOverrides Overrides { get; set; } = new();
 
     /// <summary>Quick suffixes kept on this tab, by suffix id.</summary>

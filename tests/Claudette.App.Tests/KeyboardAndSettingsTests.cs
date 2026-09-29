@@ -191,6 +191,9 @@ public class KeyboardAndSettingsTests
         settings.SearchText = "usage history";
         Assert.All(settings.SearchResults, r => Assert.Equal("Usage", r.Category));
 
+        settings.SearchText = "sync new tabs";
+        Assert.Equal(new SettingsSearchResult("Sessions", "Sync new tabs to the session library"), Assert.Single(settings.SearchResults));
+
         settings.SearchText = "xyzzy";
         Assert.Empty(settings.SearchResults);
 

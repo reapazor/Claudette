@@ -26,10 +26,12 @@ public sealed partial class SettingsViewModel
         _settings.Sessions.RestoreUnpinnedTabs = defaults.RestoreUnpinnedTabs;
         _settings.Sessions.MachineName = defaults.MachineName;
         _settings.Sessions.KeepLibrarySessions = defaults.KeepLibrarySessions;
+        _settings.Sessions.SyncNewTabs = defaults.SyncNewTabs;
         Save();
         OnPropertyChanged(nameof(RestoreUnpinnedTabs));
         OnPropertyChanged(nameof(MachineName));
         OnPropertyChanged(nameof(KeepLibrarySessions));
+        OnPropertyChanged(nameof(SyncNewTabs));
     }
 
     [RelayCommand]
