@@ -150,7 +150,11 @@ public sealed class UnrealProvider : IProjectToolProvider
                 [new(nameof(UnrealConfiguration.Development), "Development"), new(nameof(UnrealConfiguration.DebugGame), "DebugGame")],
                 configuration.ToString()),
             Fix = new ProjectFix(UnrealEngineLocator.EngineKey, engine is null ? "Choose engine folder…" : "Choose another engine folder…",
-                $"Choose the Unreal Engine folder for {project.Name}", PickFolder: true, ValidateEngineFolder),
+                $"Choose the Unreal Engine folder for {project.Name}", PickFolder: true, ValidateEngineFolder)
+            {
+                Name = "Engine folder",
+                Current = engine?.Root,
+            },
             Problem = problem,
             SystemPromptNote = context.Settings.TellClaudeAboutUnreal ? SystemPromptNote(project, engine, version, configuration, format, os) : null,
         };

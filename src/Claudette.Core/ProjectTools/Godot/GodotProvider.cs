@@ -342,7 +342,11 @@ public sealed class GodotProvider : IProjectToolProvider
             Details = details,
             Actions = actions,
             Fix = new ProjectFix(GodotExecutables.ExecutableKey, godot is null ? "Choose Godot executable…" : "Choose another Godot executable…",
-                $"Choose the Godot executable for {project.Name}", PickFolder: false, picked => GodotExecutables.Validate(picked, context.OS)),
+                $"Choose the Godot executable for {project.Name}", PickFolder: false, picked => GodotExecutables.Validate(picked, context.OS))
+            {
+                Name = "Godot executable",
+                Current = godot,
+            },
             Problem = problem,
             SystemPromptNote = context.Settings.TellClaudeAboutGodot ? SystemPromptNote(project, godot, solution ?? csharp.FirstOrDefault()) : null,
         };

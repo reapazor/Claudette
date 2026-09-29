@@ -146,7 +146,65 @@ public sealed class ProjectFileTests : IDisposable
         Assert.Equal("{ broken", File.ReadAllText(broken));
     }
 
+    [Fact]
+    public void Saving_links_rewrites_only_links_and_keeps_the_actions_and_each_entrys_own_fields()
+    {
+        var folder = _temp.CreateFolder("game");
+        var path = _temp.Write("game/claudette.json", Shared);
+        var entries = ProjectFile.ReadLinkEntries(folder, ProjectFileScope.Shared);
+        Assert.Equal(["Board", "https://github.com/org/repo/compare/{branch}?expand=1", null], entries.Select(e => e.Link?.Name));
+        Assert.Equal(("Board", ""), (entries[0].GivenName, entries[1].GivenName));
+        Assert.Equal("links[2] has no url, so it was skipped.", entries[2].Problem);
+        var actionsBefore = JsonNode.Parse(File.ReadAllText(path), documentOptions: new() { CommentHandling = System.Text.Json.JsonCommentHandling.Skip, AllowTrailingCommas = true })!["actions"]!.ToJsonString();
+
+        ProjectFile.WriteLinks(folder, ProjectFileScope.Shared,
+        [
+            ProjectFile.LinkToJson(entries[1].GivenName, entries[1].Link!.Url, entries[1].Raw),
+            ProjectFile.LinkToJson("Sprint board", " https://example.com/sprint?a=1&b=2 ", entries[0].Raw),
+            entries[2].Raw,
+        ]);
+
+        var text = File.ReadAllText(path);
+        var root = JsonNode.Parse(text)!.AsObject();
+        Assert.Equal(["actions", "links", "somethingElse"], root.Select(p => p.Key));
+        Assert.Equal(actionsBefore, root["actions"]!.ToJsonString());
+        Assert.DoesNotContain("Committed with the project", text, StringComparison.Ordinal);
+        Assert.Contains("https://example.com/sprint?a=1&b=2", text, StringComparison.Ordinal);
+        Assert.Null(root["links"]![0]!["name"]);
+        Assert.Equal("Sprint board", root["links"]![1]!["name"]!.GetValue<string>());
+        Assert.Equal("No url", root["links"]![2]!["name"]!.GetValue<string>());
+        Assert.Equal(["https://github.com/org/repo/compare/{branch}?expand=1", "Sprint board"], ProjectFile.Read(folder, ToolOS.Linux).Links.Select(l => l.Name));
+    }
+
+    [Fact]
+    public void Links_go_in_a_new_file_when_there_is_none_and_never_in_one_that_isnt_JSON()
+    {
+        var folder = _temp.CreateFolder("game");
+
+        ProjectFile.WriteLinks(folder, ProjectFileScope.Local, [ProjectFile.LinkToJson("", "mailto:team@example.com")]);
+        Assert.Equal(("mailto:team@example.com", ProjectFileScope.Local), (ProjectFile.Read(folder, ToolOS.Linux).Links.Single().Name, ProjectFile.Read(folder, ToolOS.Linux).Links.Single().Scope));
+        Assert.Empty(ProjectFile.ReadLinkEntries(folder, ProjectFileScope.Shared));
+
+        var broken = _temp.Write("game/claudette.json", "{ broken");
+        var refused = Assert.Throws<InvalidOperationException>(() => ProjectFile.WriteLinks(folder, ProjectFileScope.Shared, []));
+        Assert.StartsWith("claudette.json isn't valid JSON (", refused.Message, StringComparison.Ordinal);
+        Assert.Throws<InvalidOperationException>(() => ProjectFile.ReadLinkEntries(folder, ProjectFileScope.Shared));
+        Assert.Equal("{ broken", File.ReadAllText(broken));
+    }
+
     // ---- Links ----------------------------------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("https://github.com/org/repo/compare/{branch}?expand=1", null)]
+    [InlineData("  http://swarm.example/changes/{changelist}  ", null)]
+    [InlineData("mailto:team@example.com?subject={folderName}", null)]
+    [InlineData("", "Type the address to open, such as https://example.com.")]
+    [InlineData("file:///etc/passwd", "\"file:\" links don't open from Claudette; only https, http and mailto do.")]
+    [InlineData("javascript:alert(1)", "\"javascript:\" links don't open from Claudette; only https, http and mailto do.")]
+    [InlineData("example.com/{branch}", "example.com/{branch} isn't a full web address, such as https://example.com.")]
+    [InlineData("https://example.com/{user}", "Unknown placeholder {user}: use {branch}, {changelist} or {folderName}")]
+    public void An_address_being_edited_is_checked_by_the_rules_links_open_by(string url, string? problem) =>
+        Assert.Equal(problem, ProjectLinks.Validate(url));
 
     private static readonly LinkValues Values = new("feature/owl eyes", "12345", "Night Owl");
 

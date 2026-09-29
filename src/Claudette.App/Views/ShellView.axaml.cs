@@ -396,17 +396,15 @@ public partial class ShellView : UserControl
         }
     }
 
-    private async Task ShowSettingsAsync(string? category)
+    /// <summary>The Settings window, modal, where <paramref name="opening"/> says, with the selected tab's project pages.</summary>
+    private async Task ShowSettingsAsync(SettingsOpening opening)
     {
         if (this.FindAncestorOfType<Window>() is not { } owner || owner.DataContext is not MainWindowViewModel main)
         {
+            opening.Project?.Dispose();
             return;
         }
-        var settings = new SettingsViewModel(main.Services, main.AccountText, main.Updates) { Account = main.Account, AppUpdates = main.AppUpdate };
-        if (category is not null && SettingsViewModel.AllCategories.Contains(category))
-        {
-            settings.SelectedCategory = category;
-        }
+        var settings = new SettingsViewModel(main.Services, main.AccountText, main.Updates, opening) { Account = main.Account, AppUpdates = main.AppUpdate };
         var window = new SettingsWindow { DataContext = settings };
         await window.ShowDialog(owner);
     }

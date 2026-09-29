@@ -25,15 +25,40 @@ public static partial class ProjectLinks
 {
     public static readonly IReadOnlySet<string> AllowedSchemes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "https", "http", "mailto" };
 
-    public static ResolvedLink Resolve(ProjectLink link, LinkValues values)
+    /// <summary>The placeholders a link can use, for hints: <c>{branch}</c>, <c>{changelist}</c> and <c>{folderName}</c>.</summary>
+    public const string PlaceholderHint = "{branch}, {changelist} and {folderName} are filled in from the tab: its git branch, its Perforce changelist and its folder's name.";
+
+    /// <summary>Stand-ins for the placeholders when checking a link that's being edited, whatever tab it's for.</summary>
+    private static readonly LinkValues SampleValues = new("main", "12345", "folder");
+
+    public static ResolvedLink Resolve(ProjectLink link, LinkValues values) =>
+        Fill(link.Url.Trim(), values, showFilled: true, out var filled) is { } problem
+            ? new ResolvedLink(link.Name, null, problem, link.Scope)
+            : new ResolvedLink(link.Name, filled, null, link.Scope);
+
+    /// <summary>
+    /// Why an address typed into Settings' Links page can't be saved, by the rules the sidebar opens links with: only
+    /// https, http and mailto, a full address, and only the known placeholders. Null when it's fine.
+    /// </summary>
+    public static string? Validate(string url)
     {
-        var template = link.Url.Trim();
+        var template = url.Trim();
+        return template.Length == 0
+            ? "Type the address to open, such as https://example.com."
+            : Fill(template, SampleValues, showFilled: false, out _);
+    }
+
+    /// <summary>Fills in a link's placeholders; returns why it can't open, or null.</summary>
+    /// <param name="showFilled">Name the filled-in address in a problem, rather than the one as written.</param>
+    private static string? Fill(string template, LinkValues values, bool showFilled, out string filled)
+    {
+        filled = template;
         if (SchemePattern().Match(template) is { Success: true } scheme && !AllowedSchemes.Contains(scheme.Groups[1].Value))
         {
-            return Blocked($"\"{scheme.Groups[1].Value}:\" links don't open from Claudette; only https, http and mailto do.");
+            return NotAllowed(scheme.Groups[1].Value);
         }
         string? missing = null;
-        var filled = Placeholder().Replace(template, match =>
+        filled = Placeholder().Replace(template, match =>
         {
             var value = match.Groups[1].Value.ToLowerInvariant() switch
             {
@@ -46,26 +71,26 @@ public static partial class ProjectLinks
         });
         if (missing is not null)
         {
-            return Blocked(missing);
+            return missing;
         }
         if (!Uri.TryCreate(filled, UriKind.Absolute, out var uri))
         {
-            return Blocked($"{filled} isn't a full web address, such as https://example.com.");
+            return $"{(showFilled ? filled : template)} isn't a full web address, such as https://example.com.";
         }
         if (!AllowedSchemes.Contains(uri.Scheme))
         {
-            return Blocked($"\"{uri.Scheme}:\" links don't open from Claudette; only https, http and mailto do.");
+            return NotAllowed(uri.Scheme);
         }
-        return new ResolvedLink(link.Name, filled, null, link.Scope);
+        return null;
 
         string? Missing(string reason)
         {
             missing ??= reason;
             return null;
         }
-
-        ResolvedLink Blocked(string reason) => new(link.Name, null, reason, link.Scope);
     }
+
+    private static string NotAllowed(string scheme) => $"\"{scheme}:\" links don't open from Claudette; only https, http and mailto do.";
 
     [GeneratedRegex(@"\{(\w+)\}")]
     private static partial Regex Placeholder();

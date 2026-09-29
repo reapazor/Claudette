@@ -229,7 +229,10 @@ internal sealed class NoPlatform : IPlatformServices
 
     public Task<string?> PickFolderAsync(string title) => Task.FromResult(FolderToPick);
 
-    public Task<string?> PickFileAsync(string title) => Task.FromResult<string?>(null);
+    /// <summary>What the file picker returns: null is Cancel.</summary>
+    public string? FileToPick { get; set; }
+
+    public Task<string?> PickFileAsync(string title) => Task.FromResult(FileToPick);
 
     public Task OpenUrlAsync(string url)
     {
