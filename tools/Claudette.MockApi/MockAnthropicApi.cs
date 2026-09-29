@@ -41,6 +41,13 @@ public sealed record RecordedImage(string MediaType, int Bytes, int? Width, int?
 /// <item><c>ASK_QUESTION</c>: an AskUserQuestion tool call ("Which database?": Postgres or SQLite), then done.</item>
 /// <item><c>EXIT_PLAN</c>: an ExitPlanMode tool call with a two-step plan, then done. Needs plan mode.</item>
 /// <item><c>API_ERROR</c>: the first two requests fail with 529 "overloaded", so Claude Code retries; then <c>pong</c>.</item>
+/// <item>
+/// <c>SUBAGENTS</c>: two subagents in parallel, in the foreground. "Touch a marker file" runs
+/// <c>touch agent-marker.txt</c>, which asks for permission from inside the subagent; "Delegate a deeper look" starts
+/// a nested Explore subagent that replies "Found 3 matches in src/.". Then done.
+/// </item>
+/// <item><c>LONG_AGENT</c>: one subagent that runs <c>sleep 30</c>, for stopping it; in the background with <c>BACKGROUND</c>.</item>
+/// <item><c>AGENT_REPLY &lt;text&gt;</c>: replies with the text (how the subagents above answer).</item>
 /// <item>Requests with no tools that mention "title": <c>{"title": "Mock session title"}</c>.</item>
 /// <item>Anything else: <c>pong</c>.</item>
 /// </list>
@@ -266,6 +273,32 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
         {
             return new Plan("after-tool", [TextBlock("Done with the tool.")]);
         }
+        // Subagents (DESIGN.md §18): each one's first request carries its prompt, which scripts it in turn.
+        var agentTool = tools.Contains("Agent") ? "Agent" : "Task";
+        if (tools.Contains(agentTool))
+        {
+            if (text.Contains("SUBAGENTS", StringComparison.Ordinal))
+            {
+                return new Plan("agents",
+                [
+                    TextBlock("I'll split this into two parts."),
+                    ToolUse(agentTool, AgentInput("Touch a marker file", "general-purpose", "Create the marker file.\n\nRUN_BASH touch agent-marker.txt")),
+                    ToolUse(agentTool, AgentInput("Delegate a deeper look", "general-purpose", "NESTED_AGENT: hand the search to a helper and report back.")),
+                ]);
+            }
+            if (text.Contains("NESTED_AGENT", StringComparison.Ordinal))
+            {
+                return new Plan("nested-agent", [ToolUse(agentTool, AgentInput("Search deeper", "Explore", "AGENT_REPLY Found 3 matches in src/."))]);
+            }
+            if (text.Contains("LONG_AGENT", StringComparison.Ordinal))
+            {
+                return new Plan("long-agent", [ToolUse(agentTool, AgentInput("Long job", "general-purpose", "RUN_BASH sleep 30", background: text.Contains("BACKGROUND", StringComparison.Ordinal)))]);
+            }
+        }
+        if (AgentReplyPattern().Match(text) is { Success: true } reply)
+        {
+            return new Plan("agent-reply", [TextBlock(reply.Groups[1].Value.Trim())]);
+        }
         if (WritePattern().Match(text) is { Success: true } write && tools.Contains("Write"))
         {
             return new Plan("tool", [ToolUse("Write", new JsonObject { ["file_path"] = write.Groups[1].Value, ["content"] = "hello from mock\n" })]);
@@ -300,6 +333,11 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
         new() { ["type"] = "tool_use", ["id"] = $"toolu_mock_{Interlocked.Increment(ref _counter)}", ["name"] = name, ["input"] = input };
 
     private static JsonObject TextBlock(string text) => new() { ["type"] = "text", ["text"] = text };
+
+    private static JsonObject AgentInput(string description, string type, string prompt, bool background = false) => new()
+    {
+        ["description"] = description, ["subagent_type"] = type, ["prompt"] = prompt, ["run_in_background"] = background,
+    };
 
     private static (string Text, bool HasToolResult) LastUserText(JsonObject body)
     {
@@ -381,4 +419,7 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
 
     [GeneratedRegex(@"RUN_BASH (.+)")]
     private static partial Regex BashPattern();
+
+    [GeneratedRegex(@"AGENT_REPLY (.+)")]
+    private static partial Regex AgentReplyPattern();
 }

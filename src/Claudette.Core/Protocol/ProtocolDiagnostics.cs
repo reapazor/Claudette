@@ -13,8 +13,10 @@ public sealed class ProtocolDiagnostics
     /// </summary>
     private static readonly Dictionary<string, HashSet<string>> KnownFields = new(StringComparer.Ordinal)
     {
-        ["assistant"] = Fields("aborted", "error", "is_api_error_message", "message", "parent_tool_use_id", "session_id", "timestamp", "type", "uuid"),
-        ["user"] = Fields("isReplay", "isSynthetic", "message", "parent_tool_use_id", "session_id", "timestamp", "tool_result_meta", "tool_use_result", "type", "uuid"),
+        ["assistant"] = Fields("aborted", "error", "is_api_error_message", "message", "parent_tool_use_id", "session_id", "subagent_type", "task_description",
+            "timestamp", "type", "uuid"),
+        ["user"] = Fields("isReplay", "isSynthetic", "message", "parent_tool_use_id", "session_id", "subagent_type", "task_description", "timestamp",
+            "tool_result_meta", "tool_use_result", "type", "uuid"),
         ["result"] = Fields("api_error_status", "duration_api_ms", "duration_ms", "errors", "fast_mode_disabled_reason", "fast_mode_state",
             "first_content_frame_ms", "is_error", "local_command", "modelUsage", "num_turns", "permission_denials", "queued_turn_count", "result",
             "result_index", "session_id", "stop_reason", "subagent_stats", "subtype", "terminal_reason", "time_origin_ms",
@@ -29,8 +31,9 @@ public sealed class ProtocolDiagnostics
             "permissionMode", "plugins", "powershell_path", "product_feedback_disabled", "session_id", "skills", "slash_commands", "startup_timing", "subtype",
             "terminal_slash_commands", "tools", "type", "uuid", "view_mode"),
         ["system/status"] = Fields("compact_result", "permissionMode", "session_id", "status", "subtype", "type", "uuid"),
-        ["system/task_started"] = Fields("description", "is_backgrounded", "session_id", "subtype", "task_id", "task_type", "tool_use_id", "type", "uuid"),
-        ["system/task_notification"] = Fields("output_file", "session_id", "status", "subtype", "summary", "task_id", "tool_use_id", "type", "uuid"),
+        ["system/task_started"] = Fields("description", "is_backgrounded", "prompt", "session_id", "spawn_depth", "subagent_type", "subtype", "task_id",
+            "task_type", "tool_use_id", "type", "uuid"),
+        ["system/task_notification"] = Fields("output_file", "session_id", "status", "subtype", "summary", "task_id", "tool_use_id", "type", "usage", "uuid"),
     };
 
     private readonly Lock _lock = new();

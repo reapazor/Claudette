@@ -43,6 +43,36 @@ public class ReplayTests
     }
 
     [Fact]
+    public async Task Subagent_traffic_is_tagged_with_the_agent_call_that_started_it()
+    {
+        // SUBAGENTS against the mock Messages API: two subagents in parallel, one asking for permission, the other
+        // starting a nested one (DESIGN.md §18).
+        var transport = new ReplayTransport(ProtocolFixture.Load("12-subagents"));
+        await using var session = new ClaudeSession(transport, TimeProvider.System);
+
+        await session.InitializeAsync(TestContext.Current.CancellationToken);
+        await session.SendUserMessageAsync("SUBAGENTS", TestContext.Current.CancellationToken);
+        var (requested, before) = await session.ReadUntilAsync<PermissionRequested>();
+        requested.Request.Allow();
+        var (_, after) = await session.ReadUntilAsync<TurnCompleted>();
+        var seen = before.Concat(after).ToArray();
+
+        var agentCalls = seen.OfType<AssistantMessageReceived>()
+            .SelectMany(a => a.Message.Content.OfType<Claudette.Core.Protocol.ToolUseBlock>().Select(t => (Parent: a.Message.ParentToolUseId, Call: t)))
+            .Where(c => c.Call.Name == "Agent")
+            .ToArray();
+        Assert.Equal([(null, "Touch a marker file"), (null, "Delegate a deeper look"), ("toolu_mock_2", "Search deeper")],
+            agentCalls.Select(c => (c.Parent, c.Call.Input["description"]!.GetValue<string>())));
+        // Each subagent's task, tied to its Agent call; the prompt comes from inside the subagent.
+        var tasks = seen.OfType<SystemNotice>().Where(n => n.Message.Subtype == "task_started").Select(n => n.Message.Raw).ToArray();
+        Assert.Equal(["toolu_mock_1", "toolu_mock_2", "toolu_mock_4"], tasks.Select(t => t["tool_use_id"]!.GetValue<string>()));
+        Assert.Equal(tasks[0]["task_id"]!.GetValue<string>(), requested.Request.AgentId);
+        Assert.Contains(seen.OfType<SystemNotice>(), n => n.Message.Subtype == "task_notification");
+        Assert.Contains(seen.OfType<ToolResultsReceived>(), r => r.Message.ParentToolUseId == "toolu_mock_2");
+        Assert.Equal(0, session.UnknownMessageCount);
+    }
+
+    [Fact]
     public async Task Signed_out_turn_reports_authentication_required()
     {
         var transport = new ReplayTransport(ProtocolFixture.Load("signed-out"));

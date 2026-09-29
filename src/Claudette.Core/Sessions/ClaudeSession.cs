@@ -334,6 +334,10 @@ public sealed class ClaudeSession : IAsyncDisposable
                 Publish(new RateLimitUpdated(rateLimit));
                 break;
 
+            case ToolProgressMessage progress:
+                Publish(new ToolProgress(progress));
+                break;
+
             case AuthStatusMessage auth:
                 // Only sent with the hidden --enable-auth-status flag, which Claudette doesn't pass; it reports cloud
                 // credential helpers such as awsAuthRefresh. One that failed still means Claude Code can't sign in.

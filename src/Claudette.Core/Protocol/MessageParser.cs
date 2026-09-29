@@ -83,6 +83,13 @@ public static class MessageParser
                 obj.GetObject("modelUsage"),
                 obj),
             "rate_limit_event" => new RateLimitEventMessage(obj.GetObject("rate_limit_info") ?? [], obj),
+            "tool_progress" => new ToolProgressMessage(
+                obj.GetString("tool_use_id"),
+                obj.GetString("tool_name"),
+                obj.GetString("parent_tool_use_id"),
+                obj.GetDouble("elapsed_time_seconds"),
+                obj.GetBool("heartbeat") == true,
+                obj),
             "auth_status" => new AuthStatusMessage(
                 obj.GetBool("isAuthenticating") ?? false,
                 obj.GetStringList("output"),

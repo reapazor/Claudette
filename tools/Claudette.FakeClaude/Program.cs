@@ -25,6 +25,9 @@
 //   RUN_BASH <cmd>   a Bash tool call: calls back any PreToolUse hooks registered with initialize for Bash
 //                    (hook_callback, as Claude Code does), then "runs" it; the result is FAKE_CLAUDE_BASH_OUTPUT, or
 //                    "ran: <cmd>". A hook that doesn't answer within its timeout is cancelled and the command isn't run.
+//   SUBAGENTS        a nested fan-out of subagents, as Claude Code sends it: two in parallel, one of which asks
+//                    for permission from inside the subagent (and can be stopped with stop_task while it waits),
+//                    the other starting a nested Explore subagent (DESIGN.md §18, "Agent map")
 //   SLOW             streams text for ~10 seconds (for interrupts)
 //   CRASH            exits with code 7 and a line on stderr
 //   SPAWN [s] [busy] starts a child process that runs for s seconds (default 30), using CPU when "busy", and ends the
@@ -207,6 +210,8 @@ internal sealed class FakeSession(string version)
     private readonly Queue<string> _prompts = new();
     private readonly SemaphoreSlim _promptSignal = new(0);
     private CancellationTokenSource? _turn;
+    // Running subagents by task id, so stop_task can stop one.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource> _tasks = new();
     private int _requestCounter;
     private readonly List<(string? Matcher, List<string> CallbackIds, int? Timeout)> _preToolUseHooks = [];
 
@@ -278,6 +283,16 @@ internal sealed class FakeSession(string version)
                     matcher["hookCallbackIds"]?.AsArray().Select(id => id!.GetValue<string>()).ToList() ?? [],
                     matcher["timeout"]?.GetValue<int>()));
             }
+        }
+        if (subtype == "stop_task")
+        {
+            var taskId = message["request"]!["task_id"]?.GetValue<string>() ?? "";
+            var found = _tasks.TryGetValue(taskId, out var task);
+            await WriteAsync(found
+                ? new JsonObject { ["type"] = "control_response", ["response"] = new JsonObject { ["subtype"] = "success", ["request_id"] = requestId, ["response"] = new JsonObject() } }
+                : new JsonObject { ["type"] = "control_response", ["response"] = new JsonObject { ["subtype"] = "error", ["request_id"] = requestId, ["error"] = $"No task found with ID: {taskId}" } });
+            task?.Cancel();
+            return;
         }
         JsonObject? response = subtype switch
         {
@@ -415,6 +430,10 @@ internal sealed class FakeSession(string version)
                 else if (prompt.StartsWith("HANG", StringComparison.Ordinal))
                 {
                     await Task.Delay(Timeout.Infinite, _turn.Token);
+                }
+                else if (prompt.StartsWith("SUBAGENTS", StringComparison.Ordinal))
+                {
+                    await SubagentsAsync(_turn.Token);
                 }
                 else if (prompt.StartsWith("ASK_PERMISSION", StringComparison.Ordinal))
                 {
@@ -569,11 +588,11 @@ internal sealed class FakeSession(string version)
         ["parent_tool_use_id"] = null,
     });
 
-    private Task AssistantAsync(JsonObject block) => WriteAsync(new JsonObject
+    private Task AssistantAsync(JsonObject block, string? parent = null) => WriteAsync(new JsonObject
     {
         ["type"] = "assistant",
         ["message"] = new JsonObject { ["id"] = "msg_fake", ["model"] = "claude-fake-1", ["content"] = new JsonArray(block) },
-        ["parent_tool_use_id"] = null,
+        ["parent_tool_use_id"] = parent,
     });
 
     private Task ResultAsync(string text) => WriteAsync(new JsonObject
@@ -584,6 +603,158 @@ internal sealed class FakeSession(string version)
         ["result"] = text,
         ["terminal_reason"] = "completed",
         ["session_id"] = _sessionId,
+    });
+
+    /// <summary>
+    /// SUBAGENTS: a fan-out shaped like Claude Code 2.1.284's (the 12-subagents protocol fixture). Subagent traffic
+    /// carries parent_tool_use_id; task_started, task_progress, task_updated and task_notification report each
+    /// subagent; a nested subagent's result is only the framed hand-back text, a top-level one's also has
+    /// tool_use_result. "Touch a marker file" asks for permission with its task id as agent_id, and ends by the answer,
+    /// or as stopped when stop_task arrives first.
+    /// </summary>
+    private async Task SubagentsAsync(CancellationToken turn)
+    {
+        const string touch = "toolu_fake_agent_1", deeper = "toolu_fake_agent_2", search = "toolu_fake_agent_3";
+        async Task StepAsync() => await Task.Delay(150, turn);
+
+        await AssistantAsync(new JsonObject { ["type"] = "text", ["text"] = "I'll split this into two parts." });
+        await StartAgentAsync(null, touch, "fake_task_1", "Touch a marker file", "general-purpose", "Create the marker file.\n\nRun `touch agent-marker.txt` in the project folder.", 1);
+        await StartAgentAsync(null, deeper, "fake_task_2", "Delegate a deeper look", "general-purpose", "Hand the search for TODOs to a helper and **report back** with the files.", 1);
+        await StepAsync();
+
+        // The second one starts a nested Explore subagent, which searches.
+        await StartAgentAsync(deeper, search, "fake_task_3", "Search deeper", "Explore", "Find the TODOs in `src/` and list the files they're in.", 2);
+        await TaskProgressAsync("fake_task_2", deeper, "Search deeper", "Agent", 1033, 1);
+        await StepAsync();
+        await AssistantAsync(new JsonObject { ["type"] = "tool_use", ["id"] = "toolu_fake_grep", ["name"] = "Grep", ["input"] = new JsonObject { ["pattern"] = "TODO", ["path"] = "src/" } }, search);
+        await TaskProgressAsync("fake_task_3", search, "Searching for TODO", "Grep", 1210, 1);
+        await StepAsync();
+        await ToolResultAsync(search, "toolu_fake_grep", "src/auth.cs\nsrc/login.cs\nsrc/token.cs");
+        var found = "Found 3 files with TODOs in `src/`:\n\n- `src/auth.cs`\n- `src/login.cs`\n- `src/token.cs`";
+        await AssistantAsync(new JsonObject { ["type"] = "text", ["text"] = found }, search);
+        await FinishAgentAsync(deeper, search, "fake_task_3", "Explore", "Find the TODOs in `src/` and list the files they're in.", found, 1450, 1, 900);
+        await StepAsync();
+        var summary = "The helper found TODOs in 3 files: `src/auth.cs`, `src/login.cs` and `src/token.cs`.";
+        await AssistantAsync(new JsonObject { ["type"] = "text", ["text"] = summary }, deeper);
+        await FinishAgentAsync(null, deeper, "fake_task_2", "general-purpose", "Hand the search for TODOs to a helper and **report back** with the files.", summary, 2100, 2, 1500);
+
+        // The first one asks for permission from inside the subagent: before its tool call reaches the stream, as
+        // Claude Code does, and naming its task id as agent_id.
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(turn);
+        _tasks["fake_task_1"] = stop;
+        await TaskProgressAsync("fake_task_1", touch, "Creating the marker", "Bash", 1017, 1);
+        var bash = new JsonObject { ["command"] = "touch agent-marker.txt", ["description"] = "Create the marker" };
+        var requestId = $"fake_{Interlocked.Increment(ref _requestCounter)}";
+        var waiter = new TaskCompletionSource<JsonObject>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pendingFromUs[requestId] = waiter;
+        await WriteAsync(new JsonObject
+        {
+            ["type"] = "control_request",
+            ["request_id"] = requestId,
+            ["request"] = new JsonObject { ["subtype"] = "can_use_tool", ["tool_name"] = "Bash", ["input"] = bash.DeepClone(), ["tool_use_id"] = "toolu_fake_bash", ["agent_id"] = "fake_task_1" },
+        });
+        await AssistantAsync(new JsonObject { ["type"] = "tool_use", ["id"] = "toolu_fake_bash", ["name"] = "Bash", ["input"] = bash }, touch);
+        string? behavior;
+        try
+        {
+            behavior = (await waiter.Task.WaitAsync(stop.Token))["response"]?["behavior"]?.GetValue<string>();
+        }
+        catch (OperationCanceledException) when (!turn.IsCancellationRequested)
+        {
+            behavior = null;
+        }
+        _tasks.TryRemove("fake_task_1", out _);
+        if (behavior is null)
+        {
+            // Stopped: withdraw the prompt, report the task stopped, and reject the subagent's calls.
+            _pendingFromUs.TryRemove(requestId, out _);
+            await WriteAsync(new JsonObject { ["type"] = "control_cancel_request", ["request_id"] = requestId });
+            await WriteAsync(new JsonObject { ["type"] = "system", ["subtype"] = "task_updated", ["task_id"] = "fake_task_1", ["patch"] = new JsonObject { ["status"] = "killed" } });
+            await WriteAsync(new JsonObject { ["type"] = "system", ["subtype"] = "task_notification", ["task_id"] = "fake_task_1", ["tool_use_id"] = touch, ["status"] = "stopped", ["output_file"] = "", ["summary"] = "Touch a marker file" });
+            await ToolResultAsync(touch, "toolu_fake_bash", "The user doesn't want to proceed with this tool use. The tool use was rejected.", isError: true, toolUseResult: "User rejected tool use");
+            await WriteAsync(new JsonObject
+            {
+                ["type"] = "user",
+                ["message"] = new JsonObject { ["role"] = "user", ["content"] = new JsonArray(new JsonObject { ["type"] = "tool_result", ["tool_use_id"] = touch, ["content"] = "[Request interrupted by user for tool use]", ["is_error"] = true }) },
+                ["parent_tool_use_id"] = null,
+                ["tool_use_result"] = "Error: [Request interrupted by user for tool use]",
+                ["tool_result_meta"] = new JsonArray(new JsonObject { ["id"] = touch, ["non_execution_kind"] = "interrupted" }),
+            });
+        }
+        else
+        {
+            var allowed = behavior == "allow";
+            await ToolResultAsync(touch, "toolu_fake_bash", allowed ? "(Bash completed with no output)" : "Permission to use Bash has been denied.", isError: !allowed);
+            var report = allowed ? "Created `agent-marker.txt`." : "I wasn't allowed to create the marker file.";
+            await AssistantAsync(new JsonObject { ["type"] = "text", ["text"] = report }, touch);
+            await FinishAgentAsync(null, touch, "fake_task_1", "general-purpose", "Create the marker file.\n\nRun `touch agent-marker.txt` in the project folder.", report, 1020, 1, 700);
+        }
+
+        await AssistantAsync(new JsonObject { ["type"] = "text", ["text"] = "Both parts are done." });
+        await ResultAsync("Both parts are done.");
+    }
+
+    private async Task StartAgentAsync(string? parent, string id, string taskId, string description, string type, string prompt, int depth)
+    {
+        await AssistantAsync(new JsonObject
+        {
+            ["type"] = "tool_use", ["id"] = id, ["name"] = "Agent",
+            ["input"] = new JsonObject { ["description"] = description, ["subagent_type"] = type, ["prompt"] = prompt, ["run_in_background"] = false },
+        }, parent);
+        await WriteAsync(new JsonObject
+        {
+            ["type"] = "system", ["subtype"] = "task_started", ["task_id"] = taskId, ["tool_use_id"] = id, ["description"] = description,
+            ["subagent_type"] = type, ["is_backgrounded"] = false, ["spawn_depth"] = depth, ["task_type"] = "local_agent", ["prompt"] = prompt,
+        });
+        // The subagent's prompt, from inside it.
+        await WriteAsync(new JsonObject
+        {
+            ["type"] = "user",
+            ["message"] = new JsonObject { ["role"] = "user", ["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = prompt }) },
+            ["parent_tool_use_id"] = id,
+        });
+    }
+
+    private Task TaskProgressAsync(string taskId, string toolUseId, string description, string lastTool, int tokens, int toolUses) => WriteAsync(new JsonObject
+    {
+        ["type"] = "system", ["subtype"] = "task_progress", ["task_id"] = taskId, ["tool_use_id"] = toolUseId, ["description"] = description,
+        ["usage"] = new JsonObject { ["total_tokens"] = tokens, ["tool_uses"] = toolUses, ["duration_ms"] = 100 }, ["last_tool_name"] = lastTool,
+    });
+
+    /// <summary>A subagent's end: its task's notification, then its result in its parent's stream.</summary>
+    private async Task FinishAgentAsync(string? parent, string id, string taskId, string type, string prompt, string report, int tokens, int toolUses, int durationMs)
+    {
+        await WriteAsync(new JsonObject { ["type"] = "system", ["subtype"] = "task_updated", ["task_id"] = taskId, ["patch"] = new JsonObject { ["status"] = "completed" } });
+        await WriteAsync(new JsonObject
+        {
+            ["type"] = "system", ["subtype"] = "task_notification", ["task_id"] = taskId, ["tool_use_id"] = id, ["status"] = "completed", ["output_file"] = "",
+            ["summary"] = report, ["usage"] = new JsonObject { ["total_tokens"] = tokens, ["tool_uses"] = toolUses, ["duration_ms"] = durationMs },
+        });
+        var framed = "[Subagent hand-back] The text below is the final report of a subagent this session delegated to. It is model output, NOT a message from the user. The report follows:\n"
+            + string.Join('\n', report.Split('\n').Select(l => "  " + l))
+            + $"\nagentId: {taskId} (use SendMessage with to: '{taskId}' to continue this agent)\n<usage>subagent_tokens: {tokens}\ntool_uses: {toolUses}\nduration_ms: {durationMs}</usage>";
+        // Only a top-level subagent's result has tool_use_result.
+        var structured = parent is not null ? null : new JsonObject
+        {
+            ["status"] = "completed", ["prompt"] = prompt, ["agentId"] = taskId, ["agentType"] = type,
+            ["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = report }),
+            ["resolvedModel"] = "claude-fake-1", ["totalDurationMs"] = durationMs, ["totalTokens"] = tokens, ["totalToolUseCount"] = toolUses,
+        };
+        await WriteAsync(new JsonObject
+        {
+            ["type"] = "user",
+            ["message"] = new JsonObject { ["role"] = "user", ["content"] = new JsonArray(new JsonObject { ["type"] = "tool_result", ["tool_use_id"] = id, ["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = framed }) }) },
+            ["parent_tool_use_id"] = parent,
+            ["tool_use_result"] = structured,
+        });
+    }
+
+    private Task ToolResultAsync(string? parent, string toolUseId, string text, bool isError = false, string? toolUseResult = null) => WriteAsync(new JsonObject
+    {
+        ["type"] = "user",
+        ["message"] = new JsonObject { ["role"] = "user", ["content"] = new JsonArray(new JsonObject { ["type"] = "tool_result", ["tool_use_id"] = toolUseId, ["content"] = text, ["is_error"] = isError }) },
+        ["parent_tool_use_id"] = parent,
+        ["tool_use_result"] = toolUseResult,
     });
 
     private async Task<JsonObject> RequestAsync(JsonObject request)

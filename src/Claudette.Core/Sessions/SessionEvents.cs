@@ -38,6 +38,9 @@ public sealed record PermissionCancelled(string RequestId) : SessionEvent;
 
 public sealed record RateLimitUpdated(RateLimitEventMessage Message) : SessionEvent;
 
+/// <summary>A tool call is still running, for example a subagent (a heartbeat, or waiting out an API error).</summary>
+public sealed record ToolProgress(ToolProgressMessage Message) : SessionEvent;
+
 /// <summary>
 /// Claude Code needs a sign-in (DESIGN.md §11, "Detecting"): an <c>assistant</c> message with a sign-in error, or an
 /// <c>auth_status</c> message with an error.

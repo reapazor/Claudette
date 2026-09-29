@@ -37,6 +37,13 @@ public abstract partial class PromptItem(PermissionRequest request) : Conversati
 
     public bool HasOutcome => !IsPending && Outcome.Length > 0;
 
+    /// <summary>The subagent that's asking, when it isn't the main agent (DESIGN.md §18, "Agent map").</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAsker))]
+    public partial string? Asker { get; set; }
+
+    public bool HasAsker => Asker is not null;
+
     /// <summary>Raised when the user answers, so the tab can update its "needs input" status.</summary>
     public event EventHandler? Answered;
 

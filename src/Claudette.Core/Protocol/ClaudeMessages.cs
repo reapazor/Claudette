@@ -98,6 +98,18 @@ public sealed record ResultMessage(
 
 public sealed record RateLimitEventMessage(JsonObject Info, JsonObject Raw) : ClaudeMessage("rate_limit_event", Raw);
 
+/// <summary>
+/// <c>tool_progress</c>: a running tool call is still going. For the <c>Agent</c> tool, <see cref="ParentToolUseId"/>
+/// names the subagent, and <c>subagent_retry</c> in <see cref="ClaudeMessage.Raw"/> says it's waiting out an API error.
+/// </summary>
+public sealed record ToolProgressMessage(
+    string? ToolUseId,
+    string? ToolName,
+    string? ParentToolUseId,
+    double? ElapsedSeconds,
+    bool IsHeartbeat,
+    JsonObject Raw) : ClaudeMessage("tool_progress", Raw);
+
 public sealed record AuthStatusMessage(bool IsAuthenticating, IReadOnlyList<string> Output, string? Error, JsonObject Raw) : ClaudeMessage("auth_status", Raw);
 
 /// <summary>A control request from Claude Code, such as <c>can_use_tool</c>.</summary>

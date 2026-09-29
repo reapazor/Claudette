@@ -167,7 +167,7 @@ public partial class ToolUseItem : ConversationItem
     private void Toggle() => IsExpanded = !IsExpanded;
 
     /// <summary>Fills in the result, using Claude Code's structured <c>tool_use_result</c> where it has one.</summary>
-    public void ApplyResult(string text, bool isError, JsonNode? toolUseResult)
+    public virtual void ApplyResult(string text, bool isError, JsonNode? toolUseResult)
     {
         IsComplete = true;
         IsError = isError;
@@ -242,7 +242,7 @@ public partial class ToolUseItem : ConversationItem
     protected static string? Str(JsonObject obj, string name) =>
         obj[name] is JsonValue value && value.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : null;
 
-    private static string? FirstLine(string? text)
+    protected static string? FirstLine(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -266,6 +266,89 @@ public sealed partial class SubagentItem : ToolUseItem
     public string AgentType { get; }
 
     public ObservableCollection<ConversationItem> Items { get; } = [];
+
+    /// <summary>Launched in the background: its call returns at once, and it keeps running (DESIGN.md §18).</summary>
+    [ObservableProperty]
+    public partial bool IsBackground { get; private set; }
+
+    /// <summary>Stopped, by the user or an interrupt: neither done nor failed, so its dot is muted.</summary>
+    public bool IsStopped { get; private set; }
+
+    /// <summary>Finished and returned its report: the green dot.</summary>
+    public bool IsSucceeded => IsComplete && !IsError && !IsStopped;
+
+    public override void ApplyResult(string text, bool isError, JsonNode? toolUseResult)
+    {
+        if (!isError && toolUseResult is JsonObject result && Str(result, "status") is "async_launched" or "remote_launched")
+        {
+            // Not finished: a task notification says when it is.
+            IsBackground = true;
+            ResultSummary = "Running in the background";
+            return;
+        }
+        base.ApplyResult(text, isError, toolUseResult);
+        if (!isError && FirstLine(Report(text, toolUseResult)) is { } report)
+        {
+            ResultSummary = report;
+        }
+        OnPropertyChanged(nameof(IsSucceeded));
+    }
+
+    /// <summary>How it ended, as the agent map sees it, so the group's status dot and result line agree with the map.</summary>
+    internal void ShowEnded(AgentStatus status, string? report)
+    {
+        IsComplete = true;
+        IsError = status == AgentStatus.Failed;
+        IsStopped = status == AgentStatus.Stopped;
+        OnPropertyChanged(nameof(IsStopped));
+        OnPropertyChanged(nameof(IsSucceeded));
+        ResultSummary = status switch
+        {
+            AgentStatus.Stopped => "Stopped",
+            _ => FirstLine(report) ?? ResultSummary,
+        };
+    }
+
+    private const string HandBackMarker = "The report follows:";
+
+    /// <summary>
+    /// The report a subagent handed back. Claude Code puts it in <c>tool_use_result.content</c>; nested subagents'
+    /// results have no <c>tool_use_result</c>, so their tool result text is read instead, without the frame Claude
+    /// Code puts around it ("[Subagent hand-back] … The report follows:", indented, then an <c>agentId</c> and
+    /// <c>&lt;usage&gt;</c> trailer). Null when the frame is there but can't be read.
+    /// </summary>
+    public static string? Report(string text, JsonNode? toolUseResult)
+    {
+        if (toolUseResult is JsonObject result && result["content"] is JsonArray content)
+        {
+            var joined = string.Join("\n\n", content.OfType<JsonObject>().Where(b => Str(b, "type") == "text").Select(b => Str(b, "text")).OfType<string>());
+            if (joined.Length > 0)
+            {
+                return joined;
+            }
+        }
+        if (!text.StartsWith("[Subagent hand-back]", StringComparison.Ordinal))
+        {
+            return text;
+        }
+        var start = text.IndexOf(HandBackMarker, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return null;
+        }
+        var lines = text[(start + HandBackMarker.Length)..].Split('\n').ToList();
+        var usage = lines.FindIndex(l => l.StartsWith("<usage>", StringComparison.Ordinal));
+        if (usage >= 0)
+        {
+            lines.RemoveRange(usage, lines.Count - usage);
+        }
+        if (lines.Count > 0 && lines[^1].StartsWith("agentId: ", StringComparison.Ordinal))
+        {
+            lines.RemoveAt(lines.Count - 1);
+        }
+        // The harness indents every line of the report by two spaces.
+        return string.Join('\n', lines.Select(l => l.StartsWith("  ", StringComparison.Ordinal) ? l[2..] : l)).Trim();
+    }
 }
 
 public enum NoteKind

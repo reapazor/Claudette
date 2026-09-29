@@ -1,0 +1,81 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             xmlns:conv="using:Claudette.App.Conversation"
+             xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
+             x:Class="Claudette.App.Views.AgentDetails"
+             x:DataType="vm:TabViewModel">
+
+  <!-- The selected agent (DESIGN.md §18): the prompt its parent sent it, as Markdown with Copy, and what it returned. -->
+  <UserControl.Styles>
+    <Style Selector="Border.agentbox">
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="10,6" />
+    </Style>
+  </UserControl.Styles>
+
+  <Panel>
+    <TextBlock Classes="muted small" Margin="12,8" TextWrapping="Wrap" IsVisible="{Binding !HasSelectedAgent}"
+               Text="Select an agent to see the prompt it was given and what it returned." />
+    <ScrollViewer IsVisible="{Binding HasSelectedAgent}" HorizontalScrollBarVisibility="Disabled">
+      <ContentControl Content="{Binding SelectedAgent}" Margin="12,8,12,12">
+        <ContentControl.ContentTemplate>
+          <DataTemplate DataType="conv:AgentNode">
+            <StackPanel Spacing="8">
+              <Grid ColumnDefinitions="Auto,*">
+                <TextBlock Classes="status" Classes.busy="{Binding IsRunning}" Classes.alert="{Binding IsWaiting}"
+                           Classes.ok="{Binding IsDone}" Classes.failed="{Binding IsFailed}"
+                           Text="{Binding StatusGlyph}" Margin="0,1,8,0" />
+                <SelectableTextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+              </Grid>
+              <TextBlock Classes="small" Text="{Binding StatusText}" Classes.warning="{Binding IsWaiting}" Classes.error="{Binding IsFailed}" />
+              <TextBlock Classes="muted small" Text="{Binding Meta}" TextWrapping="Wrap"
+                         ToolTip.Tip="Tokens as Claude Code reports them: the subagent's latest request, not a running total" />
+              <TextBlock Classes="muted small" Text="{Binding ActivityLine}" TextWrapping="Wrap" IsVisible="{Binding IsActive}" />
+
+              <WrapPanel ItemSpacing="6" LineSpacing="6" IsVisible="{Binding !IsRoot}">
+                <Button Classes.accent="{Binding IsWaiting}" Content="{Binding ShowText}"
+                        Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ShowAgentCommand}" CommandParameter="{Binding}" />
+                <Button Content="{Binding StopText, StringFormat='{}{0}…'}" IsVisible="{Binding CanStop}"
+                        Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).StopAgentCommand}" CommandParameter="{Binding}" />
+              </WrapPanel>
+
+              <!-- The prompt -->
+              <StackPanel Spacing="4" IsVisible="{Binding HasPrompt}">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Classes="muted small" FontWeight="SemiBold" Text="Prompt" VerticalAlignment="Center" />
+                  <Button Grid.Column="1" Classes="flat" ToolTip.Tip="Copy the prompt"
+                          Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyAgentPromptCommand}" CommandParameter="{Binding}">
+                    <TextBlock Classes="small" Text="Copy" />
+                  </Button>
+                </Grid>
+                <Border Classes="agentbox">
+                  <md:MarkdownRenderer MarkdownBuilder="{Binding PromptMarkdown}"
+                                       LinkCommand="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenLinkCommand}" />
+                </Border>
+              </StackPanel>
+
+              <!-- What it handed back -->
+              <StackPanel Spacing="4" IsVisible="{Binding HasResult}">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Classes="muted small" FontWeight="SemiBold" Text="Result" VerticalAlignment="Center" />
+                  <Button Grid.Column="1" Classes="flat" ToolTip.Tip="Copy the result"
+                          Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyAgentResultCommand}" CommandParameter="{Binding}">
+                    <TextBlock Classes="small" Text="Copy" />
+                  </Button>
+                </Grid>
+                <Border Classes="agentbox">
+                  <md:MarkdownRenderer MarkdownBuilder="{Binding ResultMarkdown}"
+                                       LinkCommand="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenLinkCommand}" />
+                </Border>
+              </StackPanel>
+            </StackPanel>
+          </DataTemplate>
+        </ContentControl.ContentTemplate>
+      </ContentControl>
+    </ScrollViewer>
+  </Panel>
+</UserControl>
