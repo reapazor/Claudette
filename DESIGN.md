@@ -159,7 +159,7 @@ Settings → Appearance → **Style** picks one of two looks, in light and dark 
 - Thinking is a collapsed row.
 - User prompts sit in a subtle bordered box rather than a chat bubble.
 - The composer is a rounded box with the mode and model controls beside it, and a square Stop button.
-- Inline code and code blocks use VS Code's Light+ and Dark+ colors.
+- Inline code and code blocks use VS Code's Light+ and Dark+ colors. They change with the theme, as the diff view's do, including in code already shown and in a diff view that's open.
 
 **Claude** takes the Claude apps (the iOS app and claude.ai) as its reference. The layout, tool rows, diffs and every control stay the same; the look changes:
 
@@ -174,7 +174,7 @@ Settings → Appearance → **Style** picks one of two looks, in light and dark 
 - **Rounder corners** on code blocks, prompts and the sidebar's rows.
 - **No Mica**, so the sidebar and header stay warm rather than showing the desktop through.
 
-How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette's own tokens, and `Themes/AppColors` swaps them in and gives Fluent a matching palette (the window background, text, controls, and the accent it derives its shades from). Fluent reads most palette colors only when its resources are first used, so switching loads a fresh Fluent theme with the palette already set. The shapes are styles under the `claude` class, which the main view takes, as Density's are under `compact`. The replies' font is the `ReplyFont` resource.
+How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette's own tokens, and `Themes/AppColors` swaps them in and gives Fluent a matching palette (the window background, text, controls, and the accent it derives its shades from). Fluent reads most palette colors only when its resources are first used, so switching loads a fresh Fluent theme with the palette already set. The shapes are styles under the `claude` class, which the main view takes, as Density's are under `compact`. The replies' font is the `ReplyFont` resource. Code blocks take their syntax colors through `Views/CodeBlockTheme` rather than LiveMarkdown's own property, because LiveMarkdown re-highlights a block already shown by setting its code again, which empties a one-line block.
 
 ## 4. Tabs & Sessions
 

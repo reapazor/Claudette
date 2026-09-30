@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Styling;
 using Avalonia.VisualTree;
 using Claudette.App.Controls;
 using Claudette.App.Diffs;
@@ -85,11 +86,39 @@ public class DiffWindowUiTests
         Assert.True(scroll.Offset.Y > 0);
     }
 
-    private static async Task<(DiffWindow Window, DiffWindowViewModel ViewModel)> ShowAsync(DiffFile file)
+    /// <summary>The syntax colors follow a change of theme while the window is open (GitHub issue #14).</summary>
+    [AvaloniaFact]
+    public async Task The_syntax_colors_follow_the_theme_while_the_window_is_open()
+    {
+        var app = Application.Current!;
+        var theme = app.RequestedThemeVariant;
+        try
+        {
+            app.RequestedThemeVariant = ThemeVariant.Light;
+            await using var file = await DiffFile.CreateAsync("var a = 1;\n", "var a = 2;\n");
+            var (window, viewModel) = await ShowAsync(file);
+            var light = Colors(viewModel);
+
+            app.RequestedThemeVariant = ThemeVariant.Dark;
+            await UiText.SettleUntilAsync(window, () => !Colors(viewModel).SequenceEqual(light), "the dark colors");
+
+            // As a window opened in the dark theme colors it.
+            var (_, opened) = await ShowAsync(file, dark: true);
+            Assert.Equal(Colors(opened), Colors(viewModel));
+        }
+        finally
+        {
+            app.RequestedThemeVariant = theme;
+        }
+
+        static List<string?> Colors(DiffWindowViewModel viewModel) => [.. viewModel.InlineRows.SelectMany(r => r.Runs ?? []).Select(r => r.Color)];
+    }
+
+    private static async Task<(DiffWindow Window, DiffWindowViewModel ViewModel)> ShowAsync(DiffFile file, bool dark = false)
     {
         var source = new DiffSource(file.Path, "src/auth.cs", file.Before, "compared with before Claude's first change in this session",
             OpenInDiffTool: null, () => Task.CompletedTask, () => Task.CompletedTask, () => Task.CompletedTask);
-        var viewModel = new DiffWindowViewModel(source, dark: false);
+        var viewModel = new DiffWindowViewModel(source, dark);
         var window = new DiffWindow { DataContext = viewModel, Width = 700, Height = 400 };
         window.Show();
         await UiText.SettleUntilAsync(window, () => !viewModel.IsLoading, "the diff");

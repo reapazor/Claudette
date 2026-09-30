@@ -35,10 +35,11 @@
     <Style Selector="md|MarkdownTextBlock">
       <Setter Property="FontFamily" Value="{DynamicResource ReplyFont}" />
     </Style>
-    <!-- Syntax colors for the theme: LiveMarkdown's default is DarkPlus, in light mode too. -->
+    <!-- Syntax colors for the theme: LiveMarkdown's default is DarkPlus, in light mode too. Set through
+         views:CodeBlockTheme, which re-highlights a block that's already shown without losing its code. -->
     <Style Selector="md|CodeBlock">
       <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
-      <Setter Property="ColorTheme" Value="{DynamicResource CodeColorTheme}" />
+      <Setter Property="views:CodeBlockTheme.Theme" Value="{DynamicResource CodeColorTheme}" />
     </Style>
     <Style Selector="md|CodeBlock md|MarkdownTextBlock">
       <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
