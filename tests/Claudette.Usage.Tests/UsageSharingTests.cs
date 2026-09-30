@@ -16,10 +16,12 @@ public class UsageSharingTests
             new(At.AddMinutes(5), 64, At.AddHours(2), null, null, []),
         ];
 
-        var shared = UsageSharing.Read(UsageSharing.Write("DESKTOP-01", "a1b2c3", At.AddMinutes(6), samples));
+        var shared = UsageSharing.Read(UsageSharing.Write("DESKTOP-01", "0.3.0", "a1b2c3", At.AddMinutes(6), samples));
 
         Assert.NotNull(shared);
-        Assert.Equal(("DESKTOP-01", "a1b2c3", At.AddMinutes(6)), (shared.MachineName, shared.Account, shared.Published));
+        Assert.Equal((UsageSharing.FileVersion, "DESKTOP-01", "0.3.0", "a1b2c3", At.AddMinutes(6)),
+            (shared.Version, shared.MachineName, shared.WrittenBy, shared.Account, shared.Published));
+        Assert.False(shared.IsNewerFormat);
         Assert.Equal(samples.Length, shared.Samples.Count);
         Assert.Equal(samples[0] with { Models = [] }, shared.Samples[0] with { Models = [] });
         Assert.Equal(samples[0].Models, shared.Samples[0].Models);
@@ -48,7 +50,7 @@ public class UsageSharingTests
 
         var shared = UsageSharing.Read(new JsonObject
         {
-            ["version"] = 2,
+            ["version"] = 1,
             ["account"] = "a1b2c3",
             ["somethingNew"] = true,
             ["samples"] = new JsonArray(
@@ -57,5 +59,33 @@ public class UsageSharingTests
         }.ToJsonString());
 
         Assert.Equal([12.0], shared?.Samples.Select(s => s.SessionPercent));
+    }
+
+    [Fact]
+    public void A_file_in_a_newer_format_is_read_without_its_samples()
+    {
+        var shared = UsageSharing.Read(new JsonObject
+        {
+            ["version"] = UsageSharing.FileVersion + 1,
+            ["machine"] = "LAPTOP-02",
+            ["claudette"] = "2.0.0",
+            ["account"] = "a1b2c3",
+            ["samples"] = new JsonArray(new JsonObject { ["at"] = At.ToUnixTimeMilliseconds(), ["session"] = 0.12 }),
+        }.ToJsonString());
+
+        Assert.NotNull(shared);
+        Assert.True(shared.IsNewerFormat);
+        Assert.Equal(("LAPTOP-02", "2.0.0", "a1b2c3"), (shared.MachineName, shared.WrittenBy, shared.Account));
+        Assert.Empty(shared.Samples);
+    }
+
+    [Fact]
+    public void A_file_written_before_the_writers_version_was_kept_still_reads()
+    {
+        var shared = UsageSharing.Read("""{"version":1,"machine":"DESKTOP-01","account":"a1b2c3","samples":[]}""");
+
+        Assert.NotNull(shared);
+        Assert.Null(shared.WrittenBy);
+        Assert.False(shared.IsNewerFormat);
     }
 }

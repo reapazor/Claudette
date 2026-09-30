@@ -727,6 +727,10 @@ The plan's limits are the account's, so every machine signed in to it sees the s
   - A sample is added once: each machine's newest imported sample is remembered, and only newer ones are added. Samples older than **Keep usage history** aren't added.
   - The header, its trendline and projection, the detailed header's charts and the Usage panel take them in straight away. When the newest sample is newer than this machine's latest reading, the header shows it, as it does after a restart.
   - This machine's own file is never read back, and its shared samples never include ones it imported, so readings don't echo between machines.
+- **Format.** Each file says which format it's in and which version of Claudette wrote it (for the log).
+  - A change that only adds fields keeps the format, since readers ignore fields they don't know.
+  - One that removes a field or changes what one means takes the next format number. A Claudette that doesn't know that number leaves the machine's readings out until it's updated, and says so once in its log, rather than guess what they mean.
+  - A Claudette keeps reading every format before its own, so machines can be updated one at a time.
 - **Clear usage history** deletes imported samples too, and the ones shared up to then aren't imported again.
 - Turning sharing off stops writing and reading. The file already in the library stays, as a session's copy does when its tab stops syncing.
 
