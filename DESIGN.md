@@ -546,11 +546,11 @@ This is Claudette's main feature: knowing how fast you're using your plan's limi
   - Weekly limit across all models.
   - Each model-specific weekly limit the plan has (for example Fable).
   - Each shows % used and its reset day and time in a tooltip.
-  - They sit side by side. When the header is too narrow for that, they stack one above the other, with their bars lined up.
+  - They stack one above the other, the limit across all models on top, with their bars lined up.
 
 ### Burn trendline
 
-- A sparkline next to the session meter showing usage % over the current window.
+- A sparkline between the session meter and the weekly limits showing usage % over the current window, as tall as the session meter and the plain-language line under it together.
 - A dotted **projection** line continues the current rate forward.
 - A plain-language line under the meter:
   - "At this rate you'll hit the limit in 1h 05m, 1h 09m before it resets" (amber/red), or

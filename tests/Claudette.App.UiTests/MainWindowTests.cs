@@ -155,11 +155,11 @@ public class MainWindowTests
     }
 
     /// <summary>
-    /// The weekly meters sit side by side, and stack one above the other, with their bars lined up, when the header is
-    /// too narrow for that (DESIGN.md §6, "Header meters").
+    /// The weekly meters stack one above the other, the limit across all models on top, with their bars lined up; the
+    /// sparkline beside them is as tall as the session meter and the projection line together (DESIGN.md §6).
     /// </summary>
     [AvaloniaFact]
-    public async Task The_weekly_meters_stack_when_the_header_is_too_narrow_for_them_side_by_side()
+    public async Task The_weekly_meters_stack_beside_a_sparkline_as_tall_as_the_header()
     {
         await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
         var store = new UsageStore(Path.Combine(h.Root, "usage.db"), h.Time);
@@ -180,21 +180,17 @@ public class MainWindowTests
         window.Show();
         UiText.Settle(window);
         var meters = window.GetVisualDescendants().OfType<ItemsControl>().Single(c => c.Name == "WeeklyMeters");
-        var panel = meters.GetVisualDescendants().OfType<RowOrColumnPanel>().Single();
         var (weekly, fable) = (meters.GetVisualDescendants().OfType<ProgressBar>().First(), meters.GetVisualDescendants().OfType<ProgressBar>().Last());
+        var sparkline = window.GetVisualDescendants().OfType<UsageChart>().Single(c => c.Name == "Sparkline");
+        var header = sparkline.FindAncestorOfType<Grid>()!;
         Point At(Control c) => c.TranslatePoint(default, window)!.Value;
 
-        Assert.False(panel.IsStacked);
-        Assert.Equal(At(weekly).Y, At(fable).Y);
-        Assert.True(At(fable).X > At(weekly).X + weekly.Bounds.Width, "Fable's meter should be to the right of the weekly one");
-
-        // Too narrow for both on one line with the headless font, which is wider than a real one, but not for a column.
-        window.Width = 1000;
-        UiText.Settle(window);
-
-        Assert.True(panel.IsStacked);
+        Assert.Equal(["Weekly", "Fable"], usage.Weekly.Select(m => m.Label));
         Assert.Equal(At(weekly).X, At(fable).X);
         Assert.True(At(fable).Y > At(weekly).Y + weekly.Bounds.Height, "Fable's meter should be under the weekly one");
+        Assert.Equal(At(header).Y, At(sparkline).Y);
+        Assert.Equal(header.Bounds.Height, sparkline.Bounds.Height);
+        Assert.True(sparkline.Bounds.Height > 30, $"The sparkline is {sparkline.Bounds.Height} px high.");
         var right = meters.GetVisualDescendants().OfType<TextBlock>().Max(t => t.TranslatePoint(new Point(t.Bounds.Width, 0), window)!.Value.X);
         var chevron = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "UsageDetailsToggle");
         Assert.True(right <= At(chevron).X, $"The meters end at {right}, past the chevron at {At(chevron).X}");
