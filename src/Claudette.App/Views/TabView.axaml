@@ -915,6 +915,18 @@
         </Grid>
       </Border>
 
+      <!-- A check-in counting down: it can go now, or not at all (DESIGN.md §5, "Check-ins on long turns") -->
+      <Border Classes="codeblock" IsVisible="{Binding HasCheckInCountdown}">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+          <TextBlock TextWrapping="Wrap" VerticalAlignment="Center" Text="{Binding CheckInCountdownText}" ToolTip.Tip="{Binding CheckInCountdown.Message}" />
+          <Button Grid.Column="1" Content="Send now" Command="{Binding SendCheckInNowCommand}" />
+          <Button Grid.Column="2" Classes="flat" Padding="4" ToolTip.Tip="Don't check in" AutomationProperties.Name="Don't check in" VerticalAlignment="Center"
+                  Command="{Binding SkipCheckInCommand}">
+            <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="7" Height="7" Stretch="Uniform" />
+          </Button>
+        </Grid>
+      </Border>
+
       <!-- A usage limit stopped the task: it continues when the limit resets (DESIGN.md §6, "Continuing after a limit resets") -->
       <Border Classes="codeblock" IsVisible="{Binding HasLimitWait}">
         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">

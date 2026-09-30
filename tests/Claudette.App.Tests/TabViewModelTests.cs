@@ -189,13 +189,59 @@ public class TabViewModelTests
         h.Transport.Emit("""{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-5-5"}""");
         await TabTestHarness.Eventually(() => tab.Status == TabStatus.Working, "working");
 
-        for (var i = 0; i < 31; i++)
-        {
-            h.Time.Advance(CheckInMonitor.TickInterval);
-        }
+        Advance(h, TimeSpan.FromMinutes(5));
+
+        // It counts down first, in a bar over the composer.
+        await TabTestHarness.Eventually(() => tab.HasCheckInCountdown, "the countdown");
+        Assert.Equal("Checking in with Claude in 30 s.", tab.CheckInCountdownText);
+        Advance(h, TimeSpan.FromSeconds(10));
+        await TabTestHarness.Eventually(() => tab.CheckInCountdownText == "Checking in with Claude in 20 s.", "the countdown to go on");
+        Assert.DoesNotContain("Status?", h.Transport.SentUserTexts);
+
+        Advance(h, TimeSpan.FromSeconds(20));
 
         await TabTestHarness.Eventually(() => h.Transport.SentUserTexts.Contains("Status?"), "the check-in");
         Assert.Contains(tab.Items.OfType<UserMessageItem>(), m => m.IsCheckIn);
+        await TabTestHarness.Eventually(() => !tab.HasCheckInCountdown, "the bar to close");
+    }
+
+    [Fact]
+    public async Task Send_now_sends_a_check_in_at_once_and_the_close_button_skips_one()
+    {
+        await using var h = new TabTestHarness();
+        h.Services.Settings.CheckIns = new CheckInSettings { RunTimeMinutes = 0, QuietTimeMinutes = 5, Message = "Status?" };
+        var tab = await h.OpenTabAsync();
+        tab.ComposerText = "long job";
+        await tab.SendCommand.ExecuteAsync(null);
+        h.Transport.Emit("""{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-5-5"}""");
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Working, "working");
+
+        Advance(h, TimeSpan.FromMinutes(5));
+        await TabTestHarness.Eventually(() => tab.HasCheckInCountdown, "the countdown");
+        tab.SkipCheckInCommand.Execute(null);
+
+        await TabTestHarness.Eventually(() => !tab.HasCheckInCountdown, "the bar to close");
+        Advance(h, CheckInMonitor.Countdown);
+        Assert.DoesNotContain("Status?", h.Transport.SentUserTexts);
+        Assert.DoesNotContain(tab.Items.OfType<UserMessageItem>(), m => m.IsCheckIn);
+
+        // The next one comes a whole interval after the skip.
+        Advance(h, TimeSpan.FromMinutes(5) - CheckInMonitor.Countdown);
+        await TabTestHarness.Eventually(() => tab.HasCheckInCountdown, "the next countdown");
+        tab.SendCheckInNowCommand.Execute(null);
+
+        await TabTestHarness.Eventually(() => h.Transport.SentUserTexts.Contains("Status?"), "the check-in");
+        await TabTestHarness.Eventually(() => !tab.HasCheckInCountdown, "the bar to close");
+    }
+
+    private static void Advance(TabTestHarness h, TimeSpan by)
+    {
+        // In steps, so the check-in timer fires as it would.
+        var end = h.Time.GetUtcNow() + by;
+        while (h.Time.GetUtcNow() < end)
+        {
+            h.Time.Advance(CheckInMonitor.TickInterval);
+        }
     }
 
     [Fact]

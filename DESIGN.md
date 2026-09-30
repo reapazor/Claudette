@@ -514,6 +514,11 @@ If a turn runs for a long time, Claudette can ask Claude how it's going, so a ta
 - **Triggers.** Either of these starts a check-in; each can be set or turned off:
   - **Run time:** the turn has been running for longer than a set time (default 15 minutes).
   - **Quiet time:** the turn has produced no new output for a set time (default 5 minutes).
+- **Counting down.** When a check-in is due, a bar over the composer counts down 30 seconds first: *Checking in with Claude in 30 s.*, with the message as its tip.
+  - **Send now** sends it straight away.
+  - ✕ (**Don't check in**) skips it. The timers restart, so the next check-in comes a whole interval later, as if Claude had just said something.
+  - It's withdrawn if the turn no longer calls for it: Claude said something after a quiet spell, a permission prompt or question came up, or the turn ended.
+  - Once it's sent it can't be taken back. Claude Code has no way to withdraw one message it's holding for the turn, only an interrupt that stops the turn and drops them all.
 - **What happens.** Claudette sends a message to the session, the same as if the user had typed it while Claude was working. Claude Code delivers it inside the running turn, and the turn continues. The default message is:
   > *Everything OK? Give me a one or two sentence status update: what you're doing, and whether you're stuck or waiting on something.*
 - **In the conversation.** The check-in appears as a user message with an "Automatic check-in" label, so it's clear the user didn't type it. Claude's reply appears as normal.

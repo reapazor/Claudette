@@ -169,7 +169,8 @@ public class NotificationTests
         h.Transport.Emit("""{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-5-5"}""");
         await TabTestHarness.Eventually(() => tab.Status == TabStatus.Working, "working");
 
-        for (var i = 0; i < 31; i++)
+        // The quiet time, then the countdown before it's sent.
+        for (var i = 0; i < 34; i++)
         {
             h.Time.Advance(CheckInMonitor.TickInterval);
         }
