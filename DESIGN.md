@@ -238,6 +238,7 @@ The tabs are listed in a sidebar on the left of the window, rather than a strip 
   - **Context ring.** A small ring at the end of the row, level with the second line and under the close button, fills up with the tab's context window ([§6](#per-tab-context)).
     - It's muted, amber when the context indicator warns (near auto-compact), and red from 95%.
     - Its tip is the composer bar's context text and detail, for example *"Context 75% (150,000 of 200,000 tokens · auto-compacts at 160,000)"*.
+    - Clicking it shows what fills the context, as the composer bar's indicator does ([§6](#per-tab-context)), without selecting the tab.
     - It's hidden until the tab has context data, so a tab that hasn't started has none. **Show context on tab rows** (Settings → Appearance, on by default) turns it off. The rail doesn't show it.
   - The close button shows on hover and on the selected tab. Hovering the row shows the tab info card; double-clicking renames it.
 - **Project runs.** Each time one of the tab's project actions runs as a job, such as a build, it gets a small entry under the tab's row, indented to the tab's name, newest last ([§18](#project-tools)):
@@ -593,7 +594,15 @@ The header can be drawn taller, with charts, for keeping an eye on usage without
 
 Separate from plan limits, each tab shows how full its **context window** is (in the composer bar). It warns near the auto-compact threshold and has a quick **Compact** action.
 
-- Clicking the context indicator shows the detail and **Compact now**, which sends `/compact` to the session.
+- **What fills it.** Clicking the context indicator, or the tab's context ring in the sidebar, shows what fills the window, as Claude Code's `/context` does, from the same `get_context_usage` reply:
+  - The total and the window (*"124,000 of 200,000 tokens · auto-compacts at 167,000"*).
+  - A bar of the whole window, each part as wide as its share, then the free space and the auto-compact buffer (hatched). Hovering a part names it with its tokens and share; a part too small to see keeps a sliver.
+  - A row for each part, with its color, tokens and share of the window. Tools Claude Code holds out of the window until they're needed (*MCP tools (deferred)*) are listed last, without a color or share.
+  - What's inside the larger parts, each collapsed until it's clicked: the memory files, the MCP servers (with how many tools, and how many aren't loaded), custom agents, skills (and how many of those found made it into the listing), and the messages (tool results, tool calls, attachments, the user's messages and Claude's replies, then by tool and by attachment). A part left open stays open when the breakdown refreshes after a turn.
+  - The warning when it's nearly full, and **Compact now**, which sends `/compact` to the session.
+  - **The bar's order and colors.** The parts go memory files, skills, system prompt, custom agents, system tools, MCP tools, messages, rather than in `/context`'s order. The colors are the categorical palette, checked with its validator (color blindness included) for every two parts that can end up side by side, in light and dark. Parts come and go (no MCP tools, no custom agents), so in `/context`'s order nearly every pair can meet, and no eight colors keep all of those apart. Putting the parts every session has (system prompt, system tools, messages) between the others limits which can meet. A part Claudette doesn't know by name gets one more color and goes after messages.
+  - Without a buffer row (Claude Code 2.1.284 sends none), the space past the auto-compact threshold is the buffer, as `/context` shows it.
+  - When `get_context_usage` isn't available, it shows the estimate: how much is in the window and the free space, and that this version of Claude Code doesn't say what.
 - A `compact_boundary` message adds a "Conversation compacted" note, or says Claude Code compacted it by itself.
 - **On every tab's row.** A small ring in the sidebar shows the same percentage for each tab, so a tab nearing its limit stands out without selecting it ([§4](#sidebar)). It's muted, amber when the indicator warns, and red from 95%. It comes from the same `get_context_usage` reply, or the same estimate when that isn't available.
 

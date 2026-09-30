@@ -18,6 +18,7 @@
   "work"
   "Opus · Default"
   [button] Close tab
+  [button] Context 1%
 [button] Project tools: work
 [button] History
 [button] Settings

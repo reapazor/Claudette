@@ -225,16 +225,21 @@
                                     <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
                                   </Button>
                                   <!-- How full the tab's context is (DESIGN.md §4, §6): muted, amber near auto-compact, red when
-                                       nearly full. Under the close button, level with the second line; the border gives the tip
-                                       somewhere to hover. -->
-                                  <Border x:Name="ContextRing" Width="16" Height="16" VerticalAlignment="Bottom" Background="Transparent"
+                                       nearly full. Under the close button, level with the second line. Clicking it shows what
+                                       fills the context, as the composer's indicator does, without selecting the tab. -->
+                                  <Button x:Name="ContextRing" Classes="flat" Width="16" Height="16" Padding="0" VerticalAlignment="Bottom"
                                           IsVisible="{Binding ShowContextRing}" ToolTip.Tip="{Binding ContextTip}" AutomationProperties.Name="{Binding ContextText}">
                                     <Panel Width="13" Height="13">
                                       <Ellipse Classes="contexttrack" />
                                       <Arc Classes="contextarc" Classes.high="{Binding IsContextHigh}" Classes.critical="{Binding IsContextCritical}"
                                            StartAngle="-90" SweepAngle="{Binding ContextSweep}" />
                                     </Panel>
-                                  </Border>
+                                    <Button.Flyout>
+                                      <Flyout Placement="RightEdgeAlignedBottom">
+                                        <views:ContextBreakdownView />
+                                      </Flyout>
+                                    </Button.Flyout>
+                                  </Button>
                                 </Panel>
                               </Grid>
                               <Button.ContextMenu>

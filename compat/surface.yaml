@@ -522,11 +522,58 @@ items:
     fallback: See control_request. A resumed tab uses it to switch to auto mode after it starts (DESIGN.md §7, "Starting mode"); if it fails, the tab stays in Manual.
   - id: "get_context_usage"
     kind: control
-    status: undocumented
-    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/ContextUsage.cs
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/ContextUsage.cs, src/Claudette.App/ViewModels/ContextBreakdown.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: RealCliTests
-    fallback: The main agent's latest call (its message.usage) divided by modelUsage.contextWindow from the last result, warning near autocompact_state's threshold (CallUsage, TabViewModel.ShowEstimatedContext).
+    test: RealCliTests, ContextUsageTests, ContextBreakdownTests
+    fallback: The main agent's latest call (its message.usage) divided by modelUsage.contextWindow from the last result, warning near autocompact_state's threshold (CallUsage, TabViewModel.ShowEstimatedContext). The context flyout then shows the estimate's total and free space, without the parts.
+  # get_context_usage's reply, for the context flyout's bar and list (DESIGN.md §6, "Per-tab context")
+  - id: "autoCompactThreshold"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ContextUsage.cs, src/Claudette.App/ViewModels/ContextBreakdown.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ContextBreakdownTests
+    fallback: Without a buffer row (2.1.284 sends none), the space past this threshold is shown as the auto-compact buffer, as /context shows it.
+  - id: "categories"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ContextUsage.cs, src/Claudette.App/ViewModels/ContextBreakdown.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ContextUsageTests, ContextBreakdownTests
+    fallback: "Each row's kind (used, free, buffer, deferred) says where it goes; an unknown kind is listed without a share of the window. Without a kind (before Agent SDK 0.3.268), isDeferred and the names Free space and Autocompact buffer are used. The bar's colors and order go by the display name; a name Claudette doesn't know gets the Other color, after Messages."
+  - id: "memoryFiles"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ContextUsage.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ContextUsageTests
+  - id: "mcpTools"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ContextUsage.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ContextUsageTests
+    fallback: isLoaded is optional; a tool without it counts as in the window.
+  - id: "agents"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ContextUsage.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ContextUsageTests
+  - id: "skillFrontmatter"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ContextUsage.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: MessageParserTests
+  - id: "messageBreakdown"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ContextUsage.cs, src/Claudette.App/ViewModels/ContextBreakdown.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: MessageParserTests, ContextBreakdownTests
+    fallback: Optional in the type; without it the flyout has no Messages section.
   - id: "get_usage"
     kind: control
     status: experimental
@@ -1114,9 +1161,9 @@ items:
   - id: "totalTokens"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/AgentNode.cs
+    usedIn: src/Claudette.App/Conversation/AgentNode.cs, src/Claudette.Core/Sessions/ContextUsage.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: AgentMapTests
+    test: AgentMapTests, ContextUsageTests
   - id: "totalToolUseCount"
     kind: field
     status: documented

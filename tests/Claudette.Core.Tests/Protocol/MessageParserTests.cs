@@ -1,4 +1,5 @@
 using Claudette.Core.Protocol;
+using Claudette.Core.Sessions;
 using Claudette.Core.Tests.Support;
 
 namespace Claudette.Core.Tests.Protocol;
@@ -109,6 +110,22 @@ public class MessageParserTests
         Assert.Equal(200_000, usage.MaxTokens);
         Assert.True(usage.TotalTokens > 0);
         Assert.Equal(2, usage.Percentage);
+        Assert.Equal((167_000L, true), (usage.AutoCompactThreshold, usage.AutoCompactEnabled));
+
+        // What fills it (DESIGN.md §6, "Per-tab context"), as /context shows it.
+        Assert.Equal(
+            [("System prompt", 1400L, ContextCategoryKind.Used), ("Skills", 1830L, ContextCategoryKind.Used), ("Free space", 196_770L, ContextCategoryKind.Free)],
+            usage.Categories.Select(c => (c.Name, c.Tokens, c.Kind)));
+        Assert.Empty(usage.MemoryFiles);
+        Assert.Empty(usage.McpTools);
+        Assert.Empty(usage.Agents);
+        Assert.Equal((12, 12, 1830L), (usage.Skills!.Total, usage.Skills.Included, usage.Skills.Tokens));
+        Assert.Equal(("dataviz", "built-in", 482L), (usage.Skills.Listed[0].Name, usage.Skills.Listed[0].Source, usage.Skills.Listed[0].Tokens));
+        Assert.Equal(12, usage.Skills.Listed.Count);
+        var messages = usage.Messages!;
+        Assert.Equal((43L, 56L, 98_620L, 18L, 141L), (messages.ToolCallTokens, messages.ToolResultTokens, messages.AttachmentTokens, messages.AssistantTokens, messages.UserTokens));
+        Assert.Equal(new ContextToolUse("Write", 43, 56), Assert.Single(messages.ByTool));
+        Assert.Equal(new ContextAttachment("prompt_snapshot", 96_206), messages.Attachments[0]);
     }
 
     [Fact]

@@ -1229,20 +1229,13 @@
                 <TextBlock Classes="muted small" Text="{Binding ChangedFiles.Count, StringFormat='Files ({0})'}" />
               </Button>
 
-              <!-- Context window (DESIGN.md §6, "Per-tab context") -->
-              <Button Classes="flat" ToolTip.Tip="{Binding ContextDetail}"
+              <!-- Context window (DESIGN.md §6, "Per-tab context"): what fills it, as the tab's context ring shows it -->
+              <Button x:Name="ContextButton" Classes="flat" ToolTip.Tip="{Binding ContextDetail}"
                       IsVisible="{Binding ContextText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                 <TextBlock Classes="muted small" Classes.warning="{Binding IsContextHigh}" Text="{Binding ContextText}" />
                 <Button.Flyout>
                   <Flyout Placement="TopEdgeAlignedRight">
-                    <StackPanel Spacing="8" MaxWidth="360">
-                      <TextBlock FontWeight="SemiBold" Text="{Binding ContextText}" />
-                      <TextBlock Classes="muted small" Text="{Binding ContextDetail}" TextWrapping="Wrap" />
-                      <TextBlock Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding IsContextHigh}"
-                                 Text="Nearly full. Claude Code will compact the conversation soon on its own." />
-                      <Button Content="Compact now" Click="OnFlyoutItemPicked" Command="{Binding CompactCommand}"
-                              ToolTip.Tip="Summarize the conversation so far to free up context, like /compact" />
-                    </StackPanel>
+                    <views:ContextBreakdownView />
                   </Flyout>
                 </Button.Flyout>
               </Button>
