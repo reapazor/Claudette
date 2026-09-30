@@ -6,23 +6,25 @@ namespace Claudette.Core.Tests.Protocol;
 
 public class MessageParserTests
 {
-    public static TheoryData<string> Fixtures() => new(ProtocolFixture.AllNames());
+    /// <summary>Every recording of every version.</summary>
+    public static TheoryData<string, string> Fixtures() =>
+        new(ProtocolFixture.AllVersions().SelectMany(version => ProtocolFixture.AllNames(version).Select(name => (version, name))));
 
     [Theory]
     [MemberData(nameof(Fixtures))]
-    public void Every_recorded_line_parses(string fixture)
+    public void Every_recorded_line_parses(string version, string fixture)
     {
-        foreach (var line in ProtocolFixture.Load(fixture).OutputLines)
+        foreach (var line in ProtocolFixture.Load(fixture, version).OutputLines)
         {
-            Assert.True(MessageParser.TryParse(line, out _, out var error), $"{fixture}: {error}\n{line}");
+            Assert.True(MessageParser.TryParse(line, out _, out var error), $"{version}/{fixture}: {error}\n{line}");
         }
     }
 
     [Theory]
     [MemberData(nameof(Fixtures))]
-    public void Recorded_message_types_are_all_known(string fixture)
+    public void Recorded_message_types_are_all_known(string version, string fixture)
     {
-        foreach (var line in ProtocolFixture.Load(fixture).OutputLines)
+        foreach (var line in ProtocolFixture.Load(fixture, version).OutputLines)
         {
             MessageParser.TryParse(line, out var message, out _);
             Assert.IsNotType<UnknownMessage>(message);
@@ -31,11 +33,11 @@ public class MessageParserTests
 
     [Theory]
     [MemberData(nameof(Fixtures))]
-    public void Recorded_fields_are_all_known_to_diagnostics(string fixture)
+    public void Recorded_fields_are_all_known_to_diagnostics(string version, string fixture)
     {
         // Diagnostics counts fields the tested version didn't have (DESIGN.md §16), so it must know all of these.
         var diagnostics = new ProtocolDiagnostics();
-        foreach (var line in ProtocolFixture.Load(fixture).OutputLines)
+        foreach (var line in ProtocolFixture.Load(fixture, version).OutputLines)
         {
             MessageParser.TryParse(line, out var message, out _);
             diagnostics.RecordFields(message!);

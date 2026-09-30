@@ -512,7 +512,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     }
 
     public string InstalledText => _services.Install is { } install
-        ? $"Claude Code {install.Version} at {install.Path}. Last tested with {ClaudeLocator.LastTestedVersion}{(install.Version > ClaudeLocator.LastTestedVersion ? " (this version is newer)" : "")}."
+        ? $"Claude Code {install.Version} at {install.Path}. Last tested with {ClaudeLocator.LastTestedVersion}"
+            + (install.Version > ClaudeLocator.LastTestedVersion ? " (this version is newer)."
+                : install.Version < ClaudeLocator.LastTestedVersion ? " (this version is older; updating is recommended)."
+                : ".")
         : "Claude Code wasn't found.";
 
     /// <summary>

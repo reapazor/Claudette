@@ -165,6 +165,7 @@ internal abstract class UnixProcessTree<TProcess> : ProcessTree
         if (!exited && IsAlive(pid, startKey))
         {
             LibC.Kill(pid, LibC.SigKill);
+            await Polling.UntilAsync(() => !IsAlive(pid, startKey), EndWait, Time, cancellationToken).ConfigureAwait(false);
         }
     }
 
