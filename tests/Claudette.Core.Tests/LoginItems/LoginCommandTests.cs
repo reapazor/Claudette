@@ -44,9 +44,12 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Null(LoginCommand.For(new ClaudetteCopy(AppInstallKind.Msix, "reapazor.Claudette_1a2b3c4d5e6f7", "0.3.0"), windows: true, "dotnet"));
     }
 
+    // Forward slashes, which every OS reads as separators: backslashes are only separators on Windows.
     [Theory]
-    [InlineData(@"C:\Program Files\dotnet\dotnet.exe", @"C:\Program Files\dotnet\dotnet.exe")]
-    [InlineData(@"D:\Claudette\Claudette.exe", "dotnet")]
+    [InlineData("C:/Program Files/dotnet/dotnet.exe", "C:/Program Files/dotnet/dotnet.exe")]
+    [InlineData("/usr/local/share/dotnet/dotnet", "/usr/local/share/dotnet/dotnet")]
+    [InlineData("D:/Claudette/Claudette.exe", "dotnet")]
+    [InlineData("/Applications/Claudette.app/Contents/MacOS/Claudette", "dotnet")]
     [InlineData(null, "dotnet")]
     public void Dotnet_is_the_one_running_Claudette_when_it_was_started_that_way(string? processPath, string host)
     {
