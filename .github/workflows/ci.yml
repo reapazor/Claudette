@@ -17,6 +17,7 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
@@ -27,12 +28,14 @@ jobs:
       - name: Build
         run: dotnet build Claudette.slnx --no-restore --configuration Release
       # RealCli tests need Claude Code (next job); Live tests use real tokens and never run in CI.
+      # A test that hangs fails the run after 10 minutes and names itself, rather than holding the runner for hours.
       - name: Test
-        run: dotnet test Claudette.slnx --no-build --configuration Release --filter "Category!=RealCli&Category!=Live"
+        run: dotnet test Claudette.slnx --no-build --configuration Release --filter "Category!=RealCli&Category!=Live" --blame-hang-timeout 10m --blame-hang-dump-type none
 
   real-cli:
     name: Real Claude Code against the mock API
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
@@ -47,4 +50,4 @@ jobs:
       # The tests point claude at an in-process mock Messages API with a dummy key and a throwaway
       # CLAUDE_CONFIG_DIR, so no account or tokens are involved (DESIGN.md §15).
       - name: Test
-        run: dotnet test tests/Claudette.IntegrationTests --configuration Release --filter "Category=RealCli"
+        run: dotnet test tests/Claudette.IntegrationTests --configuration Release --filter "Category=RealCli" --blame-hang-timeout 10m --blame-hang-dump-type none

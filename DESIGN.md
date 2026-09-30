@@ -1510,6 +1510,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 - GitHub Actions (`.github/workflows/ci.yml`):
   - A build-and-test job on Windows, macOS and Linux runs everything except `RealCli` and `Live`, for every push and pull request.
   - A second Linux job installs Claude Code and runs the `RealCli` tests.
+  - A test that hangs fails its job after 10 minutes, naming the test (`--blame-hang-timeout`), and no job runs longer than 30 minutes.
 
 ### Where things are
 
