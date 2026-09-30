@@ -780,7 +780,7 @@ The plan's limits are the account's, so every machine signed in to it sees the s
 
 ### Starting mode
 
-A tab starts in auto mode, like a Claude Code session in a terminal or VS Code, unless something chooses otherwise. Since 2.1.283 auto mode is Claude Code's built-in starting mode there, but not for `claude -p` or the Agent SDK, which start in Manual, and a tab is a `claude -p` session. So Claudette asks for auto mode itself (`StartingPermissionMode`):
+A tab starts in auto mode, like a Claude Code session in a terminal or VS Code, unless something chooses otherwise. Since 2.1.283 auto mode is Claude Code's built-in starting mode there, but not for `claude -p` or the Agent SDK, which start in Manual, and a tab is a `claude -p` session. Since 2.1.285, `claude -p` also starts in auto mode on third-party providers and with telemetry off, when no permission mode is configured, and still in Manual otherwise. So Claudette asks for auto mode itself (`StartingPermissionMode`), which gives the same result either way; `--permission-mode` still overrides Claude Code's choice:
 
 - **Chosen in Claudette:** a mode in Tab settings, else the New tabs default, is passed with `--permission-mode`, as before.
 - **Left to Claude Code** (New tabs → **Claude Code's default**, the default): Claudette reads the settings files Claude Code would, in its precedence order: `managed-settings.json` and its `managed-settings.d` drop-ins, the project's `.claude/settings.local.json` and `.claude/settings.json`, then `settings.json` in Claude Code's config folder.
@@ -1250,7 +1250,7 @@ claude -p --input-format stream-json --output-format stream-json --verbose
 - `account`: `email`, `organization`, `subscriptionType` and `tokenSource`.
 - Also `current_permission_mode`, `agents`, output styles and `pid`.
 
-The `system/init` message that follows gives `session_id`, `model`, `permissionMode`, `claude_code_version` and `capabilities`. In 2.1.284 the capabilities were `interrupt_receipt_v1`, `interrupt_cancel_queued_v1`, `msg_lifecycle_v1`, `mcp_read_resource_v1` and `mcp_tool_ui_meta_v1`.
+The `system/init` message that follows gives `session_id`, `model`, `permissionMode`, `claude_code_version` and `capabilities`. In 2.1.284 the capabilities were `interrupt_receipt_v1`, `interrupt_cancel_queued_v1`, `msg_lifecycle_v1`, `mcp_read_resource_v1` and `mcp_tool_ui_meta_v1`. 2.1.285 can add `third_party_notification_caution`, which goes with the notifications a cloud session queues for Claude; Claudette doesn't use it.
 
 **Wire format.** Every control message is one JSON line:
 
@@ -1551,7 +1551,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 | Piece | Location |
 |---|---|
 | Fake transport and replay transport | `tests/Claudette.Core.Tests/Support/` |
-| Protocol fixtures | `tests/Claudette.Core.Tests/Fixtures/protocol/2.1.284/`: `01`–`06` and `signed-out` from the spikes, `07`–`11` from `ProtocolRecordingTests`, and `12-subagents` recorded from the mock's `SUBAGENTS` |
+| Protocol fixtures | `tests/Claudette.Core.Tests/Fixtures/protocol/2.1.284/`: `01`–`06` and `signed-out` from the spikes, `07`–`11` from `ProtocolRecordingTests`, and `12-subagents` recorded from the mock's `SUBAGENTS`. A later version's folder (`2.1.285/`) holds `07`–`11` recorded again when its compatibility report is handled; the parsing and Diagnostics tests read every version's |
 | Record mode | `tools/Claudette.Fixtures/` (`ProtocolFixtureWriter`: a protocol log to a cleaned fixture), used by `ProtocolRecordingTests` and `LiveTests` |
 | `fake-claude` | `tools/Claudette.FakeClaude/`. Scripted by the prompt (`ASK_PERMISSION`, `SLOW`, `CRASH`, `SPAWN`, `SILENT`, `HANG`, `AUTH_FAIL`, `LIMIT`, `RUN_BASH`, `SUBAGENTS`) and by environment variables, rather than scenario files; see the header of its `Program.cs`. Its sign-in (`auth login`, `auth logout`, the sign-in control requests) is kept in a file in `CLAUDE_CONFIG_DIR`, so a sign-in sticks. Its reply to a message with images names their media types. |
 | Mock Messages API | `tools/Claudette.MockApi/`. Runs in-process in tests, or on its own with `dotnet run`. |
@@ -1621,12 +1621,18 @@ A scheduled GitHub Action (`.github/workflows/compat.yml`) runs once a day. It u
 
 A dry run against the two versions before 2.1.284 (`node compat/check.mjs report --from 2.1.281 --version 2.1.284`) flagged eight changes. One was a changelog line about `claude -p` startup; another was an Agent SDK doc comment change on `apply_flag_settings`.
 
+The first real report, for 2.1.285 (#27), matched 47 changes, mostly docs rewrites and pages new to the snapshots. What it changed:
+
+- `claude -p` now starts in auto mode on third-party providers and with telemetry off ([Starting mode](#starting-mode)). Claudette already asks for auto mode itself, so tabs start as before.
+- `result` has five new timing fields (`process_turn_index` and `time_to_request_*`), now known to Diagnostics, and `system/init` can list a capability Claudette doesn't use.
+- Nothing else in the protocol changed: the Agent SDK types only gained settings documentation and a `provider_not_allowed` startup failure. The real-CLI tests pass against 2.1.285.
+
 ### Tested versions
 
 - Claudette records two versions:
   - `ClaudeLocator.MinimumVersion` (`minimum` in `compat/surface.yaml`): the hard floor from [§12](#applying-it).
   - `ClaudeLocator.LastTestedVersion` (`lastTested`): updated each time a compatibility report is handled.
-- A version newer than the last tested one is allowed. Settings → Claude Code shows a quiet note, *"Newer than the last tested version (2.1.284)"*, and nothing more intrusive.
+- A version newer than the last tested one is allowed. Settings → Claude Code shows a quiet note, *"Newer than the last tested version (2.1.285)"*, and nothing more intrusive.
 
 ### Staying tolerant at runtime
 

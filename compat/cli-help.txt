@@ -80,6 +80,9 @@ Options:
                                         "!1p,!file")
   --debug-file <path>                   Write debug logs to a specific file path
                                         (implicitly enables debug mode)
+  --desktop                             Open in the Claude Desktop app instead
+                                        of the terminal (with --continue or
+                                        --resume <id> to pick the session)
   --disable-slash-commands              Disable all skills
   --disallowedTools, --disallowed-tools <tools...>
       Comma or space-separated list of tool names to deny (e.g. "Bash(git *)

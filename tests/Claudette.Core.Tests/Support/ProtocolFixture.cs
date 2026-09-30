@@ -26,6 +26,13 @@ internal sealed record ProtocolFixture(string Name, IReadOnlyList<FixtureEntry> 
         return new ProtocolFixture(name, entries);
     }
 
+    /// <summary>Every version with recordings: <see cref="DefaultVersion"/>'s full set, and later versions' re-recorded scenarios.</summary>
+    public static IEnumerable<string> AllVersions() =>
+        Directory.EnumerateDirectories(Path.Combine(AppContext.BaseDirectory, "Fixtures", "protocol"))
+            .Select(Path.GetFileName)
+            .OfType<string>()
+            .Order(StringComparer.Ordinal);
+
     public static IEnumerable<string> AllNames(string version = DefaultVersion) =>
         Directory.EnumerateFiles(Path.Combine(AppContext.BaseDirectory, "Fixtures", "protocol", version), "*.jsonl")
             .Select(Path.GetFileNameWithoutExtension)

@@ -14,7 +14,7 @@
 
 versions:
   minimum: 2.1.284     # ClaudeLocator.MinimumVersion
-  lastTested: 2.1.284  # ClaudeLocator.LastTestedVersion; bump when a compatibility report is handled
+  lastTested: 2.1.285  # ClaudeLocator.LastTestedVersion; bump when a compatibility report is handled
 
 items:
   # --- Launch flags ------------------------------------------------------------------------------------
