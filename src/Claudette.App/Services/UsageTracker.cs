@@ -29,6 +29,8 @@ public sealed class UsageTracker : IAsyncDisposable
     private Task _historyWrites = Task.CompletedTask;
     private bool _shares;
     private string? _sharedTo;
+    // Machines whose file a later Claudette wrote in a format this one can't read, logged once each. Used under _sharing.
+    private readonly HashSet<string> _newerFormats = new(StringComparer.Ordinal);
     private volatile bool _disposed;
 
     public UsageTracker(AppServices services, UsageStore store)
@@ -120,7 +122,7 @@ public sealed class UsageTracker : IAsyncDisposable
             var now = _services.Time.GetUtcNow();
             if (publish || _sharedTo != library.LibraryFolder)
             {
-                var json = UsageSharing.Write(machineName, key, now, Store.GetOwnSamples(now - UsageSharing.SharedPeriod));
+                var json = UsageSharing.Write(machineName, _services.AppVersion.ToString(), key, now, Store.GetOwnSamples(now - UsageSharing.SharedPeriod));
                 await library.WriteSharedUsageAsync(_machineId, json).ConfigureAwait(false);
                 _sharedTo = library.LibraryFolder;
             }
@@ -128,10 +130,21 @@ public sealed class UsageTracker : IAsyncDisposable
             foreach (var (machineId, text) in await Task.Run(() => library.ReadSharedUsage(_machineId)).ConfigureAwait(false))
             {
                 // Another account's readings would say nothing about this one's limits.
-                if (UsageSharing.Read(text) is { } shared && shared.Account == key)
+                if (UsageSharing.Read(text) is not { } shared || shared.Account != key)
                 {
-                    imported += Store.ImportSamples(machineId, keep is { } k ? shared.Samples.Where(sample => sample.Timestamp >= now - k) : shared.Samples);
+                    continue;
                 }
+                if (shared.IsNewerFormat)
+                {
+                    if (_newerFormats.Add(machineId))
+                    {
+                        _logger.LogWarning("Left out the usage {Machine} shared: Claudette {WrittenBy} wrote it in format {Version}, and this version reads up to {Known}. Update Claudette here to include it.",
+                            shared.MachineName, shared.WrittenBy ?? "(unknown)", shared.Version, UsageSharing.FileVersion);
+                    }
+                    continue;
+                }
+                _newerFormats.Remove(machineId);
+                imported += Store.ImportSamples(machineId, keep is { } k ? shared.Samples.Where(sample => sample.Timestamp >= now - k) : shared.Samples);
             }
             if (imported > 0)
             {

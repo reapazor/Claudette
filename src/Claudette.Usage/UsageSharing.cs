@@ -5,9 +5,16 @@ using System.Text.Json.Nodes;
 namespace Claudette.Usage;
 
 /// <summary>Plan usage one machine shared through the session library, as another machine reads it.</summary>
+/// <param name="Version">The file's format: <see cref="UsageSharing.FileVersion"/> when this Claudette can read it.</param>
 /// <param name="MachineName">The machine's name when it wrote the file, for the log.</param>
+/// <param name="WrittenBy">The version of Claudette that wrote it, for the log. Null in a file written before it was kept.</param>
 /// <param name="Account">Which account it was signed in to: an <see cref="UsageSharing.AccountKey"/>.</param>
-public sealed record SharedUsage(string MachineName, string Account, DateTimeOffset Published, IReadOnlyList<UsageSample> Samples);
+/// <param name="Samples">Empty when the file's format is newer than this Claudette reads.</param>
+public sealed record SharedUsage(int Version, string MachineName, string? WrittenBy, string Account, DateTimeOffset Published, IReadOnlyList<UsageSample> Samples)
+{
+    /// <summary>A later Claudette wrote the file in a format this one can't read, so its samples were left out.</summary>
+    public bool IsNewerFormat => Version > UsageSharing.FileVersion;
+}
 
 /// <summary>
 /// Plan usage shared between machines through the session library (DESIGN.md §6, "Sharing across machines"). Each
@@ -16,6 +23,11 @@ public sealed record SharedUsage(string MachineName, string Account, DateTimeOff
 /// </summary>
 public static class UsageSharing
 {
+    /// <summary>
+    /// The file's format. A change that only adds fields keeps it, since readers ignore fields they don't know; one that
+    /// removes a field or changes what one means takes the next number, and a Claudette that reads an older format keeps
+    /// reading it.
+    /// </summary>
     public const int FileVersion = 1;
 
     /// <summary>How far back a machine's file goes: a week's window, and a day to spare.</summary>
@@ -36,7 +48,8 @@ public static class UsageSharing
     }
 
     /// <summary>The file this machine shares.</summary>
-    public static string Write(string machineName, string account, DateTimeOffset published, IEnumerable<UsageSample> samples)
+    /// <param name="writtenBy">This Claudette's version.</param>
+    public static string Write(string machineName, string writtenBy, string account, DateTimeOffset published, IEnumerable<UsageSample> samples)
     {
         var array = new JsonArray();
         foreach (var sample in samples)
@@ -67,6 +80,7 @@ public static class UsageSharing
         {
             ["version"] = FileVersion,
             ["machine"] = machineName,
+            ["claudette"] = writtenBy,
             ["account"] = account,
             ["published"] = published.ToUnixTimeMilliseconds(),
             ["samples"] = array,
@@ -74,8 +88,9 @@ public static class UsageSharing
     }
 
     /// <summary>
-    /// Reads a file another machine shared. Null for one that isn't a shared usage file; a sample without a time is
-    /// skipped, and fields a later version adds are ignored.
+    /// Reads a file another machine shared. Null for one that isn't a shared usage file. One in a newer format than
+    /// <see cref="FileVersion"/> reads without its samples (<see cref="SharedUsage.IsNewerFormat"/>), since what they mean
+    /// may have changed. A sample without a time is skipped, and fields a later version adds are ignored.
     /// </summary>
     public static SharedUsage? Read(string json)
     {
@@ -88,9 +103,17 @@ public static class UsageSharing
         {
             return null;
         }
-        if (file is null || file.GetDouble("version") is null || file.GetString("account") is not { } account || file.GetArray("samples") is not { } array)
+        if (file is null || file.GetDouble("version") is not { } number || file.GetString("account") is not { } account || file.GetArray("samples") is not { } array)
         {
             return null;
+        }
+        var version = (int)number;
+        var machine = file.GetString("machine") ?? "";
+        var writtenBy = file.GetString("claudette");
+        var published = Time(file, "published") ?? DateTimeOffset.MinValue;
+        if (version > FileVersion)
+        {
+            return new SharedUsage(version, machine, writtenBy, account, published, []);
         }
         var samples = new List<UsageSample>();
         foreach (var entry in array.OfType<JsonObject>())
@@ -106,7 +129,7 @@ public static class UsageSharing
             samples.Add(new UsageSample(at, entry.GetDouble("session"), Time(entry, "sessionResetsAt"), entry.GetDouble("weekly"),
                 Time(entry, "weeklyResetsAt"), models));
         }
-        return new SharedUsage(file.GetString("machine") ?? "", account, Time(file, "published") ?? DateTimeOffset.MinValue, samples);
+        return new SharedUsage(version, machine, writtenBy, account, published, samples);
     }
 
     private static DateTimeOffset? Time(JsonObject obj, string name) =>

@@ -388,7 +388,7 @@ public class MainWindowTests
         var tab = await h.OpenTabAsync();
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
 
-        var ring = window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "ContextRing");
+        var ring = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ContextRing");
         Assert.True(ring.IsEffectivelyVisible);
         Assert.Same(tab, ring.FindAncestorOfType<Button>()!.DataContext);
         Assert.Contains("tabrow", ring.FindAncestorOfType<Button>()!.Classes);

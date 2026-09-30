@@ -1,0 +1,96 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             xmlns:controls="using:Claudette.App.Controls"
+             x:Class="Claudette.App.Views.ContextBreakdownView"
+             x:DataType="vm:TabViewModel">
+  <!-- What fills a tab's context window (DESIGN.md §6, "Per-tab context"). The flyout of the tab's context ring and of
+       the composer's context indicator. -->
+  <UserControl.Styles>
+    <Style Selector="Grid.contextrow">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="MinHeight" Value="18" />
+    </Style>
+    <!-- A row within a group of a section, such as one tool under "By tool". -->
+    <Style Selector="Grid.contextrow.detail">
+      <Setter Property="Margin" Value="10,0,0,0" />
+    </Style>
+    <Style Selector="TextBlock.tokens">
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+  </UserControl.Styles>
+  <StackPanel Spacing="8" Width="340">
+    <StackPanel Spacing="2">
+      <TextBlock FontWeight="SemiBold" Text="{Binding ContextText}" />
+      <TextBlock Classes="muted small" Text="{Binding ContextDetail}" TextWrapping="Wrap" />
+    </StackPanel>
+
+    <StackPanel Spacing="8" IsVisible="{Binding ContextBreakdown, Converter={x:Static ObjectConverters.IsNotNull}}">
+      <!-- The window, left to right: what's in it, the free space and the auto-compact buffer -->
+      <controls:ContextBar x:Name="Bar" Height="12" Segments="{Binding ContextBreakdown.Segments}"
+                           AutomationProperties.Name="{Binding ContextBreakdown.Summary}" />
+
+      <!-- A row for each part, in the bar's order; tools held out of the window last, without a color -->
+      <ItemsControl ItemsSource="{Binding ContextBreakdown.Rows}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:ContextRow">
+            <Grid Classes="contextrow" ColumnDefinitions="18,*,72,40" ToolTip.Tip="{Binding Tip}">
+              <controls:ContextBar Width="10" Height="10" CornerRadius="2" Segments="{Binding Swatch}" IsVisible="{Binding HasSwatch}"
+                                   HorizontalAlignment="Left" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Classes="small" Classes.muted="{Binding !HasSwatch}" Text="{Binding Name}"
+                         TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2" Classes="small tokens" Classes.muted="{Binding !HasSwatch}" Text="{Binding Tokens}" />
+              <TextBlock Grid.Column="3" Classes="muted small tokens" Text="{Binding Percent}" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <!-- What's inside the larger parts, each collapsed until it's clicked -->
+      <ItemsControl ItemsSource="{Binding ContextBreakdown.Sections}" IsVisible="{Binding ContextBreakdown.HasSections, FallbackValue=False}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:ContextSection">
+            <StackPanel>
+              <Button Classes="flat row" Padding="2,3" Command="{Binding ToggleCommand}" AutomationProperties.Name="{Binding Header}">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <Panel Width="12">
+                    <Path Data="{StaticResource IconChevronDown}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="9" Height="9" Stretch="Uniform"
+                          IsVisible="{Binding IsExpanded}" VerticalAlignment="Center" />
+                    <Path Data="{StaticResource IconChevronRight}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="9" Height="9" Stretch="Uniform"
+                          IsVisible="{Binding IsCollapsed}" VerticalAlignment="Center" />
+                  </Panel>
+                  <TextBlock Classes="small" Text="{Binding Header}" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <ItemsControl ItemsSource="{Binding Rows}" IsVisible="{Binding IsExpanded}" Margin="18,0,0,6">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ContextSectionRow">
+                    <StackPanel>
+                      <TextBlock Classes="muted small" FontWeight="SemiBold" Text="{Binding GroupHeading}" IsVisible="{Binding HasGroupHeading}" Margin="0,4,0,1" />
+                      <Grid Classes="contextrow" Classes.detail="{Binding IsDetail}" ColumnDefinitions="*,72" ToolTip.Tip="{Binding Tip}">
+                        <StackPanel VerticalAlignment="Center">
+                          <TextBlock Classes="small" Text="{Binding Name}" TextTrimming="LeadingCharacterEllipsis" />
+                          <TextBlock Classes="muted small" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Classes="small tokens" Text="{Binding Tokens}" />
+                      </Grid>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <TextBlock Classes="muted small" TextWrapping="Wrap" Text="{Binding ContextBreakdown.Note, FallbackValue={x:Null}}"
+                 IsVisible="{Binding ContextBreakdown.HasNote, FallbackValue=False}" />
+    </StackPanel>
+
+    <TextBlock Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding IsContextHigh}"
+               Text="Nearly full. Claude Code will compact the conversation soon on its own." />
+    <Button Content="Compact now" Click="OnCompactClick" Command="{Binding CompactCommand}" HorizontalAlignment="Left"
+            ToolTip.Tip="Summarize the conversation so far to free up context, like /compact" />
+  </StackPanel>
+</UserControl>

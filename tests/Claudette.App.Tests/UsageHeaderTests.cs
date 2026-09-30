@@ -148,6 +148,30 @@ public class UsageHeaderTests
     }
 
     [Fact]
+    public async Task Readings_a_later_Claudette_shared_in_a_newer_format_are_left_out()
+    {
+        await using var first = SharingMachine("me@example.com", out var library);
+        await using var second = SharingMachine("me@example.com", out _, library);
+        await using var firstTracker = new UsageTracker(first.Services, new UsageStore(Path.Combine(first.Root, "usage.db"), first.Time));
+        var shared = Path.Combine(library, "usage", first.Services.State.MachineId + ".json");
+        firstTracker.OnRateLimitEvent(Event(0.62, first.Time.GetUtcNow().AddHours(2), 0.38));
+        await TabTestHarness.Eventually(() => File.Exists(shared) && File.ReadAllText(shared).Contains("\"session\":62", StringComparison.Ordinal), "the shared reading");
+        Assert.Contains($"\"claudette\":\"{first.Services.AppVersion}\"", File.ReadAllText(shared), StringComparison.Ordinal);
+        // Nothing of the first machine's still being written.
+        await firstTracker.ShareAsync();
+
+        // The same file, as a later Claudette that changed what its fields mean would write it. The second machine
+        // starts after that: a tracker reads the others' files as soon as it's made.
+        var file = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(shared))!.AsObject();
+        file["version"] = Claudette.Usage.UsageSharing.FileVersion + 1;
+        File.WriteAllText(shared, file.ToJsonString());
+        await using var secondTracker = new UsageTracker(second.Services, new UsageStore(Path.Combine(second.Root, "usage.db"), second.Time));
+        await secondTracker.ShareAsync();
+
+        Assert.Empty(secondTracker.Store.GetSamples(DateTimeOffset.MinValue, DateTimeOffset.MaxValue));
+    }
+
+    [Fact]
     public async Task Nothing_is_shared_until_it_is_turned_on()
     {
         await using var h = SharingMachine("me@example.com", out var library);

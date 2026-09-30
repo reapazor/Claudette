@@ -625,6 +625,13 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>The ring's tooltip: the composer bar's context text and its detail.</summary>
     public string? ContextTip => ContextText is not { } text ? null : ContextDetail is { } detail ? $"{text} ({detail})" : text;
 
+    /// <summary>
+    /// What fills the context window, for the flyout the context ring and the composer's indicator open (DESIGN.md §6,
+    /// "Per-tab context"). From the same <c>get_context_usage</c> reply as the indicator, or the estimate without it.
+    /// </summary>
+    [ObservableProperty]
+    public partial ContextBreakdown? ContextBreakdown { get; set; }
+
     /// <summary>Summarizes the conversation to free context, like <c>/compact</c> in the terminal (DESIGN.md §6).</summary>
     [RelayCommand(CanExecute = nameof(CanCompact))]
     private async Task CompactAsync()
@@ -688,6 +695,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         ContextDetail = $"about {tokens:N0} of {window:N0} tokens, estimated from the last call{compacts}";
         IsContextHigh = _autocompact is { Enabled: true, Threshold: { } limit } ? tokens >= limit * 0.9 : percentage >= 80;
         ContextPercent = percentage;
+        ContextBreakdown = ContextBreakdown.Estimated(tokens, window).KeepingExpanded(ContextBreakdown);
     }
 
     private void RefreshTokens()
@@ -1682,6 +1690,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 ? usage.TotalTokens >= limit * 0.9
                 : usage.Percentage >= 80;
             ContextPercent = usage.Percentage;
+            ContextBreakdown = ContextBreakdown.From(usage).KeepingExpanded(ContextBreakdown);
         });
     }
 

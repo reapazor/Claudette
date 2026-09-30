@@ -449,6 +449,29 @@
           <SolidColorBrush x:Key="ChartModelBrush" Color="#12946A" />
           <SolidColorBrush x:Key="ChartModel2Brush" Color="#4A3AA7" />
           <SolidColorBrush x:Key="ChartSurfaceBrush" Color="#FFFFFF" />
+          <!-- The parts of a tab's context window (DESIGN.md §6, "Per-tab context"), in the bar's order: the categorical
+               palette, placed so that every two parts that can end up side by side stay apart, also with color
+               blindness (ContextBreakdown.Parts). The auto-compact buffer is hatched, beside the free space's track. -->
+          <SolidColorBrush x:Key="ContextMemoryBrush" Color="#EB6834" />
+          <SolidColorBrush x:Key="ContextSkillsBrush" Color="#1BAF7A" />
+          <SolidColorBrush x:Key="ContextPromptBrush" Color="#4A3AA7" />
+          <SolidColorBrush x:Key="ContextAgentsBrush" Color="#EDA100" />
+          <SolidColorBrush x:Key="ContextToolsBrush" Color="#E87BA4" />
+          <SolidColorBrush x:Key="ContextMcpBrush" Color="#008300" />
+          <SolidColorBrush x:Key="ContextMessagesBrush" Color="#2A78D6" />
+          <SolidColorBrush x:Key="ContextOtherBrush" Color="#E34948" />
+          <DrawingBrush x:Key="ContextBufferBrush" TileMode="Tile" DestinationRect="0,0,5,5" Stretch="None">
+            <DrawingBrush.Drawing>
+              <DrawingGroup>
+                <GeometryDrawing Brush="#1A000000" Geometry="M0,0 H5 V5 H0 Z" />
+                <GeometryDrawing Geometry="M-1,1 L1,-1 M0,5 L5,0 M4,6 L6,4">
+                  <GeometryDrawing.Pen>
+                    <Pen Brush="#59000000" Thickness="1" />
+                  </GeometryDrawing.Pen>
+                </GeometryDrawing>
+              </DrawingGroup>
+            </DrawingBrush.Drawing>
+          </DrawingBrush>
           <SolidColorBrush x:Key="InlineCodeBrush" Color="#0F000000" />
           <SolidColorBrush x:Key="InlineCodeTextBrush" Color="#A31515" />
           <tm:ThemeName x:Key="CodeColorTheme">LightPlus</tm:ThemeName>
@@ -489,6 +512,26 @@
           <SolidColorBrush x:Key="ChartModelBrush" Color="#199E70" />
           <SolidColorBrush x:Key="ChartModel2Brush" Color="#9D6FE8" />
           <SolidColorBrush x:Key="ChartSurfaceBrush" Color="#000000" />
+          <SolidColorBrush x:Key="ContextMemoryBrush" Color="#D95926" />
+          <SolidColorBrush x:Key="ContextSkillsBrush" Color="#199E70" />
+          <SolidColorBrush x:Key="ContextPromptBrush" Color="#9085E9" />
+          <SolidColorBrush x:Key="ContextAgentsBrush" Color="#C98500" />
+          <SolidColorBrush x:Key="ContextToolsBrush" Color="#D55181" />
+          <SolidColorBrush x:Key="ContextMcpBrush" Color="#008300" />
+          <SolidColorBrush x:Key="ContextMessagesBrush" Color="#3987E5" />
+          <SolidColorBrush x:Key="ContextOtherBrush" Color="#E66767" />
+          <DrawingBrush x:Key="ContextBufferBrush" TileMode="Tile" DestinationRect="0,0,5,5" Stretch="None">
+            <DrawingBrush.Drawing>
+              <DrawingGroup>
+                <GeometryDrawing Brush="#26FFFFFF" Geometry="M0,0 H5 V5 H0 Z" />
+                <GeometryDrawing Geometry="M-1,1 L1,-1 M0,5 L5,0 M4,6 L6,4">
+                  <GeometryDrawing.Pen>
+                    <Pen Brush="#66FFFFFF" Thickness="1" />
+                  </GeometryDrawing.Pen>
+                </GeometryDrawing>
+              </DrawingGroup>
+            </DrawingBrush.Drawing>
+          </DrawingBrush>
           <SolidColorBrush x:Key="InlineCodeBrush" Color="#1FFFFFFF" />
           <SolidColorBrush x:Key="InlineCodeTextBrush" Color="#D7BA7D" />
           <tm:ThemeName x:Key="CodeColorTheme">DarkPlus</tm:ThemeName>
