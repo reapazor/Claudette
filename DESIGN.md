@@ -1633,6 +1633,10 @@ The first real report, for 2.1.285 (#27), matched 47 changes, mostly docs rewrit
   - `ClaudeLocator.MinimumVersion` (`minimum` in `compat/surface.yaml`): the hard floor from [§12](#applying-it).
   - `ClaudeLocator.LastTestedVersion` (`lastTested`): updated each time a compatibility report is handled.
 - A version newer than the last tested one is allowed. Settings → Claude Code shows a quiet note, *"Newer than the last tested version (2.1.285)"*, and nothing more intrusive.
+- A version older than the last tested one, but not older than the minimum, is supported too, with a nudge to update and nothing that blocks:
+  - Settings → Claude Code adds *"Older than the last tested version (2.1.285); updating is recommended"*.
+  - When the update badge offers a newer version ([§12](#applying-it)), its dialog adds *"Claudette was last tested with 2.1.285."*
+  - Only the minimum is required. It goes up only when Claudette starts relying on something a newer version adds, not with each compatibility report.
 
 ### Staying tolerant at runtime
 

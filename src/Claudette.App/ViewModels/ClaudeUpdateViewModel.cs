@@ -127,7 +127,8 @@ public sealed partial class ClaudeUpdateViewModel : ViewModelBase, IDisposable
         {
             ReadyVersion = available;
             IsReadyInstalled = false;
-            DetailText = $"Claude Code {available} is available from {plan?.Method ?? "your package manager"}. You have {installed}.";
+            DetailText = $"Claude Code {available} is available from {plan?.Method ?? "your package manager"}. You have {installed}."
+                + (installed < ClaudeLocator.LastTestedVersion ? $" Claudette was last tested with {ClaudeLocator.LastTestedVersion}." : "");
         }
         else if (oldest is not null && installed > oldest)
         {
@@ -156,10 +157,14 @@ public sealed partial class ClaudeUpdateViewModel : ViewModelBase, IDisposable
 
         var doctor = check?.Doctor;
         VersionText = plan is null ? $"Claude Code {installed}" : $"Claude Code {installed}, installed with: {plan.Method}";
+        // DESIGN.md §16, "Tested versions": a quiet note either way, nothing more. Only the minimum version is required.
         if (installed > ClaudeLocator.LastTestedVersion)
         {
-            // DESIGN.md §16, "Tested versions": a quiet note, nothing more.
             VersionText += $". Newer than the last tested version ({ClaudeLocator.LastTestedVersion})";
+        }
+        else if (installed < ClaudeLocator.LastTestedVersion)
+        {
+            VersionText += $". Older than the last tested version ({ClaudeLocator.LastTestedVersion}); updating is recommended";
         }
         AutoUpdateText = doctor is null ? null
             : doctor.Channel is { } channel ? $"Auto-updates: {doctor.AutoUpdates ?? "unknown"} · channel: {channel}"

@@ -76,6 +76,8 @@ public class ClaudeUpdateTests
         Assert.Equal(New, updates.ReadyVersion);
         Assert.False(updates.IsReadyInstalled);
         Assert.Contains("available from Homebrew (claude-code). You have 2.1.284", updates.DetailText);
+        // Older than the version Claudette was last tested with, so the badge says so (DESIGN.md §16).
+        Assert.EndsWith($"Claudette was last tested with {ClaudeLocator.LastTestedVersion}.", updates.DetailText);
         Assert.True(updates.CanUpdateNow);
 
         await updates.UpdateNowCommand.ExecuteAsync(null);
@@ -85,6 +87,22 @@ public class ClaudeUpdateTests
         Assert.Equal("Claude Code 2.1.290 is installed. New tabs use it.", updates.ResultText);
         Assert.Equal(New, h.Services.InstalledClaudeVersion);
         Assert.False(updates.HasBadge);
+    }
+
+    [Fact]
+    public async Task Settings_says_whether_the_installed_version_is_older_or_newer_than_the_last_tested_one()
+    {
+        await using var h = new TabTestHarness();
+
+        h.Services.UseInstall(new ClaudeInstall("claude", Old));
+        Assert.EndsWith($"Last tested with {ClaudeLocator.LastTestedVersion} (this version is older; updating is recommended).",
+            new SettingsViewModel(h.Services, null).InstalledText);
+
+        h.Services.UseInstall(new ClaudeInstall("claude", ClaudeLocator.LastTestedVersion));
+        Assert.EndsWith($"Last tested with {ClaudeLocator.LastTestedVersion}.", new SettingsViewModel(h.Services, null).InstalledText);
+
+        h.Services.UseInstall(new ClaudeInstall("claude", new Version(ClaudeLocator.LastTestedVersion.Major, ClaudeLocator.LastTestedVersion.Minor + 1, 0)));
+        Assert.EndsWith("(this version is newer).", new SettingsViewModel(h.Services, null).InstalledText);
     }
 
     [Fact]
@@ -163,7 +181,9 @@ public class ClaudeUpdateTests
         Assert.False(updates.CanUpdateNow);
         Assert.False(updates.HasManualCommand);
         Assert.Contains("DISABLE_UPDATES", updates.Note);
-        Assert.Equal("Claude Code 2.1.284, installed with: Native installer", updates.VersionText);
+        // Older than the version Claudette was last tested with: a nudge, not a requirement (DESIGN.md §16).
+        Assert.Equal($"Claude Code 2.1.284, installed with: Native installer. Older than the last tested version ({ClaudeLocator.LastTestedVersion}); updating is recommended",
+            updates.VersionText);
     }
 
     [Fact]
