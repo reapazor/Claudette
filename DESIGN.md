@@ -159,7 +159,7 @@ Settings → Appearance → **Style** picks one of two looks, in light and dark 
 - Thinking is a collapsed row.
 - User prompts sit in a subtle bordered box rather than a chat bubble.
 - The composer is a rounded box with the mode and model controls beside it, and a square Stop button.
-- Inline code and code blocks use VS Code's Light+ and Dark+ colors.
+- Inline code and code blocks use VS Code's Light+ and Dark+ colors. They change with the theme, as the diff view's do, including in code already shown and in a diff view that's open.
 
 **Claude** takes the Claude apps (the iOS app and claude.ai) as its reference. The layout, tool rows, diffs and every control stay the same; the look changes:
 
@@ -174,7 +174,7 @@ Settings → Appearance → **Style** picks one of two looks, in light and dark 
 - **Rounder corners** on code blocks, prompts and the sidebar's rows.
 - **No Mica**, so the sidebar and header stay warm rather than showing the desktop through.
 
-How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette's own tokens, and `Themes/AppColors` swaps them in and gives Fluent a matching palette (the window background, text, controls, and the accent it derives its shades from). Fluent reads most palette colors only when its resources are first used, so switching loads a fresh Fluent theme with the palette already set. The shapes are styles under the `claude` class, which the main view takes, as Density's are under `compact`. The replies' font is the `ReplyFont` resource.
+How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette's own tokens, and `Themes/AppColors` swaps them in and gives Fluent a matching palette (the window background, text, controls, and the accent it derives its shades from). Fluent reads most palette colors only when its resources are first used, so switching loads a fresh Fluent theme with the palette already set. The shapes are styles under the `claude` class, which the main view takes, as Density's are under `compact`. The replies' font is the `ReplyFont` resource. Code blocks take their syntax colors through `Views/CodeBlockTheme` rather than LiveMarkdown's own property, because LiveMarkdown re-highlights a block already shown by setting its code again, which empties a one-line block.
 
 ## 4. Tabs & Sessions
 
@@ -514,6 +514,11 @@ If a turn runs for a long time, Claudette can ask Claude how it's going, so a ta
 - **Triggers.** Either of these starts a check-in; each can be set or turned off:
   - **Run time:** the turn has been running for longer than a set time (default 15 minutes).
   - **Quiet time:** the turn has produced no new output for a set time (default 5 minutes).
+- **Counting down.** When a check-in is due, a bar over the composer counts down 30 seconds first: *Checking in with Claude in 30 s.*, with the message as its tip.
+  - **Send now** sends it straight away.
+  - ✕ (**Don't check in**) skips it. The timers restart, so the next check-in comes a whole interval later, as if Claude had just said something.
+  - It's withdrawn if the turn no longer calls for it: Claude said something after a quiet spell, a permission prompt or question came up, or the turn ended.
+  - Once it's sent it can't be taken back. Claude Code has no way to withdraw one message it's holding for the turn, only an interrupt that stops the turn and drops them all.
 - **What happens.** Claudette sends a message to the session, the same as if the user had typed it while Claude was working. Claude Code delivers it inside the running turn, and the turn continues. The default message is:
   > *Everything OK? Give me a one or two sentence status update: what you're doing, and whether you're stuck or waiting on something.*
 - **In the conversation.** The check-in appears as a user message with an "Automatic check-in" label, so it's clear the user didn't type it. Claude's reply appears as normal.
@@ -660,7 +665,7 @@ Token and context data are documented:
 
 ### Usage history
 
-Claudette stores usage data locally in a SQLite file in the app data folder, so the trendline, charts and per-tab stats survive restarts. The file is per machine and isn't synced. It holds three kinds of records.
+Claudette stores usage data locally in a SQLite file in the app data folder, so the trendline, charts and per-tab stats survive restarts. The file is per machine and isn't synced, though its plan usage samples can be shared ([Sharing across machines](#sharing-across-machines)). It holds three kinds of records.
 
 **Plan usage samples** (app-wide):
 
@@ -701,6 +706,20 @@ Records older than the chosen period are deleted at launch and once a day. With 
 - Each tab's running token totals are kept, because they're saved with the tab ([§4](#4-tabs--sessions)). A checkbox in the confirmation, **Also reset per-tab token totals**, clears those too.
 
 Even **Forever** stays small: roughly tens of megabytes a year of heavy use.
+
+### Sharing across machines
+
+The plan's limits are the account's, so every machine signed in to it sees the same usage, but each machine only charts the readings it took itself. **Share usage with my other machines** (Settings → Usage, off by default) fills in the gaps through the session library ([§9](#session-library-sync-across-machines)), so a machine that sat idle still charts the usage another machine ran up.
+
+- **What's shared:** plan usage samples only (session, weekly and model-specific percentages, their reset times, and when each was taken), from the last 8 days: a week's window and a day to spare. Never per-turn token records or tab names, which stay on the machine they came from.
+- **How.** Each machine that shares writes its own samples to `usage/<machine id>.json` in the library: after each sample it saves, at launch, when sharing is turned on and when the library folder changes. The file is written to a temporary name and then renamed, as the library's other files are. The machine id is made up once and kept on the machine, so the file keeps its name when the machine's is changed, and two machines with the same name don't share a file. Nothing is shared live: the SQLite file itself never goes into the library.
+- **Reading the others'.** At launch and once a minute, each machine that shares reads the other machines' files and adds their samples to its own history, marked with the machine they came from.
+  - Only files from the same account count: each names its account by a hash of the email and organization Claude Code reports, so the email isn't written to the library. An account with no email (an API key) has no plan limits to share.
+  - A sample is added once: each machine's newest imported sample is remembered, and only newer ones are added. Samples older than **Keep usage history** aren't added.
+  - The header, its trendline and projection, the detailed header's charts and the Usage panel take them in straight away. When the newest sample is newer than this machine's latest reading, the header shows it, as it does after a restart.
+  - This machine's own file is never read back, and its shared samples never include ones it imported, so readings don't echo between machines.
+- **Clear usage history** deletes imported samples too, and the ones shared up to then aren't imported again.
+- Turning sharing off stops writing and reading. The file already in the library stays, as a session's copy does when its tab stops syncing.
 
 ## 7. Permission Prompts
 
@@ -907,6 +926,8 @@ Claudette keeps its own **session library** in a folder the user chooses (Settin
 
 - A **session record** (JSON): the tab name, model, effort, per-tab overrides, token stats, which machine last used it and when, the project identity (below), and the changed files ticked as reviewed ([§8](#8-file-changes--diff-view)). Their paths are relative to the session's folder, since that folder's path differs between machines; a file with no relative path from there, such as one on another drive, is left out.
 - A **copy of Claude Code's transcript** (`.jsonl`), plus subagent transcripts.
+
+The library also holds `settings-sync.json` while settings sync ([§14](#settings-sync-optional)), and a `usage` folder with a file per machine that shares its plan usage ([§6](#sharing-across-machines)).
 
 Claude Code's credentials and settings are never copied.
 
@@ -1355,7 +1376,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. Use my login shell's environment (macOS and Linux only, on by default; [§13](#login-shell-environment)). **Claude app (Remote Control)**: Connect new tabs to the Claude app (off by default; each tab has its own switch), with what it does, the privacy note and how to get pushes on the phone, and Keep this computer awake while tabs are connected (on by default). Disabled, with the reason, when the account can't use it ([§18](#remote-control-the-claude-app)). |
 | New tabs | Default model, effort level and permission mode. The permission mode is **Claude Code's default** unless chosen, named with the mode it gives, usually Auto ([Starting mode](#starting-mode)). The model and effort lists are what Claude Code offered in its last `initialize` reply on this machine (the models and each one's effort levels, kept with the machine's state), with a built-in list only until a session has started; Tab settings… lists them the same way. Number of recent folders to keep (default 20), and **Clear recent folders**. Favorite folders (**Add folder…**, **Move up**, **Move down**, **Remove**), in the order the new tab picker shows them. See [Opening a tab](#opening-a-tab). |
 | Appearance | Theme: follow system, light or dark. Style: Standard (the default) or Claude, the Claude apps' look ([Visual style](#visual-style)). Font and size for the conversation, and for code: pick an installed font or type a name; empty means the default (the app's own font, and Cascadia Mono, Consolas or Menlo for code), and a font that isn't installed falls back to it. Markdown follows these too (LiveMarkdown brings its own Arial and Consolas otherwise). Show thinking expanded or collapsed by default. Show fun words while Claude works, and show what Claude is doing while it works (both on by default; [Working line](#working-line)). **Detailed usage header** (off by default): the same switch as the header's chevron, kept on this machine rather than synced ([Detailed header](#detailed-header)). Show context on tab rows (on by default; [§4](#sidebar)). **Density**: Comfortable (the default) or Compact, which tightens the conversation's spacing, message and card padding and tool rows, the sidebar's rows, and the composer's padding. It applies at once and syncs with the other Appearance settings. |
-| Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Continue tasks when a usage limit resets (on by default; each tab can override it; [Continuing after a limit resets](#continuing-after-a-limit-resets)). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). |
+| Usage | Warning thresholds (default 75% and 90%). Burn rate window (default 30 minutes). Show model-specific weekly meters, and read them from `/usage` if `get_usage` stops working (off by default). Continue tasks when a usage limit resets (on by default; each tab can override it; [Continuing after a limit resets](#continuing-after-a-limit-resets)). Keep usage history: 1 day, 1 week, 1 month (default), 1 year or forever, with a **Clear usage history** button beside it. See [Usage history](#usage-history). Share usage with my other machines (off by default; [Sharing across machines](#sharing-across-machines)). |
 | Quick suffixes | The list of suffixes: label, text and optional shortcut. Add, edit, reorder, delete. See [§5](#quick-suffixes). |
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
 | Diff tool | Built-in, a preset or a custom command, with **Test**. See [§8](#external-diff-tool). |
@@ -1414,7 +1435,7 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 
 **Sync settings through the session library** (Settings → Sessions, off by default) keeps Claudette's settings the same on every machine that uses the same library folder ([§9](#session-library-sync-across-machines)).
 
-- **What syncs:** appearance, new-tab defaults, usage settings (thresholds, and continuing when a limit resets), check-ins, quick suffixes, notifications, keyboard shortcuts and process monitor options.
+- **What syncs:** appearance, new-tab defaults, usage settings (thresholds, continuing when a limit resets, and sharing usage with other machines), check-ins, quick suffixes, notifications, keyboard shortcuts and process monitor options.
 - **What stays on each machine:** whether Claudette starts at login (the OS keeps it, [§9](#starting-at-login)), the path to `claude`, the login shell setting, the Claude app settings, this machine's name, the library folder itself, the diff tool and Settings → Project tools (program paths and installed IDEs differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, the sidebar's and the usage header's collapsed or detailed state, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
 - The synced settings are stored as one file in the library. Each setting keeps the time it was last changed, and the newest change wins, so edits on two machines don't overwrite each other wholesale.
 - The first time sync is turned on and the library already has settings from another machine, Claudette asks: **Use synced settings** or **Replace them with this machine's**.
@@ -1510,6 +1531,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 - GitHub Actions (`.github/workflows/ci.yml`):
   - A build-and-test job on Windows, macOS and Linux runs everything except `RealCli` and `Live`, for every push and pull request.
   - A second Linux job installs Claude Code and runs the `RealCli` tests.
+  - A test that hangs fails its job after 10 minutes, naming the test (`--blame-hang-timeout`), and no job runs longer than 30 minutes.
 
 ### Where things are
 

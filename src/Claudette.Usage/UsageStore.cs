@@ -9,6 +9,8 @@ namespace Claudette.Usage;
 /// The local usage history: a SQLite file in the app data folder (DESIGN.md §6, "Usage history").
 /// <list type="bullet">
 /// <item>Plan usage samples, app-wide. One is saved only when a value changed, and at most once a minute.</item>
+/// <item>Samples other machines shared through the session library, imported with the name of the machine they came
+/// from (DESIGN.md §6, "Sharing across machines").</item>
 /// <item>Per-turn token records, per tab, and each tab's last known name.</item>
 /// </list>
 /// No conversation content is ever stored. Synchronous and safe to call from any thread; keep it off the UI thread.
@@ -16,7 +18,10 @@ namespace Claudette.Usage;
 /// </summary>
 public sealed class UsageStore : IDisposable
 {
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
+
+    /// <summary>The <c>imports</c> row that holds back every machine's samples up to a time: the last Clear.</summary>
+    private const string EveryMachine = "*";
     public static readonly TimeSpan MinimumSampleInterval = TimeSpan.FromMinutes(1);
 
     private const int SqliteCorrupt = 11;
@@ -45,7 +50,7 @@ public sealed class UsageStore : IDisposable
         }
         _connection = OpenOrReplace();
 
-        if (ReadLatestSample() is { } latest)
+        if (ReadLatestSample(ownOnly: true) is { } latest)
         {
             _lastSaved = SampleValues.From(latest);
             _lastWrite = latest.Timestamp;
@@ -97,13 +102,86 @@ public sealed class UsageStore : IDisposable
         }
     }
 
-    /// <summary>The newest sample, so the header can show something after a restart.</summary>
+    /// <summary>The newest sample, from this machine or another, so the header can show something after a restart.</summary>
     public UsageSample? GetLatestSample()
     {
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            return ReadLatestSample();
+            return ReadLatestSample(ownOnly: false);
+        }
+    }
+
+    /// <summary>This machine's own samples since <paramref name="from"/>, oldest first: what it shares, never another's.</summary>
+    public IReadOnlyList<UsageSample> GetOwnSamples(DateTimeOffset from)
+    {
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            using var command = _connection.CreateCommand();
+            command.CommandText = $"{SelectSamples} WHERE machine IS NULL AND timestamp >= $from ORDER BY timestamp, id";
+            Add(command, "$from", from.ToUnixTimeMilliseconds());
+            return ReadSamples(command);
+        }
+    }
+
+    /// <summary>
+    /// Adds the samples another machine shared that are newer than any imported from it before, and newer than the last
+    /// Clear, so each is imported once and cleared history doesn't come back. Returns how many were added.
+    /// </summary>
+    public int ImportSamples(string machine, IEnumerable<UsageSample> samples)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(machine);
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            using var transaction = _connection.BeginTransaction();
+            using var watermark = _connection.CreateCommand();
+            watermark.Transaction = transaction;
+            watermark.CommandText = "SELECT MAX(through) FROM imports WHERE machine IN ($machine, $every)";
+            Add(watermark, "$machine", machine);
+            Add(watermark, "$every", EveryMachine);
+            var through = watermark.ExecuteScalar() is long stored ? stored : long.MinValue;
+
+            using var insert = _connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO samples (timestamp, session_percent, session_resets_at, weekly_percent, weekly_resets_at, models, machine)
+                VALUES ($timestamp, $sessionPercent, $sessionResetsAt, $weeklyPercent, $weeklyResetsAt, $models, $machine)
+                """;
+            var added = 0;
+            var newest = through;
+            foreach (var sample in samples)
+            {
+                var timestamp = sample.Timestamp.ToUnixTimeMilliseconds();
+                if (timestamp <= through)
+                {
+                    continue;
+                }
+                var values = SampleValues.From(sample);
+                insert.Parameters.Clear();
+                Add(insert, "$timestamp", timestamp);
+                Add(insert, "$sessionPercent", values.SessionPercent);
+                Add(insert, "$sessionResetsAt", values.SessionResetsAt);
+                Add(insert, "$weeklyPercent", values.WeeklyPercent);
+                Add(insert, "$weeklyResetsAt", values.WeeklyResetsAt);
+                Add(insert, "$models", values.Models);
+                Add(insert, "$machine", machine);
+                insert.ExecuteNonQuery();
+                added++;
+                newest = Math.Max(newest, timestamp);
+            }
+            if (newest > through)
+            {
+                using var mark = _connection.CreateCommand();
+                mark.Transaction = transaction;
+                mark.CommandText = "INSERT INTO imports (machine, through) VALUES ($machine, $through) ON CONFLICT (machine) DO UPDATE SET through = excluded.through";
+                Add(mark, "$machine", machine);
+                Add(mark, "$through", newest);
+                mark.ExecuteNonQuery();
+            }
+            transaction.Commit();
+            return added;
         }
     }
 
@@ -291,7 +369,10 @@ public sealed class UsageStore : IDisposable
         }
     }
 
-    /// <summary>Deletes every sample, turn record and tab name ("Clear usage history").</summary>
+    /// <summary>
+    /// Deletes every sample, turn record and tab name ("Clear usage history"). Samples other machines shared up to now
+    /// aren't imported again.
+    /// </summary>
     public void Clear()
     {
         lock (_lock)
@@ -302,6 +383,13 @@ public sealed class UsageStore : IDisposable
                 Execute(transaction, "DELETE FROM samples", null);
                 Execute(transaction, "DELETE FROM turns", null);
                 Execute(transaction, "DELETE FROM tabs", null);
+                Execute(transaction, "DELETE FROM imports", null);
+                using var floor = _connection.CreateCommand();
+                floor.Transaction = transaction;
+                floor.CommandText = "INSERT INTO imports (machine, through) VALUES ($every, $now)";
+                Add(floor, "$every", EveryMachine);
+                Add(floor, "$now", _time.GetUtcNow().ToUnixTimeMilliseconds());
+                floor.ExecuteNonQuery();
                 transaction.Commit();
             }
             // Give the space back and leave nothing of the old rows in the file.
@@ -387,8 +475,19 @@ public sealed class UsageStore : IDisposable
                         tab_id TEXT PRIMARY KEY,
                         name TEXT NOT NULL
                     );
-                    PRAGMA user_version = {SchemaVersion};
+                    CREATE TABLE IF NOT EXISTS imports (
+                        machine TEXT PRIMARY KEY,
+                        through INTEGER NOT NULL
+                    );
                     """;
+                create.ExecuteNonQuery();
+                // Version 3: the machine a shared sample came from; null for this machine's own.
+                if (!HasColumn(connection, transaction, "samples", "machine"))
+                {
+                    create.CommandText = "ALTER TABLE samples ADD COLUMN machine TEXT";
+                    create.ExecuteNonQuery();
+                }
+                create.CommandText = $"PRAGMA user_version = {SchemaVersion}";
                 create.ExecuteNonQuery();
                 transaction.Commit();
             }
@@ -401,10 +500,19 @@ public sealed class UsageStore : IDisposable
         }
     }
 
-    private UsageSample? ReadLatestSample()
+    private static bool HasColumn(SqliteConnection connection, SqliteTransaction transaction, string table, string column)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = $"SELECT 1 FROM pragma_table_info('{table}') WHERE name = $column";
+        Add(command, "$column", column);
+        return command.ExecuteScalar() is not null;
+    }
+
+    private UsageSample? ReadLatestSample(bool ownOnly)
     {
         using var command = _connection.CreateCommand();
-        command.CommandText = $"{SelectSamples} ORDER BY timestamp DESC, id DESC LIMIT 1";
+        command.CommandText = $"{SelectSamples} {(ownOnly ? "WHERE machine IS NULL " : "")}ORDER BY timestamp DESC, id DESC LIMIT 1";
         return ReadSamples(command) is [var latest] ? latest : null;
     }
 

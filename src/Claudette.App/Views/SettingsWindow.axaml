@@ -496,8 +496,11 @@
             </StackPanel>
           </Border>
           <TextBlock Classes="muted small" Text="{Binding UsageClearedText}" IsVisible="{Binding UsageClearedText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+          <CheckBox Content="Share usage with my other machines" IsChecked="{Binding ShareUsageThroughLibrary}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="Each machine that shares keeps its last week of session and weekly readings in the session library (Settings → Sessions), and the charts here take in the readings of the others signed in to the same account. Token counts and tab names stay on each machine." />
           <TextBlock Classes="muted small" TextWrapping="Wrap"
-                     Text="Usage history is kept on this machine only. It holds usage percentages and token counts, never your prompts, replies or code." />
+                     Text="Usage history is kept on this machine. It holds usage percentages and token counts, never your prompts, replies or code." />
           <Button Content="Reset to defaults" Command="{Binding ResetUsageCommand}" />
         </StackPanel>
 

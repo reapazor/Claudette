@@ -60,7 +60,7 @@ public sealed record DiffReview(Func<string?> LatestChange, Func<bool> IsReviewe
 public sealed partial class DiffWindowViewModel : ViewModelBase
 {
     private readonly DiffSource _source;
-    private readonly bool _dark;
+    private bool _dark;
     private string? _after;
     /// <summary>Claude's latest change to the file when it was read: what <b>Reviewed</b> marks.</summary>
     private string? _shownChange;
@@ -171,15 +171,12 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
             catch (IOException)
             {
             }
-            if ((before is not null && LineDiff.LooksBinary(before)) || (current is not null && LineDiff.LooksBinary(current)))
+            if (IsBinary(before, current))
             {
                 return (current, null, null, "This is a binary file, so there's nothing to show line by line.");
             }
-            var name = Path.GetFileName(path);
-            return (current,
-                before is null ? null : SyntaxHighlighter.Highlight(LineDiff.SplitLines(before), name, dark),
-                current is null ? null : SyntaxHighlighter.Highlight(LineDiff.SplitLines(current), name, dark),
-                current is null ? "The file has been deleted." : null);
+            var (beforeColors, afterColors) = Highlight(before, current, path, dark);
+            return (current, beforeColors, afterColors, current is null ? "The file has been deleted." : null);
         });
         _after = after;
         _beforeColors = _source.BeforeKnown ? beforeColors : afterColors;
@@ -187,8 +184,59 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
         Message = message;
         var (added, removed) = LineDiff.Count(before, after);
         Stats = _source.BeforeKnown ? $"+{added} −{removed}" : "";
+        // Build the rows before saying it's loaded, so nothing sees "loaded" with no rows.
+        BuildRows();
         IsLoading = false;
+        if (dark != _dark)
+        {
+            // The theme changed while it loaded.
+            _ = RecolorAsync();
+        }
+    }
+
+    /// <summary>
+    /// The window's theme changed: the syntax colors follow it, for the text already shown, without reading the file
+    /// again (which would count Claude's later changes as seen).
+    /// </summary>
+    public void UseDarkColors(bool dark)
+    {
+        if (dark == _dark)
+        {
+            return;
+        }
+        _dark = dark;
+        if (!IsLoading)
+        {
+            _ = RecolorAsync();
+        }
+    }
+
+    private async Task RecolorAsync()
+    {
+        var dark = _dark;
+        var before = _source.Before;
+        var after = _after;
+        var path = _source.Path;
+        var (beforeColors, afterColors) = await Task.Run(() => IsBinary(before, after) ? (null, null) : Highlight(before, after, path, dark));
+        // The theme changed again, or the file was read again, meanwhile: that colors it instead.
+        if (dark != _dark || IsLoading || !ReferenceEquals(after, _after))
+        {
+            return;
+        }
+        _beforeColors = _source.BeforeKnown ? beforeColors : afterColors;
+        _afterColors = afterColors;
         Build();
+    }
+
+    private static bool IsBinary(string? before, string? after) =>
+        (before is not null && LineDiff.LooksBinary(before)) || (after is not null && LineDiff.LooksBinary(after));
+
+    private static (IReadOnlyList<IReadOnlyList<ColoredRun>>? Before, IReadOnlyList<IReadOnlyList<ColoredRun>>? After) Highlight(
+        string? before, string? after, string path, bool dark)
+    {
+        var name = Path.GetFileName(path);
+        return (before is null ? null : SyntaxHighlighter.Highlight(LineDiff.SplitLines(before), name, dark),
+            after is null ? null : SyntaxHighlighter.Highlight(LineDiff.SplitLines(after), name, dark));
     }
 
     /// <summary>With the "before" unknown, the file is compared with itself, so nothing shows as changed.</summary>
@@ -196,10 +244,14 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
 
     private void Build()
     {
-        if (IsLoading)
+        if (!IsLoading)
         {
-            return;
+            BuildRows();
         }
+    }
+
+    private void BuildRows()
+    {
         var before = Before;
         var lines = new List<(DiffLineEntry? Line, string? Header)>();
         if (ShowWholeFile)

@@ -20,6 +20,7 @@ public sealed record LibraryEntry(SessionRecord Record, string TranscriptPath, b
 ///                                   subagents/*.jsonl
 ///                                   lease.json
 /// &lt;library&gt;/settings-sync.json
+/// &lt;library&gt;/usage/&lt;machine id&gt;.json
 /// </code>
 /// Files are written to a temporary name and then renamed, so a sync client never uploads a half-written file.
 /// </summary>
@@ -29,6 +30,7 @@ public sealed class SessionLibrary(string libraryFolder, TimeProvider time)
     public const string RecordFileName = "record.json";
     public const string SubagentsFolderName = "subagents";
     public const string SettingsSyncFileName = "settings-sync.json";
+    public const string UsageFolderName = "usage";
 
     private const string TranscriptExtension = ".jsonl";
 
@@ -42,6 +44,46 @@ public sealed class SessionLibrary(string libraryFolder, TimeProvider time)
     public string SettingsSyncFile => Path.Combine(LibraryFolder, SettingsSyncFileName);
 
     public string GetSessionFolder(string sessionId) => Path.Combine(SessionsFolder, CheckId(sessionId));
+
+    /// <summary>Where machines that share their plan usage keep it, a file each (DESIGN.md §6, "Sharing across machines").</summary>
+    public string UsageFolder => Path.Combine(LibraryFolder, UsageFolderName);
+
+    /// <summary>Writes this machine's shared plan usage to <c>usage/&lt;machine id&gt;.json</c>, through a temporary name.</summary>
+    public async Task WriteSharedUsageAsync(string machineId, string json, CancellationToken cancellationToken = default)
+    {
+        var path = Path.Combine(UsageFolder, CheckId(machineId) + ".json");
+        Directory.CreateDirectory(UsageFolder);
+        await LibraryFiles.WriteTextAsync(path, json, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The plan usage other machines shared: each file's machine id and text, apart from <paramref name="exceptMachineId"/>'s
+    /// own. A file that can't be read just now is left for next time.
+    /// </summary>
+    public IReadOnlyList<(string MachineId, string Json)> ReadSharedUsage(string exceptMachineId)
+    {
+        if (!Directory.Exists(UsageFolder))
+        {
+            return [];
+        }
+        var files = new List<(string, string)>();
+        foreach (var path in Directory.EnumerateFiles(UsageFolder, "*.json"))
+        {
+            var machineId = Path.GetFileNameWithoutExtension(path);
+            if (LibraryFiles.IsTemp(path) || machineId == exceptMachineId || !IsValidId(machineId))
+            {
+                continue;
+            }
+            try
+            {
+                files.Add((machineId, LibraryFiles.ReadText(path)));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+        return files;
+    }
 
     /// <summary>
     /// Copies a session into the library after a turn finishes: the transcript, then the subagent transcripts, then

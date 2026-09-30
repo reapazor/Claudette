@@ -251,6 +251,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         new("Usage", "Continue tasks when a usage limit resets"),
         new("Usage", "Keep usage history"),
         new("Usage", "Clear usage history"),
+        new("Usage", "Share usage with my other machines"),
         new("Quick suffixes", "Add suffix"),
         new("Quick suffixes", "Suffix shortcuts"),
         new("Check-ins", "Check in on long turns"),
@@ -1044,6 +1045,13 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         set => Set(value, v => _settings.Usage.ContinueAfterLimitReset = v);
     }
 
+    /// <summary>DESIGN.md §6, "Sharing across machines".</summary>
+    public bool ShareUsageThroughLibrary
+    {
+        get => _settings.Usage.ShareThroughLibrary;
+        set => Set(value, v => _settings.Usage.ShareThroughLibrary = v);
+    }
+
     public IReadOnlyList<RetentionChoice> HistoryRetentionChoices { get; } =
         [.. Enum.GetValues<RetentionPeriod>().Select(p => new RetentionChoice(p))];
 
@@ -1095,6 +1103,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowModelMeters));
         OnPropertyChanged(nameof(UseUsageCommandFallback));
         OnPropertyChanged(nameof(ContinueAfterLimitReset));
+        OnPropertyChanged(nameof(ShareUsageThroughLibrary));
     }
 
     // ---- Check-ins ------------------------------------------------------------------------------------------------

@@ -105,7 +105,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         };
         // A prompt the phone answered is withdrawn by Claude Code (DESIGN.md §18, "Remote Control").
         _conversation.WithdrawnOutcome = WithdrawnPromptOutcome;
-        _checkIns = new CheckInMonitor(services.Time, () => CheckInSettings, SendCheckInFromTimer, stuck => _services.Dispatcher.Post(() => IsPossiblyStuck = stuck));
+        _checkIns = new CheckInMonitor(services.Time, () => CheckInSettings, SendCheckInFromTimer, stuck => _services.Dispatcher.Post(() => IsPossiblyStuck = stuck),
+            countdown => _services.Dispatcher.Post(() => CheckInCountdown = countdown));
         _autoContinue = CreateAutoContinue();
         Status = TabStatus.NotStarted;
         _restoredTranscript = !isRestored;
@@ -1036,6 +1037,47 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         NotifyCheckIn();
     });
 
+    private ITimer? _checkInTicker;
+
+    /// <summary>A check-in counting down to being sent, shown in a bar over the composer; null otherwise.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCheckInCountdown), nameof(CheckInCountdownText))]
+    public partial CheckInCountdown? CheckInCountdown { get; private set; }
+
+    public bool HasCheckInCountdown => CheckInCountdown is not null;
+
+    /// <summary>What the bar says, counting down each second.</summary>
+    public string? CheckInCountdownText => CheckInCountdown is { } countdown
+        ? $"Checking in with Claude in {Math.Max(0, (int)Math.Ceiling((countdown.SendsAt - _services.Time.GetUtcNow()).TotalSeconds))} s."
+        : null;
+
+    partial void OnCheckInCountdownChanged(CheckInCountdown? value)
+    {
+        if (value is null)
+        {
+            StopCheckInTicker();
+        }
+        else
+        {
+            _checkInTicker ??= _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() => OnPropertyChanged(nameof(CheckInCountdownText))), null,
+                TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+        }
+    }
+
+    private void StopCheckInTicker()
+    {
+        _checkInTicker?.Dispose();
+        _checkInTicker = null;
+    }
+
+    /// <summary><b>Send now</b> on the bar: the check-in goes without waiting out the countdown.</summary>
+    [RelayCommand]
+    private void SendCheckInNow() => _checkIns.SendNow();
+
+    /// <summary>✕ on the bar: this check-in isn't sent, and the next one waits a whole interval again.</summary>
+    [RelayCommand]
+    private void SkipCheckIn() => _checkIns.Skip();
+
     // ---- Lifecycle -----------------------------------------------------------------------------------------
 
     public bool CanRestart => Status is TabStatus.Exited or TabStatus.Error && !IsFolderMissing && !IsSessionMissing;
@@ -1746,6 +1788,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _copied.Clear();
         StopAgentTicker();
         StopTaskTicker();
+        StopCheckInTicker();
         _services.Notifications.ClearTab(Id);
         StopPerforce();
         CloseProjectRuns(killProcesses);

@@ -108,6 +108,75 @@ public class UsageHeaderTests
         Assert.False(panel.HasMoreSessions);
     }
 
+    // ---- Sharing across machines (DESIGN.md §6) --------------------------------------------------------------------
+
+    [Fact]
+    public async Task Machines_signed_in_to_the_same_account_chart_each_others_readings()
+    {
+        await using var first = SharingMachine("me@example.com", out var library);
+        await using var second = SharingMachine("Me@Example.com", out _, library);
+        await using var firstTracker = new UsageTracker(first.Services, new UsageStore(Path.Combine(first.Root, "usage.db"), first.Time));
+        await using var secondTracker = new UsageTracker(second.Services, new UsageStore(Path.Combine(second.Root, "usage.db"), second.Time));
+        using var secondHeader = new UsageViewModel(second.Services, secondTracker);
+        var shared = Path.Combine(library, "usage", first.Services.State.MachineId + ".json");
+
+        // The first machine takes a reading: it's shared straight away.
+        firstTracker.OnRateLimitEvent(Event(0.62, first.Time.GetUtcNow().AddHours(2), 0.38));
+        await TabTestHarness.Eventually(() => File.Exists(shared) && File.ReadAllText(shared).Contains("\"session\":62", StringComparison.Ordinal), "the shared reading");
+        Assert.DoesNotContain("example.com", File.ReadAllText(shared), StringComparison.OrdinalIgnoreCase);
+
+        await secondTracker.ShareAsync();
+
+        await TabTestHarness.Eventually(() => secondHeader.SessionPoints.Any(p => p.Value == 62), "the other machine's reading in the trendline");
+        Assert.Empty(secondTracker.Store.GetOwnSamples(DateTimeOffset.MinValue));
+    }
+
+    [Fact]
+    public async Task Another_accounts_readings_arent_charted()
+    {
+        await using var first = SharingMachine("me@example.com", out var library);
+        await using var second = SharingMachine("someone.else@example.com", out _, library);
+        await using var firstTracker = new UsageTracker(first.Services, new UsageStore(Path.Combine(first.Root, "usage.db"), first.Time));
+        await using var secondTracker = new UsageTracker(second.Services, new UsageStore(Path.Combine(second.Root, "usage.db"), second.Time));
+        var shared = Path.Combine(library, "usage", first.Services.State.MachineId + ".json");
+        firstTracker.OnRateLimitEvent(Event(0.62, first.Time.GetUtcNow().AddHours(2), 0.38));
+        await TabTestHarness.Eventually(() => File.Exists(shared) && File.ReadAllText(shared).Contains("\"session\":62", StringComparison.Ordinal), "the shared reading");
+
+        await secondTracker.ShareAsync();
+
+        Assert.Empty(secondTracker.Store.GetSamples(DateTimeOffset.MinValue, DateTimeOffset.MaxValue));
+    }
+
+    [Fact]
+    public async Task Nothing_is_shared_until_it_is_turned_on()
+    {
+        await using var h = SharingMachine("me@example.com", out var library);
+        h.Services.Settings.Usage.ShareThroughLibrary = false;
+        await using var tracker = new UsageTracker(h.Services, new UsageStore(Path.Combine(h.Root, "usage.db"), h.Time));
+        tracker.OnRateLimitEvent(Event(0.62, h.Time.GetUtcNow().AddHours(2), 0.38));
+        await TabTestHarness.Eventually(() => tracker.Store.GetLatestSample() is not null, "the reading");
+        await tracker.ShareAsync(publish: true);
+
+        Assert.False(Directory.Exists(Path.Combine(library, "usage")));
+
+        // Turned on in Settings: shared at once.
+        h.Services.Settings.Usage.ShareThroughLibrary = true;
+        h.Services.SaveSettings();
+        await TabTestHarness.Eventually(() => File.Exists(Path.Combine(library, "usage", h.Services.State.MachineId + ".json")), "the shared file");
+    }
+
+    /// <summary>A machine that shares its usage through <paramref name="library"/>, signed in as <paramref name="email"/>.</summary>
+    private static TabTestHarness SharingMachine(string email, out string library, string? sharedLibrary = null)
+    {
+        var h = new TabTestHarness();
+        library = sharedLibrary ?? Path.Combine(h.Root, "shared-library");
+        h.Services.Settings.Sessions.LibraryFolder = library;
+        h.Services.Settings.Usage.ShareThroughLibrary = true;
+        h.Services.Library.OnSettingsChanged();
+        h.Services.RemoteControl.UseAccount(new Core.Auth.AuthStatus(true, "claude.ai", null, email, "Acme", "max", null, null));
+        return h;
+    }
+
     private static UsageSnapshot UsageSnapshotAt(DateTimeOffset asOf, double session, DateTimeOffset resetsAt) =>
         new([new LimitReading(LimitKind.Session, "Session", session, resetsAt, null, false)], asOf, UsageSource.GetUsage);
 

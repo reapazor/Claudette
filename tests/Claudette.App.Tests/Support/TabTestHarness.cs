@@ -15,8 +15,7 @@ namespace Claudette.App.Tests.Support;
 /// <summary>Plays Claude Code's side of one session for view model tests.</summary>
 internal sealed class ScriptedTransport : IClaudeTransport
 {
-    private Channel<string> _output = Channel.CreateUnbounded<string>();
-    private TaskCompletionSource<TransportExit> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private ScriptedProcess _process = new();
     private readonly List<JsonObject> _sent = [];
 
     /// <summary>
@@ -25,12 +24,17 @@ internal sealed class ScriptedTransport : IClaudeTransport
     /// </summary>
     public void RestartIfExited()
     {
-        if (_completion.Task.IsCompleted)
+        if (_process.HasExited)
         {
-            _output = Channel.CreateUnbounded<string>();
-            _completion = new TaskCompletionSource<TransportExit>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _process = new ScriptedProcess();
         }
     }
+
+    /// <summary>
+    /// The current pretend process, as the session starting now sees it. Stopping it ends only that process, so a tab
+    /// that finishes closing after the next one started (a test doesn't wait for all of it) can't end the next one's.
+    /// </summary>
+    public IClaudeTransport ForSession() => new SessionTransport(this, _process);
 
     /// <summary>Answers to control requests by subtype; null leaves the request unanswered, an exception answers with an error.</summary>
     public Dictionary<string, Func<JsonObject, JsonObject?>> Answers { get; } = new()
@@ -64,11 +68,14 @@ internal sealed class ScriptedTransport : IClaudeTransport
     /// <summary>The pretend <c>claude</c> process id, for the process monitor.</summary>
     public int? ProcessId { get; set; } = 4242;
 
-    public ChannelReader<string> Output => _output.Reader;
+    public ChannelReader<string> Output => _process.Output.Reader;
 
-    public Task<TransportExit> Completion => _completion.Task;
+    public Task<TransportExit> Completion => _process.Completion.Task;
 
-    public ValueTask SendAsync(string line, CancellationToken cancellationToken = default)
+    public ValueTask SendAsync(string line, CancellationToken cancellationToken = default) => Receive(_process, line);
+
+    /// <summary>Records what the session sent, and answers its control requests on its own process's output.</summary>
+    private ValueTask Receive(ScriptedProcess process, string line)
     {
         var message = JsonNode.Parse(line)!.AsObject();
         lock (_sent)
@@ -86,25 +93,25 @@ internal sealed class ScriptedTransport : IClaudeTransport
                 {
                     if (answer(request) is { } response)
                     {
-                        Emit(OutgoingMessages.ControlSuccess(id, response));
+                        process.Write(OutgoingMessages.ControlSuccess(id, response).ToJsonString());
                     }
                 }
                 catch (Exception ex)
                 {
-                    Emit(OutgoingMessages.ControlError(id, ex.Message));
+                    process.Write(OutgoingMessages.ControlError(id, ex.Message).ToJsonString());
                 }
             }
             else
             {
-                Emit(OutgoingMessages.ControlSuccess(id, []));
+                process.Write(OutgoingMessages.ControlSuccess(id, []).ToJsonString());
             }
         }
         return ValueTask.CompletedTask;
     }
 
-    public void Emit(JsonObject message) => _output.Writer.TryWrite(message.ToJsonString());
+    public void Emit(JsonObject message) => _process.Write(message.ToJsonString());
 
-    public void Emit(string line) => _output.Writer.TryWrite(line);
+    public void Emit(string line) => _process.Write(line);
 
     /// <summary>A complete turn: init, a text reply and a result with usage.</summary>
     public void EmitTurn(string reply = "ok", string model = "claude-opus-5-5")
@@ -133,16 +140,52 @@ internal sealed class ScriptedTransport : IClaudeTransport
 
     public void Terminate() => Exit(-1);
 
-    public void Exit(int code, string standardError = "")
-    {
-        _output.Writer.TryComplete();
-        _completion.TrySetResult(new TransportExit(code, standardError));
-    }
+    public void Exit(int code, string standardError = "") => _process.Exit(code, standardError);
 
     public ValueTask DisposeAsync()
     {
         Exit(0);
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>One pretend <c>claude</c> process: its output, and how it ended.</summary>
+    private sealed class ScriptedProcess
+    {
+        public Channel<string> Output { get; } = Channel.CreateUnbounded<string>();
+
+        public TaskCompletionSource<TransportExit> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool HasExited => Completion.Task.IsCompleted;
+
+        public void Write(string line) => Output.Writer.TryWrite(line);
+
+        public void Exit(int code, string standardError)
+        {
+            Output.Writer.TryComplete();
+            Completion.TrySetResult(new TransportExit(code, standardError));
+        }
+    }
+
+    /// <summary>A session's connection to its own pretend process; what it sends is recorded with everything else.</summary>
+    private sealed class SessionTransport(ScriptedTransport transport, ScriptedProcess process) : IClaudeTransport
+    {
+        public ChannelReader<string> Output => process.Output.Reader;
+
+        public Task<TransportExit> Completion => process.Completion.Task;
+
+        public int? ProcessId => transport.ProcessId;
+
+        public ValueTask SendAsync(string line, CancellationToken cancellationToken = default) => transport.Receive(process, line);
+
+        public void CloseInput() => process.Exit(0, "");
+
+        public void Terminate() => process.Exit(-1, "");
+
+        public ValueTask DisposeAsync()
+        {
+            process.Exit(0, "");
+            return ValueTask.CompletedTask;
+        }
     }
 }
 
@@ -161,7 +204,7 @@ internal sealed class ScriptedSessionFactory(ScriptedTransport transport, TimePr
             throw failure;
         }
         transport.RestartIfExited();
-        var session = new ClaudeSession(transport, time);
+        var session = new ClaudeSession(transport.ForSession(), time);
         await session.InitializeAsync(options.Hooks, cancellationToken);
         return session;
     }

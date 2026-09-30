@@ -134,6 +134,12 @@ public sealed class UsageSettings
     public bool ContinueAfterLimitReset { get; set; } = true;
 
     public RetentionPeriod KeepHistory { get; set; } = RetentionPeriod.OneMonth;
+
+    /// <summary>
+    /// Share this machine's plan usage readings through the session library, and chart those of the other machines signed
+    /// in to the same account (DESIGN.md §6, "Sharing across machines"). Off by default.
+    /// </summary>
+    public bool ShareThroughLibrary { get; set; }
 }
 
 /// <summary>DESIGN.md §4, "Process monitor". Off by default.</summary>

@@ -1,0 +1,3 @@
+﻿"Checking in with Claude in 30 s."
+[button] Send now
+[button] Don't check in

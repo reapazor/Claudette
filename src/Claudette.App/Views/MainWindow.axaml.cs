@@ -144,10 +144,12 @@ public partial class MainWindow : Window
         }
         var panel = new UsagePanelViewModel(main.Services, tracker, header, id => main.Shell?.AllTabs.FirstOrDefault(t => t.Id == id)?.DisplayName);
         tracker.TurnRecorded += panel.Refresh;
+        tracker.SamplesImported += panel.Refresh;
         _usageWindow = new UsageWindow { DataContext = panel };
         _usageWindow.Closed += (_, _) =>
         {
             tracker.TurnRecorded -= panel.Refresh;
+            tracker.SamplesImported -= panel.Refresh;
             _usageWindow = null;
         };
         _usageWindow.Show(this);
