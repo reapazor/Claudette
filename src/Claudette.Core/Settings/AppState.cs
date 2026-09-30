@@ -51,6 +51,12 @@ public sealed class AppState
     public bool DetailedUsageHeader { get; set; }
 
     /// <summary>
+    /// This machine's id in the session library's shared usage (DESIGN.md §6, "Sharing across machines"): made up once, so
+    /// its file keeps its name when the machine's is changed, and two machines with the same name don't share a file.
+    /// </summary>
+    public string? MachineId { get; set; }
+
+    /// <summary>
     /// Where a project from another machine lives on this one, keyed by normalized git remote and path in the repo
     /// (DESIGN.md §9, "Restoring on another machine").
     /// </summary>

@@ -54,6 +54,7 @@ public sealed partial class UsageViewModel : ViewModelBase, IDisposable
         _tracker = tracker;
         _tracker.Updated += OnUpdated;
         _tracker.TurnRecorded += OnTurnRecorded;
+        _tracker.SamplesImported += OnSamplesImported;
         _services.SettingsChanged += (_, _) => Refresh();
         _services.StateChanged += OnStateChanged;
         _services.UsageHistoryCleared += OnUsageHistoryCleared;
@@ -139,6 +140,20 @@ public sealed partial class UsageViewModel : ViewModelBase, IDisposable
             // The line under the header, and an OS notification when Claudette isn't in front (DESIGN.md §6, §10).
             Alert = alert;
             _services.Notifications.Notify(NotificationKind.UsageAlert, alert.Title, alert.Message, key: alert.Kind.ToString());
+        }
+    }
+
+    /// <summary>
+    /// Another machine's readings arrived (DESIGN.md §6, "Sharing across machines"): the trendline, the projection and
+    /// the charts take them in.
+    /// </summary>
+    private void OnSamplesImported()
+    {
+        LoadHistory();
+        Refresh();
+        if (IsDetailed)
+        {
+            QueryDetails();
         }
     }
 
@@ -266,6 +281,7 @@ public sealed partial class UsageViewModel : ViewModelBase, IDisposable
     {
         _tracker.Updated -= OnUpdated;
         _tracker.TurnRecorded -= OnTurnRecorded;
+        _tracker.SamplesImported -= OnSamplesImported;
         _services.StateChanged -= OnStateChanged;
         _services.UsageHistoryCleared -= OnUsageHistoryCleared;
         // A read of the history still running is dropped.

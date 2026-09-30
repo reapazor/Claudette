@@ -334,6 +334,24 @@ public sealed class SessionLibraryTests : IDisposable
         Assert.Equal(expected, provider);
     }
 
+    [Fact]
+    public async Task Shared_usage_is_a_file_per_machine_and_a_machine_reads_the_others()
+    {
+        await _library.WriteSharedUsageAsync("machine1", """{"version":1}""", Ct);
+        await _library.WriteSharedUsageAsync("machine2", """{"version":2}""", Ct);
+        // A sync client's half-written upload, and something else in the folder.
+        await File.WriteAllTextAsync(Path.Combine(_library.UsageFolder, "machine3.json.0123.tmp"), "{", Ct);
+        await File.WriteAllTextAsync(Path.Combine(_library.UsageFolder, "notes.txt"), "", Ct);
+
+        Assert.Equal(["machine1.json", "machine2.json", "machine3.json.0123.tmp", "notes.txt"],
+            Directory.GetFiles(_library.UsageFolder).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        Assert.Equal([("machine2", """{"version":2}""")], _library.ReadSharedUsage("machine1"));
+        await Assert.ThrowsAsync<ArgumentException>(() => _library.WriteSharedUsageAsync("../elsewhere", "{}", Ct));
+    }
+
+    [Fact]
+    public void No_shared_usage_yet_reads_as_none() => Assert.Empty(_library.ReadSharedUsage("machine1"));
+
     [Theory]
     [InlineData("abc (1).jsonl", "copy 1")]
     [InlineData("abc (DESKTOP-01's conflicted copy 2026-09-28).jsonl", "DESKTOP-01's conflicted copy 2026-09-28")]

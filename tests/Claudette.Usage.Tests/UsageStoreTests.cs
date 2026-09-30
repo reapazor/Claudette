@@ -309,6 +309,78 @@ public sealed class UsageStoreTests : IDisposable
         Assert.Equal("refactor auth", Assert.Single(upgraded.GetTokensByTab(DateTimeOffset.MinValue)).Name);
     }
 
+    // ---- Sharing across machines (DESIGN.md §6) --------------------------------------------------------------------
+
+    [Fact]
+    public void Samples_another_machine_shared_are_imported_once_and_never_shared_again()
+    {
+        var store = Open();
+        store.AddSample(Snapshot(10));
+        var theirs = new[] { Shared(Start.AddMinutes(-2), 8), Shared(Start.AddMinutes(1), 12) };
+
+        Assert.Equal(2, store.ImportSamples("machine-2", theirs));
+        Assert.Equal(0, store.ImportSamples("machine-2", theirs));
+
+        // The charts see every machine's readings, in time order; only this machine's own are shared.
+        Assert.Equal([8, 10, 12], store.GetSamples(DateTimeOffset.MinValue, DateTimeOffset.MaxValue).Select(s => s.SessionPercent));
+        Assert.Equal([10], store.GetOwnSamples(DateTimeOffset.MinValue).Select(s => s.SessionPercent));
+        Assert.Equal(12, store.GetLatestSample()?.SessionPercent);
+
+        // Newer readings come in; older ones it already had don't.
+        Assert.Equal(1, store.ImportSamples("machine-2", [.. theirs, Shared(Start.AddMinutes(5), 15)]));
+    }
+
+    [Fact]
+    public void Another_machines_readings_dont_count_as_this_machines_last_one()
+    {
+        var store = Open();
+        store.AddSample(Snapshot(10));
+        store.ImportSamples("machine-2", [Shared(Start.AddMinutes(1), 12)]);
+        store.Dispose();
+        _time.Advance(TimeSpan.FromMinutes(2));
+
+        // Reopened, a reading of 12 here is still a change from this machine's 10.
+        Assert.True(Open().AddSample(Snapshot(12)));
+    }
+
+    [Fact]
+    public void Cleared_history_isnt_imported_again()
+    {
+        var store = Open();
+        var theirs = new[] { Shared(Start.AddMinutes(-2), 8) };
+        store.ImportSamples("machine-2", theirs);
+
+        store.Clear();
+
+        Assert.Equal(0, store.ImportSamples("machine-2", theirs));
+        Assert.Equal(0, store.ImportSamples("machine-3", [Shared(Start.AddMinutes(-1), 9)]));
+        Assert.Equal(1, store.ImportSamples("machine-3", [Shared(Start.AddMinutes(1), 9)]));
+    }
+
+    [Fact]
+    public void A_history_from_before_sharing_is_upgraded_and_its_samples_are_this_machines()
+    {
+        var store = Open();
+        store.AddSample(Snapshot(10));
+        store.Dispose();
+        // Version 2 had no machine column and no imports.
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = DatabasePath, Pooling = false }.ToString()))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE old_samples AS SELECT id, timestamp, session_percent, session_resets_at, weekly_percent, weekly_resets_at, models FROM samples;
+                DROP TABLE samples; ALTER TABLE old_samples RENAME TO samples; DROP TABLE imports; PRAGMA user_version = 2;
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        var upgraded = Open();
+
+        Assert.Equal([10], upgraded.GetOwnSamples(DateTimeOffset.MinValue).Select(s => s.SessionPercent));
+        Assert.Equal(1, upgraded.ImportSamples("machine-2", [Shared(Start.AddMinutes(1), 12)]));
+    }
+
     [Fact]
     public void Prune_deletes_records_older_than_the_retention()
     {
@@ -372,4 +444,6 @@ public sealed class UsageStoreTests : IDisposable
 
     private UsageSnapshot Snapshot(double session, DateTimeOffset? resetsAt = null, double? weekly = null, double? fable = null) =>
         UsageFixtures.Snapshot(_time.GetUtcNow(), session, resetsAt, weekly, fable);
+
+    private static UsageSample Shared(DateTimeOffset at, double session) => new(at, session, UsageFixtures.SessionResetsAt, 40, UsageFixtures.WeekResetsAt, []);
 }
