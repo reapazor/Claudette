@@ -27,10 +27,12 @@ internal sealed class ControlChannel(Func<string, CancellationToken, ValueTask> 
         var requestId = $"req_{Interlocked.Increment(ref _nextId)}";
         var pending = new Pending(subtype);
         _pending[requestId] = pending;
+        // Started before the request goes out, so the deadline exists by the time anything can see the request (a test
+        // that sees it and moves the fake clock on, say).
+        using var timeoutSource = new CancellationTokenSource(timeout, timeProvider);
         try
         {
             await sendLine(OutgoingMessages.ControlRequest(requestId, request).ToJsonString(), cancellationToken).ConfigureAwait(false);
-            using var timeoutSource = new CancellationTokenSource(timeout, timeProvider);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
             try
             {

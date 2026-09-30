@@ -18,6 +18,8 @@ public class SidePanelTests
         h.Services.State.Tabs = [new TabState { Folder = h.WorkFolder, IsPinned = true }, new TabState { Folder = h.WorkFolder, IsPinned = true }];
         h.Shell.Restore(null);
         var (first, second) = (h.Shell.AllTabs.First(), h.Shell.AllTabs.Last());
+        // The selected tab starts meanwhile, changing properties on another thread while the test reads them.
+        await TabTestHarness.Eventually(() => first.Status == TabStatus.Idle && first.IsSettled, "the first tab to start");
         Assert.Equal(ShellViewModel.DefaultSidePanelWidth, second.SidePanelWidth);
         var changed = new List<string?>();
         second.PropertyChanged += (_, e) => changed.Add(e.PropertyName);

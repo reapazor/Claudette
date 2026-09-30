@@ -159,6 +159,8 @@ public class AutoContinueTests
         var tab = h.Shell.SelectedTab!;
 
         Assert.True(tab.WillContinueAfterLimit);
+        // An hour can't pass while claude starts: the start's own requests would time out on the fake clock.
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle && tab.IsSettled, "the tab to start");
         await AdvanceToAsync(h, reset + AutoContinueMonitor.Grace);
 
         await TabTestHarness.Eventually(() => h.Transport.SentUserTexts.Contains(AutoContinueMonitor.Message), "the continue");

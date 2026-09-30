@@ -187,8 +187,9 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
         Message = message;
         var (added, removed) = LineDiff.Count(before, after);
         Stats = _source.BeforeKnown ? $"+{added} −{removed}" : "";
+        // Build the rows before saying it's loaded, so nothing sees "loaded" with no rows.
+        BuildRows();
         IsLoading = false;
-        Build();
     }
 
     /// <summary>With the "before" unknown, the file is compared with itself, so nothing shows as changed.</summary>
@@ -196,10 +197,14 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
 
     private void Build()
     {
-        if (IsLoading)
+        if (!IsLoading)
         {
-            return;
+            BuildRows();
         }
+    }
+
+    private void BuildRows()
+    {
         var before = Before;
         var lines = new List<(DiffLineEntry? Line, string? Header)>();
         if (ShowWholeFile)
