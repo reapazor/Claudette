@@ -179,6 +179,7 @@ internal sealed class WindowsProcessTree : ProcessTree
         if (IsLive(handle))
         {
             TerminateProcess(handle, 1);
+            await Polling.UntilAsync(() => !IsLive(handle), EndWait, _time, cancellationToken).ConfigureAwait(false);
         }
     }
 

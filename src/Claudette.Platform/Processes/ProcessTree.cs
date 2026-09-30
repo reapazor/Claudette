@@ -46,8 +46,14 @@ public abstract class ProcessTree : IDisposable
     public abstract void KillAll();
 
     /// <summary>
-    /// Stops one process in the tree: asks it to exit, waits up to <paramref name="grace"/>, then ends it. Does nothing if
-    /// <paramref name="pid"/> isn't a live process in this tree.
+    /// How long <see cref="StopAsync"/> waits for a process it ended to be gone. Ending one only marks it: it goes
+    /// when the OS next runs it, which a busy machine can put off.
+    /// </summary>
+    protected static readonly TimeSpan EndWait = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Stops one process in the tree: asks it to exit, waits up to <paramref name="grace"/>, then ends it and waits for
+    /// it to be gone. Does nothing if <paramref name="pid"/> isn't a live process in this tree.
     /// <list type="bullet">
     /// <item>macOS and Linux: <c>SIGTERM</c>, then <c>SIGKILL</c>.</item>
     /// <item>Windows: asks the process to close its main window, then terminates it. Console programs (most of what
