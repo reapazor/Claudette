@@ -1051,7 +1051,11 @@
           <ItemsControl x:Name="ConversationItems" ItemsSource="{Binding Items}" MaxWidth="900" ClipToBounds="False">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
-                <VirtualizingStackPanel Classes="conversation" />
+                <!-- The messages a screen above and below the view stay built (CacheLength), not only those in it. A
+                     reply's Markdown lays out in the background, so a reply built again starts one line tall: following
+                     the newest output, the list then measured shorter, then taller, from frame to frame, and the view
+                     jumped with it (DESIGN.md §5). -->
+                <VirtualizingStackPanel Classes="conversation" CacheLength="1" />
               </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
           </ItemsControl>

@@ -377,9 +377,9 @@ The conversation is drawn from Claude Code's structured output stream, not from 
 | Errors / API retries | Inline warning row. |
 | Turn summary | Small footer after each turn: duration, tokens, model. |
 
-Scrolling follows new output unless the user has scrolled up; a "Jump to latest" button appears when they have.
+Scrolling follows new output unless the user has scrolled up; a "Jump to latest" button appears when they have. Following holds still: the screen's worth either side of the view stays built because a reply's Markdown lays out in the background, so a reply built again starts one line tall, and with only the items in view built the list measured shorter, then taller, frame after frame, and the view jumped with it.
 
-The conversation is virtualized: only the items in view, and a little either side, have controls, so a long session (a restored one with thousands of tool calls, say) costs no more to show than a short one, and tabs in the background hold no more than a screenful. Scrolling to a card (from the agent map or the Processes page) brings its top-level item into view first, then the card inside it. An expanded Edit or Write card's inline diff is virtualized the same way; the diff window's lists always were.
+The conversation is virtualized: only the items in view, and a screen's worth either side, have controls, so a long session (a restored one with thousands of tool calls, say) costs no more to show than a short one, and tabs in the background hold no more than a screenful. Scrolling to a card (from the agent map or the Processes page) brings its top-level item into view first, then the card inside it. An expanded Edit or Write card's inline diff is virtualized the same way; the diff window's lists always were.
 
 ### Copy and times
 
