@@ -178,6 +178,11 @@ Settings → Appearance → **Style** picks one of two looks, in light and dark 
 
 How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette's own tokens, and `Themes/AppColors` swaps them in and gives Fluent a matching palette (the window background, text, controls, and the accent it derives its shades from). Fluent reads most palette colors only when its resources are first used, so switching loads a fresh Fluent theme with the palette already set. The shapes are styles under the `claude` class, which the main view takes, as Density's are under `compact`. The replies' font is the `ReplyFont` resource. Code blocks take their syntax colors through `Views/CodeBlockTheme` rather than LiveMarkdown's own property, because LiveMarkdown re-highlights a block already shown by setting its code again, which empties a one-line block.
 
+### Accessibility
+
+- **Names.** Every control has a name a screen reader can say: a text button its text, and an icon-only button an `AutomationProperties.Name` ([CLAUDE.md](CLAUDE.md)).
+- **Announcements.** What a notification would say is also read out by a screen reader, whether or not the notification is shown: a prompt that waits (*"work: Allow this command? npm test"*), a turn that finished (*"work: Claude finished."*) and an error. They go to a live region on the main window (`AutomationProperties.LiveSetting` polite), which no one sees, so they never interrupt what's being read.
+
 ## 4. Tabs & Sessions
 
 - A tab is one Claude Code session, run as its own `claude` process.

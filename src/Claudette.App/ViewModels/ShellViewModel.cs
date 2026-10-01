@@ -880,6 +880,18 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty]
     public partial AppUpdateViewModel? AppUpdate { get; set; }
 
+    /// <summary>
+    /// The latest announcement, in a live region screen readers read out (DESIGN.md §3, "Accessibility"): a prompt that
+    /// waits, a turn that finished, an error.
+    /// </summary>
+    [ObservableProperty]
+    public partial string Announcement { get; private set; } = "";
+
+    /// <summary>Has screen readers say <paramref name="text"/>, even when it's the same as the last time.</summary>
+    public void Announce(string text) =>
+        // A live region is read when it changes: the same words again need a change no one hears.
+        Announcement = Announcement == text ? text + "\u200B" : text;
+
     /// <summary>Whether a tab is starting, in a turn, or waiting on the user.</summary>
     public bool AnyTabWorking => AllTabs.Any(t => t.IsWorking || t.Status == TabStatus.Starting);
 

@@ -694,5 +694,9 @@
         </StackPanel>
       </Border>
     </Border>
+    <!-- Announcements for screen readers (DESIGN.md §3, "Accessibility"): read out, never seen. -->
+    <TextBlock x:Name="Announcer" Grid.ColumnSpan="2" Text="{Binding Announcement}" Opacity="0" IsHitTestVisible="False"
+               Width="1" Height="1" HorizontalAlignment="Left" VerticalAlignment="Top"
+               AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="{Binding Announcement}" />
   </Grid>
 </UserControl>
