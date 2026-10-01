@@ -85,12 +85,38 @@ public sealed partial class ConversationSearch : ObservableObject
         }
     }
 
+    /// <summary>
+    /// How many items before newly added ones are looked through again: they may still have been filling in, such as a
+    /// reply streaming in before the next item came.
+    /// </summary>
+    private const int StillFillingIn = 3;
+
     private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (IsOpen && Query.Trim().Length > 0)
+        if (!IsOpen || Query.Trim().Length == 0)
         {
-            Search(keepCurrent: true);
+            return;
         }
+        if (e is { Action: NotifyCollectionChangedAction.Add, NewItems: { } added } && e.NewStartingIndex == _items.Count - added.Count)
+        {
+            // Only the new items, and the few before them, rather than the whole conversation again.
+            var from = Math.Max(0, e.NewStartingIndex - StillFillingIn);
+            var query = Query.Trim();
+            var again = _items.Skip(from).ToList();
+            _matches.RemoveAll(again.Contains);
+            _matches.AddRange(again.Where(item => Matches(item, query)));
+            OnPropertyChanged(nameof(Count));
+            if (Current is null || !_matches.Contains(Current))
+            {
+                SetCurrent(_matches.LastOrDefault());
+            }
+            else
+            {
+                OnPropertyChanged(nameof(CountText));
+            }
+            return;
+        }
+        Search(keepCurrent: true);
     }
 
     private void Search(bool keepCurrent)

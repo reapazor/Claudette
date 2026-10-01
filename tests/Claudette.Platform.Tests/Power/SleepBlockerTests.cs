@@ -1,7 +1,6 @@
 using System.Runtime.Versioning;
 using Claudette.Core.Diffs;
 using Claudette.Core.Processes;
-using Claudette.Core.RemoteControl;
 using Claudette.Platform.Power;
 using Claudette.Platform.Power.Windows;
 using Claudette.Platform.Tests.Support;

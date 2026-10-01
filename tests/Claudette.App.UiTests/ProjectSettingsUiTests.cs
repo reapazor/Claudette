@@ -8,6 +8,7 @@ using Avalonia.VisualTree;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
+using Claudette.App.ViewModels.Settings;
 using Claudette.App.Views;
 using Claudette.Core.ProjectTools;
 using Claudette.Core.Settings;
@@ -61,7 +62,7 @@ public class ProjectSettingsUiTests
         Assert.Null(pages.SelectedItem);
         pages.SelectedItem = SettingsViewModel.ToolsPage;
         UiText.Settle(window);
-        Assert.True(settings.IsToolsPage);
+        Assert.IsType<ProjectToolChoicesPage>(settings.CurrentPage);
         Assert.Null(categories.SelectedItem);
         var tools = window.GetVisualDescendants().OfType<StackPanel>().Single(p => p.Name == "ToolsPage");
         var toolsText = UiText.Describe(tools, (h.Root, "{root}"));
@@ -69,7 +70,7 @@ public class ProjectSettingsUiTests
         Assert.Contains("[choice] \"Development\"", toolsText, StringComparison.Ordinal);
         categories.SelectedItem = "Appearance";
         UiText.Settle(window);
-        Assert.True(settings.IsAppearance);
+        Assert.Same(settings.Appearance, settings.CurrentPage);
         Assert.Null(pages.SelectedItem);
 
         // The version foot stays at the bottom, below the list.

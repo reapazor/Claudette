@@ -34,8 +34,17 @@ public static class Shortcuts
         {
             return false;
         }
-        return bound.IsDigitRange ? Digit(key) is not null : boundKey == key;
+        return bound.IsDigitRange ? Digit(key) is not null : boundKey == key || NumberPadTwin(key) == boundKey;
     }
+
+    /// <summary>The main keyboard's key for a number pad key: <c>NumPad0</c> is <c>D0</c>, <c>Add</c> is <c>OemPlus</c>.</summary>
+    private static Key? NumberPadTwin(Key key) => key switch
+    {
+        >= Key.NumPad0 and <= Key.NumPad9 => Key.D0 + (key - Key.NumPad0),
+        Key.Add => Key.OemPlus,
+        Key.Subtract => Key.OemMinus,
+        _ => null,
+    };
 
     /// <summary>1–9 for the digit keys, on the main row or the number pad.</summary>
     public static int? Digit(Key key) => key switch
@@ -82,6 +91,8 @@ public static class Shortcuts
         Key.PageUp => "PageUp",
         Key.PageDown => "PageDown",
         >= Key.NumPad0 and <= Key.NumPad9 => $"D{key - Key.NumPad0}",
+        Key.Add => "OemPlus",
+        Key.Subtract => "OemMinus",
         _ => key.ToString(),
     };
 }

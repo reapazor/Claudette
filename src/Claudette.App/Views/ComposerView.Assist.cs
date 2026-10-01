@@ -1,4 +1,3 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -11,7 +10,7 @@ using Claudette.Core.Composer;
 namespace Claudette.App.Views;
 
 /// <summary>The composer's <c>/</c> and <c>@</c> autocomplete, and attaching by drop, paste and picker (DESIGN.md §5).</summary>
-public partial class TabView
+public partial class ComposerView
 {
     private bool _completionUpdateQueued;
     private bool _pasteTextThrough;

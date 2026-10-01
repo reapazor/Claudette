@@ -22,7 +22,7 @@ public class ComposerMenuUiTests
         var tab = await h.OpenTabAsync();
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
 
-        var (flyout, item) = await OpenAndFindAsync(window, "Effort", b => b.Content as string == "high");
+        var (flyout, item) = await OpenAndFindAsync(window, "Effort, ultracode and output style", b => b.Content as string == "high");
         Pick(item);
         await UiText.SettleUntilAsync(window, () => tab.Effort == "high", "the effort to change");
 
@@ -43,7 +43,7 @@ public class ComposerMenuUiTests
         UiText.Settle(window);
 
         Assert.False(flyout.IsOpen);
-        Assert.Equal("haiku", tab.PendingModel?.Value);
+        Assert.Equal("haiku", tab.ModelSwitch.Value?.Value);
         window.Close();
     }
 

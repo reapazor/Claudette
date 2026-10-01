@@ -1,0 +1,513 @@
+<!-- A tab's composer (DESIGN.md §5): the working line, attachments, the box and its bar, and the status line. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             xmlns:conv="using:Claudette.App.Conversation"
+             xmlns:core="using:Claudette.Core.Sessions"
+             xmlns:settings="using:Claudette.Core.Settings"
+             xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
+             xmlns:controls="using:Claudette.App.Controls"
+             xmlns:protocol="using:Claudette.Core.Protocol"
+             xmlns:services="using:Claudette.App.Services"
+             xmlns:views="using:Claudette.App.Views"
+             xmlns:tools="using:Claudette.Core.ProjectTools"
+             x:Class="Claudette.App.Views.ComposerView"
+             x:DataType="vm:TabViewModel">
+  <StackPanel Classes="composerarea" MaxWidth="948">
+
+    <!-- Working line (DESIGN.md §5): a twinkling glyph, a fun verb, the turn's time and tokens -->
+    <Panel x:Name="WorkingLine" Margin="4,0,4,-2" IsVisible="{Binding IsWorkingLineShown}">
+      <StackPanel Orientation="Horizontal" Spacing="8" DataContext="{Binding Working}" x:DataType="vm:WorkingLine"
+                  Background="Transparent" ToolTip.Tip="{Binding ActivityDetail}">
+        <TextBlock Classes="working-glyph" Text="{Binding Glyph}" Width="14" TextAlignment="Center" VerticalAlignment="Center" />
+        <TextBlock Classes="working-verb" Text="{Binding Verb}" VerticalAlignment="Center" />
+        <TextBlock Classes="muted small" Text="{Binding Detail}" VerticalAlignment="Center" />
+      </StackPanel>
+    </Panel>
+
+    <!-- Possibly stuck (check-ins) -->
+    <Border Classes="codeblock" IsVisible="{Binding IsPossiblyStuck}">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Classes="warning" TextWrapping="Wrap" VerticalAlignment="Center"
+                   Text="Claude hasn't answered two check-ins. It may be stuck." />
+        <Button Grid.Column="1" Content="Stop" Command="{Binding StopCommand}" />
+      </Grid>
+    </Border>
+
+    <!-- A check-in counting down: it can go now, or not at all (DESIGN.md §5, "Check-ins on long turns") -->
+    <Border Classes="codeblock" IsVisible="{Binding HasCheckInCountdown}">
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+        <TextBlock TextWrapping="Wrap" VerticalAlignment="Center" Text="{Binding CheckInCountdownText}" ToolTip.Tip="{Binding CheckInCountdown.Message}" />
+        <Button Grid.Column="1" Content="Send now" Command="{Binding SendCheckInNowCommand}" />
+        <Button Grid.Column="2" Classes="flat" Padding="4" ToolTip.Tip="Don't check in" AutomationProperties.Name="Don't check in" VerticalAlignment="Center"
+                Command="{Binding SkipCheckInCommand}">
+          <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="7" Height="7" Stretch="Uniform" />
+        </Button>
+      </Grid>
+    </Border>
+
+    <!-- A usage limit stopped the task: it continues when the limit resets (DESIGN.md §6, "Continuing after a limit resets") -->
+    <Border Classes="codeblock" IsVisible="{Binding HasLimitWait}">
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+        <TextBlock TextWrapping="Wrap" VerticalAlignment="Center" Text="{Binding LimitWaitText}" />
+        <Button Grid.Column="1" Content="Don't continue" Command="{Binding DontContinueCommand}" IsVisible="{Binding WillContinueAfterLimit}"
+                ToolTip.Tip="Leave the task stopped. Send a message to go on yourself." />
+        <Button Grid.Column="1" Content="{Binding ContinueAfterLimitText}" Command="{Binding ContinueAfterLimitCommand}" IsVisible="{Binding CanContinueAfterLimit}" />
+        <Button Grid.Column="2" Classes="flat" Padding="4" ToolTip.Tip="Close" AutomationProperties.Name="Close" VerticalAlignment="Center"
+                Command="{Binding DismissLimitWaitCommand}" IsVisible="{Binding CanContinueAfterLimit}">
+          <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="7" Height="7" Stretch="Uniform" />
+        </Button>
+      </Grid>
+    </Border>
+
+    <!-- Quick suffix chips -->
+    <ItemsControl ItemsSource="{Binding Chips}">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <WrapPanel ItemSpacing="6" LineSpacing="6" />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate DataType="vm:SuffixChip">
+          <Border Classes="chip" Classes.kept="{Binding IsKept}" ToolTip.Tip="{Binding Suffix.Text}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <TextBlock Classes="small" Text="{Binding Label}" VerticalAlignment="Center" />
+              <Button Classes="flat" Padding="3" ToolTip.Tip="Remove" AutomationProperties.Name="{Binding Label, StringFormat='Remove {0}'}"
+                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RemoveChipCommand}" CommandParameter="{Binding}">
+                <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="7" Height="7" Stretch="Uniform" />
+              </Button>
+            </StackPanel>
+            <Border.ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="Keep on this tab / stop keeping" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ToggleKeepCommand}" CommandParameter="{Binding}" />
+              </ContextMenu>
+            </Border.ContextMenu>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <!-- What the folder's own configuration would run, before Claude Code first starts there (DESIGN.md §7, "Folder trust") -->
+    <Border Classes="codeblock" IsVisible="{Binding IsAskingTrust}">
+      <StackPanel Spacing="8">
+        <TextBlock FontWeight="SemiBold" Text="Trust this folder?" />
+        <TextBlock TextWrapping="Wrap" Text="{Binding TrustText}" />
+        <ItemsControl ItemsSource="{Binding TrustRows}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="vm:TrustRow">
+              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2">
+                <TextBlock Classes="muted small" Text="{Binding Kind}" MinWidth="110" />
+                <StackPanel Grid.Column="1">
+                  <SelectableTextBlock Classes="mono" TextWrapping="Wrap" Text="{Binding Text}" />
+                  <TextBlock Classes="muted small" Text="{Binding File}" />
+                </StackPanel>
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Classes="accent" Content="Trust this folder" Command="{Binding TrustFolderCommand}" />
+          <Button Content="Start without it" Command="{Binding StartWithoutFolderSettingsCommand}"
+                  ToolTip.Tip="Claude Code starts without this folder's own settings, MCP servers and CLAUDE.md" />
+          <Button Content="{Binding CloseMissingText}" Command="{Binding UnpinAndCloseCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <!-- The folder is gone, for example a deleted clone (DESIGN.md §9, "Missing folder") -->
+    <Border Classes="codeblock" IsVisible="{Binding IsFolderMissing}">
+      <StackPanel Spacing="8">
+        <TextBlock Classes="error" TextWrapping="Wrap" Text="{Binding FolderMissingText}" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Classes="accent" Content="Choose folder…" Command="{Binding ChooseFolderCommand}" />
+          <Button Content="{Binding CloseMissingText}" Command="{Binding UnpinAndCloseCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <!-- The transcript is gone from here and the library (DESIGN.md §9, "Old sessions") -->
+    <Border Classes="codeblock" IsVisible="{Binding IsSessionMissing}">
+      <StackPanel Spacing="8">
+        <TextBlock Classes="warning" TextWrapping="Wrap" Text="{x:Static vm:TabViewModel.SessionMissingText}" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Classes="accent" Content="Start a new session" Command="{Binding StartNewSessionCommand}" />
+          <Button Content="{Binding CloseMissingText}" Command="{Binding UnpinAndCloseCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <!-- Taken over by another machine (DESIGN.md §9) -->
+    <Border Classes="codeblock" IsVisible="{Binding IsReadOnly}">
+      <TextBlock Classes="warning" TextWrapping="Wrap" Text="{Binding ReadOnlyText}" />
+    </Border>
+
+    <!-- Bypass mode warning -->
+    <TextBlock Classes="small error" Margin="4,0" TextWrapping="Wrap" IsVisible="{Binding IsBypassMode}"
+               Text="Bypass permissions: Claude won't ask before running commands or changing files in this session." />
+
+    <!-- Why a dropped or pasted file wasn't attached -->
+    <Grid ColumnDefinitions="*,Auto" Margin="4,0" IsVisible="{Binding HasAttachmentError}">
+      <TextBlock Classes="small error" TextWrapping="Wrap" VerticalAlignment="Center" Text="{Binding AttachmentError}" />
+      <Button Grid.Column="1" Classes="flat" Padding="4" ToolTip.Tip="Dismiss" AutomationProperties.Name="Dismiss" Command="{Binding DismissAttachmentErrorCommand}">
+        <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="7" Height="7" Stretch="Uniform" />
+      </Button>
+    </Grid>
+
+    <Border x:Name="ComposerBox" Classes="composer" Classes.bypass="{Binding IsBypassMode}" DragDrop.AllowDrop="True">
+      <Grid RowDefinitions="Auto,Auto,Auto">
+        <!-- Attached images, removable (DESIGN.md §5, "Attachments") -->
+        <ItemsControl x:Name="AttachmentList" ItemsSource="{Binding Attachments}" IsVisible="{Binding Attachments.Count}" Margin="0,4,0,2">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel ItemSpacing="6" LineSpacing="6" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="vm:ComposerAttachment">
+              <Panel ToolTip.Tip="{Binding Name}">
+                <Border Classes="thumbnail">
+                  <Image Source="{Binding Data, Converter={x:Static services:ImageFiles.Thumbnail}}" Height="56" MaxWidth="120" Stretch="UniformToFill"
+                         AutomationProperties.Name="{Binding Name}" />
+                </Border>
+                <Button Classes="flat" Padding="4" Margin="3" HorizontalAlignment="Right" VerticalAlignment="Top" CornerRadius="9"
+                        Background="{DynamicResource ComposerBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1"
+                        ToolTip.Tip="Remove" AutomationProperties.Name="Remove image"
+                        Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RemoveAttachmentCommand}" CommandParameter="{Binding}">
+                  <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="7" Height="7" Stretch="Uniform" />
+                </Button>
+              </Panel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBox x:Name="Composer" Grid.Row="1" Text="{Binding ComposerText}" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="240"
+                 PlaceholderText="{Binding Tips.ComposerPlaceholder}" />
+
+        <!-- / and @ autocomplete (DESIGN.md §5, "Composer"): keyboard first, the text box keeps focus -->
+        <Popup x:Name="CompletionPopup" Grid.Row="1" PlacementTarget="{Binding #ComposerBox}" Placement="TopEdgeAlignedLeft" VerticalOffset="-4"
+               IsOpen="{Binding Completions.IsOpen, Mode=OneWay}" IsLightDismissEnabled="False">
+          <Border Classes="dialog" Padding="4" Width="{Binding #ComposerBox.Bounds.Width}" MaxHeight="340">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Top" Classes="muted small" FontWeight="SemiBold" Margin="8,4,8,2" Text="{Binding Completions.Header}" />
+              <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="8,4,8,6" Text="{Binding Completions.Message}" IsVisible="{Binding Completions.HasMessage}" />
+              <ScrollViewer x:Name="CompletionScroll" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl x:Name="CompletionList" ItemsSource="{Binding Completions.Items}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:CompletionItem">
+                      <Button Classes="flat row completion" Classes.selected="{Binding IsSelected}" Focusable="False" Padding="8,4"
+                              HorizontalContentAlignment="Stretch" Click="OnCompletionClicked">
+                        <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                          <Path Classes="toolicon" Data="{Binding IconKey, Converter={x:Static conv:ToolIcons.Geometry}}" />
+                          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                            <TextBlock Classes="muted small mono" Text="{Binding Hint}" VerticalAlignment="Center"
+                                       IsVisible="{Binding Hint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                          </StackPanel>
+                          <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        </Grid>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </DockPanel>
+          </Border>
+        </Popup>
+
+        <!-- Control bar: the chips on the left, and on the right the counts and Send, which move under the chips when
+             both don't fit on one line (DESIGN.md §5) -->
+        <controls:ControlBarPanel Grid.Row="2">
+          <StackPanel Orientation="Horizontal" Spacing="2">
+            <!-- Attach a file (DESIGN.md §5, "Attachments"); dropping and pasting work too -->
+            <Button Classes="flat" Padding="6,4" ToolTip.Tip="Attach a file or image (or drop or paste one)" AutomationProperties.Name="Attach a file"
+                    Click="OnAttachClicked">
+              <Path Data="{StaticResource IconAttach}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.1" StrokeLineCap="Round"
+                    Width="12" Height="12" Stretch="None" />
+            </Button>
+            <Button x:Name="SuffixButton" Classes="flat" ToolTip.Tip="{Binding Tips.Suffixes}">
+              <TextBlock Classes="muted small" Text="Suffixes ▾" />
+              <Button.Flyout>
+                <Flyout Placement="TopEdgeAlignedLeft" Opened="OnSuffixMenuOpened">
+                  <!-- 1–9 pick the first nine (DESIGN.md §5) -->
+                  <StackPanel x:Name="SuffixMenu" MinWidth="280" Spacing="2" KeyDown="OnSuffixMenuKeyDown">
+                    <ItemsControl ItemsSource="{Binding SuffixMenu}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:SuffixMenuItem">
+                          <!-- Picking a checked one takes it off the message -->
+                          <Button Classes="flat row" ToolTip.Tip="{Binding Suffix.Text}" Click="OnSuffixPicked" HorizontalContentAlignment="Stretch"
+                                  Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ToggleSuffixCommand}" CommandParameter="{Binding Suffix}">
+                            <Grid ColumnDefinitions="14,18,*,Auto" ColumnSpacing="6">
+                              <Path Data="{StaticResource IconCheck}" Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.4" StrokeLineCap="Round" StrokeJoin="Round"
+                                    Width="12" Height="12" Stretch="None" VerticalAlignment="Center" IsVisible="{Binding IsOn}" />
+                              <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding Number}" VerticalAlignment="Center" />
+                              <TextBlock Grid.Column="2" Text="{Binding Suffix.Label}" />
+                              <TextBlock Grid.Column="3" Classes="muted small" Text="{Binding Shortcut}" VerticalAlignment="Center" />
+                            </Grid>
+                          </Button>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Separator Margin="0,4" />
+                    <Button Classes="flat row" Content="Edit suffixes…" Click="OnFlyoutItemPicked" Command="{Binding EditSuffixesCommand}" />
+                  </StackPanel>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+
+            <Button Classes="flat" ToolTip.Tip="Model">
+              <TextBlock Classes="muted small" Text="{Binding ModelName, StringFormat='{}{0} ▾', TargetNullValue='Model ▾'}" />
+              <Button.Flyout>
+                <Flyout Placement="TopEdgeAlignedLeft">
+                  <ItemsControl ItemsSource="{Binding Models}" MinWidth="240">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="core:ModelInfo">
+                        <Button Classes="flat row" Click="OnFlyoutItemPicked"
+                                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChooseModelCommand}" CommandParameter="{Binding}">
+                          <StackPanel>
+                            <TextBlock Text="{Binding DisplayName}" />
+                            <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" MaxWidth="320" />
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+
+            <Button Classes="flat" ToolTip.Tip="Effort, ultracode and output style">
+              <TextBlock Classes="muted small" Text="{Binding EffortName, StringFormat='{}{0} ▾'}" />
+              <Button.Flyout>
+                <Flyout Placement="TopEdgeAlignedLeft">
+                  <StackPanel MinWidth="160" MaxWidth="340">
+                    <Button Classes="flat row" Content="Default" Click="OnFlyoutItemPicked" Command="{Binding ChooseEffortCommand}" CommandParameter="{x:Null}" />
+                    <ItemsControl ItemsSource="{Binding EffortLevels}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                          <Button Classes="flat row" Content="{Binding}" Click="OnFlyoutItemPicked"
+                                  Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChooseEffortCommand}" CommandParameter="{Binding}" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <!-- DESIGN.md §5, "Model and effort": ultracode and the output style -->
+                    <Separator Margin="0,4" />
+                    <ToggleButton Classes="flat row" IsChecked="{Binding IsUltracode, Mode=OneWay}" Command="{Binding ToggleUltracodeCommand}">
+                      <StackPanel>
+                        <TextBlock Text="Ultracode" />
+                        <TextBlock Classes="muted small" TextWrapping="Wrap"
+                                   Text="Claude can run workflows of subagents on its own for big tasks. Uses more of your plan." />
+                      </StackPanel>
+                    </ToggleButton>
+                    <StackPanel IsVisible="{Binding HasOutputStyles}">
+                      <Separator Margin="0,4" />
+                      <TextBlock Classes="muted small" Margin="8,2" Text="Output style, for this folder" />
+                      <ItemsControl ItemsSource="{Binding OutputStyleChoices}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="vm:OutputStyleChoice">
+                            <Button Classes="flat row" Click="OnFlyoutItemPicked"
+                                    Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChooseOutputStyleCommand}" CommandParameter="{Binding}">
+                              <TextBlock Text="{Binding Label}" FontWeight="{Binding IsCurrent, Converter={x:Static vm:Converters.BoldIfTrue}}" />
+                            </Button>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </StackPanel>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+
+            <!-- Permission mode (DESIGN.md §7) -->
+            <Button Classes="flat" ToolTip.Tip="Permission mode for this session">
+              <TextBlock Classes="muted small" Classes.error="{Binding IsBypassMode}" Text="{Binding PermissionModeName, StringFormat='{}{0} ▾'}" />
+              <Button.Flyout>
+                <Flyout Placement="TopEdgeAlignedLeft">
+                  <ItemsControl ItemsSource="{Binding PermissionModeChoices}" MinWidth="280">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="vm:PermissionModeChoice">
+                        <Button Classes="flat row" Click="OnFlyoutItemPicked"
+                                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChooseModeCommand}" CommandParameter="{Binding}">
+                          <StackPanel>
+                            <TextBlock Text="{Binding Label}" Classes.error="{Binding IsBypass}" />
+                            <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" MaxWidth="320" />
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="2">
+            <!-- Processes summary (DESIGN.md §4) -->
+            <Button Classes="flat" IsVisible="{Binding ProcessMonitor.ShowSummary}"
+                    ToolTip.Tip="Processes this tab started" Click="OnShowProcesses">
+              <TextBlock Classes="muted small" Text="{Binding ProcessMonitor.SummaryText}" />
+            </Button>
+
+            <!-- Agents (DESIGN.md §18, "Agent map"), while the tab has subagents -->
+            <Button Classes="flat" IsVisible="{Binding HasAgents}" ToolTip.Tip="What this tab's subagents are doing"
+                    Command="{Binding OpenAgentsPageCommand}">
+              <TextBlock Classes="muted small" Text="{Binding AgentsButtonText}" />
+            </Button>
+
+            <!-- Running tasks (DESIGN.md §5, "Running tasks"): what Claude Code keeps going in the background -->
+            <Button x:Name="TasksChip" Classes="flat" IsVisible="{Binding HasRunningTasks}" ToolTip.Tip="Work Claude Code keeps running in the background"
+                    AutomationProperties.Name="{Binding RunningTasksText}">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Classes="status busy" Text="●" FontSize="9" VerticalAlignment="Center" />
+                <TextBlock Classes="muted small" Text="{Binding RunningTasksText}" />
+              </StackPanel>
+              <Button.Flyout>
+                <Flyout Placement="TopEdgeAlignedRight" Opened="OnTaskListOpened" Closed="OnTaskListClosed">
+                  <StackPanel x:Name="TaskList" Classes="tasklist" MinWidth="320" MaxWidth="480">
+                    <TextBlock Text="{Binding RunningTasksText}" FontWeight="SemiBold" Margin="6,2,6,0" />
+                    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="6,0,6,4"
+                               Text="Claude Code keeps these going after the turn, and tells Claude when each one ends." />
+                    <ItemsControl ItemsSource="{Binding Tasks.Running}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="conv:RunningTask">
+                          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                            <Button Classes="flat row taskrow" ToolTip.Tip="{Binding Tooltip}" Click="OnFlyoutItemPicked"
+                                    Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ShowTaskCommand}" CommandParameter="{Binding}">
+                              <Grid ColumnDefinitions="Auto,*,Auto">
+                                <Path Classes="toolicon" Data="{Binding IconKey, Converter={x:Static conv:ToolIcons.Geometry}}" Margin="0,0,8,0" />
+                                <StackPanel Grid.Column="1">
+                                  <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                  <TextBlock Classes="muted small" Text="{Binding KindText}" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding RunningText}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                              </Grid>
+                            </Button>
+                            <Button Grid.Column="1" Classes="flat" Content="Stop" VerticalAlignment="Center" Click="OnFlyoutItemPicked"
+                                    ToolTip.Tip="Stop it through Claude Code, which tells Claude it ended"
+                                    Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).StopTaskCommand}" CommandParameter="{Binding}" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+
+            <!-- Changed files (DESIGN.md §8) -->
+            <Button Classes="flat" ToolTip.Tip="Changed files" Command="{Binding ToggleSidePanelCommand}">
+              <TextBlock Classes="muted small" Text="{Binding ChangedFiles.Count, StringFormat='Files ({0})'}" />
+            </Button>
+
+            <!-- Context window (DESIGN.md §6, "Per-tab context"): what fills it, as the tab's context ring shows it -->
+            <Button x:Name="ContextButton" Classes="flat" ToolTip.Tip="{Binding Context.Detail}"
+                    IsVisible="{Binding Context.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+              <TextBlock Classes="muted small" Classes.warning="{Binding Context.IsHigh}" Text="{Binding Context.Text}" />
+              <Button.Flyout>
+                <Flyout Placement="TopEdgeAlignedRight">
+                  <views:ContextBreakdownView />
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+
+            <Button Classes="flat" ToolTip.Tip="Tokens used by this tab">
+              <TextBlock Classes="muted small" Text="{Binding Context.TokensShort}" />
+              <Button.Flyout>
+                <Flyout Placement="TopEdgeAlignedRight" Opened="OnTokenDetailsOpened" Closed="OnTokenDetailsClosed">
+                  <StackPanel Spacing="8" MinWidth="420">
+                    <TextBlock FontWeight="SemiBold" Text="Tokens used by this tab" />
+                    <Grid ColumnDefinitions="*,70,70,80,80,60">
+                      <TextBlock Classes="muted small" Text="Model" />
+                      <TextBlock Grid.Column="1" Classes="muted small" Text="Input" HorizontalAlignment="Right" />
+                      <TextBlock Grid.Column="2" Classes="muted small" Text="Output" HorizontalAlignment="Right" />
+                      <TextBlock Grid.Column="3" Classes="muted small" Text="Cache write" HorizontalAlignment="Right" />
+                      <TextBlock Grid.Column="4" Classes="muted small" Text="Cache read" HorizontalAlignment="Right" />
+                      <TextBlock Grid.Column="5" Classes="muted small" Text="Cost" HorizontalAlignment="Right" />
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding Context.TokenRows}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:TokenRow">
+                          <Grid ColumnDefinitions="*,70,70,80,80,60">
+                            <TextBlock Classes="small" Text="{Binding Model}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="1" Classes="small mono" Text="{Binding Input}" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="2" Classes="small mono" Text="{Binding Output}" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="3" Classes="small mono" Text="{Binding CacheWrite}" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="4" Classes="small mono" Text="{Binding CacheRead}" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="5" Classes="small mono" Text="{Binding Cost}" HorizontalAlignment="Right" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Classes="muted small" Text="{Binding Context.TokenSummary}" TextWrapping="Wrap" MaxWidth="420" />
+                    <TextBlock Classes="small" Text="{Binding Context.TokenWindowText}" IsVisible="{Binding Context.TokenWindowText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <StackPanel Spacing="2" IsVisible="{Binding Context.TurnPoints.Count}">
+                      <TextBlock Classes="muted small" Text="Tokens per turn" />
+                      <controls:UsageChart Height="48" Points="{Binding Context.TurnPoints}" Maximum="{Binding Context.TurnChartMaximum}"
+                                           LineBrush="{DynamicResource MeterBrush}" />
+                    </StackPanel>
+                  </StackPanel>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+
+            <Button Classes="flat" ToolTip.Tip="Tab info">
+              <TextBlock Classes="muted small" Text="ⓘ" />
+              <Button.Flyout>
+                <Flyout Placement="TopEdgeAlignedRight">
+                  <StackPanel Spacing="8" MinWidth="320" MaxWidth="480">
+                    <ItemsControl ItemsSource="{Binding InfoRows}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:InfoRow">
+                          <Grid ColumnDefinitions="88,*" Margin="0,1">
+                            <TextBlock Classes="muted small" Text="{Binding Label}" />
+                            <SelectableTextBlock Grid.Column="1" Classes="small" Text="{Binding Value}" TextWrapping="Wrap" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <!-- Perforce changelists, with Copy and Open in P4V (DESIGN.md §18) -->
+                    <ItemsControl ItemsSource="{Binding Perforce.ChangelistRows}" IsVisible="{Binding Perforce.HasChangelists}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:ChangelistRow">
+                          <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
+                            <TextBlock Classes="small" Text="{Binding Text}" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Classes="flat" Content="Copy" Click="OnFlyoutItemPicked"
+                                    Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).Perforce.CopyChangelistCommand}" CommandParameter="{Binding Number}" />
+                            <Button Grid.Column="2" Classes="flat" Content="Open in P4V" Click="OnFlyoutItemPicked"
+                                    Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).Perforce.OpenChangelistInP4VCommand}" CommandParameter="{Binding Number}" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+
+            <Button Classes="accent send" Margin="6,0,0,0" Command="{Binding SendCommand}" IsVisible="{Binding !IsWorking}" AutomationProperties.Name="Send">
+              <Panel>
+                <TextBlock Classes="sendlabel" Text="Send" />
+                <Path Classes="sendarrow" Data="{StaticResource IconSendArrow}" Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8"
+                      StrokeLineCap="Round" StrokeJoin="Round" Width="32" Height="32" Stretch="None" />
+              </Panel>
+            </Button>
+            <Button Classes="stop" Margin="6,0,0,0" ToolTip.Tip="Stop (Esc)" AutomationProperties.Name="Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsWorking}">
+              <Panel>
+                <TextBlock Classes="stoplabel" Text="■" />
+                <Path Classes="stopsquare" Data="{StaticResource IconStopRound}" Fill="{Binding $parent[Button].Foreground}" Width="32" Height="32" Stretch="None" />
+              </Panel>
+            </Button>
+          </StackPanel>
+        </controls:ControlBarPanel>
+      </Grid>
+    </Border>
+
+    <!-- Status line -->
+    <StackPanel Orientation="Horizontal" Spacing="10" Margin="4,0">
+      <TextBlock Classes="muted small" Text="{Binding Folder}" TextTrimming="PathSegmentEllipsis" MaxWidth="520" />
+      <TextBlock Classes="muted small" Text="{Binding StatusTip}" />
+      <Button Classes="flat" Padding="4,0" IsVisible="{Binding CanRestart}" Command="{Binding RestartCommand}">
+        <TextBlock Classes="small" Text="Restart" />
+      </Button>
+    </StackPanel>
+  </StackPanel>
+</UserControl>

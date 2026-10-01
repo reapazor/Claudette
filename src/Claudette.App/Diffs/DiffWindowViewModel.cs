@@ -40,6 +40,10 @@ public sealed record SideBySideDiffRow(DiffCell? Left, DiffCell? Right, bool IsH
 /// §8, "Before content"). The view shows the whole file as it is now, with nothing marked as changed.
 /// </param>
 /// <param name="Review">Marking the file as reviewed from the view, or null when it can't be.</param>
+/// <param name="FromGit">
+/// <paramref name="Before"/> is the file at HEAD (Changed files in git mode), not before Claude's first change. No HEAD
+/// copy means the file is new to git, maybe the user's own, so it isn't deleted: there's nothing to revert to.
+/// </param>
 public sealed record DiffSource(
     string Path,
     string DisplayPath,
@@ -50,7 +54,8 @@ public sealed record DiffSource(
     Func<Task> Reveal,
     Func<Task> CopyPath,
     bool BeforeKnown = true,
-    DiffReview? Review = null);
+    DiffReview? Review = null,
+    bool FromGit = false);
 
 /// <summary>The diff view's <b>Reviewed</b> button (DESIGN.md §8, "Reviewed"). Called on the UI thread.</summary>
 /// <param name="LatestChange">The id of Claude's latest change to the file, or null when it hasn't changed it.</param>
@@ -149,25 +154,23 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
     /// Claude's changes can be put back: the file as it was before is known, and the view isn't showing a file that's
     /// gone or binary.
     /// </summary>
-    public bool CanRevert => _source.BeforeKnown && !IsLoading && _after is not null && !_isBinary && !string.Equals(_after, _source.Before, StringComparison.Ordinal);
+    public bool CanRevert => HasRevertTarget && !IsLoading && _after is not null && !_isBinary && !string.Equals(_after, _source.Before, StringComparison.Ordinal);
 
-    /// <summary><b>Revert file</b> asks first: the second step shows.</summary>
-    [ObservableProperty]
-    public partial bool IsConfirmingRevert { get; set; }
+    /// <summary>There's something to put back: what the file held is known, and from git, the file is at HEAD.</summary>
+    private bool HasRevertTarget => _source.BeforeKnown && !(_source.FromGit && _source.Before is null);
 
+    /// <summary><b>Revert file</b>'s tip: what the file goes back to.</summary>
+    public string RevertFileTip => _source.FromGit ? "Put the whole file back as it is at HEAD" : "Put the whole file back as it was before Claude changed it";
+
+    /// <summary><b>Revert file</b> asks first: the second step shows in place.</summary>
+    public InlineConfirmation RevertConfirmation => field ??= new(RevertFileAsync);
+
+    /// <summary>
+    /// Puts the whole file back as it was before Claude's first change; a file Claude created is deleted. From git, it's
+    /// the file at HEAD, in the line endings the file has now: git keeps its copy with the ones it was committed in.
+    /// </summary>
     [RelayCommand]
-    private void AskToRevertFile() => IsConfirmingRevert = true;
-
-    [RelayCommand]
-    private void CancelRevert() => IsConfirmingRevert = false;
-
-    /// <summary>Puts the whole file back as it was before Claude's first change; a file Claude created is deleted.</summary>
-    [RelayCommand]
-    private Task RevertFileAsync()
-    {
-        IsConfirmingRevert = false;
-        return RevertAsync(_source.Before);
-    }
+    private Task RevertFileAsync() => RevertAsync(_source.FromGit ? Revert.WithLineEndingsOf(_source.Before, _after) : _source.Before);
 
     /// <summary>Undoes one hunk of the diff, leaving the rest of Claude's changes.</summary>
     [RelayCommand]
@@ -333,7 +336,7 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
         }
         else
         {
-            var revertable = _source.BeforeKnown && _after is not null && !_isBinary;
+            var revertable = HasRevertTarget && _after is not null && !_isBinary;
             foreach (var hunk in LineDiff.Hunks(before, _after))
             {
                 lines.Add((null, hunk.Header, revertable ? hunk : null));

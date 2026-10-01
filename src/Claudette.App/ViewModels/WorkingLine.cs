@@ -1,5 +1,5 @@
-using System.Globalization;
 using Claudette.App.Services;
+using Claudette.Core;
 using Claudette.Core.Claude;
 using Claudette.Core.Sessions;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -15,6 +15,7 @@ namespace Claudette.App.ViewModels;
 /// <param name="turnTokens">The turn's tokens so far.</param>
 /// <param name="stopShortcut">The Stop shortcut as it reads now, or null when it has been removed.</param>
 /// <param name="showActivity">Settings → Appearance → Show what Claude is doing: the running tool instead of the verb.</param>
+/// <param name="isStill">Motion is reduced (DESIGN.md §3, "Accessibility"): the glyph stays still.</param>
 public sealed partial class WorkingLine(
     TimeProvider timeProvider,
     IUiDispatcher dispatcher,
@@ -23,7 +24,8 @@ public sealed partial class WorkingLine(
     Func<long> turnTokens,
     Func<string?> stopShortcut,
     Random random,
-    Func<bool>? showActivity = null) : ObservableObject, IDisposable
+    Func<bool>? showActivity = null,
+    Func<bool>? isStill = null) : ObservableObject, IDisposable
 {
     /// <summary>The frames of the glyph, as Claude Code's terminal spinner draws them, there and back.</summary>
     public static readonly IReadOnlyList<string> Frames = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
@@ -33,7 +35,7 @@ public sealed partial class WorkingLine(
     /// <summary>How long a verb stays before the next one.</summary>
     public static readonly TimeSpan VerbInterval = TimeSpan.FromSeconds(8);
 
-    /// <summary>The glyph when the fun is off: still, in the same place.</summary>
+    /// <summary>The glyph when the fun is off, or motion is reduced: still, in the same place.</summary>
     public const string StillGlyph = "✻";
 
     private readonly Lock _lock = new();
@@ -171,7 +173,8 @@ public sealed partial class WorkingLine(
     private void Update()
     {
         var fun = isFun();
-        Glyph = fun ? Frames[_frame % Frames.Count] : StillGlyph;
+        // With motion reduced (DESIGN.md §3, "Accessibility"), the verbs still change; only the glyph stops twinkling.
+        Glyph = fun && !(isStill?.Invoke() ?? false) ? Frames[_frame % Frames.Count] : StillGlyph;
         if (!fun)
         {
             _funVerb = "Working…";
@@ -184,7 +187,7 @@ public sealed partial class WorkingLine(
         Verb = _activity is { } activity && (showActivity?.Invoke() ?? false)
             ? activity.EndsWith('…') ? activity : activity + "…"
             : _funVerb;
-        var parts = new List<string> { Elapsed(timeProvider.GetUtcNow() - _startedAt) };
+        var parts = new List<string> { Formats.Elapsed(timeProvider.GetUtcNow() - _startedAt) };
         if (turnTokens() is > 0 and var tokens)
         {
             parts.Add(TokenTotals.Short(tokens).Replace(" tok", " tokens", StringComparison.Ordinal));
@@ -217,13 +220,6 @@ public sealed partial class WorkingLine(
         return next;
     }
 
-    /// <summary>"8s", "1m 05s", "1h 02m".</summary>
-    public static string Elapsed(TimeSpan span) => span switch
-    {
-        { TotalHours: >= 1 } => string.Create(CultureInfo.InvariantCulture, $"{(int)span.TotalHours}h {span.Minutes:00}m"),
-        { TotalMinutes: >= 1 } => string.Create(CultureInfo.InvariantCulture, $"{(int)span.TotalMinutes}m {span.Seconds:00}s"),
-        _ => string.Create(CultureInfo.InvariantCulture, $"{Math.Max(0, (int)span.TotalSeconds)}s"),
-    };
 
     public void Dispose() => Stop();
 }

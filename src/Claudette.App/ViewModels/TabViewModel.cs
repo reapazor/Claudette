@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using Claudette.App.Conversation;
 using Claudette.App.Services;
+using Claudette.Core;
 using Claudette.Core.Claude;
 using Claudette.Core.Development;
 using Claudette.Core.Git;
@@ -32,18 +33,6 @@ public enum TabStatus
     Exited,
 }
 
-/// <summary>The ring on a tab's row (DESIGN.md §4, "Sidebar"): how full its context window is.</summary>
-public enum ContextLevel
-{
-    /// <summary>No context data yet: the ring is hidden.</summary>
-    None,
-    Normal,
-    /// <summary>Near the point where Claude Code compacts by itself: amber.</summary>
-    High,
-    /// <summary>Nearly full: red.</summary>
-    Critical,
-}
-
 /// <summary>A quick suffix picked for the next message (DESIGN.md §5, "Quick suffixes").</summary>
 public sealed partial class SuffixChip(QuickSuffix suffix, bool isKept) : ObservableObject
 {
@@ -66,8 +55,6 @@ public sealed record SuffixMenuItem(QuickSuffix Suffix, int? Number, string? Sho
 public sealed record InfoRow(string Label, string Value);
 
 /// <summary>A row of the token breakdown popover.</summary>
-public sealed record TokenRow(string Model, string Input, string Output, string CacheWrite, string CacheRead, string Cost);
-
 /// <summary>
 /// One tab: one Claude Code session in a working folder (DESIGN.md §4). Starts its process lazily, when first selected
 /// or sent a message.
@@ -81,6 +68,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     private ClaudeSession? _session;
     private Task? _pump;
     private Task? _starting;
+    /// <summary>Cancelled when the tab closes: a start under way stops there, and no new one begins.</summary>
+    private readonly CancellationTokenSource _closing = new();
     private bool _restoredTranscript;
     private bool _restartAfterSignIn;
     /// <summary>
@@ -99,9 +88,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         TodoList.Time = services.Time;
         ProcessMonitor = new ProcessMonitorViewModel(services, this);
         ChangedFiles = new ChangedFilesViewModel(services, this);
-        McpServers = new McpServersViewModel(() => _session);
+        McpServers = new McpServersViewModel(() => _session, url => _services.Platform.OpenUrlAsync(url));
         ProjectTools = new ProjectToolsViewModel(services, this);
         RemoteControl = new RemoteControlViewModel(services, this);
+        Perforce = new PerforceViewModel(services, this);
+        Context = new ContextViewModel(services, this);
         Agents = new AgentMap(services.Time, ModelDisplayName);
         Agents.Changed += OnAgentsChanged;
         Tasks = new RunningTasks(services.Time, Agents);
@@ -134,7 +125,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 Chips.Add(new SuffixChip(kept, isKept: true));
             }
         }
-        RefreshTokens();
+        Context.RefreshTokens();
         RestoreLimitWait();
         // Project tools (DESIGN.md §18): the project and the folder's own actions and links, as soon as they're read.
         _ = ProjectTools.RefreshAsync();
@@ -147,9 +138,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     public string Folder => State.Folder;
 
-    public string FolderName => Path.GetFileName(Folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) is { Length: > 0 } name ? name : Folder;
+    public string FolderName => Formats.FolderName(Folder);
 
-    public ObservableCollection<ConversationItem> Items { get; } = [];
+    public BatchedCollection<ConversationItem> Items { get; } = [];
 
     public TodoList TodoList { get; } = new();
 
@@ -197,6 +188,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     /// <summary>The tab's connection to the Claude app (DESIGN.md §18, "Remote Control").</summary>
     public RemoteControlViewModel RemoteControl { get; }
+
+    /// <summary>Perforce ticket handling and the changelist in the tab title (DESIGN.md §18).</summary>
+    public PerforceViewModel Perforce { get; }
 
     // ---- Name (DESIGN.md §4, "Naming") -------------------------------------------------------------------
 
@@ -286,6 +280,18 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     public bool IsWorking => Status is TabStatus.Working or TabStatus.NeedsInput;
 
+    /// <summary>Claude Code is in a turn: working, or waiting on the user within it.</summary>
+    public bool IsInTurn => _session?.State == SessionState.Working;
+
+    /// <summary>The next start carries on the turn Claudette's restart cut off (DESIGN.md §9, "Working on Claudette").</summary>
+    private bool _carryOnInterruptedTurn;
+
+    /// <summary>
+    /// Starts the next session with <c>CLAUDE_CODE_RESUME_INTERRUPTED_TURN</c>, so Claude Code carries on the turn the
+    /// restart cut off, if the transcript ends in it and is no older than a restart's snapshot can be.
+    /// </summary>
+    internal void CarryOnInterruptedTurn() => _carryOnInterruptedTurn = true;
+
     public bool NeedsInput => Status == TabStatus.NeedsInput;
 
     public bool IsBusyStatus => Status is TabStatus.Working or TabStatus.Starting;
@@ -332,6 +338,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 rows.Add(new InfoRow("Branch", branch));
             }
+            AddWorktreeRows(rows);
             rows.Add(new InfoRow("Model", $"{ModelName ?? "Default"} · {EffortName}"));
             if (PermissionMode is not null)
             {
@@ -341,7 +348,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 rows.Add(new InfoRow("Started", started.ToLocalTime().ToString("g")));
             }
-            rows.Add(new InfoRow("Tokens", $"{TokensShort} · {State.Tokens.Turns} turns"));
+            rows.Add(new InfoRow("Tokens", $"{Context.TokensShort} · {State.Tokens.Turns} turns"));
             if (RunningVersion is { } running)
             {
                 // DESIGN.md §12: open tabs keep the version they started with.
@@ -349,9 +356,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     ? new InfoRow("Claude Code", $"Running {running}; {installed} is installed. New tabs use {installed}.")
                     : new InfoRow("Claude Code", running.ToString()));
             }
-            if (ContextDetail is { } context)
+            if (Context.Detail is { } context)
             {
-                rows.Add(new InfoRow("Context", $"{ContextText} ({context})"));
+                rows.Add(new InfoRow("Context", $"{Context.Text} ({context})"));
             }
             if (Agents.Summary is { } agents)
             {
@@ -362,7 +369,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 rows.Add(new InfoRow("Running tasks", tasks));
             }
             ProjectTools.AddInfoRows(rows);
-            AddPerforceRows(rows);
+            Perforce.AddInfoRows(rows);
             RemoteControl.AddInfoRows(rows);
             AddLimitWaitRows(rows);
             rows.Add(new InfoRow("Status", StatusTip));
@@ -404,7 +411,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             // Its claudette.json may have changed while another tab was showing (DESIGN.md §18).
             _ = ProjectTools.RefreshFileAsync();
         }
-        ProjectTools.UpdateShownRun();
+        ProjectTools.Runs.UpdateShownRun();
     }
 
     /// <summary>Two check-ins in a row got no reply (DESIGN.md §5, "Check-ins on long turns"); shown on the tab's row.</summary>
@@ -428,9 +435,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     [NotifyPropertyChangedFor(nameof(EffortName), nameof(ModelBadge), nameof(InfoRows), nameof(RowDetail))]
     public partial string? Effort { get; set; }
 
-    public string EffortName => Effort is null ? "Default effort" : Capitalize(Effort);
+    public string EffortName => (Effort is null ? "Default effort" : Formats.Capitalize(Effort)) + (IsUltracode ? " · Ultracode" : "");
 
-    public string ModelBadge => $"{ShortModel(ModelName)} · {(Effort is null ? "Default" : Capitalize(Effort))}";
+    public string ModelBadge => $"{ShortModel(ModelName)} · {(Effort is null ? "Default" : Formats.Capitalize(Effort))}";
 
     /// <summary>
     /// The second line of the tab's row in the sidebar (DESIGN.md §4): the model and effort, or what needs attention
@@ -480,9 +487,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         ? starting.Expected == PermissionModeInfo.Auto && !IsAutoModeAvailable ? PermissionModeInfo.Manual : starting.Expected
         : null;
 
-    /// <summary>Bypass waiting for confirmation.</summary>
-    [ObservableProperty]
-    public partial bool IsConfirmingBypass { get; set; }
+    /// <summary>Bypass asks first (DESIGN.md §7).</summary>
+    public InlineConfirmation BypassConfirmation => field ??= new(() => SetModeAsync(PermissionModeInfo.Bypass));
 
     /// <summary>
     /// Switches this session's permission mode (DESIGN.md §7). Session-only: the mode a tab starts in is set in Tab
@@ -497,21 +503,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         if (choice.IsBypass)
         {
-            IsConfirmingBypass = true;
+            BypassConfirmation.Ask();
             return;
         }
         await SetModeAsync(choice.Value);
     }
-
-    [RelayCommand]
-    private Task ConfirmBypassAsync()
-    {
-        IsConfirmingBypass = false;
-        return SetModeAsync(PermissionModeInfo.Bypass);
-    }
-
-    [RelayCommand]
-    private void CancelBypass() => IsConfirmingBypass = false;
 
     private async Task SetModeAsync(string mode)
     {
@@ -559,6 +555,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>The oldest MCP server's request for input still waiting, when no prompt is (DESIGN.md §7).</summary>
     private McpInputItem? WaitingInput => Items.OfType<McpInputItem>().FirstOrDefault(i => i.IsPending);
 
+    /// <summary>A prompt or an MCP server's request waits: the keyboard's allow and deny shortcuts answer it.</summary>
+    public bool HasKeyboardAnswer => WaitingPrompt is not null || WaitingInput is not null;
+
     public bool AcceptWaitingPrompt()
     {
         if (WaitingPrompt is { } prompt)
@@ -588,48 +587,35 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         return false;
     }
 
-    /// <summary>A model change waiting for confirmation (DESIGN.md §5: switching drops the prompt cache).</summary>
+    /// <summary>A model change asks first (DESIGN.md §5: switching drops the prompt cache).</summary>
+    public InlineConfirmation<ModelInfo> ModelSwitch => field ??= new(SwitchModelAsync);
+
+    /// <summary>What the model switch's confirmation says.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasPendingModel), nameof(PendingModelMessage))]
-    public partial ModelInfo? PendingModel { get; set; }
-
-    public bool HasPendingModel => PendingModel is not null;
-
-    public string PendingModelMessage
-    {
-        get
-        {
-            if (PendingModel is not { } model)
-            {
-                return "";
-            }
-            var message = $"Switch to {model.DisplayName}? Switching models resets this tab's cached context. The new model has to re-read the whole conversation, so your next message will use more of your limits.";
-            if (Effort is { } effort && !model.SupportedEffortLevels.Contains(effort))
-            {
-                message += $" {model.DisplayName} doesn't support {effort} effort, so effort goes back to the model's default.";
-            }
-            return message;
-        }
-    }
+    public partial string ModelSwitchMessage { get; private set; } = "";
 
     [RelayCommand]
     private void ChooseModel(ModelInfo? model)
     {
-        if (model is not null && model != CurrentModelInfo)
+        if (model is null || model == CurrentModelInfo)
         {
-            PendingModel = model;
-        }
-    }
-
-    [RelayCommand]
-    private async Task ConfirmModelSwitchAsync()
-    {
-        if (PendingModel is not { } model || _session is null)
-        {
-            PendingModel = null;
             return;
         }
-        PendingModel = null;
+        var message = $"Switch to {model.DisplayName}? Switching models resets this tab's cached context. The new model has to re-read the whole conversation, so your next message will use more of your limits.";
+        if (Effort is { } effort && !model.SupportedEffortLevels.Contains(effort))
+        {
+            message += $" {model.DisplayName} doesn't support {effort} effort, so effort goes back to the model's default.";
+        }
+        ModelSwitchMessage = message;
+        ModelSwitch.Ask(model);
+    }
+
+    private async Task SwitchModelAsync(ModelInfo model)
+    {
+        if (_session is null)
+        {
+            return;
+        }
         try
         {
             await _session.SetModelAsync(model.Value);
@@ -652,9 +638,6 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     }
 
     [RelayCommand]
-    private void CancelModelSwitch() => PendingModel = null;
-
-    [RelayCommand]
     private async Task ChooseEffortAsync(string? level)
     {
         if (_session is null || level == Effort)
@@ -675,179 +658,22 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    // ---- Context and tokens (DESIGN.md §4, §6) -----------------------------------------------------------
+    // ---- Context and tokens (DESIGN.md §4, §6): in ContextViewModel ------------------------------------------------
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ContextTip))]
-    public partial string? ContextText { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(InfoRows), nameof(ContextTip))]
-    public partial string? ContextDetail { get; set; }
-
-    /// <summary>Near the point where Claude Code compacts by itself: the indicator and the ring turn amber.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ContextLevel))]
-    public partial bool IsContextHigh { get; set; }
-
-    /// <summary>How full the context window is, 0–100. Null until the tab has context data (it hasn't started yet).</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ContextLevel), nameof(IsContextCritical), nameof(ContextSweep), nameof(ShowContextRing))]
-    public partial double? ContextPercent { get; set; }
-
-    /// <summary>From this full, the ring on the tab's row turns red (DESIGN.md §4, "Sidebar").</summary>
-    public const double CriticalContextPercent = 95;
-
-    /// <summary>What the ring on the tab's row shows: nothing, muted, amber or red.</summary>
-    public ContextLevel ContextLevel => ContextPercent is not { } percent ? ContextLevel.None
-        : percent >= CriticalContextPercent ? ContextLevel.Critical
-        : IsContextHigh ? ContextLevel.High
-        : ContextLevel.Normal;
-
-    public bool IsContextCritical => ContextLevel == ContextLevel.Critical;
-
-    /// <summary>The ring's arc, in degrees clockwise from the top.</summary>
-    public double ContextSweep => Math.Clamp(ContextPercent ?? 0, 0, 100) * 3.6;
-
-    /// <summary>The ring on the tab's row: once there's context data, unless Settings → Appearance turns it off.</summary>
-    public bool ShowContextRing => ContextPercent is not null && _services.Settings.Appearance.ShowContextOnTabs;
-
-    /// <summary>The ring's tooltip: the composer bar's context text and its detail.</summary>
-    public string? ContextTip => ContextText is not { } text ? null : ContextDetail is { } detail ? $"{text} ({detail})" : text;
-
-    /// <summary>
-    /// What fills the context window, for the flyout the context ring and the composer's indicator open (DESIGN.md §6,
-    /// "Per-tab context"). From the same <c>get_context_usage</c> reply as the indicator, or the estimate without it.
-    /// </summary>
-    [ObservableProperty]
-    public partial ContextBreakdown? ContextBreakdown { get; set; }
+    /// <summary>The context indicator and ring, what fills the context window, and the token counts.</summary>
+    public ContextViewModel Context { get; }
 
     /// <summary>Summarizes the conversation to free context, like <c>/compact</c> in the terminal (DESIGN.md §6).</summary>
     [RelayCommand(CanExecute = nameof(CanCompact))]
     private async Task CompactAsync()
     {
         _conversation.AddNote("Compacting the conversation…");
-        await SendRawAsync("/compact");
+        var stamp = NewStamp(fromUser: true);
+        _conversation.SentWithoutCard(stamp.Uuid);
+        await SendRawAsync("/compact", stamp: stamp);
     }
 
     private bool CanCompact() => Status is TabStatus.Idle or TabStatus.Unread;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(InfoRows))]
-    public partial string TokensShort { get; set; } = "0 tok";
-
-    public ObservableCollection<TokenRow> TokenRows { get; } = [];
-
-    [ObservableProperty]
-    public partial string TokenSummary { get; set; } = "";
-
-    /// <summary>"Clear usage history" with "Also reset per-tab token totals" (DESIGN.md §6).</summary>
-    public void ResetTokenTotals()
-    {
-        State.Tokens = new TokenTotals();
-        RefreshTokens();
-        _services.SaveState();
-    }
-
-    /// <summary>Per-call usage from assistant messages, for live counts mid-turn and the context estimate (DESIGN.md §6).</summary>
-    private readonly CallUsage _callUsage = new();
-
-    /// <summary><c>get_context_usage</c> failed for this session, so the context indicator is estimated from each call.</summary>
-    private bool _contextUsageUnavailable;
-
-    /// <summary>When Claude Code compacts by itself, from <c>autocompact_state</c>, for the estimate's warning.</summary>
-    private AutocompactStateMessage? _autocompact;
-
-    /// <summary>A call finished mid-turn: the token count moves on before the result gives the turn's totals.</summary>
-    private void OnCallUsage()
-    {
-        TokensShort = TokenTotals.Short(State.Tokens.Total + _callUsage.TurnTokens);
-        Working.Refresh();
-        if (_contextUsageUnavailable)
-        {
-            ShowEstimatedContext();
-        }
-    }
-
-    /// <summary>
-    /// The context indicator without <c>get_context_usage</c>: the main agent's latest call ÷ its model's context window
-    /// (DESIGN.md §6, "Per-tab context"). Unknown until a turn has reported the window.
-    /// </summary>
-    private void ShowEstimatedContext()
-    {
-        if (_callUsage.ContextPercentage is not { } percentage || _callUsage.ContextWindow is not { } window)
-        {
-            return;
-        }
-        var tokens = _callUsage.ContextTokens ?? 0;
-        var compacts = _autocompact is { Enabled: true, Threshold: { } threshold } ? $" · auto-compacts at {threshold:N0}" : "";
-        ContextText = $"Context {percentage:0}%";
-        ContextDetail = $"about {tokens:N0} of {window:N0} tokens, estimated from the last call{compacts}";
-        IsContextHigh = _autocompact is { Enabled: true, Threshold: { } limit } ? tokens >= limit * 0.9 : percentage >= 80;
-        ContextPercent = percentage;
-        ContextBreakdown = ContextBreakdown.Estimated(tokens, window).KeepingExpanded(ContextBreakdown);
-    }
-
-    private void RefreshTokens()
-    {
-        var totals = State.Tokens;
-        TokensShort = TokenTotals.Short(totals.Total + _callUsage.TurnTokens);
-        TokenRows.Clear();
-        foreach (var (model, t) in totals.Models.OrderByDescending(m => m.Value.Total))
-        {
-            TokenRows.Add(new TokenRow(ModelDisplayName(model) ?? model, N(t.Input), N(t.Output), N(t.CacheWrite), N(t.CacheRead), $"${t.EstimatedCostUsd:0.00}"));
-        }
-        TokenSummary = $"{totals.Turns} turn{(totals.Turns == 1 ? "" : "s")} · {totals.Total:N0} tokens · about ${totals.EstimatedCostUsd:0.00} at list price (an estimate, not your bill)";
-        _ = RefreshTokenWindowAsync();
-
-        static string N(long n) => n.ToString("N0");
-    }
-
-    /// <summary>
-    /// This tab's tokens since the current 5-hour window started, the part that counts against the session limit, and
-    /// its recent turns for the popover's chart (DESIGN.md §4, "Token stats per tab"). From the usage history.
-    /// </summary>
-    [ObservableProperty]
-    public partial string? TokenWindowText { get; set; }
-
-    [ObservableProperty]
-    public partial IReadOnlyList<Controls.ChartPoint> TurnPoints { get; set; } = [];
-
-    [ObservableProperty]
-    public partial double TurnChartMaximum { get; set; } = 1;
-
-    public void RefreshTokenWindow() => _ = RefreshTokenWindowAsync();
-
-    private async Task RefreshTokenWindowAsync()
-    {
-        if (_services.Usage is not { } usage)
-        {
-            return;
-        }
-        var now = _services.Time.GetUtcNow();
-        var windowStart = usage.Current?.Session?.ResetsAt is { } resets ? resets - TimeSpan.FromHours(5) : now - TimeSpan.FromHours(5);
-        try
-        {
-            var (inWindow, turns) = await Task.Run(() =>
-            {
-                var window = usage.Store.GetTurns(windowStart, now, Id).Sum(t => t.Total);
-                var recent = usage.Store.GetTurns(now - TimeSpan.FromDays(7), now, Id)
-                    .GroupBy(t => t.Timestamp)
-                    .Select(g => new Controls.ChartPoint(g.Key, g.Sum(t => t.Total)))
-                    .OrderBy(p => p.Time)
-                    .TakeLast(40)
-                    .ToArray();
-                return (window, recent);
-            });
-            TokenWindowText = $"This session window: {TokenTotals.Short(inWindow)}";
-            TurnPoints = turns;
-            TurnChartMaximum = turns.Length > 0 ? turns.Max(p => p.Value) : 1;
-        }
-        catch (Exception)
-        {
-            // The usage history is optional here.
-        }
-    }
 
     // ---- Composer and quick suffixes (DESIGN.md §5) -------------------------------------------------------
 
@@ -944,10 +770,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _conversation.ExpandThinking = _services.Settings.Appearance.ExpandThinking;
         _conversation.ShowAllHookRuns = _services.Settings.ClaudeCode.ShowAllHookRuns;
         _conversation.ShowUnsupportedMessages = _services.Settings.Advanced.LogProtocol;
-        OnPropertyChanged(nameof(ShowContextRing));
+        Context.OnSettingsChanged();
         ProcessMonitor.UpdateSampler();
         _autoContinue.SettingsChanged();
-        OnPerforceSettingsChanged();
+        Perforce.OnSettingsChanged();
         ProjectTools.OnSettingsChanged();
     }
 
@@ -996,19 +822,32 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         var images = TakeAttachments();
         _autoContinue.UserSent();
-        _conversation.AddUserMessage(text, suffixText, images: images);
+        var stamp = NewStamp(fromUser: true);
+        var card = _conversation.AddUserMessage(text, suffixText, images: images);
+        card.SentId = stamp.Uuid;
+        // Sent while Claude works, it waits its turn (DESIGN.md §5, "Queued messages").
+        card.IsQueued = IsWorking;
         _recall.Add(text);
         _firstPrompt ??= text.Length > 0 ? text : suffixText;
-        await SendRawAsync(text, images, suffixText);
+        await SendRawAsync(text, images, suffixText, stamp);
         _ = RequestTitleAsync();
     }
 
     private bool CanSend() => !IsReadOnly && (Status is not (TabStatus.Starting or TabStatus.Error) || IsWaitingForSignIn) && (ComposerText.Trim().Length > 0 || Chips.Count > 0 || Attachments.Count > 0);
 
+    /// <summary>A new id for a message, and whether the user typed or chose it (DESIGN.md §13, "Wire format").</summary>
+    private static MessageStamp NewStamp(bool fromUser) => new(Guid.NewGuid().ToString(), fromUser);
+
     /// <param name="suffix">Quick suffixes, which Claude Code gets after the message, or beside a slash command (DESIGN.md §5).</param>
-    private async Task SendRawAsync(string message, IReadOnlyList<MessageImage>? images = null, string? suffix = null)
+    /// <param name="stamp">The message's id, and whether the user typed it. Without one it's Claudette's own, with no card.</param>
+    private async Task SendRawAsync(string message, IReadOnlyList<MessageImage>? images = null, string? suffix = null, MessageStamp? stamp = null)
     {
-        var pending = new PendingMessage(message, images ?? [], suffix);
+        if (stamp is null)
+        {
+            stamp = NewStamp(fromUser: false);
+            _conversation.SentWithoutCard(stamp.Uuid);
+        }
+        var pending = new PendingMessage(message, images ?? [], suffix, stamp);
         // Held while Claude Code needs a sign-in, and sent once it's done (DESIGN.md §11).
         if (HoldForSignIn(pending))
         {
@@ -1019,12 +858,18 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             await EnsureStartedAsync();
             if (_session is null)
             {
+                if (IsAskingTrust)
+                {
+                    // It waits for the answer about the folder (DESIGN.md §7, "Folder trust").
+                    _heldForTrust.Add(pending);
+                    return;
+                }
                 // It couldn't start because Claude Code needs a sign-in: the message waits for it.
                 HoldForSignIn(pending);
                 return;
             }
             _awaitingReply.Add(pending);
-            await _session.SendUserMessageAsync(message, pending.Images, suffix);
+            await _session.SendUserMessageAsync(message, pending.Images, suffix, stamp);
         }
         catch (Exception ex)
         {
@@ -1042,11 +887,74 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         RemoteControl.OnStoppedHere();
         try
         {
-            await _session.InterruptAsync();
+            // What was waiting its turn is cancelled with it, and comes back to the composer (DESIGN.md §5).
+            var receipt = await _session.InterruptAsync(cancelQueued: true);
+            TakeBack(receipt.Cancelled);
         }
         catch (Exception ex)
         {
             _conversation.AddNote($"Couldn't stop Claude: {ex.Message}", NoteKind.Error);
+        }
+    }
+
+    /// <summary>
+    /// <b>Cancel</b> on a message that waits its turn: Claude Code takes it back, and its text and images return to the
+    /// composer. One Claude Code has already taken stays as it is.
+    /// </summary>
+    [RelayCommand]
+    private async Task CancelQueuedMessageAsync(UserMessageItem? message)
+    {
+        if (message is not { IsQueued: true, SentId: { } id } || _session is null)
+        {
+            return;
+        }
+        if (await _session.CancelQueuedMessageAsync(id))
+        {
+            TakeBack([id]);
+        }
+        else if (message.IsQueued)
+        {
+            _conversation.AddNote("Couldn't take that message back: Claude Code has it already, or can't cancel one message on its own.", NoteKind.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Messages Claude Code cancelled before they ran: their cards go, and what the user wrote goes back to the
+    /// composer, ahead of anything typed since. Claudette's own (a check-in) just go. Ids Claudette didn't send are
+    /// ignored.
+    /// </summary>
+    private void TakeBack(IReadOnlyCollection<string> ids)
+    {
+        if (ids.Count == 0)
+        {
+            return;
+        }
+        var cards = Items.OfType<UserMessageItem>().Where(m => m.SentId is { } id && ids.Contains(id)).ToList();
+        var texts = new List<string>();
+        foreach (var card in cards)
+        {
+            _conversation.Remove(card);
+            _awaitingReply.RemoveAll(p => p.Stamp?.Uuid == card.SentId);
+            if (card.IsCheckIn || card.IsAutoContinue)
+            {
+                continue;
+            }
+            if (card.CopyText.Trim() is { Length: > 0 } text)
+            {
+                texts.Add(text);
+            }
+            foreach (var image in card.Images)
+            {
+                AddImage(image.Data, "Attached image");
+            }
+        }
+        if (texts.Count > 0)
+        {
+            ComposerText = string.Join("\n\n", ComposerText.Trim() is { Length: > 0 } typed ? [.. texts, typed] : texts);
+        }
+        if (cards.Count > 0)
+        {
+            _conversation.AddNote(cards.Count == 1 ? "Took back a message that was waiting its turn." : $"Took back {cards.Count} messages that were waiting their turn.");
         }
     }
 
@@ -1057,11 +965,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     // ---- Copy and times (DESIGN.md §5, "Copy and times") ---------------------------------------------------
 
-    /// <summary>How long a Copy button says "Copied".</summary>
+    /// <summary>How long a Copy button says "Copied", here and in Settings.</summary>
     public static readonly TimeSpan CopiedFor = TimeSpan.FromSeconds(1.5);
 
-    /// <summary>What says "Copied" now, and the timer that puts it back.</summary>
-    private readonly Dictionary<object, ITimer> _copied = [];
+    /// <summary>What says "Copied" now, and the timeout that puts it back.</summary>
+    private readonly Dictionary<object, UiTimeout> _copied = [];
 
     /// <summary><b>Copy message</b> on a user message or a reply: its text, as Markdown for a reply.</summary>
     [RelayCommand]
@@ -1088,22 +996,16 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>Says "Copied" on <paramref name="target"/> for <see cref="CopiedFor"/>, timed by the tab's clock.</summary>
     private void ShowCopied(object target, Action<bool> show)
     {
-        if (_copied.Remove(target, out var earlier))
+        if (!_copied.TryGetValue(target, out var timeout))
         {
-            earlier.Dispose();
+            _copied[target] = timeout = new UiTimeout(_services.Time, _services.Dispatcher);
         }
         show(true);
-        ITimer? timer = null;
-        timer = _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() =>
+        timeout.Restart(CopiedFor, () =>
         {
-            if (_copied.TryGetValue(target, out var current) && ReferenceEquals(current, timer))
-            {
-                _copied.Remove(target);
-                current.Dispose();
-                show(false);
-            }
-        }), null, CopiedFor, Timeout.InfiniteTimeSpan);
-        _copied[target] = timer;
+            _copied.Remove(target);
+            show(false);
+        });
     }
 
     /// <summary>A message's short time says "today" only on the day it was sent; looking at the tab again catches up.</summary>
@@ -1132,12 +1034,16 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             return;
         }
-        _conversation.AddUserMessage(message, isCheckIn: true);
-        _ = SendRawAsync(message);
+        var stamp = NewStamp(fromUser: false);
+        var card = _conversation.AddUserMessage(message, isCheckIn: true);
+        card.SentId = stamp.Uuid;
+        card.IsQueued = true;
+        _ = SendRawAsync(message, stamp: stamp);
         NotifyCheckIn();
     });
 
-    private ITimer? _checkInTicker;
+    /// <summary>The check-in bar's countdown ticks every second.</summary>
+    private UiTicker CheckInTicker => field ??= new(_services.Time, _services.Dispatcher, TimeSpan.FromSeconds(1), () => OnPropertyChanged(nameof(CheckInCountdownText)));
 
     /// <summary>A check-in counting down to being sent, shown in a bar over the composer; null otherwise.</summary>
     [ObservableProperty]
@@ -1151,24 +1057,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         ? $"Checking in with Claude in {Math.Max(0, (int)Math.Ceiling((countdown.SendsAt - _services.Time.GetUtcNow()).TotalSeconds))} s."
         : null;
 
-    partial void OnCheckInCountdownChanged(CheckInCountdown? value)
-    {
-        if (value is null)
-        {
-            StopCheckInTicker();
-        }
-        else
-        {
-            _checkInTicker ??= _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() => OnPropertyChanged(nameof(CheckInCountdownText))), null,
-                TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
-        }
-    }
-
-    private void StopCheckInTicker()
-    {
-        _checkInTicker?.Dispose();
-        _checkInTicker = null;
-    }
+    partial void OnCheckInCountdownChanged(CheckInCountdown? value) => CheckInTicker.Run(value is not null);
 
     /// <summary><b>Send now</b> on the bar: the check-in goes without waiting out the countdown.</summary>
     [RelayCommand]
@@ -1193,7 +1082,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>Starts the process if it isn't running: restored tabs start on first selection or message.</summary>
     public async Task EnsureStartedAsync()
     {
-        if (_session is not null || IsSessionMissing || Status == TabStatus.Error && (!Directory.Exists(Folder) || WaitsForSignIn))
+        if (_closing.IsCancellationRequested || _session is not null || IsSessionMissing || Status == TabStatus.Error && (!Directory.Exists(Folder) || WaitsForSignIn))
         {
             return;
         }
@@ -1218,6 +1107,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             return;
         }
+        // This start takes the extra folders as they are now.
+        _restartForExtraFolders = false;
         if (!Directory.Exists(Folder))
         {
             MarkFolderMissing();
@@ -1243,6 +1134,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             resume = localCopy;
         }
+        // Claude Code runs a folder's own configuration without asking in a session like this one: Claudette asks first.
+        if (_closing.IsCancellationRequested || await AskTrustAsync())
+        {
+            return;
+        }
         var fork = State.ForkOnNextStart && resume is not null;
         // Only a tab that syncs takes part in leases (DESIGN.md §9, "One machine at a time").
         if (resume is not null && !fork && State.SyncToLibrary && !await ClaimLeaseAsync())
@@ -1258,15 +1154,23 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             // can come back in plan mode (DESIGN.md §7, "Starting mode").
             var chosenMode = State.Overrides.PermissionMode ?? settings.NewTabs.DefaultPermissionMode;
             var folder = Folder;
-            var starting = _startingMode = await Task.Run(() => _services.ReadStartingPermissionMode(folder));
+            var settingsFolder = State.WithoutProjectSettings ? null : folder;
+            var starting = _startingMode = await Task.Run(() => _services.ReadStartingPermissionMode(settingsFolder));
             var environment = new Dictionary<string, string?>(_services.RemoteControl.ClaudeVariables);
+            if (_carryOnInterruptedTurn && resume is not null)
+            {
+                // Only after Claudette's own restart, and only once: Claude Code re-runs the turn without the user.
+                environment["CLAUDE_CODE_RESUME_INTERRUPTED_TURN"] = "1";
+                environment["CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS"] = ((long)RestartSnapshot.MaxAge.TotalMilliseconds).ToString(CultureInfo.InvariantCulture);
+            }
+            _carryOnInterruptedTurn = false;
             if (settings.ClaudeCode.KeepFileCheckpoints)
             {
                 // Copies of files before Claude changes them, so a prompt's changes can be put back (DESIGN.md §5).
                 environment["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] = "true";
             }
             var resumeAt = resume is null ? null : State.ResumeAt;
-            var session = await sessions.StartAsync(await WithPerforceAsync(await ProjectTools.WithNoteAsync(new ClaudeLaunchOptions
+            var options = await Perforce.WithPerforceAsync(await ProjectTools.WithNoteAsync(new ClaudeLaunchOptions
             {
                 WorkingDirectory = Folder,
                 Resume = resume,
@@ -1276,7 +1180,15 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 // Each prompt comes back with its id, the point to rewind or branch from; hook runs come as messages.
                 ReplayUserMessages = true,
                 IncludeHookEvents = true,
+                // MCP servers' requests for input are cards in the conversation, including ones as the servers connect.
+                ShowsElicitations = true,
+                // Chosen when asked about the folder's own configuration (DESIGN.md §7, "Folder trust").
+                SettingSources = State.WithoutProjectSettings ? "user" : null,
                 FallbackModel = settings.ClaudeCode.FallbackModel,
+                AgentProgressSummaries = settings.ClaudeCode.SubagentProgressSummaries,
+                // A worktree tab's first start makes its worktree, or opens it again (DESIGN.md §4, "Worktree tabs").
+                Worktree = State.NewWorktree,
+                AddDirectories = [.. State.ExtraFolders.Where(Directory.Exists)],
                 Model = State.Overrides.Model ?? settings.NewTabs.DefaultModel,
                 Effort = State.Overrides.Effort ?? settings.NewTabs.DefaultEffort,
                 PermissionMode = chosenMode ?? (resume is null ? starting.LaunchMode : null),
@@ -1284,11 +1196,21 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 ProtocolLogPath = _services.ProtocolLogPath(FolderName),
                 // The presence file, among others: no pushes to the phone while Claudette is in front (DESIGN.md §10).
                 EnvironmentOverrides = environment,
-            })));
+            }));
+            // Closed while the start was under way: nothing is started for a tab that's gone.
+            _closing.Token.ThrowIfCancellationRequested();
+            var session = await sessions.StartAsync(options, _closing.Token);
+            if (_closing.IsCancellationRequested)
+            {
+                await session.DisposeAsync();
+                return;
+            }
             _session = session;
-            session.ShowsElicitations = true;
-            State.ResumeAt = null;
-            State.ResumeDropsTurn = null;
+            if (!fork)
+            {
+                State.ResumeAt = null;
+                State.ResumeDropsTurn = null;
+            }
             // A new claude has none of the old one's tasks.
             Tasks.Clear();
             _ = LoadSpinnerVerbsAsync();
@@ -1296,12 +1218,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             State.SessionStartedAt ??= _services.Time.GetUtcNow();
             // The installed version is what just started; system/init confirms it with the first turn.
             SetRunningVersion(_services.InstalledClaudeVersion);
+            // The copy gets a new session id with its first turn. Until then it's still the original's, so the fork and
+            // its point stay saved: started again before that, it's a copy again, not the original.
+            _forkAwaitingId = fork;
             if (fork)
             {
-                // The copy gets a new session id with its first turn; it no longer writes to the original.
-                State.ForkOnNextStart = false;
-                State.TranscriptPath = null;
-                _forkAwaitingId = true;
                 _conversation.AddNote(_forkNote ?? "Opened as a copy. The original session is left as it was.");
                 _forkNote = null;
             }
@@ -1313,6 +1234,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(Models));
             OnPropertyChanged(nameof(EffortLevels));
             OnPropertyChanged(nameof(PermissionModeChoices));
+            if (State.Ultracode)
+            {
+                await ApplyUltracodeAsync(session, on: true);
+            }
+            UpdateOutputStyles(session.Initialization);
             if (chosenMode is null && resume is not null && starting.LaunchMode is { } launchMode
                 && session.PermissionMode == PermissionModeInfo.Manual && IsAutoModeAvailable)
             {
@@ -1320,13 +1246,32 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             }
             Status = TabStatus.Idle;
             _pump = PumpAsync(session);
-            _contextRefresh = RefreshContextUsageAsync(session);
+            _contextRefresh = Context.RefreshUsageAsync(session);
             // Before any prompt goes out, so the phone sees the whole turn (DESIGN.md §18, "Remote Control").
             RemoteControl.ConnectOnStart(session);
+        }
+        catch (OperationCanceledException) when (_closing.IsCancellationRequested)
+        {
+            // Closed: the start's claude, if there was one, is stopped already.
         }
         catch (Exception ex) when (Core.Auth.SignInErrors.IsSignInFailure(ex))
         {
             OnStartFailedForSignIn(ex);
+        }
+        catch (ClaudeSessionExitedException exited) when (exited.StartupFailure is { } failure)
+        {
+            // Claude Code said why it refused to start (DESIGN.md §4, "Why it couldn't start").
+            ErrorMessage = failure.Summary;
+            _conversation.AddNote($"Claude Code couldn't start: {failure.Message}", NoteKind.Error);
+            NotifyProcessError($"Claude Code couldn't start: {failure.Summary}");
+            if (failure.Fix == StartupFailureFix.ChooseFolder)
+            {
+                MarkFolderMissing();
+            }
+            else
+            {
+                Status = TabStatus.Error;
+            }
         }
         catch (Exception ex)
         {
@@ -1421,6 +1366,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         Status = TabStatus.NotStarted;
         OnPropertyChanged(nameof(Folder));
         OnPropertyChanged(nameof(FolderName));
+        OnPropertyChanged(nameof(IsInWorktree));
+        OnPropertyChanged(nameof(WorktreeName));
+        OnPropertyChanged(nameof(WorktreeTip));
         OnPropertyChanged(nameof(DisplayName));
         _services.Usage?.OnTabRenamed(Id, DisplayName);
         OnPropertyChanged(nameof(InfoRows));
@@ -1479,6 +1427,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             Agents.IsReplaying = true;
             // Read again after going back (DESIGN.md §5, "Rewind and branch"), the prompts are already there to recall.
             var recallPrompts = _recall.Count == 0;
+            // The view hears of the earlier conversation once, as a whole, rather than once per item.
+            using var deferred = Items.DeferNotifications();
             foreach (var item in transcript.Items)
             {
                 switch (item)
@@ -1643,7 +1593,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         ChangedFiles.Record(sessionEvent);
         TrackReplies(sessionEvent);
         ObserveForComposer(sessionEvent);
-        OnPerforceSessionEvent(sessionEvent);
+        Perforce.OnSessionEvent(sessionEvent);
+        Context.OnSessionEvent(session, sessionEvent);
         TrackToolsForWorkingLine(sessionEvent);
         if (ApiTrouble.Reports(sessionEvent))
         {
@@ -1661,9 +1612,19 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 UpdateStatus();
                 break;
             case TurnStarted started:
-                HasMcpServers = started.Init.Raw.GetArray("mcp_servers") is { Count: > 0 };
+                _turnsStarted++;
+                HasMcpServers = started.Init.McpServerCount > 0;
                 State.SessionId = started.Init.SessionId;
-                _forkAwaitingId = false;
+                OnWorkingFolderReported(started.Init.Cwd);
+                if (_forkAwaitingId)
+                {
+                    // The copy has its own id now and no longer writes to the original.
+                    _forkAwaitingId = false;
+                    State.ForkOnNextStart = false;
+                    State.ResumeAt = null;
+                    State.ResumeDropsTurn = null;
+                    State.TranscriptPath = null;
+                }
                 if (started.Init.ClaudeCodeVersion is { } reported && Version.TryParse(reported, out var version))
                 {
                     SetRunningVersion(version);
@@ -1673,18 +1634,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 PermissionMode = started.Init.PermissionMode ?? PermissionMode;
                 _services.SaveState();
                 break;
-            case AssistantMessageReceived assistant:
+            case AssistantMessageReceived or TextDelta or ThinkingDelta or ToolResultsReceived:
                 _checkIns.OutputSeen();
-                if (_callUsage.Add(assistant.Message))
-                {
-                    OnCallUsage();
-                }
-                break;
-            case TextDelta or ThinkingDelta or ToolResultsReceived:
-                _checkIns.OutputSeen();
-                break;
-            case AutocompactStateChanged autocompact:
-                _autocompact = autocompact.State;
                 break;
             case PermissionRequested requested:
                 _waitingOnUser.Add(requested.Request.RequestId);
@@ -1725,14 +1676,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 _checkIns.TurnEnded();
                 _autoContinue.TurnEnded(completed.Result);
                 State.SessionId = completed.Result.SessionId ?? State.SessionId;
-                State.Tokens.Add(completed.Result);
-                _callUsage.TurnEnded(completed.Result);
                 _services.Usage?.OnTurnCompleted(Id, DisplayName, completed.Result, Folder);
                 // Only a tab that syncs writes to the library (DESIGN.md §9, "Session library").
                 CopyToLibrary();
-                RefreshTokens();
                 _services.SaveState();
-                _ = RefreshContextUsageAsync(session);
                 if (!IsSelected && !completed.Result.IsError)
                 {
                     Status = TabStatus.Unread;
@@ -1745,9 +1692,14 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 _ = ProjectTools.RefreshFileAsync();
                 // The switch changed while Claude worked (DESIGN.md §18, "Remote Control").
                 RemoteControl.OnTurnCompleted(session);
+                if (_restartForExtraFolders)
+                {
+                    // After this event is handled: the restart stops the session it came from.
+                    var turn = _turnsStarted;
+                    _services.Dispatcher.Post(() => _ = RestartForExtraFoldersAsync(afterTurn: turn));
+                }
                 break;
             case ConversationReset:
-                _callUsage.ContextReset();
                 State.SessionStartedAt = _services.Time.GetUtcNow();
                 OnPropertyChanged(nameof(InfoRows));
                 TodoList.Clear();
@@ -1783,7 +1735,48 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         if (item is not null)
         {
             item.Answered += (_, _) => PermissionResolved(request.RequestId);
+            // Answered, withdrawn or cancelled with the session: the others are numbered again.
+            item.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(PromptItem.State))
+                {
+                    NumberWaitingPrompts();
+                }
+            };
         }
+        NumberWaitingPrompts();
+    }
+
+    /// <summary>The prompts waiting in the tab, oldest first (DESIGN.md §7, "Several prompts waiting").</summary>
+    private List<PromptItem> WaitingPrompts() => [.. Items.OfType<PromptItem>().Where(p => p.IsPending)];
+
+    /// <summary>Numbers the waiting prompts, so each card says where it stands: "Prompt 2 of 5".</summary>
+    private void NumberWaitingPrompts()
+    {
+        var waiting = WaitingPrompts();
+        for (var i = 0; i < waiting.Count; i++)
+        {
+            waiting[i].Position = i + 1;
+            waiting[i].WaitingCount = waiting.Count;
+        }
+    }
+
+    /// <summary>Goes to the waiting prompt before this one, or the newest from the oldest.</summary>
+    [RelayCommand]
+    private void ShowPreviousWaitingPrompt(PromptItem? prompt) => ShowWaitingPrompt(prompt, -1);
+
+    /// <summary>Goes to the waiting prompt after this one, or the oldest from the newest.</summary>
+    [RelayCommand]
+    private void ShowNextWaitingPrompt(PromptItem? prompt) => ShowWaitingPrompt(prompt, 1);
+
+    private void ShowWaitingPrompt(PromptItem? from, int step)
+    {
+        var waiting = WaitingPrompts();
+        if (from is null || waiting.IndexOf(from) is not (>= 0 and var index) || waiting.Count < 2)
+        {
+            return;
+        }
+        ScrollToRequested?.Invoke(waiting[(index + step + waiting.Count) % waiting.Count]);
     }
 
     private void PermissionResolved(object key)
@@ -1811,44 +1804,6 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             : Status == TabStatus.Unread ? TabStatus.Unread
             : TabStatus.Idle;
         OnPropertyChanged(nameof(CanRestart));
-    }
-
-    private async Task RefreshContextUsageAsync(ClaudeSession session)
-    {
-        ContextUsage usage;
-        try
-        {
-            usage = await session.GetContextUsageAsync().ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            // Not offered by this Claude Code, or it failed: estimate from the last call instead.
-            _services.Dispatcher.Post(() =>
-            {
-                if (ReferenceEquals(session, _session))
-                {
-                    _contextUsageUnavailable = true;
-                    ShowEstimatedContext();
-                }
-            });
-            return;
-        }
-        _services.Dispatcher.Post(() =>
-        {
-            if (!ReferenceEquals(session, _session))
-            {
-                return;
-            }
-            _contextUsageUnavailable = false;
-            ContextText = $"Context {usage.Percentage:0}%";
-            var compacts = usage is { AutoCompactEnabled: true, AutoCompactThreshold: { } threshold } ? $" · auto-compacts at {threshold:N0}" : "";
-            ContextDetail = $"{usage.TotalTokens:N0} of {usage.MaxTokens:N0} tokens{compacts}";
-            IsContextHigh = usage.AutoCompactThreshold is { } limit && usage.AutoCompactEnabled
-                ? usage.TotalTokens >= limit * 0.9
-                : usage.Percentage >= 80;
-            ContextPercent = usage.Percentage;
-            ContextBreakdown = ContextBreakdown.From(usage).KeepingExpanded(ContextBreakdown);
-        });
     }
 
     /// <summary>The tab has its own settings: its menu marks <b>Tab settings…</b> with a dot (DESIGN.md §14).</summary>
@@ -1900,7 +1855,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     }
 
     /// <param name="killProcesses">Also end every process the session started (DESIGN.md §4, "Cleanup").</param>
-    private async Task StopSessionAsync(bool killProcesses = false)
+    /// <param name="interruptTurn">
+    /// Interrupt a turn first, so it ends cleanly. A restart of Claudette leaves it as it is instead, for Claude Code to
+    /// carry on afterwards.
+    /// </param>
+    private async Task StopSessionAsync(bool killProcesses = false, bool interruptTurn = true)
     {
         var session = _session;
         _session = null;
@@ -1914,7 +1873,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             await ProcessMonitor.EndTreeAsync(killProcesses);
             return;
         }
-        if (session.State == SessionState.Working)
+        if (session.State == SessionState.Working && interruptTurn)
         {
             // Interrupt first, so the turn ends cleanly with a result (DESIGN.md §13, "Shutdown").
             try
@@ -1943,8 +1902,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     }
 
     /// <summary>Closing the tab. By default everything the tab started is stopped too; the user can keep it running.</summary>
-    public async ValueTask CloseAsync(bool killProcesses)
+    /// <param name="interruptTurn">Interrupt a turn under way; a restart of Claudette leaves it for Claude Code to carry on.</param>
+    public async ValueTask CloseAsync(bool killProcesses, bool interruptTurn = true)
     {
+        await _closing.CancelAsync();
         _checkIns.Dispose();
         _autoContinue.Dispose();
         foreach (var timer in _copied.Values)
@@ -1952,18 +1913,30 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             timer.Dispose();
         }
         _copied.Clear();
-        StopAgentTicker();
-        StopTaskTicker();
-        StopCheckInTicker();
+        AgentTicker.Stop();
+        TaskTicker.Stop();
+        CheckInTicker.Stop();
         // The session's last events aren't applied once it stops, so nothing else would end the turn's line, and its
         // timer would keep this tab alive.
         Working.Dispose();
         _services.Notifications.ClearTab(Id);
-        StopPerforce();
-        ProjectTools.CloseRuns(killProcesses);
+        Perforce.Stop();
+        ProjectTools.Runs.CloseRuns(killProcesses);
         ChangedFiles.StopReviewSync();
+        if (_starting is { } starting)
+        {
+            // A start under way stops at the cancellation, or finishes: either way, what it started is stopped next.
+            try
+            {
+                await starting;
+            }
+            catch (Exception)
+            {
+                // It reported its own failure.
+            }
+        }
         ReleaseLease();
-        await StopSessionAsync(killProcesses);
+        await StopSessionAsync(killProcesses, interruptTurn);
         ChangedFiles.CleanUpDiffFiles();
     }
 
@@ -2000,5 +1973,4 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     private static string ShortModel(string? name) => name?.Split(' ', '(')[0] is { Length: > 0 } s ? s : "Default";
 
-    private static string Capitalize(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
 }

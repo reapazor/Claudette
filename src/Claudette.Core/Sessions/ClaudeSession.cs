@@ -9,10 +9,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Claudette.Core.Sessions;
 
 /// <summary>The session's process ended while a request was waiting for it.</summary>
-public sealed class ClaudeSessionExitedException(TransportExit exit)
-    : Exception($"Claude Code exited (code {exit.ExitCode?.ToString() ?? "unknown"}).")
+public sealed class ClaudeSessionExitedException(TransportExit exit, StartupFailure? startupFailure = null)
+    : Exception(startupFailure?.Summary ?? $"Claude Code exited (code {exit.ExitCode?.ToString() ?? "unknown"}).")
 {
     public TransportExit Exit { get; } = exit;
+
+    /// <summary>Why Claude Code refused to start, when it said (DESIGN.md §4, "Why it couldn't start").</summary>
+    public StartupFailure? StartupFailure { get; } = startupFailure;
 }
 
 /// <summary>
@@ -44,8 +47,14 @@ public sealed class ClaudeSession : IAsyncDisposable
     private volatile SessionState _state = SessionState.Starting;
 
     /// <param name="diagnostics">Counts what Claude Code sends that Claudette doesn't know yet (DESIGN.md §16).</param>
-    public ClaudeSession(IClaudeTransport transport, TimeProvider timeProvider, ILogger<ClaudeSession>? logger = null, ProtocolDiagnostics? diagnostics = null)
+    /// <param name="showsElicitations">
+    /// Sets <see cref="ShowsElicitations"/> before anything is read, so a request that comes while the session starts,
+    /// as an MCP server connects, is shown rather than declined.
+    /// </param>
+    public ClaudeSession(IClaudeTransport transport, TimeProvider timeProvider, ILogger<ClaudeSession>? logger = null, ProtocolDiagnostics? diagnostics = null,
+        bool showsElicitations = false)
     {
+        ShowsElicitations = showsElicitations;
         _transport = transport;
         _time = timeProvider;
         _logger = logger ?? NullLogger<ClaudeSession>.Instance;
@@ -80,6 +89,9 @@ public sealed class ClaudeSession : IAsyncDisposable
 
     public IReadOnlyList<string> Capabilities { get; private set; } = [];
 
+    /// <summary>Why Claude Code refused to start, from the result it wrote before exiting; null otherwise.</summary>
+    public StartupFailure? StartupFailure { get; private set; }
+
     /// <summary>The <c>claude</c> process id, for the process monitor (DESIGN.md §4). Null for test transports.</summary>
     public int? ProcessId => _transport.ProcessId;
 
@@ -98,11 +110,20 @@ public sealed class ClaudeSession : IAsyncDisposable
     /// Hook callbacks to register through the <c>hooks</c> field, as the Agent SDKs do; Claude Code calls them back with
     /// <c>hook_callback</c> control requests (DESIGN.md §13, "Hook callbacks").
     /// </param>
-    public async Task<InitializeResult> InitializeAsync(IReadOnlyList<HookRegistration> hooks, CancellationToken cancellationToken = default)
+    public Task<InitializeResult> InitializeAsync(IReadOnlyList<HookRegistration> hooks, CancellationToken cancellationToken = default) =>
+        InitializeAsync(hooks, agentProgressSummaries: false, cancellationToken);
+
+    /// <inheritdoc cref="InitializeAsync(IReadOnlyList{HookRegistration}, CancellationToken)"/>
+    /// <param name="agentProgressSummaries">One-line progress summaries of subagents on <c>task_progress</c> (documented option).</param>
+    public async Task<InitializeResult> InitializeAsync(IReadOnlyList<HookRegistration> hooks, bool agentProgressSummaries, CancellationToken cancellationToken = default)
     {
         _hooks = new HookCallbackRegistry(hooks);
-        var response = await _control.RequestAsync(new JsonObject { ["subtype"] = "initialize", ["hooks"] = _hooks.Config }, InitializeTimeout, cancellationToken)
-            .ConfigureAwait(false);
+        var request = new JsonObject { ["subtype"] = "initialize", ["hooks"] = _hooks.Config };
+        if (agentProgressSummaries)
+        {
+            request["agentProgressSummaries"] = true;
+        }
+        var response = await _control.RequestAsync(request, InitializeTimeout, cancellationToken).ConfigureAwait(false);
         Initialization = InitializeResult.Parse(response);
         PermissionMode ??= Initialization.CurrentPermissionMode;
         TrySetState(SessionState.Starting, SessionState.Idle);
@@ -117,14 +138,21 @@ public sealed class ClaudeSession : IAsyncDisposable
         SendUserMessageAsync(text, images, null, cancellationToken);
 
     /// <summary>Sends a message with attached images and quick suffixes (DESIGN.md §5, "Quick suffixes").</summary>
-    public async ValueTask SendUserMessageAsync(string text, IReadOnlyList<MessageImage> images, string? suffix, CancellationToken cancellationToken = default)
+    public ValueTask SendUserMessageAsync(string text, IReadOnlyList<MessageImage> images, string? suffix, CancellationToken cancellationToken = default) =>
+        SendUserMessageAsync(text, images, suffix, null, cancellationToken);
+
+    /// <summary>
+    /// Sends a message with attached images and quick suffixes, stamped with its id and, for one the user typed, its
+    /// origin (<see cref="OutgoingMessages.Stamped"/>).
+    /// </summary>
+    public async ValueTask SendUserMessageAsync(string text, IReadOnlyList<MessageImage> images, string? suffix, MessageStamp? stamp, CancellationToken cancellationToken = default)
     {
         // Working before the message goes, not after: a local command can be answered before the write's continuation
         // runs, and a Working set then would never be cleared.
         var started = TrySetState(SessionState.Idle, SessionState.Working);
         try
         {
-            await _transport.SendAsync(OutgoingMessages.UserMessage(text, images, suffix).ToJsonString(), cancellationToken).ConfigureAwait(false);
+            await _transport.SendAsync(OutgoingMessages.Stamped(OutgoingMessages.UserMessage(text, images, suffix), stamp).ToJsonString(), cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -140,6 +168,44 @@ public sealed class ClaudeSession : IAsyncDisposable
     public Task InterruptAsync(CancellationToken cancellationToken = default) =>
         SendControlRequestAsync(new JsonObject { ["subtype"] = "interrupt" }, cancellationToken: cancellationToken);
 
+    /// <summary>The capability that says <c>interrupt</c> honors <c>cancel_queued</c> (Claude Code 2.1.219 and later).</summary>
+    public const string InterruptCancelQueuedCapability = "interrupt_cancel_queued_v1";
+
+    /// <summary>
+    /// Stops the current turn and, with <paramref name="cancelQueued"/> on a Claude Code that lists
+    /// <see cref="InterruptCancelQueuedCapability"/>, the messages waiting behind it, which then never run (DESIGN.md §5,
+    /// "Queued messages"). The receipt says which messages were still waiting and which were cancelled, by id.
+    /// </summary>
+    public async Task<InterruptReceipt> InterruptAsync(bool cancelQueued, CancellationToken cancellationToken = default)
+    {
+        var request = new JsonObject { ["subtype"] = "interrupt" };
+        if (cancelQueued && Capabilities.Contains(InterruptCancelQueuedCapability))
+        {
+            request["cancel_queued"] = true;
+        }
+        var response = await SendControlRequestAsync(request, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return new InterruptReceipt(response.GetStringList("still_queued"), response.GetStringList("cancelled"));
+    }
+
+    /// <summary>
+    /// Takes one message that's waiting its turn back, by the id it was sent with, so it never runs. Undocumented: the
+    /// TypeScript SDK's <c>cancelAsyncMessage</c>, answered with <c>{"cancelled": true}</c> by 2.1.286. False when Claude
+    /// Code had already taken the message, or doesn't know the request.
+    /// </summary>
+    public async Task<bool> CancelQueuedMessageAsync(string messageUuid, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await SendControlRequestAsync(new JsonObject { ["subtype"] = "cancel_async_message", ["message_uuid"] = messageUuid }, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+            return response.GetBool("cancelled") == true;
+        }
+        catch (ControlRequestException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Switches model in place; the conversation is kept. Null returns to Claude Code's default model.</summary>
     public Task SetModelAsync(string? model, CancellationToken cancellationToken = default) =>
         SendControlRequestAsync(new JsonObject { ["subtype"] = "set_model", ["model"] = model }, cancellationToken: cancellationToken);
@@ -148,6 +214,24 @@ public sealed class ClaudeSession : IAsyncDisposable
     public Task SetEffortAsync(string? level, CancellationToken cancellationToken = default) =>
         SendControlRequestAsync(
             new JsonObject { ["subtype"] = "apply_flag_settings", ["settings"] = new JsonObject { ["effortLevel"] = level } },
+            cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Turns ultracode on or off from the next turn, at the session's effort level (<c>apply_flag_settings</c> with
+    /// <c>ultracode</c>; DESIGN.md §5, "Model and effort"): Claude may then run workflows of subagents on its own.
+    /// </summary>
+    public Task SetUltracodeAsync(bool on, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(
+            new JsonObject { ["subtype"] = "apply_flag_settings", ["settings"] = new JsonObject { ["ultracode"] = on ? true : null } },
+            cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Sets the output style in the project's local settings (<c>.claude/settings.local.json</c>), as <c>/output-style</c>
+    /// does; it applies from the next request. The SDK's <c>updateSettings('localSettings', {outputStyle})</c>.
+    /// </summary>
+    public Task SetOutputStyleAsync(string style, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(
+            new JsonObject { ["subtype"] = "update_settings", ["source"] = "localSettings", ["settings"] = new JsonObject { ["outputStyle"] = style } },
             cancellationToken: cancellationToken);
 
     public async Task SetPermissionModeAsync(string mode, CancellationToken cancellationToken = default)
@@ -215,6 +299,25 @@ public sealed class ClaudeSession : IAsyncDisposable
     /// <summary>Connects an MCP server again, such as one that failed or needs signing in.</summary>
     public Task ReconnectMcpServerAsync(string serverName, CancellationToken cancellationToken = default) =>
         SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_reconnect", ["serverName"] = serverName }, TimeSpan.FromSeconds(60), cancellationToken);
+
+    /// <summary>
+    /// Starts signing in to an MCP server that needs it (DESIGN.md §4, "MCP servers"): Claude Code answers with the address
+    /// to open, and connects the server once the browser comes back. Undocumented: the TypeScript SDK's host request.
+    /// </summary>
+    public async Task<McpSignIn> SignInToMcpServerAsync(string serverName, CancellationToken cancellationToken = default) =>
+        McpSignIn.Parse(await SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_authenticate", ["serverName"] = serverName }, TimeSpan.FromSeconds(60), cancellationToken)
+            .ConfigureAwait(false));
+
+    /// <summary>
+    /// Finishes an MCP sign-in with the address the browser ended on, for when it couldn't come back to Claude Code by
+    /// itself. Answered once the sign-in is done. Undocumented, like <see cref="SignInToMcpServerAsync"/>.
+    /// </summary>
+    public Task FinishMcpSignInAsync(string serverName, string callbackUrl, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_oauth_callback_url", ["serverName"] = serverName, ["callbackUrl"] = callbackUrl }, TimeSpan.FromSeconds(60), cancellationToken);
+
+    /// <summary>Forgets a remote MCP server's sign-in. Undocumented, like <see cref="SignInToMcpServerAsync"/>.</summary>
+    public Task SignOutOfMcpServerAsync(string serverName, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_clear_auth", ["serverName"] = serverName }, TimeSpan.FromSeconds(60), cancellationToken);
 
     /// <summary>Turns an MCP server on or off for this session; off disconnects it and removes its tools.</summary>
     public Task SetMcpServerEnabledAsync(string serverName, bool enabled, CancellationToken cancellationToken = default) =>
@@ -306,7 +409,7 @@ public sealed class ClaudeSession : IAsyncDisposable
         }
 
         var exit = await _transport.Completion.ConfigureAwait(false);
-        _control.FailAll(new ClaudeSessionExitedException(exit));
+        _control.FailAll(new ClaudeSessionExitedException(exit, StartupFailure));
         foreach (var request in _pendingPermissions.Values)
         {
             request.Cancel();
@@ -415,6 +518,7 @@ public sealed class ClaudeSession : IAsyncDisposable
 
             case ResultMessage result:
                 SessionId = result.SessionId ?? SessionId;
+                StartupFailure ??= StartupFailure.From(result);
                 Publish(new TurnCompleted(result));
                 SetState(SessionState.Idle);
                 break;

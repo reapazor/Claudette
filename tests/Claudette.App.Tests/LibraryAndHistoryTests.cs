@@ -77,8 +77,10 @@ public class LibraryAndHistoryTests
         var history = h.Shell.History!;
         await TabTestHarness.Eventually(() => !history.IsLoading, "History to load");
 
-        history.Search = "vulkan";
+        await SearchAsync(h, history, "vulkan");
         Assert.Equal(["s2"], history.Groups.SelectMany(g => g.Entries).Select(e => e.SessionId));
+        // The view's one list: the folder's heading, then its sessions.
+        Assert.Equal(["work", "s2"], history.Rows.Select(r => r is HistoryHeading heading ? heading.Label : ((HistoryEntry)r).SessionId));
 
         await history.SearchRepliesCommand.ExecuteAsync(null);
         await TabTestHarness.Eventually(() => history.Groups.SelectMany(g => g.Entries).Count() == 2, "the reply's session");
@@ -90,9 +92,11 @@ public class LibraryAndHistoryTests
 
         // A new search starts again from the prompts.
         history.Search = "vulkan rename";
-        Assert.Empty(history.Groups);
         Assert.Null(history.ReplySearchText);
         Assert.Null(fromReply.MatchedReply);
+        await SearchAsync(h, history, "vulkan rename");
+        Assert.Empty(history.Groups);
+        Assert.True(history.IsEmpty);
     }
 
     [Fact]
@@ -706,6 +710,58 @@ public class LibraryAndHistoryTests
     }
 
     [Fact]
+    public async Task A_copy_after_a_turn_that_fails_says_so_once_and_again_when_it_works()
+    {
+        await using var h = new TabTestHarness(s => s.Sessions.SyncNewTabs = true);
+        var tab = await h.OpenTabAsync();
+        h.WriteTranscript("s1", UserLine("s1", "hello", h.WorkFolder));
+        var library = h.Services.Settings.Sessions.LibraryFolder;
+        var blocked = Path.Combine(h.Root, "not-a-folder");
+        await File.WriteAllTextAsync(blocked, "", TestContext.Current.CancellationToken);
+        h.Services.Settings.Sessions.LibraryFolder = blocked;
+        h.Services.Library.OnSettingsChanged();
+        static bool Failed(Conversation.NoteItem n) => n.Text.StartsWith("Couldn't copy this session to the session library: ", StringComparison.Ordinal);
+
+        for (var turn = 1; turn <= 2; turn++)
+        {
+            h.Transport.EmitTurn();
+            await TabTestHarness.Eventually(() => tab.State.Tokens.Total == 120 * turn && tab.IsSettled, "the turn to finish");
+            await CopyAfterTurnAsync(h, tab);
+        }
+        var note = Assert.Single(Notes(tab), Failed);
+        Assert.Equal(Conversation.NoteKind.Warning, note.Kind);
+        Assert.EndsWith("It's tried again after the next turn, or use Sync now.", note.Text, StringComparison.Ordinal);
+
+        h.Services.Settings.Sessions.LibraryFolder = library;
+        h.Services.Library.OnSettingsChanged();
+        h.Transport.EmitTurn();
+        await TabTestHarness.Eventually(() => tab.State.Tokens.Total == 360 && tab.IsSettled, "the turn to finish");
+        await CopyAfterTurnAsync(h, tab);
+        Assert.Equal("Copied this session to the session library again.", Notes(tab)[^1].Text);
+    }
+
+    /// <summary>Types a search into History and waits for typing's pause and the filtering after it.</summary>
+    private static async Task SearchAsync(TabTestHarness h, HistoryViewModel history, string text)
+    {
+        history.Search = text;
+        Assert.True(history.IsFilterPending);
+        h.Time.Advance(HistoryViewModel.SearchDelay);
+        await TabTestHarness.Eventually(() => !history.IsFilterPending, "the search");
+    }
+
+    /// <summary>Waits out the copy that follows a turn, past its settle delay.</summary>
+    private static async Task CopyAfterTurnAsync(TabTestHarness h, TabViewModel tab)
+    {
+        var copy = tab.LibraryCopy;
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(TimeSpan.FromSeconds(1));
+            return copy.IsCompleted;
+        }, "the copy after the turn");
+        await copy;
+    }
+
+    [Fact]
     public async Task Sync_now_says_so_when_this_machine_no_longer_has_the_transcript()
     {
         await using var h = new TabTestHarness(s => s.Sessions.SyncNewTabs = true);
@@ -737,14 +793,16 @@ public class LibraryAndHistoryTests
 
     private static Conversation.NoteItem[] Notes(TabViewModel tab) => InlineDispatcher.Read(() => tab.Items.OfType<Conversation.NoteItem>().ToArray());
 
-    /// <summary>Gives a copy that would follow a turn every chance to: past the settle delay, with time for background work.</summary>
-    private static async Task SettleAsync(TabTestHarness h)
+    /// <summary>
+    /// Lets a copy that would follow a turn run its course: past the settle delay, until the library has no copy under
+    /// way and every tab has heard how its last one went.
+    /// </summary>
+    private static Task SettleAsync(TabTestHarness h)
     {
-        for (var i = 0; i < 5; i++)
-        {
-            h.Time.Advance(TimeSpan.FromSeconds(1));
-            await Task.Delay(20, TestContext.Current.CancellationToken);
-        }
+        h.Time.Advance(Claudette.App.Services.LibraryService.SettleDelay);
+        return Waiting.UntilAsync(
+            () => h.Services.Library.IsIdle && InlineDispatcher.Read(() => h.Shell.AllTabs.All(t => t.LibraryCopy.IsCompleted)),
+            "the library copies to finish");
     }
 
     /// <summary>Another machine has the session open, with a fresh lease.</summary>

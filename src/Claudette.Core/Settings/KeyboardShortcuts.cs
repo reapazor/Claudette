@@ -177,6 +177,9 @@ public static class KeyboardShortcuts
     public const string NextTabNeedingInput = "tabs.nextNeedingInput";
     public const string CommandPalette = "palette.open";
     public const string Find = "conversation.find";
+    public const string ZoomIn = "view.zoomIn";
+    public const string ZoomOut = "view.zoomOut";
+    public const string ResetZoom = "view.zoomReset";
 
     /// <summary>Every rebindable command, in the order Settings lists them.</summary>
     public static IReadOnlyList<ShortcutCommand> All { get; } =
@@ -197,6 +200,9 @@ public static class KeyboardShortcuts
         new(NextTabNeedingInput, "Go to the next tab waiting for you", Chord("Primary+J")),
         new(CommandPalette, "Command palette", Chord("Primary+Shift+P")),
         new(Find, "Find in the conversation", Chord("Primary+F")),
+        new(ZoomIn, "Zoom in", Chord("Primary+OemPlus")),
+        new(ZoomOut, "Zoom out", Chord("Primary+OemMinus")),
+        new(ResetZoom, "Reset zoom", Chord("Primary+D0")),
     ];
 
     public static ShortcutCommand Command(string id) => All.First(c => c.Id == id);

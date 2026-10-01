@@ -14,7 +14,6 @@ using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 using Claudette.App.Views;
-using Claudette.Core.Sessions;
 
 namespace Claudette.App.UiTests;
 
@@ -49,7 +48,7 @@ public class ContextBreakdownUiTests
         h.Transport.Answers["get_context_usage"] = _ => Usage();
         var tab = await h.OpenTabAsync();
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
-        await UiText.SettleUntilAsync(window, () => tab.ContextBreakdown is not null, "the breakdown");
+        await UiText.SettleUntilAsync(window, () => tab.Context.Breakdown is not null, "the breakdown");
 
         // A click on the ring opens the breakdown. The row doesn't see the click, so another tab would stay selected.
         var ring = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ContextRing");

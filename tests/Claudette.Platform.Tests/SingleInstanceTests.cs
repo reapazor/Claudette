@@ -23,6 +23,30 @@ public class SingleInstanceTests
     }
 
     [Fact]
+    public async Task A_launch_that_goes_at_once_or_a_handler_that_fails_doesnt_stop_it_listening()
+    {
+        var scope = Path.Combine(Path.GetTempPath(), $"claudette-instance-{Guid.NewGuid():N}");
+        using var first = new SingleInstance(scope);
+        var received = new TaskCompletionSource<IReadOnlyList<string>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        first.ArgumentsReceived += args => (args is ["boom"] ? throw new InvalidOperationException("boom") : (Action)(() => received.TrySetResult(args)))();
+        first.Listen();
+
+        // Connects and goes without a word.
+        await using (var client = new System.IO.Pipes.NamedPipeClientStream(".", SingleInstance.PipeName(scope), System.IO.Pipes.PipeDirection.Out, System.IO.Pipes.PipeOptions.CurrentUserOnly))
+        {
+            await client.ConnectAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        }
+        using (var failing = new SingleInstance(scope))
+        {
+            Assert.True(await HandOffAsync(failing, ["boom"]));
+        }
+
+        using var second = new SingleInstance(scope);
+        Assert.True(await HandOffAsync(second, ["--folder", "/work/api"]));
+        Assert.Equal(["--folder", "/work/api"], await received.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task Separate_data_folders_are_separate_instances()
     {
         using var first = new SingleInstance(Path.Combine(Path.GetTempPath(), $"claudette-a-{Guid.NewGuid():N}"));

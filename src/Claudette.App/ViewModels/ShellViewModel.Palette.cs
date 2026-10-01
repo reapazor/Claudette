@@ -1,4 +1,5 @@
-using Claudette.App.Services;
+using Claudette.Core;
+using Claudette.Core.Accessibility;
 using Claudette.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -67,7 +68,14 @@ public sealed partial class ShellViewModel
         Command("New tab", NewTab, KeyboardShortcuts.NewTab);
         Command("Open from History", OpenHistory, KeyboardShortcuts.History);
         AsyncCommand("Settings", OpenSettingsAsync, KeyboardShortcuts.Settings);
-        Command(IsSidebarCollapsed ? "Expand the sidebar" : "Collapse the sidebar", ToggleSidebar, KeyboardShortcuts.ToggleSidebar);
+        Command(Layout.IsSidebarCollapsed ? "Expand the sidebar" : "Collapse the sidebar", () => Layout.ToggleSidebarCommand.Execute(null), KeyboardShortcuts.ToggleSidebar);
+        var zoom = _services.Settings.Appearance.Zoom;
+        Command("Zoom in", ZoomIn, KeyboardShortcuts.ZoomIn, $"{zoom}%");
+        Command("Zoom out", ZoomOut, KeyboardShortcuts.ZoomOut, $"{zoom}%");
+        if (zoom != Zoom.Default)
+        {
+            Command("Reset zoom", ResetZoom, KeyboardShortcuts.ResetZoom, $"{zoom}%");
+        }
         if (AllTabs.Any(t => t.NeedsInput && !ReferenceEquals(t, SelectedTab)))
         {
             Command("Go to the next tab waiting for you", SelectNextNeedingInput, KeyboardShortcuts.NextTabNeedingInput);
@@ -93,6 +101,10 @@ public sealed partial class ShellViewModel
             }
             Command("Tab settings…", () => OpenTabSettingsCommand.Execute(tab));
             AsyncCommand("Duplicate tab", () => DuplicateTabAsync(tab));
+            if (CanOpenWorktreeTab(tab))
+            {
+                AsyncCommand("New tab in a worktree", () => OpenWorktreeTabAsync(tab.GroupFolder));
+            }
             AsyncCommand("Export conversation…", () => tab.ExportConversationCommand.ExecuteAsync(null));
             if (tab.RestartCommand.CanExecute(null))
             {
@@ -113,7 +125,7 @@ public sealed partial class ShellViewModel
         var state = _services.State;
         foreach (var folder in state.FavoriteFolders.Concat(state.RecentFolders.Select(r => r.Path)).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            entries.Add(new PaletteEntry(Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) is { Length: > 0 } name ? name : folder,
+            entries.Add(new PaletteEntry(Formats.FolderName(folder),
                 "Folder", () => OpenFolderAsync(folder), Detail: folder));
         }
 

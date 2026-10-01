@@ -17,6 +17,7 @@ public sealed partial class TabViewModel
         var reply = result.Result?.Trim();
         var body = string.IsNullOrEmpty(reply) ? "Claude finished its turn." : Shorten(reply.Split('\n')[0].Trim(), 140);
         _services.Notifications.Notify(NotificationKind.TurnFinished, DisplayName, body, Id);
+        _shell.Announce($"{DisplayName}: Claude finished.");
     }
 
     /// <summary>A permission prompt, question or plan is waiting (DESIGN.md §7).</summary>
@@ -34,11 +35,15 @@ public sealed partial class TabViewModel
             _ => "Claude is waiting for you.",
         };
         _services.Notifications.Notify(NotificationKind.NeedsInput, DisplayName, body, Id);
+        _shell.Announce($"{DisplayName}: {body}");
     }
 
     /// <summary>Claude Code stopped with an error, or couldn't start.</summary>
-    private void NotifyProcessError(string body) =>
+    private void NotifyProcessError(string body)
+    {
         _services.Notifications.Notify(NotificationKind.ProcessError, DisplayName, body, Id);
+        _shell.Announce($"{DisplayName}: {body}");
+    }
 
     /// <summary>"Notify me when a check-in is sent" (DESIGN.md §5).</summary>
     private void NotifyCheckIn() =>

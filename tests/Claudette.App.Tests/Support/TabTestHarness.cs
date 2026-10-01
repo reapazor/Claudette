@@ -52,6 +52,8 @@ internal sealed class ScriptedTransport : IClaudeTransport
                 new JsonObject { ["value"] = "opus", ["resolvedModel"] = "claude-opus-5-5", ["displayName"] = "Opus", ["supportsEffort"] = true, ["supportedEffortLevels"] = new JsonArray("low", "high"), ["supportsAutoMode"] = true },
                 new JsonObject { ["value"] = "haiku", ["resolvedModel"] = "claude-haiku-4-5", ["displayName"] = "Haiku", ["supportsEffort"] = false }),
             ["current_permission_mode"] = "default",
+            ["output_style"] = "default",
+            ["available_output_styles"] = new JsonArray("default", "Explanatory", "Learning"),
         },
         ["get_context_usage"] = _ => new JsonObject { ["totalTokens"] = 1000, ["maxTokens"] = 200000, ["percentage"] = 0.5 },
     };
@@ -120,9 +122,9 @@ internal sealed class ScriptedTransport : IClaudeTransport
     public void Emit(string line) => _process.Write(line);
 
     /// <summary>A complete turn: init, a text reply and a result with usage.</summary>
-    public void EmitTurn(string reply = "ok", string model = "claude-opus-5-5")
+    public void EmitTurn(string reply = "ok", string model = "claude-opus-5-5", string sessionId = "s1")
     {
-        Emit(new JsonObject { ["type"] = "system", ["subtype"] = "init", ["session_id"] = "s1", ["model"] = model, ["permissionMode"] = "default" });
+        Emit(new JsonObject { ["type"] = "system", ["subtype"] = "init", ["session_id"] = sessionId, ["model"] = model, ["permissionMode"] = "default" });
         Emit(new JsonObject
         {
             ["type"] = "assistant",
@@ -134,7 +136,7 @@ internal sealed class ScriptedTransport : IClaudeTransport
             ["subtype"] = "success",
             ["is_error"] = false,
             ["result"] = reply,
-            ["session_id"] = "s1",
+            ["session_id"] = sessionId,
             ["modelUsage"] = new JsonObject
             {
                 [model] = new JsonObject { ["inputTokens"] = 100, ["outputTokens"] = 20, ["cacheReadInputTokens"] = 0, ["cacheCreationInputTokens"] = 0, ["costUSD"] = 0.01 },
@@ -205,6 +207,12 @@ internal sealed class ScriptedSessionFactory(ScriptedTransport transport, TimePr
     /// <summary>Each session started gets a pretend process of its own, for tests with more than one tab running.</summary>
     public bool ProcessPerSession { get; set; }
 
+    /// <summary>While set, a start waits for it once <c>claude</c> is running, as a slow handshake would.</summary>
+    public TaskCompletionSource? StartGate { get; set; }
+
+    /// <summary>Every session started, including ones a start stopped before handing them over.</summary>
+    public List<ClaudeSession> Sessions { get; } = [];
+
     public async Task<ClaudeSession> StartAsync(ClaudeLaunchOptions options, CancellationToken cancellationToken = default)
     {
         Launches.Add(options);
@@ -220,8 +228,22 @@ internal sealed class ScriptedSessionFactory(ScriptedTransport transport, TimePr
         {
             transport.RestartIfExited();
         }
-        var session = new ClaudeSession(transport.ForSession(), time);
-        await session.InitializeAsync(options.Hooks, cancellationToken);
+        var session = new ClaudeSession(transport.ForSession(), time, showsElicitations: options.ShowsElicitations);
+        Sessions.Add(session);
+        try
+        {
+            if (StartGate is { } gate)
+            {
+                await gate.Task.WaitAsync(cancellationToken);
+            }
+            await session.InitializeAsync(options.Hooks, cancellationToken);
+        }
+        catch
+        {
+            // As the real factory does: a start that fails leaves no claude running.
+            await session.DisposeAsync();
+            throw;
+        }
         return session;
     }
 }
@@ -412,7 +434,7 @@ internal sealed class TabTestHarness : IAsyncDisposable
             Path.Combine(_root, "programdata"), Path.Combine(_root, "programfiles"), Path.Combine(_root, "applications"));
         Services = new AppServices(AppPaths.Under(_root), launcher ?? new ProcessLauncher(), Time, Platform, dispatcher ?? new InlineDispatcher(), processTrees: Trees, notifier: Notifier,
             appInstaller: appInstaller, httpHandler: http ?? new OfflineHandler(), appVersion: appVersion ?? TestVersion, loginShell: loginShell,
-            projectToolPaths: otherPrograms, sleepBlocker: SleepBlocker, loginItems: LoginItems);
+            projectToolPaths: otherPrograms, sleepBlocker: SleepBlocker, loginItems: LoginItems, systemMotion: SystemMotion);
         Services.Notifications.UseBadge(Notifier);
         // The machine running the tests doesn't decide whether the Claude app is available (its ANTHROPIC_BASE_URL, say).
         Services.RemoteControl.EnvironmentVariable = _ => null;
@@ -441,6 +463,9 @@ internal sealed class TabTestHarness : IAsyncDisposable
 
     /// <summary>Stands in for keeping the computer awake while tabs are connected to the Claude app (DESIGN.md §18).</summary>
     public FakeSleepBlocker SleepBlocker { get; } = new();
+
+    /// <summary>Stands in for the OS's reduce-motion setting (DESIGN.md §3, "Accessibility").</summary>
+    public FakeSystemMotion SystemMotion { get; } = new();
 
     /// <summary>Stands in for the OS's login entry (DESIGN.md §9, "Starting at login"): never the real Run key or LaunchAgents.</summary>
     public Core.Tests.Support.FakeLoginItems LoginItems { get; } = new();
@@ -482,22 +507,11 @@ internal sealed class TabTestHarness : IAsyncDisposable
     }
 
     /// <summary>
-    /// Waits until <paramref name="condition"/> holds, checking every 10 ms. The deadline is generous because some
-    /// waits are on real processes (git, for the file index), which a busy CI machine can take seconds to start.
+    /// Waits until <paramref name="condition"/> holds, read the way the UI thread would (<see cref="InlineDispatcher.Read"/>),
+    /// by the clock (<see cref="Waiting.UntilAsync"/>). Some waits are on real processes (git, for the file index).
     /// </summary>
-    public static async Task Eventually(Func<bool> condition, string? what = null)
-    {
-        var deadline = System.Diagnostics.Stopwatch.StartNew();
-        while (deadline.Elapsed < TimeSpan.FromSeconds(10))
-        {
-            if (InlineDispatcher.Read(condition))
-            {
-                return;
-            }
-            await Task.Delay(10);
-        }
-        Assert.Fail($"Timed out waiting for {what ?? "the condition"}.");
-    }
+    public static Task Eventually(Func<bool> condition, string? what = null) =>
+        Waiting.UntilAsync(() => InlineDispatcher.Read(condition), what);
 
     public async ValueTask DisposeAsync()
     {
@@ -506,6 +520,21 @@ internal sealed class TabTestHarness : IAsyncDisposable
         try
         {
             Directory.Delete(_root, recursive: true);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Git makes its objects read-only, and Windows won't delete a read-only file.
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
+                {
+                    File.SetAttributes(file, FileAttributes.Normal);
+                }
+                Directory.Delete(_root, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
         }
         catch (IOException)
         {

@@ -66,8 +66,36 @@ public sealed record ClaudeLaunchOptions
     /// <summary>Hook callbacks registered with <c>initialize</c> (DESIGN.md §13, "Hook callbacks"). Not command-line arguments.</summary>
     public IReadOnlyList<HookRegistration> Hooks { get; init; } = [];
 
+    /// <summary>
+    /// <c>--setting-sources</c>: the settings Claude Code loads, such as <c>user</c> to leave out the folder's own
+    /// (DESIGN.md §7, "Folder trust"). Null: all of them.
+    /// </summary>
+    public string? SettingSources { get; init; }
+
+    /// <summary>
+    /// The host shows MCP servers' requests for input, from the start (<see cref="ClaudeSession.ShowsElicitations"/>).
+    /// Not a command-line argument.
+    /// </summary>
+    public bool ShowsElicitations { get; init; }
+
     /// <summary>Applied on top of the clean environment. A null value removes the variable.</summary>
     public IReadOnlyDictionary<string, string?> EnvironmentOverrides { get; init; } = new Dictionary<string, string?>();
+
+    /// <summary>
+    /// Asks Claude Code for one-line progress summaries of subagents on <c>task_progress</c> (<c>agentProgressSummaries</c>
+    /// on <c>initialize</c>; DESIGN.md §18, "Agent map").
+    /// </summary>
+    public bool AgentProgressSummaries { get; init; }
+
+    /// <summary>
+    /// <c>--worktree</c>: start in the git worktree of this name, which Claude Code creates under
+    /// <c>.claude/worktrees/</c> of <see cref="WorkingDirectory"/>'s repository, or opens when it's there (DESIGN.md §4,
+    /// "Worktree tabs").
+    /// </summary>
+    public string? Worktree { get; init; }
+
+    /// <summary><c>--add-dir</c>, once for each: folders Claude may also read and edit (DESIGN.md §4, "Extra folders").</summary>
+    public IReadOnlyList<string> AddDirectories { get; init; } = [];
 }
 
 public static class ClaudeArguments
@@ -97,6 +125,12 @@ public static class ClaudeArguments
         AddOption(args, "--effort", options.Effort);
         AddOption(args, "--permission-mode", options.PermissionMode);
         AddOption(args, "--fallback-model", options.FallbackModel);
+        AddOption(args, "--setting-sources", options.SettingSources);
+        AddOption(args, "--worktree", options.Worktree);
+        foreach (var directory in options.AddDirectories)
+        {
+            AddOption(args, "--add-dir", directory);
+        }
         AddOption(args, "--resume", options.Resume);
         if (options.ForkSession && options.Resume is not null)
         {

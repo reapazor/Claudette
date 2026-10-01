@@ -13,7 +13,8 @@ public sealed partial class ConfirmationViewModel(
     Func<Task> onConfirm,
     Action close,
     string? secondaryText = null,
-    Func<Task>? onSecondary = null) : ViewModelBase
+    Func<Task>? onSecondary = null,
+    string? cancelText = "Cancel") : ViewModelBase
 {
     public string Title { get; } = title;
 
@@ -24,6 +25,11 @@ public sealed partial class ConfirmationViewModel(
     public string? SecondaryText { get; } = secondaryText;
 
     public bool HasSecondary => SecondaryText is not null && onSecondary is not null;
+
+    /// <summary>"Cancel", or what not going ahead means here, such as "Keep"; null when the main choice already is that.</summary>
+    public string? CancelText { get; } = cancelText;
+
+    public bool HasCancel => CancelText is not null;
 
     [RelayCommand]
     private async Task ConfirmAsync()

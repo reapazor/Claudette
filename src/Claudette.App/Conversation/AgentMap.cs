@@ -20,6 +20,12 @@ public sealed class AgentMap
     private readonly Dictionary<string, AgentNode> _toolCallOwners = [];
     private readonly List<PromptItem> _unattributed = [];
 
+    // Every subagent in the order it started, how many are in each state, and the ones whose time is ticking: kept as
+    // nodes change, so the counts the tab shows after every change don't walk the tree.
+    private readonly List<AgentNode> _nodes = [];
+    private readonly int[] _counts = new int[Enum.GetValues<AgentStatus>().Length];
+    private readonly HashSet<AgentNode> _ticking = [];
+
     // task_started for an Agent call the stream hasn't shown yet, by that call's id.
     private readonly Dictionary<string, SystemMessage> _earlyTasks = [];
 
@@ -48,16 +54,22 @@ public sealed class AgentMap
 
     internal Func<string?, string?> ModelName { get; }
 
-    public IEnumerable<AgentNode> Subagents => Root.DescendantsAndSelf().Skip(1);
+    /// <summary>Every subagent, in the order they started.</summary>
+    public IReadOnlyList<AgentNode> Subagents => _nodes;
 
-    public bool HasSubagents => _byToolUse.Count > 0;
+    public bool HasSubagents => _nodes.Count > 0;
 
-    public int ActiveCount => Subagents.Count(n => n.IsActive);
+    public int ActiveCount => Count(AgentStatus.Running) + Count(AgentStatus.Waiting);
 
-    public int WaitingCount => Subagents.Count(n => n.IsWaiting);
+    public int WaitingCount => Count(AgentStatus.Waiting);
 
     /// <summary>Something's running time is ticking.</summary>
-    public bool IsTicking => Root.DescendantsAndSelf().Any(n => n.IsTicking);
+    public bool IsTicking => Root.IsTicking || _ticking.Count > 0;
+
+    private int Count(AgentStatus status) => _counts[(int)status];
+
+    /// <summary>The main agent, or a subagent of this map's since the last <c>/clear</c>.</summary>
+    public bool Contains(AgentNode node) => ReferenceEquals(node, Root) || node.IsCounted && ReferenceEquals(node.Map, this);
 
     /// <summary>For the tab info card: "3 agents running", or how the finished ones ended. Null without subagents.</summary>
     public string? Summary
@@ -68,12 +80,12 @@ public sealed class AgentMap
             {
                 return null;
             }
-            var agents = Subagents.ToArray();
-            var active = agents.Count(n => n.IsActive);
-            var waiting = agents.Count(n => n.IsWaiting);
-            var done = agents.Count(n => n.IsDone);
-            var failed = agents.Count(n => n.IsFailed);
-            var stopped = agents.Count(n => n.IsStopped);
+            var agents = _nodes;
+            var active = ActiveCount;
+            var waiting = WaitingCount;
+            var done = Count(AgentStatus.Done);
+            var failed = Count(AgentStatus.Failed);
+            var stopped = Count(AgentStatus.Stopped);
             var finished = new List<string>();
             if (done > 0)
             {
@@ -89,7 +101,7 @@ public sealed class AgentMap
             }
             if (active == 0)
             {
-                return agents.Length == 1 ? $"1 agent, {StatusWord(agents[0])}" : $"{agents.Length} agents: {string.Join(", ", finished)}";
+                return agents.Count == 1 ? $"1 agent, {StatusWord(agents[0])}" : $"{agents.Count} agents: {string.Join(", ", finished)}";
             }
             var summary = active == 1 ? "1 agent running" : $"{active} agents running";
             if (waiting > 0)
@@ -119,6 +131,9 @@ public sealed class AgentMap
     {
         var node = new AgentNode(this, parent, item);
         _byToolUse[item.ToolUseId] = node;
+        _nodes.Add(node);
+        node.IsCounted = true;
+        Recount(node);
         parent.Children.Add(node);
         parent.Refresh();
         if (_earlyTasks.Remove(item.ToolUseId, out var started))
@@ -278,6 +293,13 @@ public sealed class AgentMap
     internal void Clear()
     {
         Root.Children.Clear();
+        foreach (var node in _nodes)
+        {
+            node.IsCounted = false;
+        }
+        _nodes.Clear();
+        Array.Clear(_counts);
+        _ticking.Clear();
         _byToolUse.Clear();
         _byTask.Clear();
         _toolCallOwners.Clear();
@@ -289,9 +311,40 @@ public sealed class AgentMap
     /// <summary>Updates running times; called every second while something runs.</summary>
     public void Tick()
     {
-        foreach (var node in Root.DescendantsAndSelf().Where(n => n.IsTicking))
+        if (Root.IsTicking)
+        {
+            Root.Tick();
+        }
+        foreach (var node in _ticking)
         {
             node.Tick();
+        }
+    }
+
+    /// <summary>A subagent's state may have changed (<see cref="AgentNode.Refresh"/>): moves it between the counts.</summary>
+    internal void Recount(AgentNode node)
+    {
+        if (!node.IsCounted)
+        {
+            return;
+        }
+        var status = node.Status;
+        if (node.CountedStatus != status)
+        {
+            if (node.CountedStatus is { } was)
+            {
+                _counts[(int)was]--;
+            }
+            _counts[(int)status]++;
+            node.CountedStatus = status;
+        }
+        if (node.IsTicking)
+        {
+            _ticking.Add(node);
+        }
+        else
+        {
+            _ticking.Remove(node);
         }
     }
 

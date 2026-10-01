@@ -7,7 +7,7 @@ using Claudette.App.Diffs;
 
 namespace Claudette.App.Controls;
 
-/// <summary>A line of code with syntax colors: <see cref="Text"/> split into <see cref="Runs"/>.</summary>
+/// <summary>A line of code with syntax colors: <see cref="TextBlock.Text"/> split into <see cref="Runs"/>.</summary>
 public sealed class ColoredTextBlock : SelectableTextBlock
 {
     public static readonly StyledProperty<IReadOnlyList<ColoredRun>?> RunsProperty =

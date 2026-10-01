@@ -18,6 +18,8 @@ public partial class MainWindow : Window
         Activated += (_, _) =>
         {
             _viewModel?.Services.Notifications.SetAppActive(true);
+            // Back from the OS's settings, perhaps with Reduce motion changed (DESIGN.md §3, "Accessibility").
+            _ = _viewModel?.Services.ReadMotionPreferencesAsync(onlyIfStale: true);
             // Back from an editor, perhaps with claudette.json changed: the actions and links follow (DESIGN.md §18).
             if (_viewModel?.Shell?.SelectedTab is { } tab)
             {
@@ -26,7 +28,30 @@ public partial class MainWindow : Window
         };
         Deactivated += (_, _) => _viewModel?.Services.Notifications.SetAppActive(false);
         // A narrow window leaves the busiest tabs, then the weekly chart, out of the detailed header (DESIGN.md §6).
-        SizeChanged += (_, e) => _viewModel?.Usage?.SetDetailsWidth(e.NewSize.Width);
+        SizeChanged += (_, e) => _viewModel?.Usage?.SetDetailsWidth(e.NewSize.Width / _zoom);
+    }
+
+    private int _zoomPercent = 100;
+
+    private double _zoom = 1;
+
+    /// <summary>
+    /// Scales the window's content (DESIGN.md §3, "Accessibility"): <paramref name="percent"/> of its size, 100 for none.
+    /// Popups and menus keep their size.
+    /// </summary>
+    public void UseZoom(int percent)
+    {
+        if (percent == _zoomPercent)
+        {
+            return;
+        }
+        _zoomPercent = percent;
+        _zoom = percent / 100.0;
+        Zoomed.LayoutTransform = percent == 100 ? null : new ScaleTransform(_zoom, _zoom);
+        if (_viewModel?.Usage is { } usage && Bounds.Width > 0)
+        {
+            usage.SetDetailsWidth(Bounds.Width / _zoom);
+        }
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -63,7 +88,7 @@ public partial class MainWindow : Window
         usage.ShowUsagePanel = ShowUsagePanelAsync;
         if (Bounds.Width > 0)
         {
-            usage.SetDetailsWidth(Bounds.Width);
+            usage.SetDetailsWidth(Bounds.Width / _zoom);
         }
     }
 
@@ -143,12 +168,13 @@ public partial class MainWindow : Window
             return Task.CompletedTask;
         }
         var panel = new UsagePanelViewModel(main.Services, tracker, header, id => main.Shell?.AllTabs.FirstOrDefault(t => t.Id == id)?.DisplayName);
-        tracker.TurnRecorded += panel.Refresh;
+        void OnTurnRecorded(string tabId) => panel.Refresh();
+        tracker.TurnRecorded += OnTurnRecorded;
         tracker.SamplesImported += panel.Refresh;
         _usageWindow = new UsageWindow { DataContext = panel };
         _usageWindow.Closed += (_, _) =>
         {
-            tracker.TurnRecorded -= panel.Refresh;
+            tracker.TurnRecorded -= OnTurnRecorded;
             tracker.SamplesImported -= panel.Refresh;
             _usageWindow = null;
         };

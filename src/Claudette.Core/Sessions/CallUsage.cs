@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Claudette.Core.Protocol;
 
@@ -77,6 +76,5 @@ public sealed class CallUsage
     /// </summary>
     public double? ContextPercentage => ContextTokens is { } tokens && ContextWindow is { } window ? Math.Min(100, 100.0 * tokens / window) : null;
 
-    private static long Number(JsonNode? node) =>
-        node is JsonValue value && value.GetValueKind() == JsonValueKind.Number ? (long)value.GetValue<double>() : 0;
+    private static long Number(JsonNode? node) => node.AsWholeNumber() ?? 0;
 }

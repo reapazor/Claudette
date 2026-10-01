@@ -17,6 +17,10 @@
 [button] (icon)
 [button] (icon)
 [field] "13"
+"Zoom"
+[choice] "100%"
+"Motion"
+[choice] "Follow the system"
 "Leave a font empty for the default. A font that isn't installed on this machine falls back to the default."
 [ ] Show thinking expanded
 [x] Show fun words while Claude works

@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Claudette.Core.Sessions;
 using Claudette.Core.Tests.Support;
 using Microsoft.Extensions.Time.Testing;

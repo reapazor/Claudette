@@ -14,7 +14,7 @@
 
 versions:
   minimum: 2.1.284     # ClaudeLocator.MinimumVersion
-  lastTested: 2.1.285  # ClaudeLocator.LastTestedVersion; bump when a compatibility report is handled
+  lastTested: 2.1.286  # ClaudeLocator.LastTestedVersion; bump when a compatibility report is handled
 
 items:
   # --- Launch flags ------------------------------------------------------------------------------------
@@ -195,6 +195,13 @@ items:
     usedIn: src/Claudette.Core/Protocol/MessageParser.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: MessageParserTests
+  - id: "system/init cwd"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.App/ViewModels/TabViewModel.Worktree.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: WorktreeTabTests, RealCliTests
+    # Where a worktree tab's Claude Code works once --worktree made the worktree (DESIGN.md §4, "Worktree tabs").
   - id: "capabilities"
     kind: field
     status: documented
@@ -277,20 +284,20 @@ items:
   - id: "api_retry"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.Core/Status/ApiTrouble.cs
+    usedIn: src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.Core/Status/ApiTrouble.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: ServiceStatusTests
   # A retry or a failed turn on Anthropic's side checks Claude's status page straight away (DESIGN.md §18, "Service status").
   - id: "error_status"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Status/ApiTrouble.cs
+    usedIn: src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.Core/Status/ApiTrouble.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: ServiceStatusTests
   - id: "error_category"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.Core/Status/ApiTrouble.cs
+    usedIn: src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.Core/Status/ApiTrouble.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: ServiceStatusTests
   - id: "api_error_status"
@@ -367,6 +374,18 @@ items:
     usedIn: src/Claudette.App/Conversation/TodoList.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: ConversationBuilderTests
+  - id: "TaskList"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/TodoList.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
+  - id: "TaskGet"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/TodoList.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
   - id: "CLAUDE_CODE_ENABLE_TASKS"
     kind: env
     status: documented
@@ -397,6 +416,152 @@ items:
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: RealCliTests
     fallback: See control_request. SIGINT also ends a turn (documented in headless mode).
+  - id: "CLAUDE_CODE_RESUME_INTERRUPTED_TURN"
+    kind: env
+    status: documented
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/env-vars
+    test: RestartTests, RealCliTests
+    fallback: Set to 1, once, for a tab Claudette's own restart cut off mid-turn; Claude Code re-runs the turn on resume (checked with 2.1.286). Without it the tab resumes idle, as before.
+  - id: "CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS"
+    kind: env
+    status: documented
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/env-vars
+    test: RestartTests, RealCliTests
+    fallback: 600000 (a restart snapshot's 10 minutes) beside CLAUDE_CODE_RESUME_INTERRUPTED_TURN, so a stale turn isn't re-run.
+  - id: "resume_reason"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#resume_reason
+    test: RestartTests, RealCliTests
+    fallback: On a re-run's assistant messages and result; the first one adds a note. Without it the re-run reads as an ordinary turn.
+  - id: "startup_failure_reason"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/StartupFailure.cs, src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#startup_failure_reason
+    test: ClaudeSessionTests, AccountAndSignInTests, RealCliTests
+    fallback: Read from the error_during_execution result written before exiting, with its errors. Each known reason is put in words; an unknown one shows the errors. Without the result, the start error is the last line of the error output, as before.
+  - id: "CLAUDE_CODE_STARTUP_FAILURE_RESULTS"
+    kind: env
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSessionFactory.cs
+    docs: https://code.claude.com/docs/en/env-vars
+    test: RealCliTests
+    fallback: Set to 1 for every claude a tab starts, unless the environment sets it. Without it Claude Code writes the result only for a few reasons.
+  - id: "cancel_queued"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkcontrolinterruptresponse
+    test: QueuedMessageTests, RealCliTests
+    fallback: Sent on Stop only when system/init lists interrupt_cancel_queued_v1; the receipt's cancelled ids take those cards back to the composer. Without the capability Stop is a plain interrupt and queued messages run afterwards, as before.
+  - id: "interrupt_cancel_queued_v1"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdksystemmessage
+    test: QueuedMessageTests, RealCliTests
+    fallback: See cancel_queued.
+  - id: "still_queued"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkcontrolinterruptresponse
+    test: QueuedMessageTests, RealCliTests
+    fallback: Read with cancelled from the interrupt receipt. Ids Claudette didn't send are ignored, as the SDK says to.
+  - id: "ultracode"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.Styles.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#applyflagsettings
+    test: UltracodeAndStyleTests, RealCliTests
+    fallback: apply_flag_settings with {ultracode:true}, or null to turn it off, from the next turn at the session's effort level (2.1.284 and later). Refused, the tab says so and keeps it as it was.
+  - id: "update_settings"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.Styles.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#updatesettings
+    test: UltracodeAndStyleTests, RealCliTests
+    fallback: The documented updateSettings() method; its wire name is the SDK's. source localSettings with {outputStyle} writes the project's .claude/settings.local.json (checked with 2.1.286). Refused, the tab says so.
+  - id: "available_output_styles"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/InitializeResult.cs, src/Claudette.App/ViewModels/TabViewModel.Styles.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkcontrolinitializeresponse
+    test: UltracodeAndStyleTests, RealCliTests
+    fallback: With output_style from initialize, the effort dropdown's style list. Without it (or one style) there's no list.
+  - id: "agentProgressSummaries"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#options
+    test: ClaudeSessionTests, AgentMapTests, RealCliTests
+    fallback: Sent as true on initialize when Settings asks for it (the option is documented; the initialize field name is the SDK's, accepted by 2.1.286). task_progress.summary then replaces the subagent row's latest tool call. Without it the row shows the tool call, as before.
+  - id: "gitOperation"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/GitChips.cs, src/Claudette.App/Conversation/ConversationItems.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
+    fallback: commit (sha, kind, branch), push (branch), branch (ref, action) and pr (number, url, action) become chips on the Bash card; an unknown action names the pull request plainly, and only an http(s) url is a link. Without it the card shows the output, as before.
+  - id: "timedOutAfterMs"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationItems.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
+    fallback: The Bash card's summary says the command reached its time limit and carries on in the background. Without it the summary is the output's first line.
+  - id: "backgroundTaskId"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationItems.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
+    fallback: With backgroundedByUser, the Bash card's summary says it runs in the background, or was moved there. Without it the summary is the output's first line.
+  - id: "dangerouslyDisableSandbox"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/PromptItems.cs
+    docs: https://code.claude.com/docs/en/sandboxing
+    test: PromptTests
+    fallback: True on a Bash permission request's input adds a warning to the card. Without it nothing is said, as before.
+  - id: "mcp_authenticate"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/McpServersViewModel.cs
+    docs: https://code.claude.com/docs/en/mcp
+    test: McpServersTests, ClaudeSessionTests, RealCliTests
+    fallback: The TypeScript SDK's host request. With serverName, 2.1.286 answers {authUrl, requiresUserAction, callbackExpected, redirectScheme, callbackPort} and connects the server once the browser comes back on localhost, or {requiresUserAction:false} when signed in already. Refused, the MCP page says to sign in with /mcp in a terminal.
+  - id: "mcp_oauth_callback_url"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/McpServersViewModel.cs
+    docs: https://code.claude.com/docs/en/mcp
+    test: McpServersTests
+    fallback: With serverName and callbackUrl (the address the browser ended on), answered once the sign-in is done. Only for a sign-in whose page couldn't come back to Claude Code by itself.
+  - id: "mcp_clear_auth"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/McpServersViewModel.cs
+    docs: https://code.claude.com/docs/en/mcp
+    test: McpServersTests, RealCliTests
+    fallback: With serverName, for a connected HTTP or SSE server (config.type from mcp_status). Refused, the page shows Claude Code's error.
+  - id: "cancel_async_message"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: QueuedMessageTests, RealCliTests
+    fallback: The TypeScript SDK's cancelAsyncMessage. With message_uuid, 2.1.286 answers {"cancelled":true} and the message never runs, or false when it's no longer waiting. Rejected or false, the card stays queued with a note; Stop still takes everything back.
+  - id: "command_lifecycle"
+    kind: message
+    status: undocumented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    test: MessageParserTests
+    fallback: Seen in 2.1.286 for each message sent with a uuid ({command_uuid, state queued/cancelled/completed}, capability msg_lifecycle_v1). Skipped on purpose, so Diagnostics doesn't count it as unknown; the echo and the interrupt receipt say the same.
   - id: "can_use_tool"
     kind: control
     status: undocumented
@@ -432,7 +597,7 @@ items:
   - id: "decision_reason"
     kind: field
     status: undocumented
-    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
+    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs, src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: PermissionRequestTests
     fallback: Documented as the canUseTool option decisionReason; both spellings are read. Without it the card just doesn't say why.
@@ -478,13 +643,20 @@ items:
   - id: "permission_denied"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    usedIn: src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: PromptTests
+  - id: "informational"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkinformationalmessage
+    test: ConversationBuilderTests
+    fallback: system/informational with content and level (info, notice, suggestion, warning) becomes a note, a warning in the warning color. Without it Claude Code's notices aren't shown, as before.
   - id: "compact_boundary"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    usedIn: src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: TabViewModelTests
   - id: "/compact"
@@ -515,6 +687,13 @@ items:
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: ClaudeEnvironmentTests, RewindAndBranchTests
     fallback: The guard for editing and resending a prompt. Without it, resume at the reply before the prompt unguarded.
+  - id: "user message uuid and origin"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/OutgoingMessages.cs, src/Claudette.App/ViewModels/TabViewModel.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkmessageorigin
+    test: QuickSuffixMessageTests, TabViewModelTests, RealCliTests
+    fallback: Each message Claudette sends has a uuid, kept by the echo, the transcript and user_message_uuid (checked with 2.1.286); a typed one has origin {kind:"human"}. A Claude Code that made its own ids instead would have each echo matched by its text, then by order, as before.
   - id: "--replay-user-messages"
     kind: flag
     status: documented
@@ -549,19 +728,19 @@ items:
   - id: "hook_started"
     kind: message
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Protocol/SystemNotices.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: RealCliTests
   - id: "hook_progress"
     kind: message
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Protocol/SystemNotices.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: none yet (sent only while a hook runs over a second with output)
   - id: "hook_response"
     kind: message
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Protocol/SystemNotices.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: RealCliTests
   - id: "mcp_status"
@@ -595,15 +774,47 @@ items:
   - id: "elicitation_complete"
     kind: message
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Protocol/SystemNotices.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: none yet (needs an MCP server that asks through a URL)
+  - id: "--setting-sources"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.Trust.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: ClaudeEnvironmentTests, FolderTrustTests
+    # "user" leaves out the folder's settings, its .mcp.json servers and its CLAUDE.md (checked with 2.1.286): a tab
+    # started without the folder's own configuration (DESIGN.md §7, "Folder trust").
   - id: "--fallback-model"
     kind: flag
     status: documented
     usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
     docs: https://code.claude.com/docs/en/cli-reference
     test: ClaudeEnvironmentTests, RealCliTests
+  - id: "--worktree"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.Worktree.cs
+    docs: https://code.claude.com/docs/en/worktrees
+    test: ClaudeEnvironmentTests, WorktreeTabTests, RealCliTests
+    # A worktree tab's first start (DESIGN.md §4, "Worktree tabs"). With -p, Claude Code makes
+    # <repo>/.claude/worktrees/<name> on the branch worktree-<name>, reports it as system/init's cwd, keeps the transcript
+    # under the worktree's folder, and leaves the worktree locked when it exits (checked with 2.1.286). Outside a git
+    # repository it exits with an error and no result, so Claudette offers worktree tabs only for folders in one.
+  - id: "--add-dir"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.Worktree.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: ClaudeEnvironmentTests, WorktreeTabTests
+    # A tab's extra folders (DESIGN.md §4, "Extra folders"), one --add-dir each. A folder that's gone isn't passed.
+  - id: ".claude/worktrees/<name>"
+    kind: behavior
+    status: documented
+    usedIn: src/Claudette.Core/Git/GitWorktrees.cs
+    docs: https://code.claude.com/docs/en/worktrees
+    test: GitWorktreesTests
+    fallback: Where --worktree puts a worktree and its worktree-<name> branch. Claudette names new worktrees so it doesn't reuse one, groups a session found there with its main checkout, and deletes the branch only when it has the worktree- prefix. If the place changes, the tab still follows system/init's cwd; only grouping from History and naming around existing folders are off.
   - id: "set_model"
     kind: control
     status: undocumented
@@ -847,6 +1058,30 @@ items:
     usedIn: src/Claudette.Core/Claude/SpinnerVerbs.cs, src/Claudette.Core/Claude/StartingPermissionMode.cs
     docs: https://code.claude.com/docs/en/settings
     test: SpinnerVerbsTests, StartingPermissionModeTests
+  - id: ".mcp.json"
+    kind: file
+    status: documented
+    usedIn: src/Claudette.Core/Claude/FolderTrust.cs
+    docs: https://code.claude.com/docs/en/mcp
+    test: FolderTrustTests
+    # Listed before a folder is trusted. Claude Code finds one in any folder above the session's too, past the
+    # repository's root (checked with 2.1.286); FolderTrust looks up to the file system's root.
+  - id: "-p runs a never-trusted folder's hooks, env, helpers and .mcp.json servers"
+    kind: behavior
+    status: documented
+    usedIn: src/Claudette.Core/Claude/FolderTrust.cs, src/Claudette.App/ViewModels/TabViewModel.Trust.cs
+    docs: https://code.claude.com/docs/en/permissions
+    test: FolderTrustTests
+    fallback: If -p starts asking or holding them back itself, the card is redundant but harmless; the question can be turned off in Settings.
+  - id: "hooks"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Claude/FolderTrust.cs
+    docs: https://code.claude.com/docs/en/settings-reference
+    test: FolderTrustTests
+    # Also apiKeyHelper, awsAuthRefresh, awsCredentialExport, gcpAuthRefresh, otelHeadersHelper, env, enabledPlugins and
+    # permissions.allow, read from the folder's .claude/settings.json and settings.local.json; and hooks in a project
+    # skill's SKILL.md frontmatter.
   - id: "managed-settings.json"
     kind: file
     status: documented
@@ -884,6 +1119,14 @@ items:
     usedIn: src/Claudette.Core/Claude/SpinnerVerbs.cs
     docs: https://code.claude.com/docs/en/settings-reference
     test: SpinnerVerbsTests
+  - id: "prefersReducedMotion"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Accessibility/Motion.cs
+    docs: https://code.claude.com/docs/en/settings-reference
+    test: MotionAndZoomTests
+    # Read from the user's settings.json in Claude Code's config folder, for Settings → Appearance → Motion's "Follow
+    # the system" (DESIGN.md §3, "Accessibility"). Without it, only the OS's setting counts.
   - id: "resume from a transcript path writes <session-id>.jsonl next to it"
     kind: behavior
     status: undocumented
@@ -968,7 +1211,7 @@ items:
     usedIn: src/Claudette.Core/Auth/ClaudeAuth.cs, src/Claudette.App/ViewModels/AccountViewModel.cs
     docs: https://code.claude.com/docs/en/cli-reference
     test: InstallAndAuthTests, AccountAndSignInTests
-    fallback: See subscriptionType. 2.1.284 reports none, claude.ai, api_key, api_key_helper, oauth_token or third_party; an unknown value is shown as it is.
+    fallback: See subscriptionType. 2.1.284 reports none, claude.ai, api_key, api_key_helper, oauth_token or third_party; an unknown value is shown as it is. Since 2.1.286 a Console sign-in's stored key reports api_key (2.1.285 said claude.ai), so it reads as an API key, with Console billing and no Remote Control.
 
   # --- Plan usage (DESIGN.md §6) ------------------------------------------------------------------------
   - id: "rate_limits_available"
@@ -1052,7 +1295,7 @@ items:
     status: undocumented
     usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.App/ViewModels/TabViewModel.cs
     test: ReplayTests
-    fallback: "Seen in 2.1.284 before each turn: value.enabled, value.effective_window, value.threshold. Only the context estimate uses it (when get_context_usage isn't available); without it the estimate warns at 80% of the context window."
+    fallback: "Seen in 2.1.284 and 2.1.285 before each turn: value.enabled, value.effective_window, value.threshold. 2.1.286 sent none in the recorded scenarios. Only the context estimate uses it (when get_context_usage isn't available); without it the estimate warns at 80% of the context window."
   - id: "active_goal"
     kind: message
     status: undocumented
@@ -1062,7 +1305,7 @@ items:
   - id: "supportedEffortLevels"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Services/AppServices.cs, src/Claudette.App/ViewModels/SettingsViewModel.Defaults.cs, src/Claudette.App/ViewModels/TabSettingsViewModel.cs
+    usedIn: src/Claudette.App/Services/AppServices.cs, src/Claudette.App/ViewModels/Settings/NewTabsPage.cs, src/Claudette.App/ViewModels/TabSettingsViewModel.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: SettingsDefaultsTests
     # The models (and their effort levels) in the initialize reply, kept per machine for the lists in Settings.
@@ -1314,7 +1557,7 @@ items:
   - id: "tool_result_meta"
     kind: field
     status: undocumented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     test: AgentMapTests
     fallback: Marks an Agent call cut off by an interrupt or a stop (non_execution_kind "interrupted"). Without it, the "[Request interrupted" result text and the stopped task_notification still mark the subagent stopped.
   - id: "stop_task (subagents)"
@@ -1491,7 +1734,7 @@ items:
   - id: "--append-system-prompt"
     kind: flag
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/PerforceViewModel.cs
     docs: https://code.claude.com/docs/en/cli-reference
     test: HookCallbackTests, PerforceTabTests
   - id: "hooks"
@@ -1531,7 +1774,7 @@ items:
   - id: "tool_input"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Sessions/HookCallbacks.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    usedIn: src/Claudette.Core/Sessions/HookCallbacks.cs, src/Claudette.App/ViewModels/PerforceViewModel.cs
     docs: https://code.claude.com/docs/en/hooks
     test: HookCallbackTests, PerforceTabTests, RealCliTests
   - id: "`continue`"
@@ -1543,7 +1786,7 @@ items:
   - id: "PreToolUse hook did not respond before its timeout"
     kind: behavior
     status: undocumented
-    usedIn: src/Claudette.App/Services/PerforceService.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    usedIn: src/Claudette.App/Services/PerforceService.cs, src/Claudette.App/ViewModels/PerforceViewModel.cs
     docs: https://code.claude.com/docs/en/hooks
     test: RealCliTests
     fallback: "In 2.1.284 a hook_callback that isn't answered within its timeout gets a control_cancel_request, and the tool call isn't run (its result is this error). So the Perforce hook answers by itself 15 seconds before its 5-minute timeout, even with a password prompt still open; recovery then renews the login and asks Claude to retry. If Claude Code instead ran the tool after a timeout, nothing would need to change."
@@ -1557,7 +1800,7 @@ items:
   - id: "BashInput"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Perforce/BashCommandLog.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    usedIn: src/Claudette.Core/Perforce/BashCommandLog.cs, src/Claudette.App/ViewModels/PerforceViewModel.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: PerforceTabTests
   - id: "control_cancel_request for hook_callback"
@@ -1618,7 +1861,7 @@ items:
     usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: RemoteControlProtocolTests, RemoteControlTests
-    fallback: A connected tab reads Not connected, with the reason. One arriving while the tab isn't connected (replayed from a resumed session) is ignored.
+    fallback: A connected tab reads Not connected, with the reason. One arriving while the tab isn't connected (replayed from a resumed session) is ignored. The reason remote_control_disabled (2.1.286, when a policy turns Remote Control off) makes it not available in every tab until Claudette restarts or another account signs in, unless the tab was disconnecting itself. An unknown reason is shown in words.
   - id: "/remote-control"
     kind: command
     status: undocumented
@@ -1641,7 +1884,7 @@ items:
   - id: "control_cancel_request for can_use_tool answered in the Claude app"
     kind: behavior
     status: undocumented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.App/Conversation/PendingPrompts.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     test: RemoteControlTests
     fallback: When a connected device answers a permission prompt, question or plan, 2.1.284 withdraws the host's copy with control_cancel_request (from its injectControlResponse). The card closes and reads "Answered in the Claude app" while the tab is connected and Claudette didn't stop the turn. Without it the card stays open until the turn moves on, as for any withdrawn request.
   - id: "CLAUDE_CLIENT_PRESENCE_FILE"

@@ -38,7 +38,7 @@ public sealed partial class TabViewModel
                 _ = McpServers.RefreshAsync();
             }
         }
-        ProjectTools.UpdateShownRun();
+        ProjectTools.Runs.UpdateShownRun();
         ProcessMonitor.OnSidePanelOpenChanged();
     }
 
@@ -50,7 +50,7 @@ public sealed partial class TabViewModel
     partial void OnPageChanged(SidePanelPage value)
     {
         ProcessMonitor.IsPanelVisible = value == SidePanelPage.Processes && IsSidePanelOpen;
-        ProjectTools.UpdateShownRun();
+        ProjectTools.Runs.UpdateShownRun();
         if (value == SidePanelPage.Mcp && IsSidePanelOpen)
         {
             _ = McpServers.RefreshAsync();
@@ -109,18 +109,18 @@ public sealed partial class TabViewModel
     private void ToggleSidePanel() => IsSidePanelOpen = !IsSidePanelOpen;
 
     /// <summary>The side panel's width: the same for every tab, set by dragging its edge (DESIGN.md §3).</summary>
-    public double SidePanelWidth => _shell.SidePanelWidth;
+    public double SidePanelWidth => _shell.Layout.SidePanelWidth;
 
     /// <summary>Dragging the side panel's edge. <see cref="SaveSidePanelWidth"/> keeps the result when the drag ends.</summary>
-    public void ResizeSidePanel(double width) => _shell.ResizeSidePanel(width);
+    public void ResizeSidePanel(double width) => _shell.Layout.ResizeSidePanel(width);
 
-    public void SaveSidePanelWidth() => _shell.SaveSidePanelWidth();
+    public void SaveSidePanelWidth() => _shell.Layout.SaveSidePanelWidth();
 
     /// <summary>Double-clicking the edge.</summary>
     public void ResetSidePanelWidth()
     {
-        _shell.ResizeSidePanel(ShellViewModel.DefaultSidePanelWidth);
-        _shell.SaveSidePanelWidth();
+        _shell.Layout.ResizeSidePanel(ShellLayout.DefaultSidePanelWidth);
+        _shell.Layout.SaveSidePanelWidth();
     }
 
     internal void OnSidePanelWidthChanged() => OnPropertyChanged(nameof(SidePanelWidth));

@@ -79,4 +79,27 @@ public class ConversationSearchTests
         Assert.Same(first, _search.Current);
         Assert.Equal("1 of 2", _search.CountText);
     }
+
+    [Fact]
+    public void A_reply_that_streamed_in_a_match_is_found_when_the_next_item_comes()
+    {
+        _builder.AddUserMessage("deploy one");
+        _search.Query = "rollback";
+        Assert.Equal(0, _search.Count);
+
+        // The reply's text arrives a piece at a time; it isn't an item added, so it's looked at again with the next.
+        _builder.Apply(new TextDelta("Then a ", null));
+        _builder.Apply(new TextDelta("rollback.", null));
+        Assert.Equal(0, _search.Count);
+        _builder.AddUserMessage("thanks");
+
+        var reply = Assert.IsType<AssistantTextItem>(Assert.Single(_items, i => i is AssistantTextItem));
+        Assert.Same(reply, _search.Current);
+        Assert.Equal("1 of 1", _search.CountText);
+
+        // Removing items (a /clear) searches everything again.
+        _items.Clear();
+        Assert.Equal(0, _search.Count);
+        Assert.Equal("No matches", _search.CountText);
+    }
 }

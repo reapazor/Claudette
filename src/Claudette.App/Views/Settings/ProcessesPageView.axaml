@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.ProcessesPageView"
+             x:DataType="settings:ProcessesPage">
+  <!-- Processes (DESIGN.md §4, "Process monitor") -->
+  <StackPanel Spacing="12">
+    <TextBlock Classes="section" Text="Processes" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="See the processes each tab has started (test runs, dev servers, builds, MCP servers) with their CPU and memory use. When a tab closes, the processes it started are stopped too." />
+    <CheckBox Content="Show the process monitor" IsChecked="{Binding ShowProcessMonitor}" />
+    <Grid ColumnDefinitions="260,*" RowDefinitions="Auto" IsEnabled="{Binding ShowProcessMonitor}">
+      <TextBlock Classes="label" Text="Refresh the panel every (seconds)" />
+      <NumericUpDown Grid.Column="1" Minimum="1" Maximum="60" Increment="1" FormatString="0" Value="{Binding ProcessRefreshSeconds}" />
+    </Grid>
+    <CheckBox Content="Show command lines" IsChecked="{Binding ShowCommandLines}" IsEnabled="{Binding ShowProcessMonitor}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="Command lines sometimes contain tokens or passwords. Turn this off if others can see your screen." />
+    <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
+  </StackPanel>
+</UserControl>

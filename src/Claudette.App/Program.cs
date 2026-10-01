@@ -21,6 +21,8 @@ internal sealed class Program
         {
             SetWindowsIdentity();
         }
+        // Before anything hands the arguments on, to a running Claudette or a copy of this build.
+        args = LaunchArguments.WithFullPaths(args, Environment.CurrentDirectory);
         var paths = AppPaths.ForCurrentUser();
         // The MSIX's startup task starts it without arguments: mark it as started at login, as the other entries do.
         if (LoginItemPlatforms.StartedByPackageTask())

@@ -39,3 +39,4 @@
 [button] Send
 "{root}/work"
 "Idle"
+"work: Claude finished."

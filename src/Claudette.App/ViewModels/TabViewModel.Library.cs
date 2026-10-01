@@ -21,7 +21,10 @@ public sealed partial class TabViewModel
     /// </summary>
     public bool SyncToLibrary => State.SyncToLibrary;
 
-    /// <summary>A copy (<b>Open a copy</b>, or a conflict copy) that hasn't had its first turn yet still has the original's id.</summary>
+    /// <summary>
+    /// This tab's Claude Code was started as a copy (<b>Open a copy</b>, a branch, or a conflict copy) and hasn't had its
+    /// first turn yet, so it still has the original's id. <see cref="TabState.ForkOnNextStart"/> stays set until then too.
+    /// </summary>
     private bool _forkAwaitingId;
 
     /// <summary><b>Sync to other machines</b> in the tab's menu.</summary>
@@ -106,6 +109,7 @@ public sealed partial class TabViewModel
         switch (result)
         {
             case LibraryCopyResult.Copied:
+                _libraryCopyFailed = false;
                 _conversation.AddNote("Copied this session to the session library.");
                 break;
             case LibraryCopyResult.NoTranscript:
@@ -135,8 +139,37 @@ public sealed partial class TabViewModel
     {
         if (State.SessionId is not null && State.SyncToLibrary && !IsReadOnly)
         {
-            _ = _services.Library.CopyToLibraryAsync(LibraryRecord(), State.TranscriptPath, () => State.SyncToLibrary);
+            LibraryCopy = CopyToLibraryAsync();
         }
+    }
+
+    /// <summary>The latest copy after a turn, for tests to wait on.</summary>
+    internal Task LibraryCopy { get; private set; } = Task.CompletedTask;
+
+    /// <summary>The last copy after a turn failed: the next one that works says so.</summary>
+    private bool _libraryCopyFailed;
+
+    /// <summary>
+    /// A copy that fails says so once, until one works again: the library is missing turns another machine would need,
+    /// and nothing else would show it (DESIGN.md §9, "Writing").
+    /// </summary>
+    private async Task CopyToLibraryAsync()
+    {
+        var result = await _services.Library.CopyToLibraryAsync(LibraryRecord(), State.TranscriptPath, () => State.SyncToLibrary);
+        _services.Dispatcher.Post(() =>
+        {
+            switch (result)
+            {
+                case LibraryCopyResult.Failed failed when !_libraryCopyFailed:
+                    _libraryCopyFailed = true;
+                    _conversation.AddNote($"Couldn't copy this session to the session library: {failed.Reason} It's tried again after the next turn, or use Sync now.", NoteKind.Warning);
+                    break;
+                case LibraryCopyResult.Copied when _libraryCopyFailed:
+                    _libraryCopyFailed = false;
+                    _conversation.AddNote("Copied this session to the session library again.");
+                    break;
+            }
+        });
     }
 
     // ---- One machine at a time (DESIGN.md §9) ----------------------------------------------------------------------

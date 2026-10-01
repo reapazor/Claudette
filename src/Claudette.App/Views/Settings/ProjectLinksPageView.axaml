@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.ProjectLinksPageView"
+             x:DataType="settings:ProjectLinksPage">
+  <!-- The tab's project: Links (DESIGN.md §14, "The project's pages"; §18, "Links"). Saved as each change is made. -->
+  <StackPanel x:Name="LinksPage" Spacing="12" DataContext="{Binding Project}" x:DataType="vm:ProjectSettingsViewModel">
+    <TextBlock Classes="section" Text="Links" />
+    <TextBlock Classes="muted small" Text="{Binding ForTabText, FallbackValue=''}" TextWrapping="Wrap" Margin="0,-10,0,0" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="Web links for this project, in the project's menu in the sidebar; a click opens one in the browser. Shared links are in claudette.json, committed with the project; yours alone are in claudette.local.json. Changes are saved as you make them, and saving rewrites the file, so comments in it are dropped." />
+    <ItemsControl ItemsSource="{Binding LinkFileErrors}" IsVisible="{Binding HasLinkFileErrors}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="x:String">
+          <TextBlock Classes="small error" Text="{Binding}" TextWrapping="Wrap" />
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+    <TextBlock Classes="muted small" Text="No links yet." IsVisible="{Binding !HasLinks}" />
+    <ListBox ItemsSource="{Binding Links}" SelectedItem="{Binding SelectedLink}" MaxHeight="300"
+             IsVisible="{Binding HasLinks}" AutomationProperties.Name="Links">
+      <ListBox.ItemTemplate>
+        <DataTemplate DataType="vm:ProjectLinkRow">
+          <StackPanel Spacing="1">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+              <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding FileText}" VerticalAlignment="Center" />
+            </Grid>
+            <TextBlock Classes="muted small mono" Text="{Binding Url}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Url}" IsVisible="{Binding CanEdit}" />
+            <TextBlock Classes="small warning" Text="{Binding Warning}" TextWrapping="Wrap" IsVisible="{Binding HasWarning}" />
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <WrapPanel ItemSpacing="6" LineSpacing="6">
+      <Button Content="Add…" Command="{Binding AddLinkCommand}" />
+      <Button Content="Edit…" Command="{Binding EditLinkCommand}" />
+      <Button Content="Remove" Command="{Binding RemoveLinkCommand}" />
+      <Button Content="Move up" Command="{Binding MoveLinkUpCommand}" />
+      <Button Content="Move down" Command="{Binding MoveLinkDownCommand}" />
+    </WrapPanel>
+    <TextBlock Classes="small error" Text="{Binding LinksError}" TextWrapping="Wrap" IsVisible="{Binding HasLinksError}" />
+  </StackPanel>
+</UserControl>

@@ -72,9 +72,9 @@ public sealed class SystemProcesses : ISystemProcesses
             }
             process.Kill(entireProcessTree: true);
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception or NotSupportedException)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception or NotSupportedException or AggregateException)
         {
-            // Already exited, or not ours to end.
+            // Already exited, or not ours to end; for a process it started, the rest of the tree is ended regardless.
         }
     }
 

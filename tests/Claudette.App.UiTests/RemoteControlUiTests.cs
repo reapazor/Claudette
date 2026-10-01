@@ -7,6 +7,7 @@ using Avalonia.VisualTree;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
+using Claudette.App.ViewModels.Settings;
 using Claudette.App.Views;
 using Claudette.Core.Auth;
 
@@ -124,9 +125,9 @@ public class RemoteControlUiTests
         UiText.Settle(window);
         var block = window.GetVisualDescendants().OfType<StackPanel>().Single(p => p.Name == "RemoteControlSettings");
         Assert.True(block.IsEffectivelyVisible);
-        var link = block.GetVisualDescendants().OfType<Button>().Single(b => b.Command == settings.OpenPushNotificationsDocsCommand);
+        var link = block.GetVisualDescendants().OfType<Button>().Single(b => b.Command == settings.ClaudeCode.OpenPushNotificationsDocsCommand);
         link.Command!.Execute(null);
-        Assert.Equal([SettingsViewModel.PushNotificationsDocs], h.Platform.OpenedUrls);
+        Assert.Equal([ClaudeCodePage.PushNotificationsDocs], h.Platform.OpenedUrls);
 
         await Verify(UiText.Describe(block));
     }

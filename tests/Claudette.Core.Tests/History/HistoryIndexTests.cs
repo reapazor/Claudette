@@ -165,6 +165,61 @@ public sealed class HistoryIndexTests : IDisposable
     }
 
     [Fact]
+    public async Task A_transcript_that_grew_is_read_on_from_where_the_last_scan_stopped()
+    {
+        var path = WriteTranscript("p", "s1", Prompt("alpha", "2026-01-01T00:00:00Z"), AssistantText("ok", "2026-01-01T00:00:01Z"));
+        Assert.Equal(2, Assert.Single(await _index.ScanAsync(Ct)).MessageCount);
+
+        // Proof it isn't read again from the start: an earlier line changed in place is left as it was read.
+        File.WriteAllText(path, File.ReadAllText(path).Replace("alpha", "bravo", StringComparison.Ordinal)
+            + Prompt("next", "2026-01-02T00:00:00Z") + "\n");
+        var grown = Assert.Single(await _index.ScanAsync(Ct));
+
+        Assert.Equal(("alpha", 3), (grown.FirstPrompt, grown.MessageCount));
+        Assert.Equal(DateTimeOffset.Parse("2026-01-02T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture), grown.LastActivity);
+        Assert.Contains("next", grown.Prompts, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_transcript_rewritten_longer_is_read_again_from_the_start()
+    {
+        var path = WriteTranscript("p", "s1", Prompt("alpha", "2026-01-01T00:00:00Z"));
+        Assert.Single(await _index.ScanAsync(Ct));
+
+        // Its last line is different now: not only appended to.
+        WriteTranscript("p", "s1", Prompt("something else entirely", "2026-01-03T00:00:00Z"), Prompt("more", "2026-01-03T00:00:01Z"));
+        File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path).AddSeconds(5));
+
+        var summary = Assert.Single(await _index.ScanAsync(Ct));
+        Assert.Equal(("something else entirely", 2), (summary.FirstPrompt, summary.MessageCount));
+    }
+
+    [Fact]
+    public async Task A_last_line_still_being_written_is_read_whole_once_it_is()
+    {
+        var path = WriteTranscript("p", "s1", Prompt("alpha", "2026-01-01T00:00:00Z"));
+        File.AppendAllText(path, Prompt("half", "2026-01-02T00:00:00Z")[..40]);
+        Assert.Equal(1, Assert.Single(await _index.ScanAsync(Ct)).MessageCount);
+
+        File.WriteAllText(path, File.ReadAllText(path)[..^40] + Prompt("half", "2026-01-02T00:00:00Z") + "\n");
+        File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path).AddSeconds(5));
+        Assert.Equal(2, Assert.Single(await _index.ScanAsync(Ct)).MessageCount);
+    }
+
+    [Fact]
+    public async Task Transcripts_elsewhere_are_summarized_and_cached_too()
+    {
+        var library = _root.Write("library/s9.jsonl", Prompt("from the library", "2026-01-01T00:00:00Z") + "\n");
+        var written = File.GetLastWriteTimeUtc(library);
+        Assert.Equal("from the library", (await _index.SummarizeAsync([library], Ct))[library]!.FirstPrompt);
+
+        File.WriteAllText(library, File.ReadAllText(library).Replace("library", "LIBRARY", StringComparison.Ordinal));
+        File.SetLastWriteTimeUtc(library, written);
+        Assert.Equal("from the library", (await _index.SummarizeAsync([library], Ct))[library]!.FirstPrompt);
+        Assert.Null((await _index.SummarizeAsync([_root.Combine("library", "gone.jsonl")], Ct)).Values.Single());
+    }
+
+    [Fact]
     public async Task Deleted_files_drop_out_and_new_ones_appear()
     {
         var first = WriteTranscript("p", "s1", Prompt("one", "2026-01-01T00:00:00Z"));

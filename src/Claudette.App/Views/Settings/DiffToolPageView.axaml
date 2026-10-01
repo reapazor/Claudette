@@ -1,0 +1,25 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.DiffToolPageView"
+             x:DataType="settings:DiffToolPage">
+  <!-- Diff tool (DESIGN.md §8, "External diff tool") -->
+  <StackPanel Spacing="12">
+    <TextBlock Classes="section" Text="Diff tool" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="How changed files open. Tools that are installed on this machine are listed. With a tool set, double-click a changed file to open it there; the built-in view is still in the file's menu." />
+    <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding DiffToolOptions}" SelectedItem="{Binding SelectedDiffTool}" />
+    <StackPanel Spacing="6" IsVisible="{Binding IsCustomDiffTool}">
+      <TextBlock Text="Command" />
+      <TextBox Classes="mono" Text="{Binding CustomDiffCommand, UpdateSourceTrigger=LostFocus}" PlaceholderText="&quot;C:\Program Files\Beyond Compare 5\BCompare.exe&quot; &quot;{left}&quot; &quot;{right}&quot; /title1=&quot;{leftTitle}&quot; /title2=&quot;{rightTitle}&quot;" />
+      <TextBlock Classes="small error" Text="{Binding CustomDiffCommandError}" TextWrapping="Wrap" IsVisible="{Binding CustomDiffCommandError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      <TextBlock Classes="muted small" TextWrapping="Wrap"
+                 Text="A program and its arguments. {left} is the file before Claude's changes (a read-only copy), {right} is the file now; {leftTitle} and {rightTitle} are their titles." />
+    </StackPanel>
+    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanTestDiffTool}">
+      <Button Content="Test" Command="{Binding TestDiffToolCommand}" />
+      <TextBlock Classes="muted small" Text="{Binding DiffToolTestResult}" VerticalAlignment="Center" TextWrapping="Wrap" />
+    </StackPanel>
+    <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
+  </StackPanel>
+</UserControl>

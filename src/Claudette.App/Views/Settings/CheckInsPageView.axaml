@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.CheckInsPageView"
+             x:DataType="settings:CheckInsPage">
+  <!-- Check-ins -->
+  <StackPanel Spacing="12">
+    <TextBlock Classes="section" Text="Check-ins" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="During a long turn, Claudette can ask Claude how it's going, so a stuck tab doesn't burn usage unnoticed. Set a time to 0 to turn that trigger off." />
+    <CheckBox Content="Check in on long turns" IsChecked="{Binding CheckInsEnabled}" />
+    <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,Auto" RowSpacing="10" IsEnabled="{Binding CheckInsEnabled}">
+      <TextBlock Classes="label" Text="After the turn has run (minutes)" />
+      <NumericUpDown Grid.Column="1" Minimum="0" Maximum="600" Increment="1" FormatString="0" Value="{Binding CheckInRunTime}" />
+      <TextBlock Grid.Row="1" Classes="label" Text="After no output for (minutes)" />
+      <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="600" Increment="1" FormatString="0" Value="{Binding CheckInQuietTime}" />
+    </Grid>
+    <TextBlock Text="Message" />
+    <TextBox Text="{Binding CheckInMessage, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70" IsEnabled="{Binding CheckInsEnabled}" />
+    <CheckBox Content="Notify me when a check-in is sent" IsChecked="{Binding NotifyOnCheckIn}" IsEnabled="{Binding CheckInsEnabled}" />
+    <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
+  </StackPanel>
+</UserControl>

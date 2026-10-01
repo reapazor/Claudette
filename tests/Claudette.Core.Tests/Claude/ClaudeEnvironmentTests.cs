@@ -65,6 +65,25 @@ public class ClaudeEnvironmentTests
     }
 
     [Fact]
+    public void A_worktree_and_extra_folders_add_their_flags()
+    {
+        var args = ClaudeArguments.ForStreamingSession(new ClaudeLaunchOptions
+        {
+            WorkingDirectory = ".",
+            Worktree = "brisk-otter",
+            AddDirectories = ["/src/lib", "/src/docs"],
+            Resume = "abc",
+        });
+        var plain = ClaudeArguments.ForStreamingSession(new ClaudeLaunchOptions { WorkingDirectory = "." });
+
+        // One --add-dir each: the option takes several values, so a value is never read as anything else.
+        Assert.Equal(["--worktree", "brisk-otter", "--add-dir", "/src/lib", "--add-dir", "/src/docs", "--resume", "abc"],
+            args.SkipWhile(a => a != "--worktree").Take(8));
+        Assert.DoesNotContain("--worktree", plain);
+        Assert.DoesNotContain("--add-dir", plain);
+    }
+
+    [Fact]
     public void Opening_a_copy_forks_the_resumed_session()
     {
         var args = ClaudeArguments.ForStreamingSession(new ClaudeLaunchOptions { WorkingDirectory = ".", Resume = "abc", ForkSession = true });
@@ -87,12 +106,13 @@ public class ClaudeEnvironmentTests
             ReplayUserMessages = true,
             IncludeHookEvents = true,
             FallbackModel = "sonnet",
+            SettingSources = "user",
         });
         // Without a session to resume, there's nothing to resume at.
         var fresh = ClaudeArguments.ForStreamingSession(new ClaudeLaunchOptions { WorkingDirectory = ".", ResumeSessionAt = "a-9", ResumeDropsTurn = "u-9" });
 
         Assert.Equal(
-            ["--fallback-model", "sonnet", "--resume", "abc", "--fork-session", "--resume-session-at", "a-9", "--resume-drops-turn", "u-9", "--replay-user-messages", "--include-hook-events"],
+            ["--fallback-model", "sonnet", "--setting-sources", "user", "--resume", "abc", "--fork-session", "--resume-session-at", "a-9", "--resume-drops-turn", "u-9", "--replay-user-messages", "--include-hook-events"],
             args.SkipWhile(a => a != "--fallback-model"));
         Assert.DoesNotContain("--resume-session-at", fresh);
         Assert.DoesNotContain("--resume-drops-turn", fresh);

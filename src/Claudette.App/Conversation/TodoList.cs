@@ -1,7 +1,8 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Claudette.Core;
+using Claudette.Core.Protocol;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Claudette.App.Conversation;
@@ -54,7 +55,7 @@ public sealed partial class TodoItem(string content, string? activeForm, string 
 
     /// <summary>"Took 4m", "Started 14:05" or "Added 14:02", for the Tasks page.</summary>
     public string? TimeText =>
-        CompletedAt is { } done && StartedAt is { } began ? $"Took {Duration(done - began)}"
+        CompletedAt is { } done && StartedAt is { } began ? $"Took {Formats.Duration(done - began)}"
         : CompletedAt is { } finished ? $"Done {finished.ToLocalTime():t}"
         : StartedAt is { } started ? $"Started {started.ToLocalTime():t}"
         : CreatedAt is { } created ? $"Added {created.ToLocalTime():t}"
@@ -69,13 +70,6 @@ public sealed partial class TodoItem(string content, string? activeForm, string 
     };
 
     public bool HasDetail => DetailText is not null;
-
-    private static string Duration(TimeSpan span) => span switch
-    {
-        { TotalSeconds: < 60 } => $"{Math.Max(0, (int)span.TotalSeconds)}s",
-        { TotalHours: < 1 } => $"{(int)span.TotalMinutes}m",
-        _ => $"{(int)span.TotalHours}h {span.Minutes:00}m",
-    };
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayText))]
@@ -111,6 +105,9 @@ public sealed partial class TodoItem(string content, string? activeForm, string 
 public sealed partial class TodoList : ObservableObject
 {
     private readonly Dictionary<string, TodoItem> _pendingCreates = [];
+
+    /// <summary><c>TaskList</c> and <c>TaskGet</c> calls whose results haven't come.</summary>
+    private readonly HashSet<string> _pendingReads = [];
 
     public ObservableCollection<TodoItem> Items { get; } = [];
 
@@ -160,13 +157,17 @@ public sealed partial class TodoList : ObservableObject
 
     public string Summary => $"To-do · {Items.Count(i => i.IsDone)} of {Items.Count} done";
 
-    public static bool IsTodoTool(string name) => name is "TodoWrite" or "TaskCreate" or "TaskUpdate";
-
-    /// <summary>Applies a to-do tool call. Returns true if it was one.</summary>
+    /// <summary>
+    /// Applies a to-do tool call. Returns true if it was one, so it shows here rather than as a card. <c>TaskList</c> and
+    /// <c>TaskGet</c> change nothing, but their results say how the tasks stand.
+    /// </summary>
     public bool ApplyToolUse(string toolUseId, string name, JsonObject input)
     {
         switch (name)
         {
+            case "TaskList" or "TaskGet":
+                _pendingReads.Add(toolUseId);
+                return true;
             case "TodoWrite":
                 // The whole list again: items that read the same keep their times.
                 var previous = Items.ToList();
@@ -240,28 +241,34 @@ public sealed partial class TodoList : ObservableObject
     /// A <c>TaskCreate</c> result carries the new task's id, which later <c>TaskUpdate</c> calls use. A <c>TaskList</c>
     /// result is the whole list as Claude Code has it: it fills in what the calls didn't show.
     /// </summary>
+    /// <param name="toolUseResult">The result's details; an error's is just its text, a string.</param>
     public void ApplyToolResult(string toolUseId, string resultText, JsonNode? toolUseResult)
     {
-        if (toolUseResult?["tasks"] is JsonArray listed)
+        var details = toolUseResult as JsonObject;
+        if (details?["tasks"] is JsonArray listed)
         {
-            ApplyTaskList(listed);
+            ApplyTaskList(listed.OfType<JsonObject>());
+            return;
+        }
+        if (_pendingReads.Remove(toolUseId))
+        {
+            if (details?["task"] is JsonObject task)
+            {
+                ApplyTaskList([task]);
+            }
             return;
         }
         if (!_pendingCreates.Remove(toolUseId, out var item))
         {
             return;
         }
-        item.Id = (toolUseResult?["task"]?["id"] ?? toolUseResult?["taskId"] ?? toolUseResult?["id"]) switch
-        {
-            JsonValue v when v.GetValueKind() == JsonValueKind.String => v.GetValue<string>(),
-            JsonValue v when v.GetValueKind() == JsonValueKind.Number => v.ToJsonString(),
-            _ => TaskNumber().Match(resultText) is { Success: true } m ? m.Groups[1].Value : null,
-        };
+        item.Id = ((details?["task"] as JsonObject)?["id"] ?? details?["taskId"] ?? details?["id"]).AsStringOrNumber()
+            ?? (TaskNumber().Match(resultText) is { Success: true } m ? m.Groups[1].Value : null);
     }
 
-    private void ApplyTaskList(JsonArray listed)
+    private void ApplyTaskList(IEnumerable<JsonObject> listed)
     {
-        foreach (var task in listed.OfType<JsonObject>())
+        foreach (var task in listed)
         {
             if (Text(task, "id") is not { } id)
             {
@@ -274,6 +281,7 @@ public sealed partial class TodoList : ObservableObject
                 Items.Add(item);
             }
             item.Content = Text(task, "subject") ?? item.Content;
+            item.Description = Text(task, "description") ?? item.Description;
             item.Owner = Text(task, "owner") ?? item.Owner;
             if (Text(task, "status") is { } status)
             {
@@ -291,6 +299,7 @@ public sealed partial class TodoList : ObservableObject
     {
         Items.Clear();
         _pendingCreates.Clear();
+        _pendingReads.Clear();
         Plan = null;
         PlanApprovedAt = null;
         Changed();
@@ -347,20 +356,10 @@ public sealed partial class TodoList : ObservableObject
         }
     }
 
-    private static string? Text(JsonObject obj, string name) => obj[name] switch
-    {
-        JsonValue value when value.GetValueKind() == JsonValueKind.String => value.GetValue<string>(),
-        JsonValue value when value.GetValueKind() == JsonValueKind.Number => value.ToJsonString(),
-        _ => null,
-    };
+    private static string? Text(JsonObject obj, string name) => obj.GetStringOrNumber(name);
 
     private static IEnumerable<string> Ids(JsonObject obj, string name) =>
-        (obj[name] as JsonArray ?? []).Select(v => v switch
-        {
-            JsonValue value when value.GetValueKind() == JsonValueKind.String => value.GetValue<string>(),
-            JsonValue value when value.GetValueKind() == JsonValueKind.Number => value.ToJsonString(),
-            _ => null,
-        }).OfType<string>();
+        (obj[name] as JsonArray ?? []).Select(v => v.AsStringOrNumber()).OfType<string>();
 
     [GeneratedRegex(@"#(\d+)")]
     private static partial Regex TaskNumber();

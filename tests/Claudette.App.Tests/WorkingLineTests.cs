@@ -238,12 +238,4 @@ public class WorkingLineTests
         await TabTestHarness.Eventually(() => tab.Working.Detail.Contains("tokens", StringComparison.Ordinal), "the next event");
         Assert.Equal("Noodling…", tab.Working.Verb);
     }
-
-    [Theory]
-    [InlineData(0, "0s")]
-    [InlineData(59, "59s")]
-    [InlineData(65, "1m 05s")]
-    [InlineData(3720, "1h 02m")]
-    public void Elapsed_time_reads_like_a_stopwatch(int seconds, string expected) =>
-        Assert.Equal(expected, WorkingLine.Elapsed(TimeSpan.FromSeconds(seconds)));
 }

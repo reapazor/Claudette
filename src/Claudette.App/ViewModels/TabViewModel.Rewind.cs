@@ -316,13 +316,16 @@ public sealed partial class TabViewModel
     internal TabState CopyState(CopyPoint point)
     {
         var sessionId = point.Keeps ? State.SessionId : null;
+        // A copy that hasn't had its first turn is still the original up to its own point: the whole of it ends there.
+        var (resumeAt, dropsTurn) = point.ResumeAt is null && State.ForkOnNextStart ? (State.ResumeAt, State.ResumeDropsTurn) : (point.ResumeAt, null);
         return new TabState
         {
             Folder = State.Folder,
             SessionId = sessionId,
             TranscriptPath = sessionId is null ? null : State.TranscriptPath,
             ForkOnNextStart = sessionId is not null,
-            ResumeAt = sessionId is null ? null : point.ResumeAt,
+            ResumeAt = sessionId is null ? null : resumeAt,
+            ResumeDropsTurn = sessionId is null ? null : dropsTurn,
             AutoName = State.AutoName,
             SyncToLibrary = State.SyncToLibrary,
             RemoteControl = _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp,
@@ -330,6 +333,10 @@ public sealed partial class TabViewModel
             KeptSuffixes = [.. State.KeptSuffixes],
             // A copy has the same changes, so keeps their marks (DESIGN.md §8, "Reviewed").
             ReviewedFiles = sessionId is null ? [] : Copy(State.ReviewedFiles) ?? [],
+            // In the same worktree, with the same extra folders (DESIGN.md §4, "Worktree tabs").
+            WorktreeOf = State.WorktreeOf,
+            NewWorktree = State.NewWorktree,
+            ExtraFolders = [.. State.ExtraFolders],
         };
     }
 }

@@ -15,7 +15,7 @@ public static class ApiTrouble
     public static bool Reports(SessionEvent sessionEvent) => sessionEvent switch
     {
         // system/api_retry: error_status (null without an HTTP answer) and error, a category such as "overloaded".
-        SystemNotice { Message.Subtype: "api_retry" } retry => IsServerError(retry.Message.Raw.GetDouble("error_status"), Category(retry.Message.Raw)),
+        SystemNotice { Message.ApiRetry: { } retry } => IsServerError(retry.ErrorStatus, retry.Category),
         // tool_progress while a subagent waits out an API error: the same fields, in subagent_retry.
         ToolProgress progress when progress.Message.Raw.GetObject("subagent_retry") is { } retry => IsServerError(retry.GetDouble("error_status"), Category(retry)),
         // The turn gave up: api_error_status is the HTTP status that ended it.

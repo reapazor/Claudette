@@ -32,6 +32,12 @@ public class KeyboardAndSettingsTests
         Assert.False(Shortcuts.Matches(keyboard, KeyboardShortcuts.GoToTab, Key.D0, Primary));
         Assert.True(Shortcuts.Matches(keyboard, KeyboardShortcuts.AllowPrompt, Key.Enter, Primary));
         Assert.True(Shortcuts.Matches(keyboard, KeyboardShortcuts.Stop, Key.Escape, KeyModifiers.None));
+        // The number pad's keys work like the main keyboard's.
+        Assert.True(Shortcuts.Matches(keyboard, KeyboardShortcuts.ZoomIn, Key.OemPlus, Primary));
+        Assert.True(Shortcuts.Matches(keyboard, KeyboardShortcuts.ZoomIn, Key.Add, Primary));
+        Assert.True(Shortcuts.Matches(keyboard, KeyboardShortcuts.ZoomOut, Key.Subtract, Primary));
+        Assert.True(Shortcuts.Matches(keyboard, KeyboardShortcuts.ResetZoom, Key.NumPad0, Primary));
+        Assert.Equal(Chord("Primary+OemPlus"), Shortcuts.FromKeyPress(Key.Add, Primary));
 
         keyboard.Bindings[KeyboardShortcuts.NewTab] = "Primary+Shift+N";
         Assert.False(Shortcuts.Matches(keyboard, KeyboardShortcuts.NewTab, Key.T, Primary));
@@ -53,9 +59,9 @@ public class KeyboardAndSettingsTests
     {
         await using var h = new TabTestHarness();
         var settings = new SettingsViewModel(h.Services, null);
-        var newTab = settings.ShortcutRows.Single(r => r.Command.Id == KeyboardShortcuts.NewTab);
+        var newTab = settings.Keyboard.ShortcutRows.Single(r => r.Command.Id == KeyboardShortcuts.NewTab);
 
-        settings.StartRecordingCommand.Execute(newTab);
+        settings.Keyboard.StartRecordingCommand.Execute(newTab);
         Assert.True(settings.IsRecordingShortcut);
         Assert.Equal("Press keys…", newTab.ShortcutText);
 
@@ -66,7 +72,7 @@ public class KeyboardAndSettingsTests
         Assert.True(newTab.IsCustomized);
         Assert.Equal($"New tab ({Chord("Primary+Shift+N").Display(Shortcuts.IsMac)})", h.Services.Tips.NewTab);
 
-        settings.ResetShortcutCommand.Execute(newTab);
+        settings.Keyboard.ResetShortcutCommand.Execute(newTab);
         Assert.False(newTab.IsCustomized);
         Assert.Empty(h.Services.Settings.Keyboard.Bindings);
     }
@@ -76,9 +82,9 @@ public class KeyboardAndSettingsTests
     {
         await using var h = new TabTestHarness();
         var settings = new SettingsViewModel(h.Services, null);
-        var newTab = settings.ShortcutRows.Single(r => r.Command.Id == KeyboardShortcuts.NewTab);
+        var newTab = settings.Keyboard.ShortcutRows.Single(r => r.Command.Id == KeyboardShortcuts.NewTab);
 
-        settings.StartRecordingCommand.Execute(newTab);
+        settings.Keyboard.StartRecordingCommand.Execute(newTab);
         settings.RecordShortcut(Chord("Primary+W"));
 
         Assert.True(settings.IsRecordingShortcut);
@@ -91,9 +97,9 @@ public class KeyboardAndSettingsTests
     {
         await using var h = new TabTestHarness();
         var settings = new SettingsViewModel(h.Services, null);
-        var history = settings.ShortcutRows.Single(r => r.Command.Id == KeyboardShortcuts.History);
+        var history = settings.Keyboard.ShortcutRows.Single(r => r.Command.Id == KeyboardShortcuts.History);
 
-        settings.StartRecordingCommand.Execute(history);
+        settings.Keyboard.StartRecordingCommand.Execute(history);
         settings.RecordShortcut(Chord("Shift+H"));
         Assert.Equal("Add Ctrl, Alt or Cmd, so typing still works.", history.Error);
 
@@ -106,9 +112,9 @@ public class KeyboardAndSettingsTests
     {
         await using var h = new TabTestHarness();
         var settings = new SettingsViewModel(h.Services, null);
-        var goTo = settings.ShortcutRows.Single(r => r.Command.Id == KeyboardShortcuts.GoToTab);
+        var goTo = settings.Keyboard.ShortcutRows.Single(r => r.Command.Id == KeyboardShortcuts.GoToTab);
 
-        settings.StartRecordingCommand.Execute(goTo);
+        settings.Keyboard.StartRecordingCommand.Execute(goTo);
         settings.RecordShortcut(Chord("Alt+G"));
         Assert.Contains("number key", goTo.Error);
 
@@ -122,13 +128,13 @@ public class KeyboardAndSettingsTests
     {
         await using var h = new TabTestHarness();
         var settings = new SettingsViewModel(h.Services, null);
-        var stop = settings.ShortcutRows.Single(r => r.Command.Id == KeyboardShortcuts.Stop);
+        var stop = settings.Keyboard.ShortcutRows.Single(r => r.Command.Id == KeyboardShortcuts.Stop);
 
-        settings.ClearShortcutCommand.Execute(stop);
+        settings.Keyboard.ClearShortcutCommand.Execute(stop);
         Assert.Equal("None", stop.ShortcutText);
         Assert.False(Shortcuts.Matches(h.Services.Settings.Keyboard, KeyboardShortcuts.Stop, Key.Escape, KeyModifiers.None));
 
-        settings.ResetKeyboardCommand.Execute(null);
+        settings.Keyboard.ResetCommand.Execute(null);
         Assert.True(Shortcuts.Matches(h.Services.Settings.Keyboard, KeyboardShortcuts.Stop, Key.Escape, KeyModifiers.None));
     }
 
@@ -139,9 +145,9 @@ public class KeyboardAndSettingsTests
     {
         await using var h = new TabTestHarness();
         var settings = new SettingsViewModel(h.Services, null);
-        var clarify = settings.Suffixes.First();
+        var clarify = settings.QuickSuffixes.Suffixes.First();
 
-        settings.StartRecordingCommand.Execute(clarify);
+        settings.QuickSuffixes.StartRecordingCommand.Execute(clarify);
         settings.RecordShortcut(Chord("Primary+Shift+H"));
         Assert.Contains("History", clarify.Error);
 
@@ -149,7 +155,7 @@ public class KeyboardAndSettingsTests
         Assert.Equal("Primary+Alt+C", clarify.Suffix.Shortcut);
         Assert.True(clarify.HasShortcut);
 
-        settings.ClearShortcutCommand.Execute(clarify);
+        settings.QuickSuffixes.ClearShortcutCommand.Execute(clarify);
         Assert.Null(clarify.Suffix.Shortcut);
     }
 
@@ -297,13 +303,15 @@ public class KeyboardAndSettingsTests
     }
 
     [Fact]
-    public async Task Density_and_the_context_ring_sync_with_the_other_appearance_settings()
+    public async Task Density_and_the_context_ring_sync_with_the_other_appearance_settings_but_zoom_does_not()
     {
         await using var first = new TabTestHarness();
         await using var second = new TabTestHarness();
         var library = Path.Combine(first.Root, "shared-library");
         first.Services.Settings.Appearance.Density = Density.Compact;
         first.Services.Settings.Appearance.ShowContextOnTabs = false;
+        // The zoom suits each machine's screen (DESIGN.md §3, "Accessibility").
+        first.Services.Settings.Appearance.Zoom = 150;
         first.Services.Settings.Sessions.LibraryFolder = library;
         first.Services.Settings.Sessions.SyncSettings = true;
         first.Services.Library.OnSettingsChanged();
@@ -319,5 +327,8 @@ public class KeyboardAndSettingsTests
 
         Assert.Equal(Density.Compact, second.Services.Settings.Appearance.Density);
         Assert.False(second.Services.Settings.Appearance.ShowContextOnTabs);
+        Assert.Equal(100, second.Services.Settings.Appearance.Zoom);
+        Assert.DoesNotContain("appearance.zoom", File.ReadAllText(syncFile), StringComparison.Ordinal);
+        Assert.Equal(150, first.Services.Settings.Appearance.Zoom);
     }
 }

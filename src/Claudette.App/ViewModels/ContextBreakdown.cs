@@ -259,7 +259,7 @@ public sealed record ContextRow(string Name, string Tokens, string Percent, stri
 }
 
 /// <summary>What's inside a part of the window, such as each memory file. Collapsed until it's clicked.</summary>
-/// <param name="Key">Which part it is, so it stays open when the breakdown is refreshed after a turn.</param>
+/// <param name="key">Which part it is, so it stays open when the breakdown is refreshed after a turn.</param>
 public sealed partial class ContextSection(string key, string header, IReadOnlyList<ContextSectionRow> rows) : ObservableObject
 {
     public string Key { get; } = key;

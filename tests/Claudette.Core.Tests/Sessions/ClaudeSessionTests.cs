@@ -184,6 +184,19 @@ public class ClaudeSessionTests
     }
 
     [Fact]
+    public async Task An_mcp_servers_request_while_the_session_starts_is_shown_when_the_host_shows_them()
+    {
+        // As an MCP server connects, before initialize has its answer.
+        await using var session = new ClaudeSession(_transport, _time, showsElicitations: true);
+        _transport.Emit("""{"type":"control_request","request_id":"cli_e0","request":{"subtype":"elicitation","mcp_server_name":"auth","message":"Sign in","mode":"url","url":"https://example.com/login","elicitation_id":"el-0"}}""");
+
+        var (requested, _) = await session.ReadUntilAsync<ElicitationRequested>();
+
+        Assert.Equal("auth", requested.Request.ServerName);
+        Assert.DoesNotContain(_transport.Sent, m => Type(m) == "control_response");
+    }
+
+    [Fact]
     public async Task Without_anyone_to_show_it_an_mcp_servers_request_is_declined()
     {
         await using var session = await StartAsync();
@@ -365,6 +378,62 @@ public class ClaudeSessionTests
         Assert.Equal("boom", exited.Exit.StandardErrorTail);
         await session.Completion;
         Assert.Equal(SessionState.Exited, session.State);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Progress_summaries_are_asked_for_on_initialize_only_when_wanted(bool wanted)
+    {
+        await using var session = new ClaudeSession(_transport, _time);
+
+        await session.InitializeAsync([], wanted, TestContext.Current.CancellationToken);
+
+        var initialize = _transport.Sent.Single(m => Type(m) == "control_request" && Subtype(m["request"]!) == "initialize")["request"]!.AsObject();
+        Assert.Equal(wanted, initialize.ContainsKey("agentProgressSummaries"));
+    }
+
+    [Fact]
+    public async Task A_refused_start_says_why()
+    {
+        // What 2.1.286 writes, with CLAUDE_CODE_STARTUP_FAILURE_RESULTS=1, before exiting instead of answering initialize.
+        _transport.AutoRespond["initialize"] = _ => null;
+        await using var session = new ClaudeSession(_transport, _time);
+        var starting = session.InitializeAsync(TestContext.Current.CancellationToken);
+        await _transport.WaitForSentAsync(m => Type(m) == "control_request");
+        _transport.Emit("""{"type":"result","subtype":"error_during_execution","is_error":true,"num_turns":0,"session_id":"s1","total_cost_usd":0,"errors":["Invalid proxy URL in HTTPS_PROXY: \"not-a-url\" cannot be parsed as a URL.\nFix or unset HTTPS_PROXY and restart Claude Code."],"startup_failure_reason":"proxy_invalid","result_index":0}""");
+        _transport.Exit(1, "Invalid proxy URL in HTTPS_PROXY");
+
+        var ex = await Assert.ThrowsAsync<ClaudeSessionExitedException>(() => starting);
+
+        Assert.Equal("proxy_invalid", ex.StartupFailure!.Reason);
+        Assert.Equal("A proxy setting isn't a complete URL. Fix or unset it, then restart the tab.", ex.Message);
+        Assert.StartsWith("A proxy setting isn't a complete URL. Fix or unset it, then restart the tab.\nClaude Code said: Invalid proxy URL in HTTPS_PROXY", ex.StartupFailure.Message, StringComparison.Ordinal);
+        Assert.Equal(StartupFailureFix.None, ex.StartupFailure.Fix);
+    }
+
+    [Theory]
+    [InlineData("cwd_unavailable", StartupFailureFix.ChooseFolder, "The tab's folder was deleted or moved, or can't be read.")]
+    [InlineData("bypass_root", StartupFailureFix.None, "Bypass permissions mode can't be used while running as root. Choose another permission mode in Tab settings…, then restart the tab.")]
+    [InlineData("something_new", StartupFailureFix.None, "It went wrong")]
+    public void Each_reason_is_explained(string reason, StartupFailureFix fix, string summary)
+    {
+        var failure = new StartupFailure(reason, "It went wrong\nin detail");
+
+        Assert.Equal((fix, summary), (failure.Fix, failure.Summary));
+        Assert.Equal("Claude Code refused to start (something new).", new StartupFailure("something_new", "").Summary);
+    }
+
+    [Theory]
+    [InlineData("""{"authUrl":"https://auth.example.com/authorize","requiresUserAction":true,"callbackExpected":true,"redirectScheme":"localhost","callbackPort":54321}""", "https://auth.example.com/authorize", true)]
+    [InlineData("""{"requiresUserAction":false,"callbackExpected":false}""", null, false)]
+    [InlineData("""{"authUrl":"file:///etc/passwd","requiresUserAction":true}""", null, false)]
+    [InlineData("""{"authUrl":"javascript:alert(1)","requiresUserAction":true}""", null, false)]
+    public void An_MCP_sign_in_only_opens_a_web_address(string response, string? url, bool callback)
+    {
+        var signIn = McpSignIn.Parse(JsonNode.Parse(response)!.AsObject());
+
+        Assert.Equal((url, callback), (signIn.AuthUrl, signIn.CallbackExpected));
     }
 
     [Fact]

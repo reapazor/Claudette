@@ -42,6 +42,31 @@ public sealed partial class McpServerRow(McpServerStatus status) : ObservableObj
 
     [ObservableProperty]
     public partial bool IsBusy { get; set; }
+
+    /// <summary>It needs signing in: <b>Sign in</b> starts that.</summary>
+    public bool CanSignIn => Status.State == McpServerState.NeedsAuth;
+
+    /// <summary>A connected remote server can be signed out of, so the next connect asks again.</summary>
+    public bool CanSignOut => IsConnected && Status.IsRemote;
+
+    /// <summary>The address it's being signed in at, while the user finishes in the browser; null otherwise.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSigningIn))]
+    public partial string? SignInUrl { get; set; }
+
+    public bool IsSigningIn => SignInUrl is not null;
+
+    /// <summary>What to do in the browser, while signing in.</summary>
+    [ObservableProperty]
+    public partial string? SignInText { get; set; }
+
+    /// <summary>Claude Code waits for the browser to come back to it, or else takes the address it ended on.</summary>
+    [ObservableProperty]
+    public partial bool CanPasteAddress { get; set; }
+
+    /// <summary>The address the browser ended on, pasted when it couldn't come back to Claude Code by itself.</summary>
+    [ObservableProperty]
+    public partial string PastedAddress { get; set; } = "";
 }
 
 /// <summary>
@@ -49,7 +74,8 @@ public sealed partial class McpServerRow(McpServerStatus status) : ObservableObj
 /// <b>Reconnect</b> and a switch to turn one off for the session. Read from Claude Code when the page opens and after a
 /// change; a tab without a session shows nothing.
 /// </summary>
-public sealed partial class McpServersViewModel(Func<ClaudeSession?> session) : ViewModelBase
+/// <param name="openUrl">Opens a sign-in page in the browser.</param>
+public sealed partial class McpServersViewModel(Func<ClaudeSession?> session, Func<string, Task>? openUrl = null) : ViewModelBase
 {
     public ObservableCollection<McpServerRow> Servers { get; } = [];
 
@@ -102,6 +128,63 @@ public sealed partial class McpServersViewModel(Func<ClaudeSession?> session) : 
     [RelayCommand]
     private Task ReconnectAsync(McpServerRow? row) =>
         row is null ? Task.CompletedTask : ChangeAsync(row, s => s.ReconnectMcpServerAsync(row.Name), "reconnect");
+
+    /// <summary>
+    /// <b>Sign in</b> (DESIGN.md §4, "MCP servers"): Claude Code gives the address to sign in at, which opens in the
+    /// browser; it connects the server once the browser comes back to it.
+    /// </summary>
+    [RelayCommand]
+    private async Task SignInAsync(McpServerRow? row)
+    {
+        if (row is null || session() is not { } current)
+        {
+            return;
+        }
+        row.IsBusy = true;
+        McpSignIn signIn;
+        try
+        {
+            signIn = await current.SignInToMcpServerAsync(row.Name);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Error = $"Couldn't sign in to {row.Name}: {ex.Message.TrimEnd('.')}. You can sign in with /mcp in Claude Code in a terminal.";
+            row.IsBusy = false;
+            return;
+        }
+        row.IsBusy = false;
+        if (signIn.AuthUrl is not { } url)
+        {
+            // Signed in already: it only needed connecting.
+            await RefreshAsync();
+            return;
+        }
+        row.SignInUrl = url;
+        row.CanPasteAddress = signIn.CallbackExpected;
+        row.SignInText = signIn.CallbackExpected
+            ? "Finish signing in in your browser; the server connects when you're done. Refresh shows it."
+            : "Finish signing in in your browser, then Reconnect.";
+        await OpenSignInPageAsync(row);
+    }
+
+    [RelayCommand]
+    private Task OpenSignInPageAsync(McpServerRow? row) =>
+        row?.SignInUrl is { } url && openUrl is not null ? openUrl(url) : Task.CompletedTask;
+
+    /// <summary>
+    /// The address the browser ended on, for a sign-in whose page couldn't come back to Claude Code by itself (on another
+    /// machine, say).
+    /// </summary>
+    [RelayCommand]
+    private Task FinishSignInAsync(McpServerRow? row) =>
+        row is { PastedAddress: var address } && address.Trim().Length > 0
+            ? ChangeAsync(row, s => s.FinishMcpSignInAsync(row.Name, address.Trim()), "finish signing in to")
+            : Task.CompletedTask;
+
+    /// <summary><b>Sign out</b>: Claude Code forgets the server's sign-in, so the next connect asks again.</summary>
+    [RelayCommand]
+    private Task SignOutAsync(McpServerRow? row) =>
+        row is null ? Task.CompletedTask : ChangeAsync(row, s => s.SignOutOfMcpServerAsync(row.Name), "sign out of");
 
     /// <summary>Turns a server off for this session, or back on.</summary>
     [RelayCommand]

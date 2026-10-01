@@ -3,31 +3,14 @@ using Claudette.App.Services;
 using Claudette.Core.Protocol;
 using Claudette.Core.RemoteControl;
 using Claudette.Core.Sessions;
-using Claudette.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 namespace Claudette.App.ViewModels;
 
 /// <summary>What Remote Control needs from its tab.</summary>
-internal interface IRemoteControlHost
+internal interface IRemoteControlHost : ITabAreaHost
 {
-    string Id { get; }
-
-    /// <summary>The tab's name, which the session has in the Claude app.</summary>
-    string DisplayName { get; }
-
-    /// <summary>What's saved for the tab: the switch, and the session id.</summary>
-    TabState State { get; }
-
-    /// <summary>The tab's session while it runs.</summary>
-    ClaudeSession? Session { get; }
-
-    void AddNote(string text, NoteKind kind = NoteKind.Info, string? link = null);
-
-    /// <summary>The tab info card's "Claude app" row changed.</summary>
-    void InfoRowsChanged();
-
     /// <summary>The <c>/remote-control</c> fallback's own turn ended: the check-ins stop, as at the end of any turn.</summary>
     void CommandTurnEnded();
 
@@ -542,7 +525,7 @@ public sealed partial class RemoteControlViewModel : ViewModelBase
         var next = message.Subtype switch
         {
             "bridge_state" => RemoteControlProtocol.AfterBridgeState(Status, _url, message.Raw),
-            "worker_shutting_down" => RemoteControlProtocol.AfterWorkerShuttingDown(Status, message.Raw),
+            "worker_shutting_down" => RemoteControlProtocol.AfterWorkerShuttingDown(Status, message.Raw, leaving: _disconnecting),
             _ => null,
         };
         if (next is null)
@@ -550,6 +533,11 @@ public sealed partial class RemoteControlViewModel : ViewModelBase
             return;
         }
         Status = next;
+        if (next.State == RemoteControlState.Unavailable && RemoteControlProtocol.SaysTurnedOffByPolicy(message.Subtype, message.Raw, leaving: _disconnecting))
+        {
+            // The other tabs, and this one when it starts again, don't try to connect again.
+            _services.RemoteControl.OnTurnedOffByPolicy(next.Detail ?? RemoteControlProtocol.TurnedOffByPolicy);
+        }
         if (before.IsConnected && !next.IsConnected)
         {
             _host.AddNote(next.State == RemoteControlState.Unavailable

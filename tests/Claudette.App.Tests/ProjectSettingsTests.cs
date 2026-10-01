@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
+using Claudette.App.ViewModels.Settings;
 using Claudette.Core.ProjectTools;
 using Claudette.Core.ProjectTools.Unity;
 using Claudette.Core.ProjectTools.Unreal;
@@ -56,7 +57,7 @@ public class ProjectSettingsTests
             Assert.Null(none.SelectedProjectPage);
             none.SelectedProjectPage = SettingsViewModel.LinksPage;
             Assert.Equal("General", none.SelectedCategory);
-            Assert.False(none.IsLinksPage);
+            Assert.Same(none.General, none.CurrentPage);
         }
 
         var tab = await h.OpenTabAsync();
@@ -69,12 +70,12 @@ public class ProjectSettingsTests
 
         // Picking a page selects it in the project group, and nothing in the categories.
         settings.SelectedProjectPage = SettingsViewModel.ToolsPage;
-        Assert.True(settings.IsToolsPage);
+        Assert.IsType<ProjectToolChoicesPage>(settings.CurrentPage);
         Assert.Null(settings.SelectedMainCategory);
         settings.SelectedMainCategory = null;
-        Assert.True(settings.IsToolsPage);
+        Assert.IsType<ProjectToolChoicesPage>(settings.CurrentPage);
         settings.SelectedMainCategory = "Appearance";
-        Assert.True(settings.IsAppearance);
+        Assert.Same(settings.Appearance, settings.CurrentPage);
         Assert.Null(settings.SelectedProjectPage);
 
         // A provider finds a project: the group is named after it, in this window and the next.
@@ -107,7 +108,7 @@ public class ProjectSettingsTests
         settings.SearchText = "web links";
         var links = Assert.Single(settings.SearchResults);
         Assert.Equal((SettingsViewModel.LinksPage, "NightOwl → Links"), (links.Category, links.Where));
-        Assert.True(settings.IsLinksPage);
+        Assert.IsType<ProjectLinksPage>(settings.CurrentPage);
 
         settings.SearchText = "links";
         Assert.All(settings.SearchResults, r => Assert.Equal(SettingsViewModel.LinksPage, r.Category));
@@ -118,7 +119,7 @@ public class ProjectSettingsTests
         settings.SearchText = "engine";
         Assert.Contains(settings.SearchResults, r => r is { Category: SettingsViewModel.ToolsPage, Label: "Engine folder" });
         settings.SelectedSearchResult = settings.SearchResults.First(r => r.Category == SettingsViewModel.ToolsPage);
-        Assert.True(settings.IsToolsPage);
+        Assert.IsType<ProjectToolChoicesPage>(settings.CurrentPage);
 
         settings.SearchText = "editor configuration";
         Assert.Contains(settings.SearchResults, r => r.Category == SettingsViewModel.ToolsPage);
@@ -151,9 +152,9 @@ public class ProjectSettingsTests
         using var settings = await OpenSettingsAsync(h);
         var before = File.ReadAllText(shared);
 
-        settings.ResetProjectToolsCommand.Execute(null);
-        settings.ResetGeneralCommand.Execute(null);
-        settings.ResetAdvancedCommand.Execute(null);
+        settings.ProjectTools.ResetCommand.Execute(null);
+        settings.General.ResetCommand.Execute(null);
+        settings.Advanced.ResetCommand.Execute(null);
 
         Assert.Equal(UnrealConfiguration.Development, h.Services.Settings.ProjectTools.UnrealConfiguration);
         Assert.Equal(before, File.ReadAllText(shared));
@@ -366,7 +367,7 @@ public class ProjectSettingsTests
         using var settings = await OpenSettingsAsync(h);
         settings.SelectedProjectPage = SettingsViewModel.ActionsPage;
         var project = settings.Project!;
-        Assert.True(settings.IsActionsPage);
+        Assert.IsType<ProjectActionsPage>(settings.CurrentPage);
         Assert.Equal(ProjectFileScope.Local, project.SelectedProjectActionFile.Value);
         Assert.Equal(["First", "Elsewhere"], project.ProjectActions.Select(r => r.Name));
         Assert.Contains("only on plan9", project.ProjectActions[1].Detail, StringComparison.Ordinal);
@@ -495,7 +496,7 @@ public class ProjectSettingsTests
         Assert.Equal((SettingsViewModel.ActionsPage, true), (opening.Category, opening.StartNew));
         Assert.Same(tab, opening.Project!.Tab);
         using var settings = new SettingsViewModel(h.Services, null, opening: opening);
-        Assert.True(settings.IsActionsPage);
+        Assert.IsType<ProjectActionsPage>(settings.CurrentPage);
         var editor = Assert.IsType<ProjectActionEditorViewModel>(settings.Project!.Editor);
         Assert.Equal("Add an action", editor.Title);
         Assert.True(editor.AsksForFile);
@@ -537,7 +538,7 @@ public class ProjectSettingsTests
         Assert.NotNull(opening);
         Assert.Equal((SettingsViewModel.LinksPage, true), (opening.Category, opening.StartNew));
         using var settings = new SettingsViewModel(h.Services, null, opening: opening);
-        Assert.True(settings.IsLinksPage);
+        Assert.IsType<ProjectLinksPage>(settings.CurrentPage);
         var editor = Assert.IsType<ProjectLinkEditorViewModel>(settings.Project!.Editor);
         Assert.Equal("Add a link", editor.Title);
         Assert.True(editor.AsksForFile);
@@ -748,7 +749,7 @@ public class ProjectSettingsTests
 
         settings.ShowProjectToolsDefaultsCommand.Execute(null);
 
-        Assert.True(settings.IsProjectTools);
+        Assert.Same(settings.ProjectTools, settings.CurrentPage);
         Assert.Equal("Project tools", settings.SelectedMainCategory);
     }
 }

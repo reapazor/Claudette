@@ -34,7 +34,7 @@ public enum InstallOutcome
 }
 
 /// <summary>Why an update couldn't be installed, in words to show.</summary>
-/// <param name="CanOpenPackage">The downloaded package can still be installed by hand: opening it starts the OS's installer.</param>
+/// <param name="canOpenPackage">The downloaded package can still be installed by hand: opening it starts the OS's installer.</param>
 public sealed class AppInstallException(string message, bool canOpenPackage = false, Exception? inner = null) : Exception(message, inner)
 {
     public bool CanOpenPackage { get; } = canOpenPackage;

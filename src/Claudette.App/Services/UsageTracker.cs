@@ -73,8 +73,8 @@ public sealed class UsageTracker : IAsyncDisposable
     /// <summary>Raised on the UI thread when plan usage changes.</summary>
     public event Action<UsageSnapshot>? Updated;
 
-    /// <summary>Raised on the UI thread after a tab's turn was recorded.</summary>
-    public event Action? TurnRecorded;
+    /// <summary>Raised on the UI thread after a tab's turn was recorded, with the tab's id.</summary>
+    public event Action<string>? TurnRecorded;
 
     /// <summary>Raised on the UI thread after readings another machine shared were added to the history.</summary>
     public event Action? SamplesImported;
@@ -199,7 +199,7 @@ public sealed class UsageTracker : IAsyncDisposable
                 {
                     Store.AddTurns(records);
                     Store.SetTabName(tabId, tabName);
-                    _services.Dispatcher.Post(() => TurnRecorded?.Invoke());
+                    _services.Dispatcher.Post(() => TurnRecorded?.Invoke(tabId));
                 }
                 catch (Exception ex)
                 {

@@ -1,0 +1,144 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             xmlns:installation="using:Claudette.Core.Installation"
+             x:Class="Claudette.App.Views.Settings.ClaudeCodePageView"
+             x:DataType="settings:ClaudeCodePage">
+  <!-- Claude Code -->
+  <StackPanel Spacing="12">
+    <TextBlock Classes="section" Text="Claude Code" />
+    <TextBlock Text="{Binding InstalledText}" TextWrapping="Wrap" IsVisible="{Binding !HasUpdates}" />
+
+    <!-- Version, install method and updates, from claude doctor (DESIGN.md §12) -->
+    <Panel IsVisible="{Binding HasUpdates}">
+      <StackPanel Spacing="8" DataContext="{Binding Updates}" x:DataType="vm:ClaudeUpdateViewModel">
+        <TextBlock Text="{Binding VersionText, FallbackValue=''}" TextWrapping="Wrap" />
+        <TextBlock Classes="muted small" Text="{Binding AutoUpdateText}" TextWrapping="Wrap" IsVisible="{Binding AutoUpdateText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+        <TextBlock Classes="muted small" Text="{Binding LastAttemptText}" TextWrapping="Wrap" IsVisible="{Binding LastAttemptText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+        <TextBlock Classes="small" Text="claude doctor found:" IsVisible="{Binding HasWarnings}" Margin="0,4,0,0" />
+        <ItemsControl ItemsSource="{Binding Warnings}" IsVisible="{Binding HasWarnings}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="installation:DoctorWarning">
+              <StackPanel Margin="0,2">
+                <TextBlock Classes="small warning" Text="{Binding Issue}" TextWrapping="Wrap" />
+                <SelectableTextBlock Classes="muted small" Text="{Binding Fix, StringFormat='Fix: {0}'}" TextWrapping="Wrap"
+                                     IsVisible="{Binding Fix, Converter={x:Static ObjectConverters.IsNotNull}}" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Classes="muted small" Text="{Binding CheckStatusText}" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding DetailText}" TextWrapping="Wrap" IsVisible="{Binding ReadyVersion, Converter={x:Static ObjectConverters.IsNotNull}}" />
+        <WrapPanel ItemSpacing="8" LineSpacing="8">
+          <Button Content="Check now" Command="{Binding CheckNowCommand}" />
+          <Button Classes="accent" Content="Update now" Command="{Binding UpdateNowCommand}" IsVisible="{Binding CanUpdateNow}" />
+          <Button Classes="accent" Content="Update on next launch" Command="{Binding UpdateOnNextLaunchCommand}"
+                  IsVisible="{Binding CanUpdateOnNextLaunch}" IsEnabled="{Binding !IsUpdateScheduled}" />
+          <Button Content="Don't update on next launch" Command="{Binding CancelUpdateOnNextLaunchCommand}" IsVisible="{Binding IsUpdateScheduled}" />
+          <Button Classes="flat" Content="What's new" Command="{Binding OpenChangelogCommand}" />
+        </WrapPanel>
+        <TextBlock Classes="muted small" Text="{Binding Note}" TextWrapping="Wrap" IsVisible="{Binding HasNote}" />
+        <StackPanel Spacing="4" IsVisible="{Binding HasManualCommand}">
+          <TextBlock Classes="small" Text="Run this in a terminal to update:" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+            <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6">
+              <SelectableTextBlock Text="{Binding ManualCommand}" FontFamily="{DynamicResource MonoFont}" TextWrapping="Wrap" />
+            </Border>
+            <Button Grid.Column="1" Content="Copy" Command="{Binding CopyManualCommandCommand}" VerticalAlignment="Center" />
+          </Grid>
+        </StackPanel>
+        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
+        <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6" MaxHeight="180" IsVisible="{Binding HasOutput}">
+          <ScrollViewer>
+            <SelectableTextBlock Text="{Binding Output}" FontFamily="{DynamicResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
+          </ScrollViewer>
+        </Border>
+        <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" IsVisible="{Binding ResultText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      </StackPanel>
+    </Panel>
+    <CheckBox Content="Check for Claude Code updates automatically" IsChecked="{Binding CheckForUpdates}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="At launch and every few hours. Open tabs keep the version they started with; new tabs use the newest one installed." />
+    <!-- The account, with Sign in / Sign out (DESIGN.md §11, §14) -->
+    <TextBlock Text="{Binding AccountText, StringFormat='Signed in as {0}'}" TextWrapping="Wrap" IsVisible="{Binding !HasAccount}" />
+    <Panel IsVisible="{Binding HasAccount}">
+      <StackPanel Spacing="8" DataContext="{Binding Account}" x:DataType="vm:AccountViewModel">
+        <TextBlock Text="{Binding SettingsText, FallbackValue=''}" TextWrapping="Wrap" />
+        <WrapPanel ItemSpacing="8" LineSpacing="8">
+          <Button Content="Sign out…" Command="{Binding SignOutCommand}" IsVisible="{Binding IsSignedIn}" />
+          <Button Classes="accent" Content="Sign in" Command="{Binding BeginSignInCommand}" IsVisible="{Binding CanBeginSignIn}" />
+        </WrapPanel>
+        <TextBlock Classes="muted small" Text="Signing out affects Claude Code everywhere on this computer, and every tab stops working until you sign in again."
+                   TextWrapping="Wrap" IsVisible="{Binding IsSignedIn}" />
+        <TextBlock Classes="error" Text="{Binding SignOutError}" TextWrapping="Wrap" IsVisible="{Binding HasSignOutError}" />
+        <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="10,8" IsVisible="{Binding HasSignOutConfirmation}">
+          <StackPanel Spacing="8" DataContext="{Binding SignOutConfirmation}" x:DataType="vm:ConfirmationViewModel">
+            <TextBlock FontWeight="SemiBold" Text="{Binding Title, FallbackValue=''}" />
+            <TextBlock TextWrapping="Wrap" Text="{Binding Message, FallbackValue=''}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="accent" Content="{Binding ConfirmText, FallbackValue=''}" Command="{Binding ConfirmCommand}" />
+              <Button Content="Cancel" Command="{Binding CancelCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+        <ContentControl Content="{Binding SignIn}" IsVisible="{Binding HasSignIn}" HorizontalAlignment="Left" />
+      </StackPanel>
+    </Panel>
+
+    <!-- The Claude app, Remote Control (DESIGN.md §18): each tab has its own switch; this is what new tabs start with -->
+    <StackPanel x:Name="RemoteControlSettings" Spacing="12">
+      <TextBlock Text="Claude app (Remote Control)" FontWeight="SemiBold" Margin="0,8,0,0" />
+      <CheckBox Content="Connect new tabs to the Claude app" IsChecked="{Binding ConnectNewTabsToClaudeApp}" IsEnabled="{Binding CanUseRemoteControl}" />
+      <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                 Text="Continue a tab from the Claude app on your phone, or at claude.ai/code, while Claudette keeps running here. Each tab has Connect to the Claude app in its menu; this only sets it for tabs opened from now on. While a tab is connected, its transcript is stored on Anthropic's servers. Needs a claude.ai subscription sign-in." />
+      <TextBlock Classes="small warning" TextWrapping="Wrap" Margin="28,-8,0,0" Text="{Binding RemoteControlUnavailableText}"
+                 IsVisible="{Binding HasRemoteControlUnavailableText}" />
+      <StackPanel Spacing="2" Margin="28,-8,0,0">
+        <TextBlock Classes="muted small" TextWrapping="Wrap"
+                   Text="For a push notification on your phone when a tab needs an answer, turn on Push when actions required in Claude Code's /config; Push when Claude decides adds the ones Claude chooses to send. None arrive while Claudette is in front." />
+        <Button Classes="flat" Padding="0" HorizontalAlignment="Left" Command="{Binding OpenPushNotificationsDocsCommand}"
+                ToolTip.Tip="{x:Static settings:ClaudeCodePage.PushNotificationsDocs}">
+          <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="How to set up push notifications" TextDecorations="Underline" />
+        </Button>
+      </StackPanel>
+      <CheckBox Content="Keep this computer awake while tabs are connected" IsChecked="{Binding KeepAwakeWhileConnected}" />
+      <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                 Text="So the Claude app can still reach them. The screen can still turn off." />
+    </StackPanel>
+    <!-- How tabs run (DESIGN.md §5, "Rewind and branch", "Hook runs"; §13, "Launch") -->
+    <TextBlock Text="Sessions" FontWeight="SemiBold" Margin="0,8,0,0" />
+    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+      <TextBlock Text="Fallback model" VerticalAlignment="Center" />
+      <ComboBox Grid.Column="1" MinWidth="200" ItemsSource="{Binding FallbackModelChoices}" SelectedItem="{Binding FallbackModel}" />
+    </Grid>
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,-8,0,0"
+               Text="When a tab's model is overloaded, Claude Code switches to this one rather than wait. Applies to tabs started after the change." />
+    <CheckBox Content="Keep copies of files Claude changes, so prompts can be rewound" IsChecked="{Binding KeepFileCheckpoints}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="Restore files and Edit and resend put files back as they were before a prompt. Claude Code keeps the copies with the session, as its terminal does. Applies to tabs started after the change." />
+    <CheckBox Content="Show every hook run in the conversation" IsChecked="{Binding ShowAllHookRuns}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="Off, only hooks that fail, or print something while they run, get a row." />
+    <!-- DESIGN.md §18, "Agent map" -->
+    <CheckBox Content="Summarize subagents' progress" IsChecked="{Binding SubagentProgressSummaries}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="Claude Code writes a line about what each subagent has got to, for the Agents page. Each summary is a small extra model call, which counts toward your usage. Applies to tabs started after the change." />
+    <!-- DESIGN.md §7, "Folder trust" -->
+    <CheckBox Content="Ask before using a new folder's own configuration" IsChecked="{Binding AskBeforeUsingFolderSettings}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="Before Claude Code first starts in a folder you haven't trusted, list the hooks, commands and MCP servers its configuration would run. Started by Claudette, Claude Code doesn't ask itself." />
+    <!-- macOS and Linux only (DESIGN.md §13, "Login shell environment") -->
+    <CheckBox Content="Use my login shell's environment" IsChecked="{Binding UseLoginShellEnvironment}"
+              IsVisible="{x:Static settings:ClaudeCodePage.ShowLoginShellSetting}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0" IsVisible="{x:Static settings:ClaudeCodePage.ShowLoginShellSetting}"
+               Text="Claude and the tools Claudette runs get the PATH and variables your shell profile sets up, as in a terminal. Not needed when Claudette is started from a terminal. Applies to tabs started after the change." />
+    <TextBlock Text="Path to claude" />
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <TextBox Text="{Binding ClaudePath, UpdateSourceTrigger=LostFocus}" PlaceholderText="Found automatically" />
+      <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseClaudePathCommand}" />
+    </Grid>
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Leave empty to find Claude Code automatically. A change takes effect the next time Claudette starts." />
+    <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
+  </StackPanel>
+</UserControl>

@@ -2,8 +2,8 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core;
 using Claudette.Core.Protocol;
-using Claudette.Core.Sessions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiveMarkdown.Avalonia;
@@ -89,6 +89,16 @@ public sealed partial class UserMessageItem(string text, string? suffixText = nu
     [NotifyPropertyChangedFor(nameof(CanRestoreFiles))]
     public partial string? Uuid { get; set; }
 
+    /// <summary>The id Claudette sent the prompt with, which Claude Code echoes back (DESIGN.md §13, "Wire format").</summary>
+    public string? SentId { get; set; }
+
+    /// <summary>
+    /// Sent while Claude worked, and waiting its turn: Claude Code hasn't taken it yet (DESIGN.md §5, "Queued messages").
+    /// Its echo ends the wait.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsQueued { get; set; }
+
     /// <summary>
     /// The conversation entry just before this prompt: resuming there leaves the prompt out. Null for the first prompt,
     /// before which there's nothing to keep.
@@ -143,9 +153,12 @@ public sealed partial class ThinkingItem : ConversationItem
     private readonly System.Text.StringBuilder _text = new();
     private string? _textAsString = "";
 
+    /// <summary>How long <see cref="ShownText"/> was when the view was last told it changed.</summary>
+    private int _shownLength;
+
     /// <summary>
-    /// The thinking so far. It streams in small pieces, so it's kept in a builder and made into a string only when read
-    /// (by the view, while the row is expanded), rather than copied whole for every piece.
+    /// The thinking so far. It streams in small pieces, so it's kept in a builder and made into a string only when read,
+    /// rather than copied whole for every piece.
     /// </summary>
     public string Text
     {
@@ -153,7 +166,7 @@ public sealed partial class ThinkingItem : ConversationItem
         set
         {
             _text.Clear().Append(value);
-            TextChanged();
+            TextChanged(force: true);
         }
     }
 
@@ -162,22 +175,52 @@ public sealed partial class ThinkingItem : ConversationItem
         if (text.Length > 0)
         {
             _text.Append(text);
-            TextChanged();
+            TextChanged(force: false);
         }
     }
 
-    private void TextChanged()
+    /// <summary>
+    /// What the view shows: the text while the row is expanded, else nothing, so collapsed thinking is never made into a
+    /// string. While it streams in, the view hears of it as it grows by an eighth (at least 256 characters) rather than
+    /// with every piece, and all of it once it's done.
+    /// </summary>
+    public string? ShownText => IsExpanded ? Text : null;
+
+    private void TextChanged(bool force)
     {
         _textAsString = null;
+        if (HasText != _saidHasText)
+        {
+            _saidHasText = HasText;
+            OnPropertyChanged(nameof(HasText));
+        }
+        if (force || _shownLength == 0 || _text.Length - _shownLength >= Math.Max(256, _shownLength / 8))
+        {
+            ShowText();
+        }
+    }
+
+    private bool _saidHasText;
+
+    private void ShowText()
+    {
+        _shownLength = _text.Length;
         OnPropertyChanged(nameof(Text));
-        OnPropertyChanged(nameof(HasText));
+        if (IsExpanded)
+        {
+            OnPropertyChanged(nameof(ShownText));
+        }
     }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Header))]
     public partial bool IsStreaming { get; set; } = true;
 
+    // All of it, once it's done.
+    partial void OnIsStreamingChanged(bool value) => ShowText();
+
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShownText))]
     public partial bool IsExpanded { get; set; }
 
     public bool HasText => _text.Length > 0;
@@ -337,9 +380,8 @@ public partial class ToolUseItem : ConversationItem
                 var stdout = Str(result, "stdout") ?? "";
                 var stderr = Str(result, "stderr") ?? "";
                 Output = string.Join('\n', new[] { stdout, stderr }.Where(s => s.Length > 0));
-                ResultSummary = result["interrupted"] is JsonValue interrupted && interrupted.GetValueKind() == JsonValueKind.True
-                    ? "Interrupted"
-                    : FirstLine(Output) ?? FirstLine(text);
+                ResultSummary = BashSummary(result) ?? FirstLine(Output) ?? FirstLine(text);
+                GitChips = Conversation.GitChips.From(result.GetObject("gitOperation"));
                 OnPropertyChanged(nameof(CanExpand));
                 return;
             }
@@ -350,6 +392,27 @@ public partial class ToolUseItem : ConversationItem
             Output = text;
         }
         OnPropertyChanged(nameof(CanExpand));
+    }
+
+    /// <summary>What git did, read from a Bash result's <c>gitOperation</c>: "Committed 1a2b3c4 on main", "Opened PR #42".</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasGitChips))]
+    public partial IReadOnlyList<GitChip> GitChips { get; private set; } = [];
+
+    public bool HasGitChips => GitChips.Count > 0;
+
+    /// <summary>How a Bash command ended, when its result says more than its output's first line (DESIGN.md §5).</summary>
+    private static string? BashSummary(JsonObject result)
+    {
+        if (result.GetDouble("timedOutAfterMs") is { } timedOut)
+        {
+            return $"Reached its {Formats.Elapsed(TimeSpan.FromMilliseconds(timedOut))} time limit; carries on in the background";
+        }
+        if (result.GetString("backgroundTaskId") is not null)
+        {
+            return result.GetBool("backgroundedByUser") == true ? "Moved to the background" : "Running in the background";
+        }
+        return result.GetBool("interrupted") == true ? "Interrupted" : null;
     }
 
     /// <summary>The most telling input field, such as the file path or command.</summary>
@@ -392,8 +455,7 @@ public partial class ToolUseItem : ConversationItem
         _ => input.Count > 0 ? input.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) : null,
     };
 
-    protected static string? Str(JsonObject obj, string name) =>
-        obj[name] is JsonValue value && value.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : null;
+    protected static string? Str(JsonObject obj, string name) => obj.GetString(name);
 
     protected static string? FirstLine(string? text)
     {
@@ -616,4 +678,35 @@ public sealed partial class UnsupportedMessageItem(string messageType, string js
 public sealed class TurnSummaryItem(string text) : ConversationItem
 {
     public string Text { get; } = text;
+
+    /// <summary>The footer for a turn's result; null when the result says none of those.</summary>
+    /// <param name="modelName">Turns a model id into a display name.</param>
+    internal static TurnSummaryItem? For(ResultMessage result, Func<string?, string?> modelName)
+    {
+        var parts = new List<string>();
+        if (result.DurationMs is { } ms)
+        {
+            parts.Add(ms >= 60_000 ? $"{(int)(ms / 60_000)}m {ms % 60_000 / 1000:0}s" : $"{ms / 1000:0.#}s");
+        }
+        if (result.Usage is { } usage)
+        {
+            var input = (Number(usage["input_tokens"]) ?? 0) + (Number(usage["cache_creation_input_tokens"]) ?? 0) + (Number(usage["cache_read_input_tokens"]) ?? 0);
+            var output = Number(usage["output_tokens"]) ?? 0;
+            parts.Add($"{Tokens(input)} in · {Tokens(output)} out");
+        }
+        if (result.ModelUsage is { Count: > 0 } models)
+        {
+            parts.Add(string.Join(", ", models.Select(m => modelName(m.Key) ?? m.Key)));
+        }
+        return parts.Count > 0 ? new TurnSummaryItem(string.Join(" · ", parts)) : null;
+    }
+
+    private static string Tokens(long count) => count switch
+    {
+        >= 1_000_000 => $"{count / 1_000_000.0:0.#}M",
+        >= 1_000 => $"{count / 1_000.0:0.#}k",
+        _ => count.ToString(),
+    };
+
+    private static long? Number(JsonNode? node) => node.AsWholeNumber();
 }

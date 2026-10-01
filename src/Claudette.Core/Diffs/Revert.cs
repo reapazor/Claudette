@@ -31,20 +31,37 @@ public static class Revert
     }
 
     /// <summary>
+    /// <paramref name="text"/> with <paramref name="like"/>'s line endings, when <paramref name="like"/> has Windows ones
+    /// and <paramref name="text"/> only Unix ones (as git hands back a file it converts on checkout); otherwise as it is.
+    /// </summary>
+    public static string? WithLineEndingsOf(string? text, string? like) =>
+        text is null || like is null || !like.Contains("\r\n", StringComparison.Ordinal) || text.Contains('\r', StringComparison.Ordinal)
+            ? text
+            : text.ReplaceLineEndings("\r\n");
+
+    /// <summary>
     /// Writes <paramref name="text"/> to <paramref name="path"/> only if the file still holds
     /// <paramref name="expectedCurrent"/> (null: missing). False when it changed meanwhile. A null
-    /// <paramref name="text"/> deletes the file: it didn't exist before Claude made it.
+    /// <paramref name="text"/> deletes the file: it didn't exist before Claude made it. The file keeps its encoding and
+    /// byte order mark, its permissions, and a symbolic link stays one (<see cref="Files.AtomicFile.ReplaceContents"/>).
     /// </summary>
+    /// <exception cref="IOException">The file isn't text in an encoding that can be written back as it was.</exception>
     public static bool Write(string path, string? expectedCurrent, string? text)
     {
-        string? now;
+        byte[]? bytes;
         try
         {
-            now = File.Exists(path) ? File.ReadAllText(path) : null;
+            bytes = File.Exists(path) ? File.ReadAllBytes(path) : null;
         }
         catch (FileNotFoundException)
         {
-            now = null;
+            bytes = null;
+        }
+        var encoding = (Files.TextFileEncoding?)null;
+        string? now = null;
+        if (bytes is not null && !Files.TextFileEncoding.TryRead(bytes, out encoding, out now))
+        {
+            throw new IOException("It isn't UTF-8 or UTF-16 text, so it can't be written back as it was.");
         }
         if (!string.Equals(now, expectedCurrent, StringComparison.Ordinal))
         {
@@ -55,15 +72,9 @@ public static class Revert
             File.Delete(path);
             return true;
         }
-        // Reading drops a UTF-8 byte order mark; put it back if the file had one.
-        var hadMark = false;
-        if (now is not null)
-        {
-            using var stream = File.OpenRead(path);
-            Span<byte> head = stackalloc byte[3];
-            hadMark = stream.Read(head) == 3 && head[0] == 0xEF && head[1] == 0xBB && head[2] == 0xBF;
-        }
-        Files.AtomicFile.WriteAllText(path, hadMark && !text.StartsWith('\uFEFF') ? '\uFEFF' + text : text);
+        // A file Claude deleted comes back as UTF-8 without a mark, unless the text had one.
+        var bytesToWrite = encoding is not null ? encoding.GetBytes(text.TrimStart('\uFEFF')) : new System.Text.UTF8Encoding(false).GetBytes(text);
+        Files.AtomicFile.ReplaceContents(path, bytesToWrite);
         return true;
     }
 }

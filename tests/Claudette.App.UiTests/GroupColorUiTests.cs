@@ -57,7 +57,7 @@ public class GroupColorUiTests
         Assert.Equal(TabGroupViewModel.Palette[2].Color, group.Color);
 
         // The rail's group menu opens it too, beside the rail's group.
-        h.Shell.ToggleSidebarCommand.Execute(null);
+        h.Shell.Layout.ToggleSidebarCommand.Execute(null);
         UiText.Settle(window);
         var rail = GroupLabel(window);
         Assert.NotSame(label, rail);

@@ -193,6 +193,8 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
             ?? (status.ConfigDirectory is { } config ? Path.Combine(config, "projects") : null);
         services.ClaudeConfigDirectory = status.ConfigDirectory
             ?? (status.ProjectsDirectory is { } projects ? Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(projects)) : null);
+        // Claude Code's prefersReducedMotion is in its config folder, now known (DESIGN.md §3, "Accessibility").
+        _ = services.ReadMotionPreferencesAsync();
         if (_shell is null)
         {
             _shell = new ShellViewModel(services, ShowSignIn);
@@ -243,8 +245,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
                     OnPropertyChanged(nameof(HasUsage));
                 }
             };
-            tracker.TurnRecorded += () => _shell?.OnTurnRecorded();
-            _shell?.OnTurnRecorded();
+            tracker.TurnRecorded += id => _shell?.OnTurnRecorded(id);
             Usage = usage;
         }
         catch (Exception ex)
@@ -327,7 +328,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
                 // The tab's Project page, with the log of the run that finished (DESIGN.md §18, "Project tools").
                 if (target.TabId is { } jobTab && CurrentPage == _shell && _shell?.SelectTab(jobTab) == true)
                 {
-                    _shell.SelectedTab?.ProjectTools.OpenNotifiedRun();
+                    _shell.SelectedTab?.ProjectTools.Runs.OpenNotifiedRun();
                 }
                 break;
             default:

@@ -71,6 +71,8 @@ jobs:
         if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
 
       - name: Install Claude Code ${{ steps.detect.outputs.version }}
         if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
@@ -150,6 +152,8 @@ jobs:
         if: steps.changed.outputs.run == 'true'
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
       - name: Install Claude Code ${{ steps.versions.outputs.minimum }}
         if: steps.changed.outputs.run == 'true'
         env:

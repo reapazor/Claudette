@@ -10,6 +10,27 @@ namespace Claudette.App.Tests;
 public class TabViewModelTests
 {
     [Fact]
+    public async Task Closing_a_tab_while_it_starts_leaves_no_claude_running()
+    {
+        await using var h = new TabTestHarness();
+        var gate = h.Factory.StartGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Opening waits for the start, which waits at the gate.
+        var opening = h.Shell.OpenFolderAsync(h.WorkFolder);
+        await TabTestHarness.Eventually(() => h.Factory.Sessions.Count == 1, "claude to start");
+        var tab = h.Shell.SelectedTab!;
+
+        await h.Shell.CloseTabCommand.ExecuteAsync(tab);
+        await opening;
+
+        Assert.Equal(SessionState.Exited, h.Factory.Sessions[0].State);
+        Assert.Empty(h.Shell.AllTabs);
+        Assert.False(gate.Task.IsCompleted);
+        // Nothing starts again for it, either.
+        await tab.EnsureStartedAsync();
+        Assert.Single(h.Factory.Launches);
+    }
+
+    [Fact]
     public async Task Suffixes_are_appended_and_kept_chips_stay()
     {
         await using var h = new TabTestHarness();
@@ -105,7 +126,7 @@ public class TabViewModelTests
 
         await TabTestHarness.Eventually(() => tab.Status == TabStatus.Unread, "the unread status");
         Assert.Equal(120, tab.State.Tokens.Total);
-        Assert.Equal("120 tok", tab.TokensShort);
+        Assert.Equal("120 tok", tab.Context.TokensShort);
         Assert.Equal("s1", tab.State.SessionId);
         tab.IsSelected = true;
         Assert.Equal(TabStatus.Idle, tab.Status);
@@ -122,24 +143,24 @@ public class TabViewModelTests
 
         h.Transport.Emit("""{"type":"assistant","message":{"id":"m1","model":"claude-opus-5-5","content":[{"type":"text","text":"a"}],"usage":{"input_tokens":3000,"output_tokens":100,"cache_read_input_tokens":46900}}}""");
         h.Transport.Emit("""{"type":"assistant","message":{"id":"m1","model":"claude-opus-5-5","content":[{"type":"text","text":"b"}],"usage":{"input_tokens":3000,"output_tokens":100,"cache_read_input_tokens":46900}}}""");
-        await TabTestHarness.Eventually(() => tab.TokensShort == "50k tok", "the live token count");
+        await TabTestHarness.Eventually(() => tab.Context.TokensShort == "50k tok", "the live token count");
         // No context window known yet: nothing to estimate from.
-        Assert.Null(tab.ContextText);
+        Assert.Null(tab.Context.Text);
 
         h.Transport.Emit("""{"type":"result","subtype":"success","is_error":false,"session_id":"s1","modelUsage":{"claude-opus-5-5":{"inputTokens":49900,"outputTokens":100,"contextWindow":200000}}}""");
 
-        await TabTestHarness.Eventually(() => tab.ContextText == "Context 25%", "the estimated context");
-        Assert.Equal("50k tok", tab.TokensShort);
-        Assert.Equal("about 50,000 of 200,000 tokens, estimated from the last call", tab.ContextDetail);
-        Assert.False(tab.IsContextHigh);
+        await TabTestHarness.Eventually(() => tab.Context.Text == "Context 25%", "the estimated context");
+        Assert.Equal("50k tok", tab.Context.TokensShort);
+        Assert.Equal("about 50,000 of 200,000 tokens, estimated from the last call", tab.Context.Detail);
+        Assert.False(tab.Context.IsHigh);
 
         // Claude Code says when it compacts by itself: near that, the indicator warns.
         tab.ComposerText = "more";
         await tab.SendCommand.ExecuteAsync(null);
         h.Transport.Emit("""{"type":"autocompact_state","value":{"enabled":true,"effective_window":180000,"threshold":52000,"enforced":true,"source":"auto"},"session_id":"s1"}""");
         h.Transport.Emit("""{"type":"assistant","message":{"id":"m2","model":"claude-opus-5-5","content":[{"type":"text","text":"b"}],"usage":{"input_tokens":1000,"output_tokens":100,"cache_read_input_tokens":48900}}}""");
-        await TabTestHarness.Eventually(() => tab.IsContextHigh, "the warning");
-        Assert.EndsWith("auto-compacts at 52,000", tab.ContextDetail, StringComparison.Ordinal);
+        await TabTestHarness.Eventually(() => tab.Context.IsHigh, "the warning");
+        Assert.EndsWith("auto-compacts at 52,000", tab.Context.Detail, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -166,11 +187,11 @@ public class TabViewModelTests
         await tab.ChooseEffortCommand.ExecuteAsync("high");
 
         tab.ChooseModelCommand.Execute(haiku);
-        Assert.True(tab.HasPendingModel);
-        Assert.Contains("doesn't support high effort", tab.PendingModelMessage, StringComparison.Ordinal);
+        Assert.True(tab.ModelSwitch.IsOpen);
+        Assert.Contains("doesn't support high effort", tab.ModelSwitchMessage, StringComparison.Ordinal);
         Assert.DoesNotContain("set_model", h.Transport.SentControlSubtypes);
 
-        await tab.ConfirmModelSwitchCommand.ExecuteAsync(null);
+        await tab.ModelSwitch.ConfirmCommand.ExecuteAsync(null);
 
         Assert.Contains("set_model", h.Transport.SentControlSubtypes);
         Assert.Equal("haiku", tab.State.Overrides.Model);
@@ -203,6 +224,43 @@ public class TabViewModelTests
         await TabTestHarness.Eventually(() => h.Transport.SentUserTexts.Contains("Status?"), "the check-in");
         Assert.Contains(tab.Items.OfType<UserMessageItem>(), m => m.IsCheckIn);
         await TabTestHarness.Eventually(() => !tab.HasCheckInCountdown, "the bar to close");
+
+        // The prompt the user typed says so, and the check-in doesn't: each has its own id, as its card knows it.
+        var sent = h.Transport.Sent.Where(m => m["type"]?.GetValue<string>() == "user").ToList();
+        var cards = tab.Items.OfType<UserMessageItem>().ToList();
+        Assert.Equal("human", sent[0]["origin"]?["kind"]?.GetValue<string>());
+        Assert.Null(sent[1]["origin"]);
+        Assert.Equal(cards.Select(c => c.SentId), sent.Select(m => m["uuid"]?.GetValue<string>()));
+        Assert.All(cards, c => Assert.True(Guid.TryParse(c.SentId, out _)));
+    }
+
+    [Fact]
+    public async Task An_echo_finds_its_prompt_by_the_id_it_was_sent_with()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        tab.ComposerText = "first";
+        await tab.SendCommand.ExecuteAsync(null);
+        tab.ComposerText = "second";
+        await tab.SendCommand.ExecuteAsync(null);
+        await TabTestHarness.Eventually(() => h.Transport.SentUserTexts.Count() == 2, "both prompts");
+        var (first, second) = (tab.Items.OfType<UserMessageItem>().First(), tab.Items.OfType<UserMessageItem>().Last());
+
+        // The second is echoed first, reading differently (Claude Code expanded a mention, say): its id still finds it.
+        h.Transport.Emit(new JsonObject { ["type"] = "user", ["isReplay"] = true, ["uuid"] = second.SentId, ["message"] = new JsonObject { ["role"] = "user", ["content"] = "second, expanded" } }.ToJsonString());
+        await TabTestHarness.Eventually(() => second.Uuid is not null, "the echo");
+        Assert.Equal(second.SentId, second.Uuid);
+        Assert.Null(first.Uuid);
+
+        // Compact's /compact, the user's choice with no card of its own, is no prompt's echo.
+        tab.ComposerText = "";
+        await tab.CompactCommand.ExecuteAsync(null);
+        var compact = h.Transport.Sent.Last(m => m["type"]?.GetValue<string>() == "user");
+        Assert.Equal("human", compact["origin"]?["kind"]?.GetValue<string>());
+        h.Transport.Emit(new JsonObject { ["type"] = "user", ["isReplay"] = true, ["uuid"] = compact["uuid"]!.GetValue<string>(), ["message"] = new JsonObject { ["role"] = "user", ["content"] = "/compact" } }.ToJsonString());
+        h.Transport.EmitTurn();
+        await TabTestHarness.Eventually(() => tab.Items.OfType<TurnSummaryItem>().Any(), "a turn");
+        Assert.Null(first.Uuid);
     }
 
     [Fact]

@@ -3,11 +3,14 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.LogicalTree;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 using Claudette.App.Views;
+using Claudette.Core.Settings;
 
 namespace Claudette.App.UiTests;
 
@@ -35,9 +38,84 @@ public class SettingsWindowTests
     }
 
     /// <summary>
+    /// The search box's entries name what their pages show (DESIGN.md §14): each page, rendered, has the words of each
+    /// of its entries (<see cref="SettingsSearchResult.PageText"/>, or else the label), so a setting reworded or removed
+    /// on its page can't leave the index pointing at nothing. Text a page holds while hidden counts, since some settings
+    /// only show in some states, such as a custom diff tool's command or an update to install.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Every_search_entry_names_something_its_page_shows()
+    {
+        await using var h = new TabTestHarness(updater: new FakeClaudeUpdater(new Version(2, 1, 284)), dispatcher: new AvaloniaUiDispatcher());
+        UnrealFixture.Write(h.Root, h.WorkFolder);
+        var tab = await h.OpenTabAsync();
+        await Waiting.UntilAsync(() => tab.ProjectTools.Project is not null, "the project", poll: () => Dispatcher.UIThread.RunJobs());
+        var updates = new ClaudeUpdateViewModel(h.Services, h.Services.ClaudeUpdates!, () => h.Shell.RunningVersions);
+        await h.Services.ClaudeUpdates!.CheckNowAsync();
+        using var settings = new SettingsViewModel(h.Services, "me@example.com", updates, new SettingsOpening(Project: new ProjectSettingsViewModel(h.Services, tab, h.Shell)));
+        var window = new SettingsWindow { DataContext = settings, Width = 900, Height = 700 };
+        window.Show();
+
+        var missing = new List<string>();
+        foreach (var page in settings.Pages)
+        {
+            settings.SelectedCategory = page.Title;
+            UiText.Settle(window);
+            var view = window.GetVisualDescendants().OfType<UserControl>().First(v => ReferenceEquals(v.DataContext, page));
+            var shown = TextsOf(view);
+            missing.AddRange(page.SearchEntries
+                .Where(entry => !shown.Any(text => text.Contains(entry.PageText ?? entry.Label, StringComparison.OrdinalIgnoreCase)))
+                .Select(entry => $"{entry.Where}: {entry.Label}"));
+        }
+        window.Close();
+
+        Assert.Equal([.. SettingsViewModel.AllCategories, .. SettingsViewModel.ProjectPages], settings.Pages.Select(p => p.Title));
+        Assert.Empty(missing);
+    }
+
+    /// <summary>The words in a view, shown or hidden: its text blocks', and its buttons' and check boxes' labels.</summary>
+    private static List<string> TextsOf(Control view) =>
+    [
+        .. view.GetLogicalDescendants().Cast<object>().Concat(view.GetVisualDescendants()).Distinct().Select(element => element switch
+        {
+            TextBlock block => block.Text,
+            ContentControl { Content: string content } => content,
+            _ => null,
+        }).OfType<string>(),
+    ];
+
+    /// <summary>
     /// Typing in a text setting doesn't save and apply it on every keystroke, which refreshed every tab each time; it
     /// takes effect when the box loses focus.
     /// </summary>
+    /// <summary>
+    /// A page's view is made when its category is picked and dropped when another is: none of its dropdowns or boxes
+    /// writes a setting back as it goes.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Going_through_every_category_changes_no_setting()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var appearance = h.Services.Settings.Appearance;
+        appearance.Density = Density.Compact;
+        appearance.Motion = MotionSetting.Reduce;
+        appearance.Zoom = 125;
+        h.Services.SaveSettings();
+        var before = JsonFileStore<AppSettings>.Serialize(h.Services.Settings);
+        var settings = new SettingsViewModel(h.Services, "me@example.com");
+        var window = new SettingsWindow { DataContext = settings, Width = 900, Height = 700 };
+        window.Show();
+
+        foreach (var category in SettingsViewModel.AllCategories.Concat(SettingsViewModel.AllCategories.Reverse()))
+        {
+            settings.SelectedCategory = category;
+            UiText.Settle(window);
+        }
+
+        Assert.Equal(before, JsonFileStore<AppSettings>.Serialize(h.Services.Settings));
+        window.Close();
+    }
+
     [AvaloniaFact]
     public async Task A_text_setting_takes_effect_when_the_box_loses_focus_not_on_each_keystroke()
     {
@@ -58,7 +136,7 @@ public class SettingsWindowTests
         window.GetVisualDescendants().OfType<TextBox>().First(t => t.PlaceholderText == "Search settings").Focus();
         UiText.Settle(window);
         Assert.Equal(1, changes);
-        Assert.Equal("--verbose", settings.ExtraArguments);
+        Assert.Equal("--verbose", settings.Advanced.ExtraArguments);
     }
 
     /// <summary>

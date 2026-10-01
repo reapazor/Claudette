@@ -41,6 +41,18 @@ public class PlatformChromeTests
         Assert.Equal(expected is null ? null : Path.GetFullPath(expected), LaunchArguments.Folder(args));
     }
 
+    [Fact]
+    public void A_relative_folder_is_made_absolute_where_the_launch_started_before_it_is_handed_on()
+    {
+        var started = Path.Combine(Path.GetTempPath(), "launched-here");
+
+        var args = LaunchArguments.WithFullPaths(["--folder", "api", "--source-build", "../bin", "--other", "x"], started);
+
+        Assert.Equal(["--folder", Path.Combine(started, "api"), "--source-build", Path.GetFullPath(Path.Combine(started, "..", "bin")), "--other", "x"], args);
+        // The running Claudette that gets them reads the same folder, wherever it runs from.
+        Assert.Equal(Path.Combine(started, "api"), LaunchArguments.Folder(args));
+    }
+
     private sealed class FakeJumpList : IJumpList
     {
         public List<IReadOnlyList<RecentFolderEntry>> Updates { get; } = [];

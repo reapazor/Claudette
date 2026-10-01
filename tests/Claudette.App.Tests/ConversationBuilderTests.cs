@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Collections.ObjectModel;
 using Claudette.App.Conversation;
 using Claudette.Core.Protocol;
@@ -27,6 +28,63 @@ public class ConversationBuilderTests
         Assert.Equal("pong", text.Text);
         Assert.False(text.IsStreaming);
         Assert.Equal(2, _items.Count);
+    }
+
+    [Fact]
+    public void Claude_Codes_notices_are_notes_at_their_level()
+    {
+        // As the Agent SDK documents system/informational: a hook's message to the user, and a fallback warning.
+        Apply("""{"type":"system","subtype":"informational","content":"PostToolUse:Bash says: Formatted 3 files","level":"info","tool_use_id":"t1","uuid":"i-1","session_id":"s"}""");
+        Apply("""{"type":"system","subtype":"informational","content":"  Switched to Sonnet: the context window is now 200K tokens.\n","level":"warning","uuid":"i-2","session_id":"s"}""");
+        Apply("""{"type":"system","subtype":"informational","content":"A tip.","level":"someday","uuid":"i-3","session_id":"s"}""");
+        Apply("""{"type":"system","subtype":"informational","content":"  ","level":"warning","uuid":"i-4","session_id":"s"}""");
+
+        var notes = _items.OfType<NoteItem>().Select(n => (n.Text, n.Kind)).ToList();
+        Assert.Equal([
+            ("PostToolUse:Bash says: Formatted 3 files", NoteKind.Info),
+            ("Switched to Sonnet: the context window is now 200K tokens.", NoteKind.Warning),
+            ("A tip.", NoteKind.Info),
+        ], notes);
+    }
+
+    [Fact]
+    public void A_bash_card_says_what_git_did_and_how_the_command_ended()
+    {
+        string Result(string id, JsonObject toolUseResult) => new JsonObject
+        {
+            ["type"] = "user",
+            ["message"] = new JsonObject { ["role"] = "user", ["content"] = new JsonArray(new JsonObject { ["type"] = "tool_result", ["tool_use_id"] = id, ["content"] = "done" }) },
+            ["tool_use_result"] = toolUseResult,
+        }.ToJsonString();
+        Apply("""{"type":"assistant","message":{"content":[{"type":"tool_use","id":"b1","name":"Bash","input":{"command":"git commit -am fix && git push && gh pr create"}},{"type":"tool_use","id":"b2","name":"Bash","input":{"command":"npm test"}},{"type":"tool_use","id":"b3","name":"Bash","input":{"command":"npm run dev","run_in_background":true}}]}}""");
+
+        // As the Agent SDK documents Bash's output.
+        Apply(Result("b1", JsonNode.Parse("""
+            {"stdout":"[main 1a2b3c4] fix","stderr":"","interrupted":false,
+             "gitOperation":{"commit":{"sha":"1a2b3c4d5e6f","kind":"committed","branch":"main"},"push":{"branch":"main"},
+                             "branch":{"ref":"origin/main","action":"rebased"},"pr":{"number":42,"url":"https://github.com/o/r/pull/42","action":"created"}}}
+            """)!.AsObject()));
+        Apply(Result("b2", new JsonObject { ["stdout"] = "", ["stderr"] = "", ["interrupted"] = false, ["backgroundTaskId"] = "bash_1", ["timedOutAfterMs"] = 120000 }));
+        Apply(Result("b3", new JsonObject { ["stdout"] = "", ["stderr"] = "", ["interrupted"] = false, ["backgroundTaskId"] = "bash_2" }));
+
+        var cards = _items.OfType<ToolUseItem>().ToList();
+        Assert.Equal(["Committed 1a2b3c4 on main", "Pushed main", "Rebased onto origin/main", "Opened PR #42"], cards[0].GitChips.Select(c => c.Text));
+        Assert.Equal("https://github.com/o/r/pull/42", cards[0].GitChips[^1].Url);
+        Assert.Equal("Reached its 2m 00s time limit; carries on in the background", cards[1].ResultSummary);
+        Assert.Empty(cards[1].GitChips);
+        Assert.Equal("Running in the background", cards[2].ResultSummary);
+    }
+
+    [Fact]
+    public void Git_chips_name_only_what_they_know_and_link_only_to_web_addresses()
+    {
+        var chips = GitChips.From(JsonNode.Parse("""
+            {"commit":{"sha":"abc","kind":"amended"},"pr":{"number":7,"url":"javascript:alert(1)","action":"something-new"},"push":{}}
+            """)!.AsObject());
+
+        Assert.Equal(["Amended abc", "PR #7"], chips.Select(c => c.Text));
+        Assert.Null(chips[1].Url);
+        Assert.Empty(GitChips.From(null));
     }
 
     // ---- Rewind and branch points (DESIGN.md §5) ------------------------------------------------------------------
@@ -205,18 +263,39 @@ public class ConversationBuilderTests
     {
         _builder.Apply(new ThinkingDelta("a", null));
         var thinking = Assert.IsType<ThinkingItem>(_items[0]);
-        var changes = 0;
-        thinking.PropertyChanged += (_, e) => changes += e.PropertyName == nameof(ThinkingItem.Text) ? 1 : 0;
+        var (changes, shown) = (0, 0);
+        thinking.PropertyChanged += (_, e) =>
+        {
+            changes += e.PropertyName == nameof(ThinkingItem.Text) ? 1 : 0;
+            shown += e.PropertyName == nameof(ThinkingItem.ShownText) ? 1 : 0;
+        };
 
         for (var i = 0; i < 2000; i++)
         {
             _builder.Apply(new ThinkingDelta("bc", null));
         }
 
-        Assert.Equal(2000, changes);
+        // Collapsed, the view has nothing to show; the text is said to change as it grows by an eighth, not every piece.
+        Assert.Equal(0, shown);
+        Assert.Null(thinking.ShownText);
+        Assert.InRange(changes, 5, 40);
         Assert.Equal(4001, thinking.Text.Length);
         Assert.Same(thinking.Text, thinking.Text);
         Assert.True(thinking.HasText);
+
+        // Expanded, it shows all of it so far, and grows from there.
+        thinking.IsExpanded = true;
+        Assert.Equal(1, shown);
+        Assert.Equal(4001, thinking.ShownText!.Length);
+        for (var i = 0; i < 1000; i++)
+        {
+            _builder.Apply(new ThinkingDelta("de", null));
+        }
+        Assert.InRange(shown, 2, 10);
+        // Once it's done, the view has every last piece.
+        Apply("""{"type":"assistant","message":{"content":[{"type":"text","text":"Done"}]}}""");
+        Assert.False(thinking.IsStreaming);
+        Assert.Equal(6001, thinking.ShownText!.Length);
     }
 
     [Fact]
@@ -384,6 +463,25 @@ public class ConversationBuilderTests
         Apply("""{"type":"user","message":{"role":"user","content":"<local-command-stdout>Set model to `sonnet`</local-command-stdout>"}}""");
 
         Assert.Equal("Set model to sonnet", Assert.IsType<NoteItem>(Assert.Single(_items)).Text);
+    }
+
+    [Fact]
+    public void A_subagents_tasks_and_a_task_list_reach_the_tasks_but_its_own_todo_list_stays_in_its_group()
+    {
+        var items = new ObservableCollection<ConversationItem>();
+        var tasks = new TodoList();
+        var builder = new ConversationBuilder(items, tasks);
+        Apply(builder, """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"a1","name":"Agent","input":{"description":"Helper"}}]}}""");
+        Apply(builder, """{"type":"assistant","parent_tool_use_id":"a1","message":{"content":[{"type":"tool_use","id":"t1","name":"TaskCreate","input":{"subject":"From the helper"}}]}}""");
+        Apply(builder, """{"type":"user","parent_tool_use_id":"a1","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"Task #1 created"}]},"tool_use_result":{"task":{"id":"1","subject":"From the helper"}}}""");
+        Apply(builder, """{"type":"assistant","parent_tool_use_id":"a1","message":{"content":[{"type":"tool_use","id":"w1","name":"TodoWrite","input":{"todos":[{"content":"Helper's own","status":"pending"}]}}]}}""");
+        Apply(builder, """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"l1","name":"TaskGet","input":{"taskId":"1"}}]}}""");
+        Apply(builder, """{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"l1","content":"…"}]},"tool_use_result":{"task":{"id":"1","subject":"From the helper","status":"in_progress","owner":"helper"}}}""");
+
+        var task = Assert.Single(tasks.Items);
+        Assert.Equal(("1", "From the helper", "helper", true), (task.Id, task.Content, task.Owner, task.IsActive));
+        var group = Assert.IsType<SubagentItem>(Assert.Single(items));
+        Assert.Equal("TodoWrite", Assert.IsType<ToolUseItem>(Assert.Single(group.Items)).Name);
     }
 
     private void Apply(string line) => Apply(_builder, line);

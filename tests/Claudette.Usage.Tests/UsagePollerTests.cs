@@ -321,7 +321,7 @@ public sealed class UsagePollerTests : IAsyncDisposable
 
         public int UsageCommandCalls => Volatile.Read(ref _usageCommandCalls);
 
-        public async Task<JsonObject> GetUsageAsync(CancellationToken cancellationToken)
+        public async Task<JsonObject> GetUsageAsync(CancellationToken _)
         {
             var call = Interlocked.Increment(ref _calls);
             var inFlight = Interlocked.Increment(ref _inFlight);
@@ -336,7 +336,7 @@ public sealed class UsagePollerTests : IAsyncDisposable
             }
         }
 
-        public Task<string?> UsageCommandAsync(CancellationToken cancellationToken)
+        public Task<string?> UsageCommandAsync(CancellationToken _)
         {
             Interlocked.Increment(ref _usageCommandCalls);
             return Task.FromResult(UsageCommandText);

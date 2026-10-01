@@ -42,10 +42,26 @@ public static class MessageParser
     }
 
     /// <summary>
+    /// <see cref="TryParse(string, out ClaudeMessage?, out string?)"/> for a message already read as JSON, such as one a
+    /// transcript entry holds: no text to write out and read back. Null when its shape can't be read.
+    /// </summary>
+    internal static ClaudeMessage? TryParse(JsonObject obj)
+    {
+        try
+        {
+            return Parse(obj);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Types Claude Code sends that Claudette has seen and has no use for, so they aren't counted as unknown
     /// (compat/surface.yaml).
     /// </summary>
-    private static readonly HashSet<string> IgnoredTypes = new(StringComparer.Ordinal) { "active_goal" };
+    private static readonly HashSet<string> IgnoredTypes = new(StringComparer.Ordinal) { "active_goal", "command_lifecycle" };
 
     private static ClaudeMessage Parse(JsonObject obj)
     {

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -60,6 +61,14 @@ public sealed partial class AgentNode : ObservableObject
     }
 
     public AgentNode? Parent { get; }
+
+    internal AgentMap Map => _map;
+
+    /// <summary>A subagent in its map's counts: from when it's added until <c>/clear</c> takes it away.</summary>
+    internal bool IsCounted { get; set; }
+
+    /// <summary>The state its map last counted it in.</summary>
+    internal AgentStatus? CountedStatus { get; set; }
 
     /// <summary>The subagent's group in the conversation; null for the main agent.</summary>
     public SubagentItem? Item { get; }
@@ -160,6 +169,14 @@ public sealed partial class AgentNode : ObservableObject
     [NotifyPropertyChangedFor(nameof(ActivityLine), nameof(Subtitle))]
     public partial string? Activity { get; private set; }
 
+    /// <summary>
+    /// Claude Code's one-line summary of how far it has got (<c>task_progress.summary</c>), with Settings → Claude Code →
+    /// <b>Summarize subagents' progress</b> on: shown in place of its latest tool call while it runs.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActivityLine), nameof(Subtitle))]
+    public partial string? ProgressSummary { get; private set; }
+
     /// <summary>Waiting out an API error (<c>tool_progress</c> with <c>subagent_retry</c>).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ActivityLine), nameof(Subtitle))]
@@ -172,7 +189,7 @@ public sealed partial class AgentNode : ObservableObject
     public string ActivityLine => Status switch
     {
         AgentStatus.Waiting => WaitingPrompt is { } prompt ? $"Needs your permission: {Describe(prompt.Request.ToolName, prompt.Request.Input)}" : StatusText,
-        AgentStatus.Running => RetryText ?? Activity ?? (IsRoot ? "Working…" : "Starting…"),
+        AgentStatus.Running => RetryText ?? ProgressSummary ?? Activity ?? (IsRoot ? "Working…" : "Starting…"),
         AgentStatus.Done => FirstLine(ResultText) ?? "Done",
         AgentStatus.Failed => FirstLine(ResultText) is { } error ? $"Failed: {error}" : "Failed",
         AgentStatus.Stopped => StatusText,
@@ -356,6 +373,11 @@ public sealed partial class AgentNode : ObservableObject
     internal void OnTaskProgress(JsonObject raw)
     {
         ApplyUsage(raw.GetObject("usage"), duration: false);
+        // Claude Code's one-line summary of its progress, with Settings → Claude Code → Subagent progress summaries on.
+        if (raw.GetString("summary") is { Length: > 0 } summary)
+        {
+            ProgressSummary = summary.Trim();
+        }
         // Claude Code's own one-line description of what it's doing, when the stream hasn't shown a tool call.
         if (Activity is null && raw.GetString("description") is { Length: > 0 } description)
         {
@@ -474,8 +496,16 @@ public sealed partial class AgentNode : ObservableObject
         }
         Item?.ShowEnded(outcome, ResultText);
         RetryText = null;
+        // Its subtree folds away once nothing in it is still going: a long session's tree stays short. A prompt that
+        // comes from inside it later opens it again (AddPrompt).
+        if (Children.Count > 0 && !Descendants().Any(d => d.IsActive))
+        {
+            IsExpanded = false;
+        }
         Refresh();
     }
+
+    private IEnumerable<AgentNode> Descendants() => Children.SelectMany(c => c.Descendants().Prepend(c));
 
     /// <summary>Running time changed (every second while it runs).</summary>
     internal void Tick()
@@ -503,6 +533,7 @@ public sealed partial class AgentNode : ObservableObject
         OnPropertyChanged(nameof(StopText));
         OnPropertyChanged(nameof(ShowText));
         Tick();
+        _map.Recount(this);
         _map.NotifyChanged();
     }
 
@@ -535,18 +566,6 @@ public sealed partial class AgentNode : ObservableObject
 
     internal void SetTaskId(string taskId) => TaskId ??= taskId;
 
-    internal IEnumerable<AgentNode> DescendantsAndSelf()
-    {
-        yield return this;
-        foreach (var child in Children)
-        {
-            foreach (var node in child.DescendantsAndSelf())
-            {
-                yield return node;
-            }
-        }
-    }
-
     /// <summary>It, or an agent above it, runs in the background, so it isn't tied to the turn.</summary>
     internal bool IsDetachedFromTurn()
     {
@@ -576,13 +595,7 @@ public sealed partial class AgentNode : ObservableObject
         toolUseResult is JsonValue value && value.GetValueKind() == JsonValueKind.String && value.GetValue<string>().Contains("rejected", StringComparison.OrdinalIgnoreCase)
         || text.TrimStart().StartsWith("[Request interrupted", StringComparison.Ordinal);
 
-    internal static string FormatElapsed(TimeSpan span) => span switch
-    {
-        { TotalSeconds: < 1 } => "<1s",
-        { TotalMinutes: < 1 } => $"{(int)span.TotalSeconds}s",
-        { TotalHours: < 1 } => $"{(int)span.TotalMinutes}m {span.Seconds:00}s",
-        _ => $"{(int)span.TotalHours}h {span.Minutes:00}m",
-    };
+    internal static string FormatElapsed(TimeSpan span) => span < TimeSpan.FromSeconds(1) ? "<1s" : Formats.Elapsed(span);
 
     internal static string? FirstLine(string? text)
     {
@@ -594,6 +607,5 @@ public sealed partial class AgentNode : ObservableObject
         return line.Length > 140 ? line[..137] + "…" : line;
     }
 
-    private static string? Str(JsonObject obj, string name) =>
-        obj[name] is JsonValue value && value.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : null;
+    private static string? Str(JsonObject obj, string name) => obj.GetString(name);
 }

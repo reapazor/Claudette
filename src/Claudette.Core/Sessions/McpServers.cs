@@ -21,6 +21,12 @@ public enum McpServerState
 /// <param name="Scope">Where it's configured, such as <c>project</c>, <c>user</c> or <c>local</c>, when Claude Code says.</param>
 public sealed record McpServerStatus(string Name, McpServerState State, string? Error, string? Version, string? Scope, int ToolCount)
 {
+    /// <summary>How Claude Code talks to it, from its <c>config.type</c>: <c>stdio</c>, <c>http</c>, <c>sse</c>, … Null when not said.</summary>
+    public string? Transport { get; init; }
+
+    /// <summary>A remote server, which can use a sign-in that <c>mcp_clear_auth</c> forgets.</summary>
+    public bool IsRemote => Transport is "http" or "sse";
+
     /// <summary>The servers in an <c>mcp_status</c> response (<c>mcpServers</c>). Entries without a name are skipped.</summary>
     public static IReadOnlyList<McpServerStatus> ParseList(JsonObject response) =>
         (response.GetArray("mcpServers") ?? response.GetArray("mcp_servers") ?? [])
@@ -37,6 +43,9 @@ public sealed record McpServerStatus(string Name, McpServerState State, string? 
             server.GetObject("serverInfo")?.GetString("version"),
             server.GetString("scope") ?? server.GetString("source"),
             server.GetArray("tools")?.Count ?? 0)
+        {
+            Transport = server.GetObject("config")?.GetString("type"),
+        }
         : null;
 
     public static McpServerState StateOf(string? status) => status switch
@@ -62,4 +71,21 @@ public sealed record RewindResult(bool CanRewind, string? Error, IReadOnlyList<s
         (int)(response.GetDouble("insertions") ?? 0),
         (int)(response.GetDouble("deletions") ?? 0),
         (int)(response.GetDouble("skippedLinks") ?? response.GetDouble("skipped_links") ?? 0));
+}
+
+/// <summary>
+/// The answer to <c>mcp_authenticate</c> (undocumented; the wire names are from Claude Code 2.1.286): the address to
+/// sign in at, when the user has to, and whether Claude Code waits for the browser to come back to it on this machine.
+/// </summary>
+/// <param name="AuthUrl">Where to sign in; null when the server is signed in already.</param>
+/// <param name="CallbackExpected">
+/// Claude Code listens on this machine for the browser's return, then connects the server by itself. A claude.ai
+/// connector's sign-in happens on claude.ai instead.
+/// </param>
+public sealed record McpSignIn(string? AuthUrl, bool RequiresUserAction, bool CallbackExpected)
+{
+    public static McpSignIn Parse(JsonObject response) => new(
+        response.GetString("authUrl") is { Length: > 0 } url && Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http" ? url : null,
+        response.GetBool("requiresUserAction") ?? false,
+        response.GetBool("callbackExpected") ?? false);
 }

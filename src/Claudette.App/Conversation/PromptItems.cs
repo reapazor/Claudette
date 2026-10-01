@@ -1,10 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.App.ViewModels;
+using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Claudette.App.ViewModels;
 using LiveMarkdown.Avalonia;
 
 namespace Claudette.App.Conversation;
@@ -26,10 +27,28 @@ public abstract partial class PromptItem(PermissionRequest request) : Conversati
     public PermissionRequest Request { get; } = request;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsPending), nameof(HasOutcome))]
+    [NotifyPropertyChangedFor(nameof(IsPending), nameof(HasOutcome), nameof(PositionText), nameof(HasPosition))]
     public partial PermissionState State { get; set; } = PermissionState.Pending;
 
     public bool IsPending => State == PermissionState.Pending;
+
+    /// <summary>
+    /// Where it stands among the prompts waiting in its tab, oldest first: the first is the one Ctrl/Cmd+Enter answers
+    /// (DESIGN.md §7, "Several prompts waiting").
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PositionText), nameof(HasPosition))]
+    public partial int Position { get; internal set; }
+
+    /// <summary>How many prompts wait in its tab.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PositionText), nameof(HasPosition))]
+    public partial int WaitingCount { get; internal set; }
+
+    /// <summary>"Prompt 2 of 5" while several wait; null for one alone, or once answered.</summary>
+    public string? PositionText => IsPending && WaitingCount > 1 && Position > 0 ? $"Prompt {Position} of {WaitingCount}" : null;
+
+    public bool HasPosition => PositionText is not null;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasOutcome))]
@@ -99,6 +118,7 @@ public sealed partial class PermissionItem : PromptItem
             _ => $"Allow {name}?",
         };
         Command = request.ToolName == "Bash" ? Str(input, "command") : null;
+        IsUnsandboxed = request.ToolName == "Bash" && input["dangerouslyDisableSandbox"] is JsonValue unsandboxed && unsandboxed.GetValueKind() == JsonValueKind.True;
         Detail = Command is not null ? null : ToolUseItem.Summarize(request.ToolName, input) is { Length: > 0 } summary ? summary : null;
         Description = request.Description is { } description && description != Detail && description != Path.GetFileName(path ?? "") ? description : null;
         Reason = request.DecisionReason;
@@ -127,6 +147,12 @@ public sealed partial class PermissionItem : PromptItem
     public string? Command { get; }
 
     public bool HasCommand => Command is not null;
+
+    /// <summary>
+    /// The command asks to run outside the sandbox (<c>dangerouslyDisableSandbox</c>), with the file and network access
+    /// the sandbox would have kept from it (DESIGN.md §7).
+    /// </summary>
+    public bool IsUnsandboxed { get; }
 
     /// <summary>The file path, URL or other one-line summary of the input.</summary>
     public string? Detail { get; }
@@ -303,8 +329,7 @@ public sealed partial class PermissionItem : PromptItem
         return true;
     }
 
-    private static string? Str(JsonObject obj, string name) =>
-        obj[name] is JsonValue value && value.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : null;
+    private static string? Str(JsonObject obj, string name) => obj.GetString(name);
 }
 
 /// <summary>One option of a clarifying question.</summary>

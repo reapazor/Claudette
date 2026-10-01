@@ -1,5 +1,4 @@
 using Claudette.Core.Development;
-using Claudette.Core.Git;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
@@ -13,6 +12,25 @@ public sealed class SettingsAndStateTests : IDisposable
     public SettingsAndStateTests() => Directory.CreateDirectory(_root);
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
+
+    [Fact]
+    public void The_first_launch_that_knows_about_trust_trusts_the_folders_already_used()
+    {
+        var state = new AppState
+        {
+            Tabs = [new TabState { Folder = "/work/api" }, new TabState { Folder = "" }],
+            RecentFolders = [new RecentFolder { Path = "/work/web" }, new RecentFolder { Path = "/work/api" }],
+            FavoriteFolders = ["/work/docs"],
+        };
+
+        state.TrustFoldersAlreadyUsed();
+        Assert.Equal(["/work/api", "/work/web", "/work/docs"], state.TrustedFolders);
+
+        // Once set, it's the user's list: a later launch doesn't add to it.
+        state.FavoriteFolders.Add("/work/new");
+        state.TrustFoldersAlreadyUsed();
+        Assert.DoesNotContain("/work/new", state.TrustedFolders!);
+    }
 
     [Fact]
     public void A_missing_file_loads_defaults()
@@ -200,24 +218,6 @@ public sealed class SettingsAndStateTests : IDisposable
         Assert.Equal(2680, totals.Total);
         Assert.Equal(1.02, totals.EstimatedCostUsd, 5);
         Assert.Equal("2.7k tok", TokenTotals.Short(totals.Total));
-    }
-
-    [Fact]
-    public void Reads_the_git_branch_including_from_a_subfolder_and_a_worktree()
-    {
-        var repo = Path.Combine(_root, "repo");
-        Directory.CreateDirectory(Path.Combine(repo, ".git"));
-        Directory.CreateDirectory(Path.Combine(repo, "src", "deep"));
-        File.WriteAllText(Path.Combine(repo, ".git", "HEAD"), "ref: refs/heads/feature/auth\n");
-        var worktreeGit = Path.Combine(_root, "wt-git");
-        Directory.CreateDirectory(worktreeGit);
-        File.WriteAllText(Path.Combine(worktreeGit, "HEAD"), "0123456789abcdef\n");
-        var worktree = Path.Combine(_root, "worktree");
-        Directory.CreateDirectory(worktree);
-        File.WriteAllText(Path.Combine(worktree, ".git"), $"gitdir: {worktreeGit}\n");
-
-        Assert.Equal("feature/auth", GitInfo.TryGetBranch(Path.Combine(repo, "src", "deep")));
-        Assert.Equal("0123456", GitInfo.TryGetBranch(worktree));
     }
 
     [Fact]

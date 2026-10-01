@@ -98,7 +98,7 @@ public class PerforceTabTests
 
         Assert.Equal(("other:1666", "build"), (p4.Runs.First(r => r.Command == "info").Port, p4.Runs.First(r => r.Command == "info").User));
         Assert.Equal(["-p", "other:1666", "-u", "build", "login"], p4.Logins.Single().Spec.Arguments);
-        await TabTestHarness.Eventually(() => tab.PerforceStatusText?.StartsWith("build @ other:1666, ticket expires in", StringComparison.Ordinal) == true, "the status");
+        await TabTestHarness.Eventually(() => tab.Perforce.StatusText?.StartsWith("build @ other:1666, ticket expires in", StringComparison.Ordinal) == true, "the status");
     }
 
     // ---- Keeping the ticket fresh ----------------------------------------------------------------------------------
@@ -117,7 +117,7 @@ public class PerforceTabTests
         var login = p4.Logins.Single();
         Assert.Equal(["s3cret"], login.Input);
         Assert.DoesNotContain(p4.Runs.SelectMany(r => r.Spec.Arguments), a => a.Contains("s3cret", StringComparison.Ordinal));
-        Assert.Null(tab.PerforcePrompt);
+        Assert.Null(tab.Perforce.Prompt);
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public class PerforceTabTests
         store.Secrets[StoredKey] = "s3cret";
         var tab = await h.OpenTabAsync();
         // Finished, too: a hook arriving while the first check is still under way would share its answer.
-        await TabTestHarness.Eventually(() => p4.StatusChecks == 1 && tab.PerforceStatusText?.Contains("11h", StringComparison.Ordinal) == true && !tab.IsCheckingPerforceTicket,
+        await TabTestHarness.Eventually(() => p4.StatusChecks == 1 && tab.Perforce.StatusText?.Contains("11h", StringComparison.Ordinal) == true && !tab.Perforce.IsCheckingTicket,
             "the first check");
         // Later, the ticket has gone (for example p4 logout in a terminal).
         h.Time.Advance(TimeSpan.FromMinutes(6));
@@ -166,20 +166,20 @@ public class PerforceTabTests
         p4.TicketExpires = h.Time.GetUtcNow().AddHours(11);
         store.Secrets[StoredKey] = "s3cret";
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.PerforceStatusText?.Contains("11h", StringComparison.Ordinal) == true, "the first check");
+        await TabTestHarness.Eventually(() => tab.Perforce.StatusText?.Contains("11h", StringComparison.Ordinal) == true, "the first check");
         h.Transport.Emit(Init());
         await TabTestHarness.Eventually(() => tab.Status == TabStatus.Working, "the turn");
         // Whether the turn's own check sees it or recovery does, there's one login and one retry message.
         p4.TicketExpires = h.Time.GetUtcNow().AddMinutes(-1);
 
         EmitBash(h, "b1", "p4 sync //depot/...", "Your session has expired, please login again.", isError: true);
-        await TabTestHarness.Eventually(() => h.Transport.SentUserTexts.Contains(TabViewModel.PerforceRetryMessage), "the retry message");
+        await TabTestHarness.Eventually(() => h.Transport.SentUserTexts.Contains(PerforceViewModel.RetryMessage), "the retry message");
         EmitBash(h, "b2", "p4 sync //depot/...", "Your session has expired, please login again.", isError: true);
-        await Waiting.NeverAsync(() => p4.Logins.Count > 1 || h.Transport.SentUserTexts.Count(t => t == TabViewModel.PerforceRetryMessage) > 1,
+        await Waiting.NeverAsync(() => p4.Logins.Count > 1 || h.Transport.SentUserTexts.Count(t => t == PerforceViewModel.RetryMessage) > 1,
             "a second login or retry message");
 
         Assert.Single(p4.Logins);
-        Assert.Single(h.Transport.SentUserTexts, t => t == TabViewModel.PerforceRetryMessage);
+        Assert.Single(h.Transport.SentUserTexts, t => t == PerforceViewModel.RetryMessage);
         Assert.Contains(tab.Items.OfType<NoteItem>(), n => n.Text.Contains("retry the last p4 command", StringComparison.Ordinal));
     }
 
@@ -190,9 +190,9 @@ public class PerforceTabTests
         await using var _h = h;
 
         var tab = await OpenAsync(h);
-        await TabTestHarness.Eventually(() => tab.PerforcePrompt is not null && tab.Status == TabStatus.NeedsInput, "the prompt");
+        await TabTestHarness.Eventually(() => tab.Perforce.Prompt is not null && tab.Status == TabStatus.NeedsInput, "the prompt");
 
-        var prompt = tab.PerforcePrompt!;
+        var prompt = tab.Perforce.Prompt!;
         Assert.False(prompt.OfferToSave);
         Assert.Contains("matt @ ssl:perforce:1666", prompt.Message, StringComparison.Ordinal);
         Assert.Equal($"Perforce needs your password to log in as matt @ ssl:perforce:1666.", h.Notifier.Last("NeedsInput:")?.Body);
@@ -204,7 +204,7 @@ public class PerforceTabTests
             prompt.LogInCommand.Execute(null);
             return 0;
         });
-        await TabTestHarness.Eventually(() => tab.PerforcePrompt is null && tab.Status == TabStatus.Idle, "the prompt to close");
+        await TabTestHarness.Eventually(() => tab.Perforce.Prompt is null && tab.Status == TabStatus.Idle, "the prompt to close");
         // The run is recorded as it starts; its password is written to standard input just after.
         await TabTestHarness.Eventually(() => p4.Logins is [{ Input.Count: > 0 }], "the login");
 
@@ -220,8 +220,8 @@ public class PerforceTabTests
         await using var _h = h;
 
         var tab = await OpenAsync(h);
-        await TabTestHarness.Eventually(() => tab.PerforcePrompt is not null, "the prompt");
-        var prompt = tab.PerforcePrompt!;
+        await TabTestHarness.Eventually(() => tab.Perforce.Prompt is not null, "the prompt");
+        var prompt = tab.Perforce.Prompt!;
         Assert.True(prompt.OfferToSave);
         Assert.Equal("Save it in Test Keychain", prompt.SaveText);
 
@@ -239,15 +239,15 @@ public class PerforceTabTests
         var (h, p4, _) = Harness(p => p.PasswordSource = PerforcePasswordSource.AskEachTime);
         await using var _h = h;
         var tab = await OpenAsync(h);
-        await TabTestHarness.Eventually(() => tab.PerforcePrompt is not null, "the prompt");
-        var first = tab.PerforcePrompt!;
+        await TabTestHarness.Eventually(() => tab.Perforce.Prompt is not null, "the prompt");
+        var first = tab.Perforce.Prompt!;
 
         Answer(first, "wrong");
-        await TabTestHarness.Eventually(() => tab.PerforcePrompt is { } p && p != first, "the second prompt");
+        await TabTestHarness.Eventually(() => tab.Perforce.Prompt is { } p && p != first, "the second prompt");
 
-        Assert.Equal("Password invalid. Try again.", tab.PerforcePrompt!.Error);
-        Answer(tab.PerforcePrompt!, "s3cret");
-        await TabTestHarness.Eventually(() => tab.PerforcePrompt is null && p4.Logins.Count == 2, "the second login");
+        Assert.Equal("Password invalid. Try again.", tab.Perforce.Prompt!.Error);
+        Answer(tab.Perforce.Prompt!, "s3cret");
+        await TabTestHarness.Eventually(() => tab.Perforce.Prompt is null && p4.Logins.Count == 2, "the second login");
         Assert.Equal(TabStatus.Idle, tab.Status);
     }
 
@@ -257,16 +257,16 @@ public class PerforceTabTests
         var (h, p4, _) = Harness(p => p.PasswordSource = PerforcePasswordSource.AskEachTime);
         await using var _h = h;
         var tab = await OpenAsync(h);
-        await TabTestHarness.Eventually(() => tab.PerforcePrompt is not null, "the prompt");
+        await TabTestHarness.Eventually(() => tab.Perforce.Prompt is not null, "the prompt");
 
         InlineDispatcher.Read(() =>
         {
-            tab.PerforcePrompt!.CancelCommand.Execute(null);
+            tab.Perforce.Prompt!.CancelCommand.Execute(null);
             return 0;
         });
 
         await TabTestHarness.Eventually(() => tab.Items.OfType<NoteItem>().Any(n => n.Text.Contains("password prompt was cancelled", StringComparison.Ordinal)), "the note");
-        Assert.Null(tab.PerforcePrompt);
+        Assert.Null(tab.Perforce.Prompt);
         Assert.Empty(p4.Logins);
         Assert.Equal(TabStatus.Idle, tab.Status);
     }
@@ -284,7 +284,7 @@ public class PerforceTabTests
 
         Assert.Contains(p4.Runs, r => r.Command == "set" && r.Arguments.SequenceEqual(["-q", "P4PASSWD"]));
         Assert.Equal(["s3cret"], p4.Logins.Single().Input);
-        Assert.Null(tab.PerforcePrompt);
+        Assert.Null(tab.Perforce.Prompt);
     }
 
     [Fact]
@@ -311,9 +311,9 @@ public class PerforceTabTests
         await TabTestHarness.Eventually(() => h.Notifier.Last("NeedsInput:") is not null, "the notification");
         Assert.Equal("Perforce needs you to log in: run p4 login in a terminal, or log in with P4V.", h.Notifier.Last("NeedsInput:")!.Body);
         Assert.Contains(tab.Items.OfType<NoteItem>(), n => n.Text.Contains("Claudette checks again every minute", StringComparison.Ordinal));
-        Assert.Contains("log in yourself", tab.PerforceStatusText, StringComparison.Ordinal);
+        Assert.Contains("log in yourself", tab.Perforce.StatusText, StringComparison.Ordinal);
         Assert.Empty(p4.Logins);
-        Assert.Null(tab.PerforcePrompt);
+        Assert.Null(tab.Perforce.Prompt);
     }
 
     // ---- The changelist ---------------------------------------------------------------------------------------------
@@ -326,9 +326,9 @@ public class PerforceTabTests
         var tab = await h.OpenTabAsync();
 
         EmitBash(h, "b1", "p4 edit -c 12345 src/login.cpp", "//depot/src/login.cpp#7 - opened for edit");
-        await TabTestHarness.Eventually(() => tab.ChangelistBadge == "CL 12345", "the changelist");
+        await TabTestHarness.Eventually(() => tab.Perforce.ChangelistBadge == "CL 12345", "the changelist");
 
-        Assert.False(tab.ShowChangelistBadge);
+        Assert.False(tab.Perforce.ShowChangelistBadge);
         Assert.Contains(tab.InfoRows, r => r is { Label: "Changelist", Value: "CL 12345" });
         Assert.Equal(12345, tab.State.Changelists.Single().Number);
 
@@ -338,7 +338,7 @@ public class PerforceTabTests
             h.Services.SaveSettings();
             return 0;
         });
-        Assert.True(tab.ShowChangelistBadge);
+        Assert.True(tab.Perforce.ShowChangelistBadge);
         Assert.Equal("fix login bug", InlineDispatcher.Read(() =>
         {
             tab.StartRenameCommand.Execute(null);
@@ -346,7 +346,7 @@ public class PerforceTabTests
             tab.CommitRenameCommand.Execute(null);
             return tab.DisplayName;
         }));
-        Assert.Equal("CL 12345", tab.ChangelistBadge);
+        Assert.Equal("CL 12345", tab.Perforce.ChangelistBadge);
     }
 
     [Fact]
@@ -358,16 +358,16 @@ public class PerforceTabTests
 
         EmitBash(h, "b1", "p4 change -i < spec", "Change 100 created with 1 open file(s).");
         EmitBash(h, "b2", "p4 reopen -c 200 a.cpp", "//depot/a.cpp#1 - reopened; change 200");
-        await TabTestHarness.Eventually(() => tab.ChangelistBadge == "CL 200", "the second changelist");
+        await TabTestHarness.Eventually(() => tab.Perforce.ChangelistBadge == "CL 200", "the second changelist");
         Assert.Equal("CL 200; earlier: CL 100", tab.InfoRows.Single(r => r.Label == "Changelist").Value);
 
         EmitBash(h, "b3", "p4 submit -c 200", "Submitting change 200.\nChange 200 submitted.");
-        await TabTestHarness.Eventually(() => tab.ChangelistBadge == "CL 200 · submitted", "submitted");
+        await TabTestHarness.Eventually(() => tab.Perforce.ChangelistBadge == "CL 200 · submitted", "submitted");
 
         EmitBash(h, "b4", "p4 change -d 100", "Change 100 deleted.");
-        await TabTestHarness.Eventually(() => tab.ChangelistBadge is null, "the badge to go");
-        Assert.False(tab.ShowChangelistBadge);
-        Assert.Equal(["CL 200 · submitted"], tab.ChangelistRows.Select(r => r.Text));
+        await TabTestHarness.Eventually(() => tab.Perforce.ChangelistBadge is null, "the badge to go");
+        Assert.False(tab.Perforce.ShowChangelistBadge);
+        Assert.Equal(["CL 200 · submitted"], tab.Perforce.ChangelistRows.Select(r => r.Text));
     }
 
     [Fact]
@@ -385,8 +385,8 @@ public class PerforceTabTests
         h.Shell.Restore(null);
         var tab = h.Shell.AllTabs.Single();
 
-        Assert.Equal("CL 777", tab.ChangelistBadge);
-        Assert.True(tab.ShowChangelistBadge);
+        Assert.Equal("CL 777", tab.Perforce.ChangelistBadge);
+        Assert.True(tab.Perforce.ShowChangelistBadge);
         var saved = JsonFileStoreRoundTrip(h.Services.State);
         Assert.Equal(777, saved.Tabs.Single().Changelists.Single().Number);
     }
@@ -399,12 +399,12 @@ public class PerforceTabTests
         p4.TicketExpires = h.Time.GetUtcNow().AddHours(11);
         var tab = await h.OpenTabAsync();
         EmitBash(h, "b1", "p4 shelve -c 12345", "Change 12345 files shelved.");
-        await TabTestHarness.Eventually(() => tab.ChangelistBadge == "CL 12345", "the changelist");
+        await TabTestHarness.Eventually(() => tab.Perforce.ChangelistBadge == "CL 12345", "the changelist");
 
-        await InlineDispatcher.Read(() => tab.CopyChangelistCommand.ExecuteAsync(null));
+        await InlineDispatcher.Read(() => tab.Perforce.CopyChangelistCommand.ExecuteAsync(null));
         InlineDispatcher.Read(() =>
         {
-            tab.OpenChangelistInP4VCommand.Execute(12345L);
+            tab.Perforce.OpenChangelistInP4VCommand.Execute(12345L);
             return 0;
         });
 

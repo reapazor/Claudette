@@ -82,9 +82,12 @@ public sealed partial class TabViewModel
         }
     }
 
-    /// <summary>The working folder's files, for <c>@</c>. Made again if the tab moves to another folder.</summary>
+    /// <summary>
+    /// The working folder's files, for <c>@</c>: shared with the other tabs in the folder, so it's listed once. Found
+    /// again if the tab moves to another folder.
+    /// </summary>
     internal ProjectFileIndex FileIndex =>
-        _fileIndex is { } index && index.Folder == Folder ? index : _fileIndex = new ProjectFileIndex(Folder, _services.Git, _services.Time);
+        _fileIndex is { } index && index.Folder == Folder ? index : _fileIndex = _services.FileIndexFor(Folder);
 
     /// <summary>Keeps the command list and file index current from the session's events.</summary>
     private void ObserveForComposer(SessionEvent sessionEvent)

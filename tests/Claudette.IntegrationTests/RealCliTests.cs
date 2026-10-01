@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
 using Claudette.Core.Diffs;
+using Claudette.Core.Git;
 using Claudette.Core.Installation;
 using Claudette.Core.Processes;
 using Claudette.Core.Protocol;
@@ -80,6 +81,49 @@ public sealed class RealCliTests : IAsyncLifetime
     }
 
     // ---- Rewind and branch, hook rows, MCP servers (DESIGN.md §5, §4) ------------------------------------------------
+
+    [Fact]
+    public async Task A_typed_prompt_comes_back_with_the_id_and_origin_it_was_sent_with()
+    {
+        await using var session = await StartAsync(replayUserMessages: true);
+        var stamp = new MessageStamp(Guid.NewGuid().ToString(), FromUser: true);
+
+        await session.SendUserMessageAsync("hello", [], null, stamp, TestContext.Current.CancellationToken);
+        var (replayed, _) = await session.ReadUntilAsync<PromptReplayed>();
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        // DESIGN.md §13: Claude Code keeps the id, and counts the prompt as a person's (checked with 2.1.286).
+        Assert.Equal(stamp.Uuid, replayed.Message.Uuid);
+        Assert.Equal("human", replayed.Message.Raw["origin"]?["kind"]?.GetValue<string>());
+        Assert.Equal(stamp.Uuid, done.Result.Raw["user_message_uuid"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task A_worktree_tab_works_in_the_worktree_Claude_Code_makes_and_leaves_locked()
+    {
+        RealCli.SkipUnlessInstalled(_factory is not null);
+        // --worktree branches from HEAD when there's no remote, so the repository needs a commit.
+        Process.Start(new ProcessStartInfo("git", ["-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "init"])
+            { WorkingDirectory = Work, CreateNoWindow = true })?.WaitForExit(10_000);
+        var extra = _root.Combine("extra");
+        Directory.CreateDirectory(extra);
+
+        await using (var session = await StartAsync(worktree: "real-check", addDirectories: [extra]))
+        {
+            await session.SendUserMessageAsync("hello", TestContext.Current.CancellationToken);
+            var (started, _) = await session.ReadUntilAsync<TurnStarted>();
+            await session.ReadUntilAsync<TurnCompleted>();
+
+            // DESIGN.md §4, "Worktree tabs": system/init reports the worktree as where it works (checked with 2.1.286).
+            Assert.Equal(Path.GetFullPath(GitWorktrees.PathFor(Work, "real-check")), Path.GetFullPath(started.Init.Cwd!));
+        }
+
+        var worktree = await new GitWorktrees(new GitWorkingTree(new ProcessLauncher(), TimeProvider.System)).FindAsync(Work, GitWorktrees.PathFor(Work, "real-check"), TestContext.Current.CancellationToken);
+        Assert.NotNull(worktree);
+        Assert.Equal("worktree-real-check", worktree.Branch);
+        // -p leaves its lock behind, which removing it has to undo.
+        Assert.True(worktree.IsLocked);
+    }
 
     [Fact]
     public async Task A_prompt_comes_back_with_its_uuid_and_files_rewind_to_it()
@@ -168,9 +212,47 @@ public sealed class RealCliTests : IAsyncLifetime
         }, "the server to fail", TimeSpan.FromSeconds(30));
         Assert.Equal(McpServerState.Failed, broken!.State);
 
+        Assert.Equal("stdio", broken.Transport);
+
+        // DESIGN.md §4, "MCP servers": the sign-in requests are known (checked with 2.1.286); a stdio server has no sign-in.
+        var signIn = await Assert.ThrowsAsync<ControlRequestException>(() => session.SignInToMcpServerAsync("broken", TestContext.Current.CancellationToken));
+        Assert.Contains("does not support OAuth", signIn.Message, StringComparison.Ordinal);
+        var signOut = await Assert.ThrowsAsync<ControlRequestException>(() => session.SignOutOfMcpServerAsync("broken", TestContext.Current.CancellationToken));
+        Assert.Contains("Cannot clear auth", signOut.Message, StringComparison.Ordinal);
+
         await session.SetMcpServerEnabledAsync("broken", false, TestContext.Current.CancellationToken);
         var after = Assert.Single(await session.GetMcpStatusAsync(TestContext.Current.CancellationToken), s => s.Name == "broken");
         Assert.Equal(McpServerState.Disabled, after.State);
+    }
+
+    [Fact]
+    public async Task Ultracode_and_the_output_style_are_set_on_a_running_session()
+    {
+        // DESIGN.md §5, "Model and effort" (checked with 2.1.286).
+        await using var session = await StartAsync();
+        var initialization = session.Initialization!;
+        Assert.Contains("default", initialization.AvailableOutputStyles, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("Explanatory", initialization.AvailableOutputStyles);
+        Assert.NotNull(initialization.OutputStyle);
+
+        await session.SetUltracodeAsync(true, TestContext.Current.CancellationToken);
+        await session.SetUltracodeAsync(false, TestContext.Current.CancellationToken);
+        await session.SetOutputStyleAsync("Explanatory", TestContext.Current.CancellationToken);
+
+        var local = Path.Combine(Work, ".claude", "settings.local.json");
+        Assert.Equal("Explanatory", JsonNode.Parse(await File.ReadAllTextAsync(local, TestContext.Current.CancellationToken))!["outputStyle"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Subagent_progress_summaries_are_accepted()
+    {
+        // DESIGN.md §18, "Agent map": agentProgressSummaries on initialize (checked with 2.1.286).
+        await using var session = await StartAsync(agentProgressSummaries: true);
+
+        await session.SendUserMessageAsync("hello", TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.False(done.Result.IsError);
     }
 
     [Fact]
@@ -383,6 +465,41 @@ public sealed class RealCliTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_refused_start_says_why()
+    {
+        // DESIGN.md §4, "Why it couldn't start": every claude starts with CLAUDE_CODE_STARTUP_FAILURE_RESULTS=1 (checked with 2.1.286).
+        var ex = await Assert.ThrowsAsync<ClaudeSessionExitedException>(() => StartAsync(environment: new() { ["HTTPS_PROXY"] = "not-a-url", ["https_proxy"] = "not-a-url" }));
+
+        Assert.Equal("proxy_invalid", ex.StartupFailure?.Reason);
+        Assert.Contains("https_proxy", ex.StartupFailure!.Errors, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task A_turn_cut_off_by_a_restart_carries_on_when_the_session_resumes()
+    {
+        // DESIGN.md §9, "Working on Claudette": Claudette's own restart stops a working tab without interrupting it...
+        string sessionId;
+        await using (var first = await StartAsync())
+        {
+            await first.SendUserMessageAsync("SLOW", TestContext.Current.CancellationToken);
+            await first.ReadUntilAsync<TextDelta>();
+            sessionId = first.SessionId!;
+            await first.StopAsync(TimeSpan.FromSeconds(1));
+        }
+
+        // ...and resumes it with CLAUDE_CODE_RESUME_INTERRUPTED_TURN, which re-runs the turn (checked with 2.1.286).
+        await using var second = await StartAsync(resume: sessionId, environment: new()
+        {
+            ["CLAUDE_CODE_RESUME_INTERRUPTED_TURN"] = "1",
+            ["CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS"] = "600000",
+        });
+        var (done, seen) = await second.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(30));
+
+        Assert.Equal("interrupted_turn", done.Result.Raw["resume_reason"]?.GetValue<string>());
+        Assert.Contains(seen.OfType<AssistantMessageReceived>(), a => a.Message.Raw["resume_reason"] is not null);
+    }
+
+    [Fact]
     public async Task Interrupt_stops_a_streaming_reply()
     {
         await using var session = await StartAsync();
@@ -393,6 +510,34 @@ public sealed class RealCliTests : IAsyncLifetime
         var (done, _) = await session.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(15));
 
         Assert.Equal("aborted_streaming", done.Result.TerminalReason);
+    }
+
+    [Fact]
+    public async Task Messages_waiting_their_turn_are_taken_back_one_by_one_or_with_the_interrupt()
+    {
+        await using var session = await StartAsync(replayUserMessages: true);
+        var ct = TestContext.Current.CancellationToken;
+        string Id() => Guid.NewGuid().ToString();
+
+        // DESIGN.md §5, "Queued messages" (checked with 2.1.286): cancel_async_message takes one back...
+        await session.SendUserMessageAsync("SLOW", [], null, new MessageStamp(Id(), FromUser: true), ct);
+        await session.ReadUntilAsync<TextDelta>();
+        var one = Id();
+        await session.SendUserMessageAsync("one", [], null, new MessageStamp(one, FromUser: true), ct);
+        Assert.True(await session.CancelQueuedMessageAsync(one, ct));
+        Assert.False(await session.CancelQueuedMessageAsync(Id(), ct));
+
+        // ...and an interrupt with cancel_queued takes back the rest, which never run.
+        var two = Id();
+        await session.SendUserMessageAsync("two", [], null, new MessageStamp(two, FromUser: true), ct);
+        var receipt = await session.InterruptAsync(cancelQueued: true, ct);
+        var (done, seen) = await session.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(15));
+
+        Assert.Contains(ClaudeSession.InterruptCancelQueuedCapability, session.Capabilities);
+        Assert.Equal([two], receipt.Cancelled);
+        Assert.Empty(receipt.StillQueued);
+        Assert.Equal("aborted_streaming", done.Result.TerminalReason);
+        Assert.DoesNotContain(seen.OfType<PromptReplayed>(), p => p.Message.Uuid == one || p.Message.Uuid == two);
     }
 
     [Fact]
@@ -767,9 +912,10 @@ public sealed class RealCliTests : IAsyncLifetime
 
     private async Task<ClaudeSession> StartAsync(string? permissionMode = null, string? resume = null, IReadOnlyList<HookRegistration>? hooks = null, string? appendSystemPrompt = null, Dictionary<string, string?>? environment = null,
         string model = "claude-haiku-4-5", bool replayUserMessages = false, bool includeHookEvents = false, bool forkSession = false, string? resumeSessionAt = null,
-        string? fallbackModel = null, IReadOnlyList<string>? additionalArguments = null)
+        string? fallbackModel = null, IReadOnlyList<string>? additionalArguments = null, bool agentProgressSummaries = false, string? worktree = null,
+        IReadOnlyList<string>? addDirectories = null)
     {
-        Assert.SkipWhen(_factory is null, "Claude Code isn't installed.");
+        RealCli.SkipUnlessInstalled(_factory is not null);
         var overrides = new Dictionary<string, string?>
         {
             ["ANTHROPIC_BASE_URL"] = _api.BaseAddress.ToString().TrimEnd('/'),
@@ -798,6 +944,9 @@ public sealed class RealCliTests : IAsyncLifetime
             ResumeSessionAt = resumeSessionAt,
             FallbackModel = fallbackModel,
             AdditionalArguments = additionalArguments ?? [],
+            AgentProgressSummaries = agentProgressSummaries,
+            Worktree = worktree,
+            AddDirectories = addDirectories ?? [],
         }, TestContext.Current.CancellationToken);
     }
 }

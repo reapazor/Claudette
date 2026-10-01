@@ -43,11 +43,22 @@ public abstract record LibraryCopyResult
 public sealed class LibraryService : IDisposable
 {
     /// <summary>Claude Code finishes writing the transcript around the result message; give it a moment.</summary>
-    private static readonly TimeSpan SettleDelay = TimeSpan.FromSeconds(1);
+    internal static readonly TimeSpan SettleDelay = TimeSpan.FromSeconds(1);
 
-    /// <summary>What syncs (DESIGN.md §14). The path to claude, the machine name, the library folder, the diff tool, folders and tabs stay per machine.</summary>
-    /// <summary>Synced sections; <see cref="ApplySettings"/> copies each of them back.</summary>
+    /// <summary>Copies to the library under way, waiting out <see cref="SettleDelay"/> or writing.</summary>
+    private int _copying;
+
+    /// <summary>No copy to the library is under way: for tests, which can't await the copies turns start.</summary>
+    internal bool IsIdle => Volatile.Read(ref _copying) == 0;
+
+    /// <summary>
+    /// What syncs (DESIGN.md §14), by section; <see cref="ApplySettings"/> copies each of them back. The path to claude,
+    /// the machine name, the library folder, the diff tool, folders and tabs stay per machine.
+    /// </summary>
     private static readonly string[] SyncedSettings = ["appearance", "newTabs", "usage", "checkIns", "quickSuffixes", "processes", "notifications", "keyboard"];
+
+    /// <summary>Within the synced sections, what stays per machine: the zoom suits this machine's screen.</summary>
+    private static readonly string[] PerMachine = ["appearance.zoom"];
 
     /// <summary>Synced as one value each: the shortcut overrides come and go by command id.</summary>
     private static readonly string[] SyncedLeaves = ["keyboard.bindings"];
@@ -136,6 +147,7 @@ public sealed class LibraryService : IDisposable
     /// <param name="force">Copies every file again, even ones that look unchanged (<b>Sync now</b>).</param>
     public async Task<LibraryCopyResult> CopyToLibraryAsync(SessionRecord record, string? localCopy, Func<bool> stillSyncing, bool force = false)
     {
+        Interlocked.Increment(ref _copying);
         try
         {
             await Task.Delay(SettleDelay, _services.Time).ConfigureAwait(false);
@@ -180,6 +192,10 @@ public sealed class LibraryService : IDisposable
         {
             _logger.LogWarning(ex, "Couldn't copy session {SessionId} to the library.", record.SessionId);
             return new LibraryCopyResult.Failed(ex.Message);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _copying);
         }
     }
 
@@ -252,8 +268,15 @@ public sealed class LibraryService : IDisposable
         }
     }
 
-    private Dictionary<string, JsonNode?> FlattenSettings() =>
-        SettingsSync.Flatten(SettingsJson(_services.Settings), SyncedSettings, SyncedLeaves);
+    private Dictionary<string, JsonNode?> FlattenSettings()
+    {
+        var values = SettingsSync.Flatten(SettingsJson(_services.Settings), SyncedSettings, SyncedLeaves);
+        foreach (var path in PerMachine)
+        {
+            values.Remove(path);
+        }
+        return values;
+    }
 
     private static JsonObject SettingsJson(AppSettings settings) =>
         JsonSerializer.SerializeToNode(settings, JsonFileStore<AppSettings>.Options)!.AsObject();
@@ -263,7 +286,10 @@ public sealed class LibraryService : IDisposable
         var json = SettingsJson(_services.Settings);
         foreach (var (path, value) in values)
         {
-            SettingsSync.Apply(json, path, value);
+            if (!PerMachine.Contains(path, StringComparer.Ordinal))
+            {
+                SettingsSync.Apply(json, path, value);
+            }
         }
         var updated = json.Deserialize<AppSettings>(JsonFileStore<AppSettings>.Options);
         if (updated is null)

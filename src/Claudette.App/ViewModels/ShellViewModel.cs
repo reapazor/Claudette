@@ -1,11 +1,9 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using Avalonia.Media;
 using Claudette.App.Services;
+using Claudette.Core.Accessibility;
 using Claudette.Core.Development;
-using Claudette.Core.Diffs;
 using Claudette.Core.Git;
-using Claudette.Core.Library;
 using Claudette.Core.Protocol;
 using Claudette.Core.Settings;
 using Claudette.Platform.Processes;
@@ -16,20 +14,27 @@ namespace Claudette.App.ViewModels;
 
 /// <summary>
 /// The main UI once Claude Code is ready: the sidebar of tabs grouped by folder, the selected tab, the new-tab picker
-/// and dialogs (DESIGN.md §3, §4).
+/// and dialogs (DESIGN.md §3, §4). Opening a session from History is <see cref="SessionOpener"/>'s, the sidebar's and
+/// side panel's widths are <see cref="Layout"/>'s, and a group's color is chosen by <see cref="GroupColors"/>.
 /// </summary>
 public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 {
     private readonly AppServices _services;
     private readonly Action _onAuthenticationRequired;
+    private readonly SessionOpener _opener;
 
     public ShellViewModel(AppServices services, Action onAuthenticationRequired)
     {
         _services = services;
         _onAuthenticationRequired = onAuthenticationRequired;
-        IsSidebarCollapsed = services.State.SidebarCollapsed;
-        SidebarWidth = Math.Clamp(services.State.SidebarWidth ?? DefaultSidebarWidth, MinSidebarWidth, MaxSidebarWidth);
-        SidePanelWidth = Math.Clamp(services.State.SidePanelWidth ?? DefaultSidePanelWidth, MinSidePanelWidth, MaxSidePanelWidth);
+        _opener = new SessionOpener(services, this);
+        Layout = new ShellLayout(services.State, services.SaveState, () =>
+        {
+            foreach (var tab in AllTabs)
+            {
+                tab.OnSidePanelWidthChanged();
+            }
+        });
         _services.Notifications.SelectedTabId = () => SelectedTab?.Id;
         IsCompact = services.Settings.Appearance.Density == Density.Compact;
         IsClaudeStyle = services.Settings.Appearance.Style == AppStyle.Claude;
@@ -73,7 +78,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             {
                 foreach (var tab in AllTabs)
                 {
-                    tab.ResetTokenTotals();
+                    tab.Context.ResetTokenTotals();
                 }
             }
         };
@@ -253,6 +258,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         SaveTabs();
         foreach (var tab in AllTabs.Where(t => snapshot?.RunningTabIds.Contains(t.Id) == true))
         {
+            if (snapshot!.InterruptedTabIds.Contains(tab.Id))
+            {
+                tab.CarryOnInterruptedTurn();
+            }
             _ = tab.EnsureStartedAsync();
         }
         // Library retention and settings sync, at launch (DESIGN.md §9, §14). Retention keeps the sessions of open tabs
@@ -326,6 +335,9 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         OpenTabs.Remove(tab);
         tab.State.Folder = normalized;
+        // Still a worktree only if the new folder is one Claude Code made (DESIGN.md §4, "Worktree tabs").
+        tab.State.WorktreeOf = GitWorktrees.MainCheckoutOf(normalized);
+        tab.State.NewWorktree = null;
         AddTab(tab);
         UpdateGroupLabels();
         OnPropertyChanged(nameof(HasTabs));
@@ -336,13 +348,14 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     private void AddTab(TabViewModel tab)
     {
-        var group = Groups.FirstOrDefault(g => FolderHistory.SamePath(g.Folder, tab.Folder));
+        // A tab in a worktree is in its main checkout's group (DESIGN.md §4, "Worktree tabs").
+        var folder = tab.GroupFolder;
+        var group = Groups.FirstOrDefault(g => FolderHistory.SamePath(g.Folder, folder));
         if (group is null)
         {
             var state = _services.State;
-            var color = SavedGroupColor(tab.Folder) ?? NextGroupColor();
-            RememberGroupColor(tab.Folder, color);
-            group = new TabGroupViewModel(tab.Folder, color, state.CollapsedGroups.Any(c => FolderHistory.SamePath(c, tab.Folder)));
+            var color = GroupColors.ForNewGroup(state, folder, Groups.Select(g => g.Color).ToArray());
+            group = new TabGroupViewModel(folder, color, state.CollapsedGroups.Any(c => FolderHistory.SamePath(c, folder)));
             Groups.Add(group);
             UpdateGroupLabels();
             OnPropertyChanged(nameof(HasTabs));
@@ -371,192 +384,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     public void CloseHistory() => History = null;
 
-    /// <summary>Resumes a past session in a new tab, with its earlier conversation loaded.</summary>
-    public async Task OpenFromHistoryAsync(HistoryEntry entry)
-    {
-        if (!entry.IsConflictCopy && AllTabs.FirstOrDefault(t => t.State.SessionId == entry.SessionId) is { } open)
-        {
-            SelectedTab = open;
-            return;
-        }
-        if (entry.IsConflictCopy)
-        {
-            if (entry.Record is not null)
-            {
-                await OpenFromLibraryAsync(entry, fork: true, takeOver: false);
-            }
-            return;
-        }
-        // This machine's copy, unless another machine carried the session on since: then the library's is newer.
-        var fromLibrary = !entry.IsLocal || entry.ContinuedElsewhere;
-        if (fromLibrary && entry.Record is null)
-        {
-            return;
-        }
-        Func<bool, bool, Task> resume = fromLibrary
-            ? (fork, takeOver) => OpenFromLibraryAsync(entry, fork, takeOver)
-            : (fork, takeOver) => OpenLocalAsync(entry, fork, takeOver);
-        // One machine at a time (DESIGN.md §9), whichever copy it opens from.
-        if (entry.Record is not null && _services.Library.CheckLease(entry.SessionId) is LeaseStatus.HeldByOther other)
-        {
-            Confirmation = new ConfirmationViewModel(
-                $"\"{entry.Title}\" is open on {other.Machine}",
-                $"It was last active there at {other.UpdatedAt.ToLocalTime():t}. Open a copy to continue separately, or take it over; the tab on {other.Machine} then becomes read-only.",
-                "Take over",
-                () => resume(false, true),
-                () => Confirmation = null,
-                "Open a copy",
-                () => resume(true, false));
-            return;
-        }
-        await resume(false, false);
-    }
-
-    /// <summary>A session whose transcript is on this machine: resumes it where Claude Code keeps it.</summary>
-    private async Task OpenLocalAsync(HistoryEntry entry, bool fork, bool takeOver)
-    {
-        var folder = entry.Folder is { } known && Directory.Exists(known)
-            ? known
-            : await _services.Platform.PickFolderAsync($"Choose the folder for \"{entry.Title}\"");
-        if (folder is null)
-        {
-            return;
-        }
-        if (takeOver)
-        {
-            var library = _services.Library;
-            await Task.Run(() => library.Leases.TakeOver(entry.SessionId, library.Library.GetSessionFolder(entry.SessionId)));
-        }
-        OpenSession(NewState(entry, folder, transcriptPath: null, fork, _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp));
-    }
-
-    /// <summary>
-    /// A session from the library, possibly recorded on another machine (DESIGN.md §9, "Restoring on another machine"):
-    /// find the project here, warn if the code differs, then copy the transcript to a local working copy and resume it.
-    /// </summary>
-    private async Task OpenFromLibraryAsync(HistoryEntry entry, bool fork, bool takeOver)
-    {
-        var record = entry.Record!;
-        var folder = await FindProjectFolderAsync(record, entry.Title);
-        if (folder is null)
-        {
-            return;
-        }
-        if (record.Project is { } recorded)
-        {
-            var local = ProjectIdentity.Read(folder);
-            var difference = ProjectIdentity.Compare(recorded, record.HadUncommittedChanges, local);
-            if (difference.Any)
-            {
-                Confirmation = new ConfirmationViewModel(
-                    "The code here may be different",
-                    difference.Describe(record.Machine, recorded, local) + " Sync the code first (push and pull), or continue anyway.",
-                    "Continue anyway",
-                    () => ResumeFromLibraryAsync(entry, folder, fork, takeOver),
-                    () => Confirmation = null);
-                return;
-            }
-        }
-        await ResumeFromLibraryAsync(entry, folder, fork, takeOver);
-    }
-
-    private async Task ResumeFromLibraryAsync(HistoryEntry entry, string folder, bool fork, bool takeOver)
-    {
-        var library = _services.Library;
-        string transcript;
-        try
-        {
-            if (entry.IsConflictCopy && entry.LibraryTranscript is { } copy)
-            {
-                // A conflict copy gets its own folder, so it can't overwrite the working copy of the original.
-                var separate = Path.Combine(_services.Paths.LocalSessionsDirectory, $"copy-{Guid.NewGuid():N}");
-                Directory.CreateDirectory(separate);
-                transcript = Path.Combine(separate, $"{entry.SessionId}.jsonl");
-                await Task.Run(() => File.Copy(copy, transcript, overwrite: true));
-            }
-            else
-            {
-                transcript = await library.CopyToLocalAsync(entry.SessionId);
-            }
-        }
-        catch (Exception ex)
-        {
-            Confirmation = new ConfirmationViewModel("Couldn't open the session", ex.Message, "OK", () => Task.CompletedTask, () => Confirmation = null);
-            return;
-        }
-        if (takeOver)
-        {
-            await Task.Run(() => library.Leases.TakeOver(entry.SessionId, library.Library.GetSessionFolder(entry.SessionId)));
-        }
-        OpenSession(NewState(entry, folder, transcript, fork, _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp));
-    }
-
-    /// <summary>
-    /// Where a project lives on this machine: a folder remembered for it, a recent or favorite folder in the same
-    /// repository, the recorded path if it exists here, or else the user picks one, which is remembered.
-    /// </summary>
-    private async Task<string?> FindProjectFolderAsync(SessionRecord record, string title)
-    {
-        var state = _services.State;
-        var key = record.Project is { RemoteUrl: { } remote } project ? $"{ProjectIdentity.NormalizeRemote(remote)}|{project.PathInRepo}" : null;
-        if (key is not null && state.FolderMappings.TryGetValue(key, out var mapped) && Directory.Exists(mapped))
-        {
-            return mapped;
-        }
-        if (record.Project is { RemoteUrl: not null } identity)
-        {
-            var candidates = state.FavoriteFolders.Concat(state.RecentFolders.Select(r => r.Path)).Concat(AllTabs.Select(t => t.Folder)).Distinct();
-            if (ProjectIdentity.FindMatchingFolder(identity, candidates) is { } match)
-            {
-                return match;
-            }
-        }
-        if (record.Folder is { } recordedFolder && Directory.Exists(recordedFolder))
-        {
-            return recordedFolder;
-        }
-        var picked = await _services.Platform.PickFolderAsync($"Where is the folder for \"{title}\" on this machine?");
-        if (picked is not null && key is not null)
-        {
-            state.FolderMappings[key] = picked;
-            _services.SaveState();
-        }
-        return picked;
-    }
-
-    /// <param name="remoteControl">Settings → Claude Code → <b>Connect new tabs to the Claude app</b> (DESIGN.md §18).</param>
-    private static TabState NewState(HistoryEntry entry, string folder, string? transcriptPath, bool fork, bool remoteControl)
-    {
-        var record = entry.Record;
-        var state = new TabState
-        {
-            Folder = FolderHistory.Normalize(folder),
-            SessionId = entry.SessionId,
-            AutoName = record?.AutoName ?? entry.Title,
-            UserName = fork ? null : record?.UserName,
-            TranscriptPath = transcriptPath,
-            ForkOnNextStart = fork,
-            // A session someone synced keeps syncing wherever it's opened, a copy of one too; one that only ever lived
-            // on this machine stays here (DESIGN.md §9, "Session library").
-            SyncToLibrary = record is not null,
-            // A tab opened from History is a new tab here; the phone connection belongs to this machine, not the record.
-            RemoteControl = remoteControl,
-        };
-        if (record is not null)
-        {
-            // The tab's own choices come back with it (DESIGN.md §9); older records only had its model and effort.
-            state.Overrides = record.Overrides is { } overrides
-                ? JsonSerializer.Deserialize<TabOverrides>(JsonSerializer.Serialize(overrides, JsonFileStore<TabOverrides>.Options), JsonFileStore<TabOverrides>.Options) ?? new TabOverrides()
-                : new TabOverrides { Model = record.Model, Effort = record.Effort };
-            if (!fork)
-            {
-                state.Tokens = record.Tokens;
-            }
-            // Found in this machine's copy of the folder; a copy has the same changes, so keeps them too (DESIGN.md §8).
-            state.ReviewedFiles = ReviewedFiles.FromRecord(record.ReviewedFiles, state.Folder);
-        }
-        return state;
-    }
+    /// <summary>Resumes a past session in a new tab, with its earlier conversation loaded (<see cref="SessionOpener"/>).</summary>
+    public Task OpenFromHistoryAsync(HistoryEntry entry) => _opener.OpenAsync(entry);
 
     /// <summary>
     /// <b>Duplicate tab</b> (DESIGN.md §5, "Rewind and branch"): a new tab in its group carrying its session on as a copy,
@@ -578,15 +407,6 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             tab.PutInComposer(text, images);
         }
         return tab.EnsureStartedAsync();
-    }
-
-    private void OpenSession(TabState state)
-    {
-        FolderHistory.Touch(_services.State, state.Folder, _services.Time.GetUtcNow(), _services.Settings.NewTabs.RecentFolderLimit);
-        var tab = new TabViewModel(_services, this, state, isRestored: true);
-        AddTab(tab);
-        SelectedTab = tab;
-        SaveTabs();
     }
 
     // ---- Closing tabs -----------------------------------------------------------------------------------
@@ -616,26 +436,38 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             var names = string.Join(", ", running.Take(5).Select(p => $"{p.Name} ({p.Pid})")) + (running.Count > 5 ? $" and {running.Count - 5} more" : "");
             reasons.Add($"It started {(running.Count == 1 ? "a process that is" : $"{running.Count} processes that are")} still running: {names}.");
             Confirmation = new ConfirmationViewModel($"Close \"{tab.DisplayName}\"?", string.Join(" ", reasons),
-                running.Count == 1 ? "Close and stop it" : "Close and stop them", () => RemoveTabAsync(tab), () => Confirmation = null,
-                "Close, leave running", () => RemoveTabAsync(tab, killProcesses: false));
+                running.Count == 1 ? "Close and stop it" : "Close and stop them", () => CloseAndTidyAsync(tab), () => Confirmation = null,
+                "Close, leave running", () => CloseAndTidyAsync(tab, killProcesses: false));
             return;
         }
         if (reasons.Count == 0)
         {
-            await RemoveTabAsync(tab);
+            await CloseAndTidyAsync(tab);
             return;
         }
-        Confirmation = new ConfirmationViewModel($"Close \"{tab.DisplayName}\"?", string.Join(" ", reasons), "Close", () => RemoveTabAsync(tab), () => Confirmation = null);
+        Confirmation = new ConfirmationViewModel($"Close \"{tab.DisplayName}\"?", string.Join(" ", reasons), "Close", () => CloseAndTidyAsync(tab), () => Confirmation = null);
     }
 
-    /// <summary>A turn reached the usage history: refresh each tab's "this session window" tokens.</summary>
-    internal void OnTurnRecorded()
+    /// <summary>Closes the tab, then offers to remove the worktree it worked in, if no other tab does (DESIGN.md §4).</summary>
+    private async Task CloseAndTidyAsync(TabViewModel tab, bool killProcesses = true)
     {
-        foreach (var tab in AllTabs)
+        await RemoveTabAsync(tab, killProcesses);
+        // What the user chose to leave running may still be working in the tab's worktree.
+        if (killProcesses)
         {
-            tab.RefreshTokenWindow();
+            await OfferToRemoveWorktreesAsync([tab.State]);
         }
     }
+
+    /// <summary>Closes several tabs side by side, then offers to remove the worktrees they leave unused.</summary>
+    private async Task CloseAllAndTidyAsync(IReadOnlyList<TabViewModel> tabs)
+    {
+        await Task.WhenAll(tabs.Select(tab => RemoveTabAsync(tab)));
+        await OfferToRemoveWorktreesAsync([.. tabs.Select(t => t.State)]);
+    }
+
+    /// <summary>A tab's turn reached the usage history: that tab's "this session window" tokens follow.</summary>
+    internal void OnTurnRecorded(string tabId) => AllTabs.FirstOrDefault(t => t.Id == tabId)?.Context.RefreshTokenWindow();
 
     /// <summary>A plain confirmation over the whole window.</summary>
     internal void Confirm(string title, string message, string confirmText, Func<Task> onConfirm) =>
@@ -651,11 +483,11 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     /// </summary>
     [RelayCommand]
     private Task CloseOtherTabsAsync(TabViewModel? keep) =>
-        Task.WhenAll(AllTabs.Where(t => t != keep && !t.IsPinned).ToArray().Select(tab => RemoveTabAsync(tab)));
+        CloseAllAndTidyAsync([.. AllTabs.Where(t => t != keep && !t.IsPinned)]);
 
     [RelayCommand]
     private Task CloseGroupAsync(TabGroupViewModel? group) =>
-        Task.WhenAll((group?.Tabs.Where(t => !t.IsPinned).ToArray() ?? []).Select(tab => RemoveTabAsync(tab)));
+        CloseAllAndTidyAsync(group?.Tabs.Where(t => !t.IsPinned).ToArray() ?? []);
 
     [RelayCommand(AllowConcurrentExecutions = true)]
     private Task CloseSelectedTabAsync() => CloseTabAsync(SelectedTab);
@@ -747,52 +579,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     public void SetGroupColor(TabGroupViewModel group, Color color)
     {
         group.Color = color;
-        RememberGroupColor(group.Folder, color);
+        GroupColors.Remember(_services.State, group.Folder, color);
         _services.SaveState();
-    }
-
-    /// <summary>The color saved for a folder, matched as groups match folders. One saved as a group color's index is read too.</summary>
-    private Color? SavedGroupColor(string folder)
-    {
-        var state = _services.State;
-        foreach (var (path, hex) in state.FolderColors)
-        {
-            if (FolderHistory.SamePath(path, folder) && TabGroupViewModel.TryParseHex(hex, out var color))
-            {
-                return color;
-            }
-        }
-        var palette = TabGroupViewModel.Palette;
-        foreach (var (path, index) in state.GroupColors)
-        {
-            if (FolderHistory.SamePath(path, folder))
-            {
-                return palette[(index % palette.Count + palette.Count) % palette.Count].Color;
-            }
-        }
-        return null;
-    }
-
-    /// <summary>A new group's color: the first group color no open group has, else the next in turn.</summary>
-    private Color NextGroupColor()
-    {
-        var palette = TabGroupViewModel.Palette;
-        var used = Groups.Select(g => g.Color).ToHashSet();
-        return palette.Select(p => p.Color).FirstOrDefault(c => !used.Contains(c), palette[Groups.Count % palette.Count].Color);
-    }
-
-    private void RememberGroupColor(string folder, Color color)
-    {
-        var state = _services.State;
-        foreach (var path in state.FolderColors.Keys.Where(p => FolderHistory.SamePath(p, folder)).ToList())
-        {
-            state.FolderColors.Remove(path);
-        }
-        foreach (var path in state.GroupColors.Keys.Where(p => FolderHistory.SamePath(p, folder)).ToList())
-        {
-            state.GroupColors.Remove(path);
-        }
-        state.FolderColors[folder] = TabGroupViewModel.ToHex(color);
     }
 
     [RelayCommand]
@@ -882,6 +670,39 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty]
     public partial AppUpdateViewModel? AppUpdate { get; set; }
 
+    /// <summary>
+    /// The latest announcement, in a live region screen readers read out (DESIGN.md §3, "Accessibility"): a prompt that
+    /// waits, a turn that finished, an error.
+    /// </summary>
+    [ObservableProperty]
+    public partial string Announcement { get; private set; } = "";
+
+    /// <summary>Has screen readers say <paramref name="text"/>, even when it's the same as the last time.</summary>
+    public void Announce(string text) =>
+        // A live region is read when it changes: the same words again need a change no one hears.
+        Announcement = Announcement == text ? text + "\u200B" : text;
+
+    /// <summary>Ctrl/Cmd + (DESIGN.md §3, "Accessibility"): the main window's content one step bigger.</summary>
+    [RelayCommand]
+    private void ZoomIn() => SetZoom(Zoom.In(_services.Settings.Appearance.Zoom));
+
+    [RelayCommand]
+    private void ZoomOut() => SetZoom(Zoom.Out(_services.Settings.Appearance.Zoom));
+
+    [RelayCommand]
+    private void ResetZoom() => SetZoom(Zoom.Default);
+
+    private void SetZoom(int percent)
+    {
+        if (percent == _services.Settings.Appearance.Zoom)
+        {
+            return;
+        }
+        _services.Settings.Appearance.Zoom = percent;
+        _services.SaveSettings();
+        Announce($"Zoom {percent}%");
+    }
+
     /// <summary>Whether a tab is starting, in a turn, or waiting on the user.</summary>
     public bool AnyTabWorking => AllTabs.Any(t => t.IsWorking || t.Status == TabStatus.Starting);
 
@@ -892,6 +713,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         SelectedTabId = SelectedTab?.Id,
         Drafts = AllTabs.Where(t => t.Draft is not null).ToDictionary(t => t.Id, t => t.Draft!),
         RunningTabIds = AllTabs.Where(t => t.IsProcessRunning).Select(t => t.Id).ToList(),
+        InterruptedTabIds = AllTabs.Where(t => t.IsInTurn).Select(t => t.Id).ToList(),
     };
 
     /// <summary>
@@ -907,7 +729,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         Groups.Clear();
         OpenTabs.Clear();
         OnPropertyChanged(nameof(HasTabs));
-        await Task.WhenAll(tabs.Select(t => t.CloseAsync(killProcesses: true).AsTask()));
+        // A turn is left as it is, not interrupted, so Claude Code can carry it on after the restart.
+        await Task.WhenAll(tabs.Select(t => t.CloseAsync(killProcesses: true, interruptTurn: false).AsTask()));
         OnTabStatusChanged();
     }
 
@@ -926,93 +749,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty]
     public partial bool IsClaudeStyle { get; private set; }
 
-    // ---- Sidebar (DESIGN.md §4, "Sidebar") ------------------------------------------------------------------
+    // ---- Sidebar and side panel (DESIGN.md §3, §4, "Sidebar") -------------------------------------------------
 
-    public const double DefaultSidebarWidth = 248;
-    public const double MinSidebarWidth = 180;
-    public const double MaxSidebarWidth = 420;
-
-    /// <summary>The collapsed sidebar: a rail of status icons.</summary>
-    public const double RailWidth = 52;
-
-    /// <summary>Below this width the sidebar collapses to its rail by itself, leaving the user's own choice alone.</summary>
-    public const double NarrowWidth = 900;
-
-    private bool _isNarrow;
-
-    /// <summary>Whether the sidebar shows only its rail.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsSidebarExpanded), nameof(SidebarDisplayWidth))]
-    public partial bool IsSidebarCollapsed { get; set; }
-
-    public bool IsSidebarExpanded => !IsSidebarCollapsed;
-
-    /// <summary>The expanded sidebar's width, as the user dragged it.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SidebarDisplayWidth))]
-    public partial double SidebarWidth { get; set; }
-
-    public double SidebarDisplayWidth => IsSidebarCollapsed ? RailWidth : SidebarWidth;
-
-    [RelayCommand]
-    private void ToggleSidebar()
-    {
-        IsSidebarCollapsed = !IsSidebarCollapsed;
-        // In a narrow window, expanding is only for now: once it's wide again, the user's choice comes back.
-        if (!_isNarrow)
-        {
-            _services.State.SidebarCollapsed = IsSidebarCollapsed;
-            _services.SaveState();
-        }
-    }
-
-    /// <summary>Called by the view as the window resizes: a narrow window shows the rail.</summary>
-    public void SetAvailableWidth(double width)
-    {
-        var narrow = width < NarrowWidth;
-        if (narrow == _isNarrow)
-        {
-            return;
-        }
-        _isNarrow = narrow;
-        IsSidebarCollapsed = narrow || _services.State.SidebarCollapsed;
-    }
-
-    /// <summary>Dragging the sidebar's edge. <see cref="SaveSidebarWidth"/> keeps the result when the drag ends.</summary>
-    public void ResizeSidebar(double width) => SidebarWidth = Math.Clamp(width, MinSidebarWidth, MaxSidebarWidth);
-
-    public void SaveSidebarWidth()
-    {
-        _services.State.SidebarWidth = SidebarWidth;
-        _services.SaveState();
-    }
-
-    // ---- Side panel (DESIGN.md §3): one width for every tab's -----------------------------------------------
-
-    public const double DefaultSidePanelWidth = 340;
-    public const double MinSidePanelWidth = 260;
-    public const double MaxSidePanelWidth = 900;
-
-    /// <summary>The side panel's width, as the user dragged it. Each tab's view also keeps room for its conversation.</summary>
-    [ObservableProperty]
-    public partial double SidePanelWidth { get; private set; } = DefaultSidePanelWidth;
-
-    partial void OnSidePanelWidthChanged(double value)
-    {
-        foreach (var tab in AllTabs)
-        {
-            tab.OnSidePanelWidthChanged();
-        }
-    }
-
-    /// <summary>Dragging the side panel's edge. <see cref="SaveSidePanelWidth"/> keeps the result when the drag ends.</summary>
-    public void ResizeSidePanel(double width) => SidePanelWidth = Math.Clamp(width, MinSidePanelWidth, MaxSidePanelWidth);
-
-    public void SaveSidePanelWidth()
-    {
-        _services.State.SidePanelWidth = SidePanelWidth;
-        _services.SaveState();
-    }
+    /// <summary>The sidebar's width, and whether it shows only its rail, and the width every tab's side panel has.</summary>
+    public ShellLayout Layout { get; }
 
     // ---- Settings -------------------------------------------------------------------------------------------
 

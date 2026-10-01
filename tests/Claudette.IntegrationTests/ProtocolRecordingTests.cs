@@ -136,7 +136,7 @@ public sealed class ProtocolRecordingTests : IAsyncLifetime
 
     private async Task<ClaudeSession> StartAsync(string fixtureName)
     {
-        Assert.SkipWhen(_factory is null, "Claude Code isn't installed.");
+        RealCli.SkipUnlessInstalled(_factory is not null);
         _fixtureName = fixtureName;
         return await _factory!.StartAsync(new ClaudeLaunchOptions
         {

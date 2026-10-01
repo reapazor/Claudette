@@ -88,25 +88,25 @@
 
     <!-- The sidebar: tabs grouped by folder, with New tab above and History, updates and Settings below
          (DESIGN.md §3, §4). Collapses to a rail of status icons. -->
-    <Border x:Name="Sidebar" Grid.Column="0" Width="{Binding SidebarDisplayWidth}" Background="{DynamicResource SidebarBrush}"
+    <Border x:Name="Sidebar" Grid.Column="0" Width="{Binding Layout.SidebarDisplayWidth}" Background="{DynamicResource SidebarBrush}"
             BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,1,0">
       <Grid RowDefinitions="Auto,*,Auto">
 
         <!-- New tab, and collapsing -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="6,8,6,4" IsVisible="{Binding IsSidebarExpanded}">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="6,8,6,4" IsVisible="{Binding Layout.IsSidebarExpanded}">
           <Button Classes="flat side" Command="{Binding NewTabCommand}" ToolTip.Tip="{Binding Tips.NewTab}" AutomationProperties.Name="New tab">
             <StackPanel Orientation="Horizontal" Spacing="10">
               <Path Classes="icon" Data="{StaticResource IconPlus}" />
               <TextBlock Text="New tab" VerticalAlignment="Center" />
             </StackPanel>
           </Button>
-          <Button Grid.Column="1" Classes="flat" Padding="8" Command="{Binding ToggleSidebarCommand}"
+          <Button Grid.Column="1" Classes="flat" Padding="8" Command="{Binding Layout.ToggleSidebarCommand}"
                   ToolTip.Tip="{Binding Tips.CollapseSidebar}" AutomationProperties.Name="Collapse the sidebar">
             <Path Data="{StaticResource IconSidebar}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="13" Height="13" Stretch="Uniform" />
           </Button>
         </Grid>
-        <StackPanel Grid.Row="0" Margin="6,8,6,4" Spacing="2" IsVisible="{Binding IsSidebarCollapsed}">
-          <Button Classes="flat side" Command="{Binding ToggleSidebarCommand}" ToolTip.Tip="{Binding Tips.ExpandSidebar}" AutomationProperties.Name="Expand the sidebar">
+        <StackPanel Grid.Row="0" Margin="6,8,6,4" Spacing="2" IsVisible="{Binding Layout.IsSidebarCollapsed}">
+          <Button Classes="flat side" Command="{Binding Layout.ToggleSidebarCommand}" ToolTip.Tip="{Binding Tips.ExpandSidebar}" AutomationProperties.Name="Expand the sidebar">
             <Path Classes="icon" Data="{StaticResource IconSidebar}" />
           </Button>
           <Button Classes="flat side" Command="{Binding NewTabCommand}" ToolTip.Tip="{Binding Tips.NewTab}" AutomationProperties.Name="New tab">
@@ -116,7 +116,7 @@
 
         <!-- Groups and their tabs. Drag a tab to reorder it in its group, or a group's label to move the group
              (DESIGN.md §4). -->
-        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding IsSidebarExpanded}">
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding Layout.IsSidebarExpanded}">
           <ItemsControl x:Name="GroupList" ItemsSource="{Binding Groups}" Margin="6,0,6,8">
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="vm:TabGroupViewModel">
@@ -140,6 +140,9 @@
                       <Button.ContextMenu>
                         <ContextMenu>
                           <MenuItem Header="New tab here" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewTabInGroupCommand}" CommandParameter="{Binding}" />
+                          <!-- Its own git worktree, so its edits don't meet the other tabs' (DESIGN.md §4, "Worktree tabs") -->
+                          <MenuItem Header="New tab in a worktree" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewWorktreeTabCommand}" CommandParameter="{Binding}"
+                                    IsVisible="{Binding CanMakeWorktrees}" ToolTip.Tip="A tab whose Claude works in a separate checkout, on its own branch" />
                           <MenuItem Header="{Binding CollapseMenuText}" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).ToggleGroupCollapsedCommand}" CommandParameter="{Binding}" />
                           <MenuItem Header="Change color…" Click="OnChangeGroupColor" />
                           <Separator />
@@ -183,6 +186,11 @@
                                             ToolTip.Tip="Synced to the session library" AutomationProperties.Name="Synced to the session library">
                                       <Path Data="{StaticResource IconSync}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="9" Height="9" Stretch="Uniform" />
                                     </Border>
+                                    <!-- Works in a git worktree of its own (DESIGN.md §4, "Worktree tabs") -->
+                                    <Border DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding IsInWorktree}" VerticalAlignment="Center" Margin="0,0,5,0"
+                                            ToolTip.Tip="{Binding WorktreeTip}" AutomationProperties.Name="{Binding WorktreeTip}">
+                                      <Path Data="{StaticResource IconBranch}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="9" Height="9" Stretch="Uniform" />
+                                    </Border>
                                     <!-- Connected to the Claude app (DESIGN.md §18, "Remote Control"); dimmed while it connects or reconnects,
                                          and more once it's switched off and waiting to disconnect -->
                                     <Border x:Name="RemoteIcon" DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding RemoteControl.ShowIcon}" VerticalAlignment="Center" Margin="0,0,5,0"
@@ -199,14 +207,14 @@
                                     </Border>
                                     <!-- The Perforce changelist (DESIGN.md §18): separate from the name, so renaming keeps it -->
                                     <Button DockPanel.Dock="Right" Classes="flat changelist" Padding="0" Margin="5,0,0,0" VerticalAlignment="Center"
-                                            IsVisible="{Binding ShowChangelistBadge}" ToolTip.Tip="{Binding ChangelistBadgeTip}" AutomationProperties.Name="{Binding ChangelistBadge}">
+                                            IsVisible="{Binding Perforce.ShowChangelistBadge}" ToolTip.Tip="{Binding Perforce.ChangelistBadgeTip}" AutomationProperties.Name="{Binding Perforce.ChangelistBadge}">
                                       <Border Background="{DynamicResource SubtleBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1" CornerRadius="4" Padding="4,0">
-                                        <TextBlock Classes="muted small" Text="{Binding ChangelistBadge}" />
+                                        <TextBlock Classes="muted small" Text="{Binding Perforce.ChangelistBadge}" />
                                       </Border>
                                       <Button.Flyout>
                                         <MenuFlyout>
-                                          <MenuItem Header="Copy changelist number" Command="{Binding CopyChangelistCommand}" CommandParameter="{x:Null}" />
-                                          <MenuItem Header="Open in P4V" Command="{Binding OpenChangelistInP4VCommand}" CommandParameter="{x:Null}" />
+                                          <MenuItem Header="Copy changelist number" Command="{Binding Perforce.CopyChangelistCommand}" CommandParameter="{x:Null}" />
+                                          <MenuItem Header="Open in P4V" Command="{Binding Perforce.OpenChangelistInP4VCommand}" CommandParameter="{x:Null}" />
                                         </MenuFlyout>
                                       </Button.Flyout>
                                     </Button>
@@ -228,11 +236,11 @@
                                        nearly full. Under the close button, level with the second line. Clicking it shows what
                                        fills the context, as the composer's indicator does, without selecting the tab. -->
                                   <Button x:Name="ContextRing" Classes="flat" Width="16" Height="16" Padding="0" VerticalAlignment="Bottom"
-                                          IsVisible="{Binding ShowContextRing}" ToolTip.Tip="{Binding ContextTip}" AutomationProperties.Name="{Binding ContextText}">
+                                          IsVisible="{Binding Context.ShowRing}" ToolTip.Tip="{Binding Context.Tip}" AutomationProperties.Name="{Binding Context.Text}">
                                     <Panel Width="13" Height="13">
                                       <Ellipse Classes="contexttrack" />
-                                      <Arc Classes="contextarc" Classes.high="{Binding IsContextHigh}" Classes.critical="{Binding IsContextCritical}"
-                                           StartAngle="-90" SweepAngle="{Binding ContextSweep}" />
+                                      <Arc Classes="contextarc" Classes.high="{Binding Context.IsHigh}" Classes.critical="{Binding Context.IsCritical}"
+                                           StartAngle="-90" SweepAngle="{Binding Context.Sweep}" />
                                     </Panel>
                                     <Button.Flyout>
                                       <Flyout Placement="RightEdgeAlignedBottom">
@@ -267,6 +275,9 @@
                                             ToolTip.Tip="A new tab that carries this session on as a copy" />
                                   <MenuItem Header="Export conversation…" Command="{Binding ExportConversationCommand}"
                                             ToolTip.Tip="Save the conversation as a Markdown file or a web page" />
+                                  <!-- Started without the folder's own configuration (DESIGN.md §7, "Folder trust") -->
+                                  <MenuItem Header="Trust this folder" Command="{Binding TrustFolderCommand}" IsVisible="{Binding IsWithoutFolderSettings}"
+                                            ToolTip.Tip="Start Claude Code again with this folder's own settings, MCP servers and CLAUDE.md" />
                                   <Separator />
                                   <MenuItem Header="Move up" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MoveTabUpCommand}" CommandParameter="{Binding}" />
                                   <MenuItem Header="Move down" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MoveTabDownCommand}" CommandParameter="{Binding}" />
@@ -278,7 +289,7 @@
                             </Button>
                             <!-- The tab's project runs, newest last, each with its log (DESIGN.md §4, §18). They stay until
                                  closed: × on a finished one, and Stop in its place while one runs. -->
-                            <ItemsControl Classes="runs" ItemsSource="{Binding ProjectTools.Runs}" IsVisible="{Binding ProjectTools.HasRuns}">
+                            <ItemsControl Classes="runs" ItemsSource="{Binding ProjectTools.Runs.Items}" IsVisible="{Binding ProjectTools.Runs.HasRuns}">
                               <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                   <StackPanel Spacing="1" />
@@ -323,7 +334,7 @@
 
         <!-- The rail: each group's color, then a square per tab with its initial and status. A collapsed group shows
              its most urgent status. -->
-        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding IsSidebarCollapsed}">
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding Layout.IsSidebarCollapsed}">
           <ItemsControl ItemsSource="{Binding Groups}" Margin="0,0,0,8">
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="vm:TabGroupViewModel">
@@ -338,6 +349,9 @@
                     <Button.ContextMenu>
                       <ContextMenu>
                         <MenuItem Header="New tab here" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewTabInGroupCommand}" CommandParameter="{Binding}" />
+                        <!-- Its own git worktree, so its edits don't meet the other tabs' (DESIGN.md §4, "Worktree tabs") -->
+                        <MenuItem Header="New tab in a worktree" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewWorktreeTabCommand}" CommandParameter="{Binding}"
+                                  IsVisible="{Binding CanMakeWorktrees}" ToolTip.Tip="A tab whose Claude works in a separate checkout, on its own branch" />
                         <MenuItem Header="{Binding CollapseMenuText}" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).ToggleGroupCollapsedCommand}" CommandParameter="{Binding}" />
                         <MenuItem Header="Change color…" Click="OnChangeGroupColor" />
                         <Separator />
@@ -388,6 +402,9 @@
                                         ToolTip.Tip="A new tab that carries this session on as a copy" />
                               <MenuItem Header="Export conversation…" Command="{Binding ExportConversationCommand}"
                                         ToolTip.Tip="Save the conversation as a Markdown file or a web page" />
+                              <!-- Started without the folder's own configuration (DESIGN.md §7, "Folder trust") -->
+                              <MenuItem Header="Trust this folder" Command="{Binding TrustFolderCommand}" IsVisible="{Binding IsWithoutFolderSettings}"
+                                        ToolTip.Tip="Start Claude Code again with this folder's own settings, MCP servers and CLAUDE.md" />
                               <Separator />
                               <MenuItem Header="Close" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CloseTabCommand}" CommandParameter="{Binding}" />
                             </ContextMenu>
@@ -413,14 +430,14 @@
               <DockPanel>
                 <!-- As wide as the other icons, so the busy dot lines up with them -->
                 <Panel DockPanel.Dock="Left" Width="13" VerticalAlignment="Center">
-                  <Path Classes="icon" Data="{StaticResource IconProject}" IsVisible="{Binding !SelectedTab.ProjectTools.IsJobRunning, FallbackValue=True}" />
+                  <Path Classes="icon" Data="{StaticResource IconProject}" IsVisible="{Binding !SelectedTab.ProjectTools.Runs.IsJobRunning, FallbackValue=True}" />
                   <TextBlock Classes="status busy" Text="●" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center"
-                             IsVisible="{Binding SelectedTab.ProjectTools.IsJobRunning, FallbackValue=False}" />
+                             IsVisible="{Binding SelectedTab.ProjectTools.Runs.IsJobRunning, FallbackValue=False}" />
                 </Panel>
                 <Path DockPanel.Dock="Right" Data="{StaticResource IconChevronRight}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="9" Height="9"
-                      Stretch="Uniform" VerticalAlignment="Center" Margin="6,0,0,0" IsVisible="{Binding IsSidebarExpanded}" />
+                      Stretch="Uniform" VerticalAlignment="Center" Margin="6,0,0,0" IsVisible="{Binding Layout.IsSidebarExpanded}" />
                 <TextBlock Margin="10,0,0,0" Text="{Binding SelectedTab.ProjectTools.ButtonText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                           IsVisible="{Binding IsSidebarExpanded}" />
+                           IsVisible="{Binding Layout.IsSidebarExpanded}" />
               </DockPanel>
               <Button.Flyout>
                 <Flyout Placement="RightEdgeAlignedBottom" Opened="OnProjectMenuOpened">
@@ -467,7 +484,7 @@
             <Button Classes="flat side" Command="{Binding OpenHistoryCommand}" ToolTip.Tip="{Binding Tips.History}" ToolTip.Placement="Right" AutomationProperties.Name="History">
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <Path Classes="icon" Data="{StaticResource IconHistory}" />
-                <TextBlock Text="History" VerticalAlignment="Center" IsVisible="{Binding IsSidebarExpanded}" />
+                <TextBlock Text="History" VerticalAlignment="Center" IsVisible="{Binding Layout.IsSidebarExpanded}" />
               </StackPanel>
             </Button>
             <!-- "Claude Code 2.1.290 is ready" (DESIGN.md §12, "Applying it"): small and non-blocking -->
@@ -477,7 +494,7 @@
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <Path Classes="icon" Data="{StaticResource IconUpdate}" />
                 <TextBlock Classes="badge" Text="{Binding BadgeText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                           IsVisible="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).IsSidebarExpanded, FallbackValue=False}" />
+                           IsVisible="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).Layout.IsSidebarExpanded, FallbackValue=False}" />
               </StackPanel>
                 <Button.Flyout>
                   <Flyout Placement="RightEdgeAlignedBottom">
@@ -520,7 +537,7 @@
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <Path Classes="icon" Data="{StaticResource IconRestart}" />
                 <TextBlock Classes="badge" Text="{Binding BadgeText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                           IsVisible="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).IsSidebarExpanded, FallbackValue=False}" />
+                           IsVisible="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).Layout.IsSidebarExpanded, FallbackValue=False}" />
               </StackPanel>
               <Button.Flyout>
                 <Flyout Placement="RightEdgeAlignedBottom">
@@ -554,7 +571,7 @@
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <Path Classes="icon" Data="{StaticResource IconUpdate}" />
                 <TextBlock Classes="badge" Text="{Binding BadgeText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                           IsVisible="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).IsSidebarExpanded, FallbackValue=False}" />
+                           IsVisible="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).Layout.IsSidebarExpanded, FallbackValue=False}" />
               </StackPanel>
               <Button.Flyout>
                 <Flyout Placement="RightEdgeAlignedBottom">
@@ -597,7 +614,7 @@
             <Button Classes="flat side" Command="{Binding OpenSettingsCommand}" ToolTip.Tip="{Binding Tips.Settings}" ToolTip.Placement="Right" AutomationProperties.Name="Settings">
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <Path Classes="icon" Data="{StaticResource IconSettings}" />
-                <TextBlock Text="Settings" VerticalAlignment="Center" IsVisible="{Binding IsSidebarExpanded}" />
+                <TextBlock Text="Settings" VerticalAlignment="Center" IsVisible="{Binding Layout.IsSidebarExpanded}" />
               </StackPanel>
             </Button>
           </StackPanel>
@@ -607,7 +624,7 @@
 
     <!-- Drag the sidebar's edge to resize it; double-click for the default width. -->
     <Border x:Name="SidebarEdge" Grid.Column="0" Width="6" Margin="0,0,-3,0" HorizontalAlignment="Right" Background="Transparent"
-            Cursor="SizeWestEast" ZIndex="1" IsVisible="{Binding IsSidebarExpanded}" />
+            Cursor="SizeWestEast" ZIndex="1" IsVisible="{Binding Layout.IsSidebarExpanded}" />
 
     <!-- Tabs: one view per tab, kept alive while hidden -->
     <ItemsControl Grid.Column="1" ItemsSource="{Binding OpenTabs}">
@@ -681,12 +698,16 @@
           <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="16" TextWrapping="Wrap" />
           <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
           <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-            <Button Content="Cancel" Command="{Binding CancelCommand}" />
+            <Button Content="{Binding CancelText}" Command="{Binding CancelCommand}" IsVisible="{Binding HasCancel}" />
             <Button Content="{Binding SecondaryText}" Command="{Binding SecondaryCommand}" IsVisible="{Binding HasSecondary}" />
             <Button Classes="accent" Content="{Binding ConfirmText}" Command="{Binding ConfirmCommand}" />
           </StackPanel>
         </StackPanel>
       </Border>
     </Border>
+    <!-- Announcements for screen readers (DESIGN.md §3, "Accessibility"): read out, never seen. -->
+    <TextBlock x:Name="Announcer" Grid.ColumnSpan="2" Text="{Binding Announcement}" Opacity="0" IsHitTestVisible="False"
+               Width="1" Height="1" HorizontalAlignment="Left" VerticalAlignment="Top"
+               AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="{Binding Announcement}" />
   </Grid>
 </UserControl>

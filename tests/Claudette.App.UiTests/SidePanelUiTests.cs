@@ -58,12 +58,12 @@ public class SidePanelUiTests
         var view = window.GetVisualDescendants().OfType<TabView>().Single();
         var panel = view.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "SidePanel");
         var edge = view.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "SidePanelEdge");
-        Assert.Equal(ShellViewModel.DefaultSidePanelWidth, panel.Bounds.Width);
+        Assert.Equal(ShellLayout.DefaultSidePanelWidth, panel.Bounds.Width);
 
         // Left widens it; the width is kept when the drag ends.
         Drag(window, edge, -100);
-        Assert.Equal(ShellViewModel.DefaultSidePanelWidth + 100, panel.Bounds.Width);
-        Assert.Equal(ShellViewModel.DefaultSidePanelWidth + 100, h.Services.State.SidePanelWidth);
+        Assert.Equal(ShellLayout.DefaultSidePanelWidth + 100, panel.Bounds.Width);
+        Assert.Equal(ShellLayout.DefaultSidePanelWidth + 100, h.Services.State.SidePanelWidth);
 
         // However far it's dragged, the conversation keeps 360.
         Drag(window, edge, -2000);
@@ -72,7 +72,7 @@ public class SidePanelUiTests
 
         // Right narrows it, down to its least.
         Drag(window, edge, 2000);
-        Assert.Equal(ShellViewModel.MinSidePanelWidth, panel.Bounds.Width);
+        Assert.Equal(ShellLayout.MinSidePanelWidth, panel.Bounds.Width);
     }
 
     [AvaloniaFact]
@@ -82,6 +82,8 @@ public class SidePanelUiTests
         var tab = await h.OpenTabAsync();
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
         tab.IsSidePanelOpen = true;
+        // The panel's pages are only in the visual tree once it has been laid out open.
+        UiText.Settle(window);
         var (first, second) = (Path.Combine(h.WorkFolder, "auth.cs"), Path.Combine(h.WorkFolder, "login.cs"));
         await File.WriteAllTextAsync(first, "b\n", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(second, "b\n", TestContext.Current.CancellationToken);
@@ -132,6 +134,8 @@ public class SidePanelUiTests
         var tab = await h.OpenTabAsync();
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
         tab.IsSidePanelOpen = true;
+        // The panel's pages are only in the visual tree once it has been laid out open.
+        UiText.Settle(window);
         var (first, second) = (Path.Combine(h.WorkFolder, "auth.cs"), Path.Combine(h.WorkFolder, "login.cs"));
         await File.WriteAllTextAsync(first, "b\n", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(second, "b\n", TestContext.Current.CancellationToken);

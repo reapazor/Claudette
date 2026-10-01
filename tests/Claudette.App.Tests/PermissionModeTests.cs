@@ -97,7 +97,7 @@ public class PermissionModeTests
         tab.PropertyChanged += (_, e) => switched.Add(e.PropertyName);
 
         tab.ChooseModelCommand.Execute(tab.Models.Single(m => m.Value == "haiku"));
-        await tab.ConfirmModelSwitchCommand.ExecuteAsync(null);
+        await tab.ModelSwitch.ConfirmCommand.ExecuteAsync(null);
 
         Assert.DoesNotContain(tab.PermissionModeChoices, c => c.IsAuto);
         Assert.Contains(nameof(TabViewModel.PermissionModeChoices), switched);
@@ -125,7 +125,7 @@ public class PermissionModeTests
         using var settings = new SettingsViewModel(h.Services, null);
 
         Assert.Equal("Default (Auto)", TabSettings(h, tab).ModeChoices[0].Label);
-        Assert.Equal("Claude Code's default (Auto)", settings.ModeChoices[0].Label);
+        Assert.Equal("Claude Code's default (Auto)", settings.NewTabs.ModeChoices[0].Label);
 
         h.Services.Settings.NewTabs.DefaultPermissionMode = "acceptEdits";
         Assert.Equal("Default (Accept edits)", TabSettings(h, tab).ModeChoices[0].Label);

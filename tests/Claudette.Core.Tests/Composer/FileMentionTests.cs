@@ -80,7 +80,7 @@ public sealed class FileMentionTests : IDisposable
         "tests/Readers/ReaderTests.cs",
     ], 1000);
 
-    private static string[] Match(string query) => PathMatcher.Match(Paths, query).Select(p => p.Path).ToArray();
+    private static string[] Match(string query) => PathMatcher.Match(Paths, query, cancellationToken: TestContext.Current.CancellationToken).Select(p => p.Path).ToArray();
 
     [Fact]
     public void Folders_are_listed_from_the_files()
@@ -121,11 +121,39 @@ public sealed class FileMentionTests : IDisposable
     }
 
     [Fact]
+    public void A_paths_parts_are_worked_out_once()
+    {
+        var file = new IndexedPath("src/app/Main.cs");
+        var folder = new IndexedPath("src/app/");
+
+        Assert.Equal(("Main.cs", "src/app/", 2, false), (file.Name, file.Parent, file.Depth, file.IsFolder));
+        Assert.Equal(("app", "src/", 1, true), (folder.Name, folder.Parent, folder.Depth, folder.IsFolder));
+        Assert.Equal(new IndexedPath("src/app/Main.cs"), file);
+    }
+
+    [Fact]
+    public void The_cap_counts_files_not_the_folders_theyre_in()
+    {
+        var paths = ProjectFileIndex.WithFolders(["a/b/c/one.txt", "a/b/c/two.txt", "three.txt"], maxFiles: 2);
+
+        Assert.Equal(["a/", "a/b/", "a/b/c/", "a/b/c/one.txt", "a/b/c/two.txt"], paths.Select(p => p.Path));
+    }
+
+    [Fact]
+    public void A_stale_match_stops()
+    {
+        using var stale = new CancellationTokenSource();
+        stale.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() => PathMatcher.Match(Paths, "core", cancellationToken: stale.Token));
+    }
+
+    [Fact]
     public void A_letter_the_word_start_jump_would_skip_still_matches()
     {
         var paths = ProjectFileIndex.WithFolders(["ab/c/b.txt"], 10);
 
-        Assert.Contains("ab/c/b.txt", PathMatcher.Match(paths, "bcb").Select(p => p.Path));
+        Assert.Contains("ab/c/b.txt", PathMatcher.Match(paths, "bcb", cancellationToken: TestContext.Current.CancellationToken).Select(p => p.Path));
     }
 
     // ---- Listing the folder ------------------------------------------------------------------------------------

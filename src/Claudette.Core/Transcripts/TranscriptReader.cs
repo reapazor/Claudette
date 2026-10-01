@@ -101,19 +101,33 @@ public static class TranscriptReader
     /// <paramref name="endAt"/> (its <c>uuid</c>): what a resume with <c>--resume-session-at</c> keeps (DESIGN.md §5,
     /// "Rewind and branch"). Subagents' entries after it are left out too. Null, or an entry it doesn't have, reads it all.
     /// </summary>
-    public static async Task<Transcript> ReadAsync(string path, string? endAt, CancellationToken cancellationToken = default)
-    {
-        var lines = await File.ReadAllLinesAsync(path, cancellationToken).ConfigureAwait(false);
-        var main = ReadEntries(lines, parentToolUseId: null, endAt);
-        var streams = new List<List<Entry>> { main.Entries };
-        var subagents = await ReadSubagentsAsync(path, cancellationToken).ConfigureAwait(false);
-        if (main.Ended)
+    /// <remarks>
+    /// Off the caller's thread, line by line rather than the whole file at once: a long session's transcript can be tens
+    /// of MB.
+    /// </remarks>
+    public static Task<Transcript> ReadAsync(string path, string? endAt, CancellationToken cancellationToken = default) =>
+        Task.Run(() =>
         {
-            // An entry without a time follows the one before it.
-            subagents = subagents.Select(stream => stream.TakeWhile(e => e.Time is null || main.EndTime is null || e.Time <= main.EndTime).ToList()).ToList();
+            var main = ReadEntries(Lines(path, cancellationToken), parentToolUseId: null, endAt);
+            var streams = new List<List<Entry>> { main.Entries };
+            var subagents = ReadSubagents(path, cancellationToken);
+            if (main.Ended)
+            {
+                // An entry without a time follows the one before it.
+                subagents = subagents.Select(stream => stream.TakeWhile(e => e.Time is null || main.EndTime is null || e.Time <= main.EndTime).ToList()).ToList();
+            }
+            streams.AddRange(subagents);
+            return new Transcript(Merge(streams), main.AiTitle, main.CustomTitle, main.StartedAt);
+        }, cancellationToken);
+
+    /// <summary>The file's lines, read as they're needed. Claude Code keeps writing it meanwhile, so it's shared.</summary>
+    private static IEnumerable<string> Lines(string path, CancellationToken cancellationToken)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 64 * 1024, FileOptions.SequentialScan);
+        foreach (var line in Files.Utf8Lines.Read(stream, 0, cancellationToken))
+        {
+            yield return line.Text;
         }
-        streams.AddRange(subagents);
-        return new Transcript(Merge(streams), main.AiTitle, main.CustomTitle, main.StartedAt);
     }
 
     public static Transcript Read(IEnumerable<string> lines)
@@ -193,7 +207,9 @@ public static class TranscriptReader
                 case not null when ended:
                     break;
                 case "assistant" when entry.GetObject("message") is { } message:
-                    if (Parse(new JsonObject { ["type"] = "assistant", ["message"] = message.DeepClone(), ["parent_tool_use_id"] = parentToolUseId, ["uuid"] = entry.GetString("uuid") }) is { } assistant)
+                    // The entry is read once: its message moves into the stream's shape, not copied.
+                    entry.Remove("message");
+                    if (MessageParser.TryParse(new JsonObject { ["type"] = "assistant", ["message"] = message, ["parent_tool_use_id"] = parentToolUseId, ["uuid"] = entry.GetString("uuid") }) is { } assistant)
                     {
                         items.Add(new Entry(time, new TranscriptMessage(assistant)));
                     }
@@ -233,16 +249,19 @@ public static class TranscriptReader
         }
         if (blocks.OfType<JsonObject>().Any(b => b.GetString("type") == "tool_result"))
         {
-            // Transcripts call it toolUseResult; the live stream calls it tool_use_result.
+            // Transcripts call it toolUseResult; the live stream calls it tool_use_result. Moved, not copied: the entry
+            // is read once.
+            var details = Take(entry, "toolUseResult") ?? Take(entry, "tool_use_result");
+            entry.Remove("message");
             var user = new JsonObject
             {
                 ["type"] = "user",
                 ["uuid"] = entry.GetString("uuid"),
-                ["message"] = message.DeepClone(),
-                ["tool_use_result"] = (entry["toolUseResult"] ?? entry["tool_use_result"])?.DeepClone(),
+                ["message"] = message,
+                ["tool_use_result"] = details,
                 ["parent_tool_use_id"] = parentToolUseId,
             };
-            if (Parse(user) is { } toolResults)
+            if (MessageParser.TryParse(user) is { } toolResults)
             {
                 items.Add(new Entry(time, new TranscriptMessage(toolResults)));
             }
@@ -324,7 +343,7 @@ public static class TranscriptReader
     /// The subagents' own transcripts: <c>&lt;session-id&gt;/subagents/agent-&lt;id&gt;.jsonl</c>, each with a
     /// <c>.meta.json</c> naming the <c>Agent</c> call that started it (<c>toolUseId</c>). One without it is skipped.
     /// </summary>
-    private static async Task<List<List<Entry>>> ReadSubagentsAsync(string transcriptPath, CancellationToken cancellationToken)
+    private static List<List<Entry>> ReadSubagents(string transcriptPath, CancellationToken cancellationToken)
     {
         var streams = new List<List<Entry>>();
         var folder = Path.Combine(Path.GetDirectoryName(transcriptPath) ?? "", Path.GetFileNameWithoutExtension(transcriptPath), "subagents");
@@ -338,13 +357,12 @@ public static class TranscriptReader
             {
                 var meta = Path.ChangeExtension(file, ".meta.json");
                 if (!File.Exists(meta)
-                    || JsonTree.Parse(await File.ReadAllTextAsync(meta, cancellationToken).ConfigureAwait(false)) is not JsonObject metadata
+                    || JsonTree.Parse(File.ReadAllText(meta)) is not JsonObject metadata
                     || metadata.GetString("toolUseId") is not { Length: > 0 } toolUseId)
                 {
                     continue;
                 }
-                var lines = await File.ReadAllLinesAsync(file, cancellationToken).ConfigureAwait(false);
-                streams.Add(ReadEntries(lines, toolUseId).Entries);
+                streams.Add(ReadEntries(Lines(file, cancellationToken), toolUseId).Entries);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
             {
@@ -371,22 +389,24 @@ public static class TranscriptReader
         }).ToArray();
         var positions = new int[streams.Count];
         var merged = new List<TranscriptItem>(streams.Sum(s => s.Count));
-        while (true)
+        // The streams' next entries, earliest first; a tie goes to the earlier stream. A session can have many subagents.
+        var next = new PriorityQueue<int, (DateTimeOffset Time, int Stream)>();
+        for (var i = 0; i < streams.Count; i++)
         {
-            var next = -1;
-            for (var i = 0; i < streams.Count; i++)
+            if (streams[i].Count > 0)
             {
-                if (positions[i] < streams[i].Count && (next < 0 || times[i][positions[i]] < times[next][positions[next]]))
-                {
-                    next = i;
-                }
+                next.Enqueue(i, (times[i][0], i));
             }
-            if (next < 0)
-            {
-                return merged;
-            }
-            merged.Add(streams[next][positions[next]++].Item);
         }
+        while (next.TryDequeue(out var stream, out _))
+        {
+            merged.Add(streams[stream][positions[stream]++].Item);
+            if (positions[stream] < streams[stream].Count)
+            {
+                next.Enqueue(stream, (times[stream][positions[stream]], stream));
+            }
+        }
+        return merged;
     }
 
     /// <summary>Claude Code prepends <c>&lt;system-reminder&gt;</c> blocks to some prompts; they aren't what the user typed.</summary>
@@ -402,6 +422,11 @@ public static class TranscriptReader
         return text.Trim();
     }
 
-    private static ClaudeMessage? Parse(JsonObject obj) =>
-        MessageParser.TryParse(obj.ToJsonString(), out var message, out _) ? message : null;
+    /// <summary>Takes a property's value out of <paramref name="obj"/>, so it can go into another object.</summary>
+    private static JsonNode? Take(JsonObject obj, string name)
+    {
+        var value = obj[name];
+        obj.Remove(name);
+        return value;
+    }
 }

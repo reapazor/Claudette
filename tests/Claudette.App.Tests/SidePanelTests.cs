@@ -20,14 +20,14 @@ public class SidePanelTests
         var (first, second) = (h.Shell.AllTabs.First(), h.Shell.AllTabs.Last());
         // The selected tab starts meanwhile, changing properties on another thread while the test reads them.
         await TabTestHarness.Eventually(() => first.Status == TabStatus.Idle && first.IsSettled, "the first tab to start");
-        Assert.Equal(ShellViewModel.DefaultSidePanelWidth, second.SidePanelWidth);
+        Assert.Equal(ShellLayout.DefaultSidePanelWidth, second.SidePanelWidth);
         var changed = new List<string?>();
         second.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
 
         first.ResizeSidePanel(40);
-        Assert.Equal(ShellViewModel.MinSidePanelWidth, second.SidePanelWidth);
+        Assert.Equal(ShellLayout.MinSidePanelWidth, second.SidePanelWidth);
         first.ResizeSidePanel(5000);
-        Assert.Equal(ShellViewModel.MaxSidePanelWidth, second.SidePanelWidth);
+        Assert.Equal(ShellLayout.MaxSidePanelWidth, second.SidePanelWidth);
         Assert.Contains(nameof(TabViewModel.SidePanelWidth), changed);
 
         // Kept when the drag ends, for every tab and the next launch.
@@ -35,12 +35,12 @@ public class SidePanelTests
         Assert.Null(h.Services.State.SidePanelWidth);
         first.SaveSidePanelWidth();
         Assert.Equal(480, h.Services.State.SidePanelWidth);
-        Assert.Equal(480, new ShellViewModel(h.Services, () => { }).SidePanelWidth);
+        Assert.Equal(480, new ShellViewModel(h.Services, () => { }).Layout.SidePanelWidth);
 
         // Double-clicking the edge.
         second.ResetSidePanelWidth();
-        Assert.Equal(ShellViewModel.DefaultSidePanelWidth, first.SidePanelWidth);
-        Assert.Equal(ShellViewModel.DefaultSidePanelWidth, h.Services.State.SidePanelWidth);
+        Assert.Equal(ShellLayout.DefaultSidePanelWidth, first.SidePanelWidth);
+        Assert.Equal(ShellLayout.DefaultSidePanelWidth, h.Services.State.SidePanelWidth);
     }
 
     [Fact]
@@ -377,8 +377,63 @@ public class SidePanelTests
         tab.ChangedFiles.ToggleFileReviewedCommand.Execute(tab.ChangedFiles.Files.Single(r => r.FileName == "notes.md"));
         Assert.Equal("2 files changed · 2 reviewed", tab.ChangedFiles.Summary);
         EmitEdit(h, "e2", yours);
-        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files.SingleOrDefault(r => r.FileName == "notes.md") is { LatestChange: "e2", IsReviewed: false }, "Claude's change");
+        // Git is asked once the edits pause.
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(ChangedFilesViewModel.GitRefreshDelay);
+            return tab.ChangedFiles.Files.SingleOrDefault(r => r.FileName == "notes.md") is { LatestChange: "e2", IsReviewed: false };
+        }, "Claude's change");
         Assert.True(tab.ChangedFiles.Files.Single(r => r.FileName == "a.cs").IsReviewed);
+    }
+
+    [Fact]
+    public async Task Git_is_asked_once_edits_pause_and_not_for_a_tab_in_the_background()
+    {
+        var statuses = 0;
+        var git = new FakeLauncher
+        {
+            OnStart = (spec, process) =>
+            {
+                if (spec.Arguments.Contains("--show-toplevel"))
+                {
+                    process.WriteOutput(spec.WorkingDirectory!);
+                    process.WriteOutput("");
+                    process.Exit(0);
+                    return;
+                }
+                if (spec.Arguments.Contains("status"))
+                {
+                    Interlocked.Increment(ref statuses);
+                }
+                process.Exit(0);
+            },
+        };
+        await using var h = new TabTestHarness(launcher: git);
+        var tab = await h.OpenTabAsync();
+        tab.ChangedFiles.ShowGitChanges = true;
+        await TabTestHarness.Eventually(() => Volatile.Read(ref statuses) == 1, "the first listing");
+
+        for (var i = 0; i < 5; i++)
+        {
+            EmitEdit(h, $"e{i}", Path.Combine(h.WorkFolder, $"f{i}.cs"));
+        }
+        await TabTestHarness.Eventually(() => tab.Items.OfType<Conversation.ToolUseItem>().Count() == 5 && tab.IsSettled, "the edits");
+        Assert.Equal(1, Volatile.Read(ref statuses));
+        h.Time.Advance(ChangedFilesViewModel.GitRefreshDelay);
+        await TabTestHarness.Eventually(() => Volatile.Read(ref statuses) == 2, "one listing for the five");
+
+        // In the background (another tab selected), it waits to be shown.
+        tab.IsSelected = false;
+        EmitEdit(h, "e9", Path.Combine(h.WorkFolder, "f9.cs"));
+        await TabTestHarness.Eventually(() => tab.Items.OfType<Conversation.ToolUseItem>().Count() == 6 && tab.IsSettled, "the edit");
+        h.Time.Advance(ChangedFilesViewModel.GitRefreshDelay * 4);
+        Assert.Equal(2, Volatile.Read(ref statuses));
+        tab.IsSelected = true;
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(ChangedFilesViewModel.GitRefreshDelay);
+            return Volatile.Read(ref statuses) == 3;
+        }, "the listing once it's shown");
     }
 
     [Fact]
@@ -492,6 +547,35 @@ public class SidePanelTests
         Assert.StartsWith("1 proc · ", tab.ProcessMonitor.SummaryText, StringComparison.Ordinal);
         Assert.True(tab.ProcessMonitor.HasBusyProcesses);
         Assert.Equal(["claude", "node"], tab.ProcessMonitor.Processes.Select(p => p.Name));
+    }
+
+    [Fact]
+    public async Task Each_process_keeps_its_row_from_sample_to_sample()
+    {
+        await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true);
+        var tab = await h.OpenTabAsync();
+        var tree = h.Trees.Trees[4242];
+        tree.Children.Add((5001, "node"));
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+        await TabTestHarness.Eventually(() => tab.ProcessMonitor.Processes.Count == 2, "the first sample");
+        var (claude, node) = (tab.ProcessMonitor.Processes[0], tab.ProcessMonitor.Processes[1]);
+        var changes = new List<System.Collections.Specialized.NotifyCollectionChangedAction>();
+        tab.ProcessMonitor.Processes.CollectionChanged += (_, e) => changes.Add(e.Action);
+
+        tree.Children.Add((5002, "dotnet"));
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+        await TabTestHarness.Eventually(() => tab.ProcessMonitor.Processes.Count == 3, "the second sample");
+
+        // The rows that were there are the same rows; only the new one was added.
+        Assert.Same(claude, tab.ProcessMonitor.Processes[0]);
+        Assert.Same(node, tab.ProcessMonitor.Processes[1]);
+        Assert.Equal([System.Collections.Specialized.NotifyCollectionChangedAction.Add], changes);
+
+        tree.Children.RemoveAll(c => c.Item1 == 5001);
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+        await TabTestHarness.Eventually(() => tab.ProcessMonitor.Processes.Count == 2, "the third sample");
+        Assert.Equal(["claude", "dotnet"], tab.ProcessMonitor.Processes.Select(p => p.Name));
+        Assert.Same(claude, tab.ProcessMonitor.Processes[0]);
     }
 
     [Fact]

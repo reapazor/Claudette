@@ -75,3 +75,9 @@ public sealed record UnrecognizedMessage(string MessageType, System.Text.Json.No
 public sealed record ProtocolError(string Line, string Error) : SessionEvent;
 
 public sealed record SessionExited(TransportExit Exit) : SessionEvent;
+
+/// <summary>
+/// The answer to an <c>interrupt</c>: the ids of the messages still waiting to run after it, and of the ones it cancelled
+/// (with <c>cancel_queued</c>). Ids Claudette didn't send, such as a scheduled task's, can be among them.
+/// </summary>
+public sealed record InterruptReceipt(IReadOnlyList<string> StillQueued, IReadOnlyList<string> Cancelled);

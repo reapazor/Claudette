@@ -100,7 +100,7 @@ public class AutoContinueTests
         await HitLimitAsync(h, tab, reset);
 
         var settings = new SettingsViewModel(h.Services, null);
-        settings.ContinueAfterLimitReset = false;
+        settings.Usage.ContinueAfterLimitReset = false;
 
         await TabTestHarness.Eventually(() => !tab.WillContinueAfterLimit, "the wait to follow the setting");
         await AdvanceToAsync(h, reset + AutoContinueMonitor.Grace);

@@ -35,6 +35,12 @@ public sealed class RestartSnapshot
     /// <summary>Tabs whose Claude Code was running: they start again straight away instead of when selected.</summary>
     public List<string> RunningTabIds { get; set; } = [];
 
+    /// <summary>
+    /// Tabs that were in a turn, which the restart cut off rather than interrupting: Claude Code carries it on when they
+    /// start again (DESIGN.md §9, "Working on Claudette").
+    /// </summary>
+    public List<string> InterruptedTabIds { get; set; } = [];
+
     public WindowPlacement? Window { get; set; }
 
     /// <summary>Set when the restart is for installing a release, rather than a new source build.</summary>

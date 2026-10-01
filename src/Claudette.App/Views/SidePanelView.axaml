@@ -1,0 +1,325 @@
+<!-- A tab's side panel (DESIGN.md §3): changed files, agents, tasks, MCP servers, the project's tools and, when the
+     monitor is on, processes. TabView holds it in a border it sizes. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             xmlns:conv="using:Claudette.App.Conversation"
+             xmlns:core="using:Claudette.Core.Sessions"
+             xmlns:settings="using:Claudette.Core.Settings"
+             xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
+             xmlns:controls="using:Claudette.App.Controls"
+             xmlns:protocol="using:Claudette.Core.Protocol"
+             xmlns:services="using:Claudette.App.Services"
+             xmlns:views="using:Claudette.App.Views"
+             xmlns:tools="using:Claudette.Core.ProjectTools"
+             x:Class="Claudette.App.Views.SidePanelView"
+             x:DataType="vm:TabViewModel">
+  <DockPanel>
+    <!-- The pages, as tabs: the one showing in full text over an accent line, the others muted -->
+    <Border DockPanel.Dock="Top" Classes="pagetabs">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+        <Button Classes="pagetab" Classes.selected="{Binding IsFilesPage}" Command="{Binding ShowFilesPageCommand}">
+          <TextBlock Text="Changed Files" Classes.muted="{Binding !IsFilesPage}" />
+        </Button>
+        <!-- Agents (DESIGN.md §18); a busy dot while a subagent runs -->
+        <Button Grid.Column="1" Classes="pagetab" Classes.selected="{Binding IsAgentsPage}" Command="{Binding ShowAgentsPageCommand}" ToolTip.Tip="{Binding AgentsHeader}">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Text="Agents" Classes.muted="{Binding !IsAgentsPage}" />
+            <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding HasActiveAgents}" />
+          </StackPanel>
+        </Button>
+        <!-- Project tools (DESIGN.md §18); a busy dot while a job runs -->
+        <Button Grid.Column="2" Classes="pagetab" Classes.selected="{Binding IsProjectPage}" Command="{Binding ShowProjectPageCommand}" IsVisible="{Binding ProjectTools.HasTools}" ToolTip.Tip="{Binding ProjectTools.HeaderTitle}">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Text="Project" Classes.muted="{Binding !IsProjectPage}" />
+            <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding ProjectTools.Runs.IsJobRunning}" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="3" Classes="pagetab" Classes.selected="{Binding IsProcessesPage}" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding ProcessMonitor.IsOn}">
+          <TextBlock Text="Processes" Classes.muted="{Binding !IsProcessesPage}" />
+        </Button>
+        <!-- Tasks (DESIGN.md §5, "Tasks"): "2 of 5" done -->
+        <Button Grid.Column="4" Classes="pagetab" Classes.selected="{Binding IsTasksPage}" Command="{Binding ShowTasksPageCommand}" IsVisible="{Binding TodoList.HasAnything}"
+                ToolTip.Tip="{Binding TodoList.Summary}">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Text="Tasks" Classes.muted="{Binding !IsTasksPage}" />
+            <TextBlock Classes="muted small" Text="{Binding TodoList.Badge}" VerticalAlignment="Center" IsVisible="{Binding TodoList.HasItems}" />
+          </StackPanel>
+        </Button>
+        <!-- MCP servers (DESIGN.md §4, "MCP servers"); a warning dot when one failed -->
+        <Button Grid.Column="5" Classes="pagetab" Classes.selected="{Binding IsMcpPage}" Command="{Binding ShowMcpPageCommand}" IsVisible="{Binding HasMcpServers}"
+                ToolTip.Tip="{Binding McpServers.Attention, TargetNullValue='MCP servers'}">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Text="MCP" Classes.muted="{Binding !IsMcpPage}" />
+            <TextBlock Classes="status warning" Text="●" FontSize="8" VerticalAlignment="Center"
+                       IsVisible="{Binding McpServers.Attention, Converter={x:Static ObjectConverters.IsNotNull}}" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="7" Classes="flat" Padding="6" VerticalAlignment="Center" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
+          <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
+        </Button>
+      </Grid>
+    </Border>
+
+    <Panel Margin="0,8,0,0">
+      <!-- Changed files (DESIGN.md §8) -->
+      <DockPanel IsVisible="{Binding IsFilesPage}">
+        <StackPanel DockPanel.Dock="Top" Margin="12,0,12,6" Spacing="4">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Classes="muted small" Text="{Binding ChangedFiles.Summary}" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="flat" Command="{Binding ChangedFiles.RefreshCommand}">
+              <TextBlock Classes="small" Text="Refresh" />
+            </Button>
+          </Grid>
+          <CheckBox IsChecked="{Binding ChangedFiles.ShowGitChanges}" IsVisible="{Binding ChangedFiles.IsGitRepository}"
+                    ToolTip.Tip="All changes in the repository, including ones made by commands or by you">
+            <TextBlock Classes="small" Text="Working tree vs HEAD" />
+          </CheckBox>
+        </StackPanel>
+        <!-- Every page scrolls both ways (DESIGN.md §3, "Side panel"): a row's name and counts stay in view, and its path
+             is shown whole and scrolls sideways. -->
+        <ListBox x:Name="ChangedFilesList" ItemsSource="{Binding ChangedFiles.Files}" Background="Transparent"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                 Tapped="OnChangedFileTapped" DoubleTapped="OnChangedFileDoubleTapped">
+          <ListBox.ItemTemplate>
+            <DataTemplate DataType="vm:ChangedFileRow">
+              <Grid Classes="changedfile" Classes.reviewed="{Binding IsReviewed}" ColumnDefinitions="Auto,18,*" ToolTip.Tip="{Binding StatusText}" Background="Transparent">
+                <!-- DESIGN.md §8, "Reviewed": unticks when Claude changes the file again -->
+                <CheckBox Classes="reviewed" IsChecked="{Binding IsReviewed, Mode=OneWay}"
+                          Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.ToggleFileReviewedCommand}" CommandParameter="{Binding}"
+                          AutomationProperties.Name="Reviewed" ToolTip.Tip="Reviewed. Unticks when Claude changes the file again." />
+                <TextBlock Grid.Column="1" Classes="mono" FontWeight="SemiBold" Text="{Binding Status}" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsDeleted}" />
+                <StackPanel Grid.Column="2">
+                  <controls:ShownWidth>
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Column="1" Classes="mono small muted" Text="{Binding Stats}" VerticalAlignment="Top" Margin="6,2,0,0" />
+                    </Grid>
+                  </controls:ShownWidth>
+                  <TextBlock Classes="muted small" Text="{Binding DisplayPath}" />
+                </StackPanel>
+                <Grid.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="Open diff" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.OpenFileDiffCommand}" CommandParameter="{Binding}" />
+                    <MenuItem Header="Open in diff tool" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.OpenFileInDiffToolCommand}" CommandParameter="{Binding}"
+                              IsVisible="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.HasDiffTool}" />
+                    <MenuItem Header="Open in editor" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.OpenFileInEditorCommand}" CommandParameter="{Binding}" />
+                    <MenuItem Header="Reveal in folder" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.RevealFileCommand}" CommandParameter="{Binding}" />
+                    <MenuItem Header="Copy path" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.CopyFilePathCommand}" CommandParameter="{Binding}" />
+                  </ContextMenu>
+                </Grid.ContextMenu>
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+
+      <!-- Agents (DESIGN.md §18, "Agent map"): the tree, and the selected agent's prompt and result -->
+      <Grid IsVisible="{Binding IsAgentsPage}" RowDefinitions="Auto,*,Auto,*">
+        <Grid Margin="12,0,6,6" ColumnDefinitions="*,Auto">
+          <TextBlock Classes="muted small" Text="{Binding AgentsHeader}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="flat" Padding="6" ToolTip.Tip="Open the agent map in its own window" AutomationProperties.Name="Open the agent map in a window"
+                  Command="{Binding OpenAgentWindowCommand}">
+            <Path Data="{StaticResource IconOpenWindow}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.3" Width="10" Height="10" Stretch="Uniform" />
+          </Button>
+        </Grid>
+        <views:AgentTree Grid.Row="1" />
+        <GridSplitter Grid.Row="2" Height="5" Background="Transparent" ResizeDirection="Rows" IsVisible="{Binding HasAgents}"
+                      BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" />
+        <views:AgentDetails Grid.Row="3" IsVisible="{Binding HasAgents}" />
+      </Grid>
+
+      <!-- Project (DESIGN.md §18, "Project tools"): the project's details and the selected run's log: the newest, or the
+           one clicked in the sidebar. The actions are in the project's menu at the sidebar's foot. -->
+      <DockPanel x:Name="ProjectPage" IsVisible="{Binding IsProjectPage}">
+        <StackPanel DockPanel.Dock="Top" Margin="12,0,12,6" Spacing="8">
+          <TextBlock Text="{Binding ProjectTools.HeaderTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+          <ItemsControl ItemsSource="{Binding ProjectTools.FileProblems}" IsVisible="{Binding ProjectTools.HasFileProblems}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Classes="small warning" Text="{Binding}" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <ItemsControl ItemsSource="{Binding ProjectTools.Details}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="tools:ProjectDetail">
+                <Grid ColumnDefinitions="84,*" Margin="0,1">
+                  <TextBlock Classes="muted small" Text="{Binding Label}" />
+                  <SelectableTextBlock Grid.Column="1" Classes="small" Text="{Binding Value}" TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" IsVisible="{Binding ProjectTools.Runs.HasSelectedRun}">
+            <TextBlock Classes="small" Classes.error="{Binding ProjectTools.Runs.SelectedRun.Failed, FallbackValue=False}" Text="{Binding ProjectTools.Runs.SelectedRun.Status, FallbackValue={x:Null}}"
+                       TextWrapping="Wrap" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Content="Stop" Command="{Binding ProjectTools.Runs.SelectedRun.StopCommand, FallbackValue={x:Null}}"
+                    IsVisible="{Binding ProjectTools.Runs.SelectedRun.IsRunning, FallbackValue=False}" ToolTip.Tip="Ends the job and every process it started" />
+            <Button Grid.Column="2" Content="Copy" Command="{Binding ProjectTools.Runs.CopyOutputCommand}" ToolTip.Tip="Copy the output" />
+          </Grid>
+          <TextBlock Classes="muted small" Text="{Binding ProjectTools.Runs.SelectedRun.OutputNote, FallbackValue={x:Null}}" TextWrapping="Wrap"
+                     IsVisible="{Binding ProjectTools.Runs.SelectedRun.OutputNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}, FallbackValue=False}" />
+        </StackPanel>
+        <ListBox x:Name="ProjectOutputList" ItemsSource="{Binding ProjectTools.Runs.SelectedRun.Output, FallbackValue={x:Null}}" Background="Transparent" Margin="8,0,8,8"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                 IsVisible="{Binding ProjectTools.Runs.HasSelectedRun}" AutomationProperties.Name="Output">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="x:String">
+              <TextBlock Classes="mono small" Text="{Binding}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+
+      <!-- Tasks (DESIGN.md §5, "Tasks"): the approved plan, then each task with its state, owner, what it waits on and times -->
+      <DockPanel IsVisible="{Binding IsTasksPage}">
+        <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="12,0,12,6" Text="{Binding TodoList.Summary}" IsVisible="{Binding TodoList.HasItems}" />
+        <!-- The text wraps at the width shown; a plan's code blocks scroll sideways on their own -->
+        <ScrollViewer x:Name="TasksScroller" HorizontalScrollBarVisibility="Auto">
+          <controls:ShownWidth>
+            <StackPanel Margin="12,0,12,12" Spacing="10">
+              <Border Classes="codeblock" IsVisible="{Binding TodoList.HasPlan}">
+                <StackPanel Spacing="4">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="Plan" FontWeight="SemiBold" />
+                    <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding TodoList.PlanApprovedText}" VerticalAlignment="Center" />
+                  </Grid>
+                  <md:MarkdownRenderer MarkdownBuilder="{Binding TodoList.PlanMarkdown}" />
+                </StackPanel>
+              </Border>
+              <ItemsControl ItemsSource="{Binding TodoList.Items}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Spacing="8" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="conv:TodoItem">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                      <TextBlock Text="{Binding Glyph}" Classes.muted="{Binding IsDone}" />
+                      <StackPanel Grid.Column="1" Spacing="2">
+                        <TextBlock TextWrapping="Wrap" Classes.muted="{Binding IsDone}" Classes.strong="{Binding IsActive}">
+                          <Run Classes="muted" Text="{Binding NumberText}" />
+                          <Run Text="{Binding DisplayText}" />
+                        </TextBlock>
+                        <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+                        <TextBlock Classes="small warning" Text="{Binding BlockedText}" IsVisible="{Binding IsBlocked}" />
+                        <TextBlock Classes="muted small" Text="{Binding DetailText}" IsVisible="{Binding HasDetail}" />
+                      </StackPanel>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </controls:ShownWidth>
+        </ScrollViewer>
+      </DockPanel>
+
+      <!-- MCP servers (DESIGN.md §4, "MCP servers") -->
+      <DockPanel IsVisible="{Binding IsMcpPage}">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="12,0,12,6">
+          <TextBlock Classes="muted small" Text="This session's MCP servers." VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="flat" Content="Refresh" Command="{Binding McpServers.RefreshCommand}" />
+        </Grid>
+        <TextBlock DockPanel.Dock="Top" Classes="small error" Margin="12,0,12,6" Text="{Binding McpServers.Error}" TextWrapping="Wrap" IsVisible="{Binding McpServers.HasError}" />
+        <ScrollViewer x:Name="McpScroller" HorizontalScrollBarVisibility="Auto">
+          <controls:ShownWidth>
+            <ItemsControl ItemsSource="{Binding McpServers.Servers}" Margin="12,0,12,12">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Spacing="10" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:McpServerRow">
+                  <StackPanel Spacing="2">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Column="1" Classes="small" Classes.muted="{Binding !IsFailed}" Classes.warning="{Binding IsFailed}" Text="{Binding StateText}" />
+                    </Grid>
+                    <TextBlock Classes="muted small" Text="{Binding Detail}" TextWrapping="Wrap" IsVisible="{Binding HasDetail}" />
+                    <SelectableTextBlock Classes="small error" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
+                    <!-- Signing in, while the user finishes in the browser -->
+                    <StackPanel Spacing="4" IsVisible="{Binding IsSigningIn}">
+                      <TextBlock Classes="muted small" Text="{Binding SignInText}" TextWrapping="Wrap" />
+                      <Button Classes="flat" Padding="0" HorizontalAlignment="Left" ToolTip.Tip="{Binding SignInUrl}"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.OpenSignInPageCommand}" CommandParameter="{Binding}">
+                        <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="Open the sign-in page again" TextDecorations="Underline" />
+                      </Button>
+                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" IsVisible="{Binding CanPasteAddress}">
+                        <TextBox Text="{Binding PastedAddress}" PlaceholderText="If the page after signing in didn't load, paste its address here"
+                                 AutomationProperties.Name="The address the browser ended on" />
+                        <Button Grid.Column="1" Classes="flat" Content="Done"
+                                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.FinishSignInCommand}" CommandParameter="{Binding}" />
+                      </Grid>
+                    </StackPanel>
+                    <WrapPanel ItemSpacing="8" IsEnabled="{Binding !IsBusy}">
+                      <Button Classes="flat" Content="Sign in" IsVisible="{Binding CanSignIn}" ToolTip.Tip="Opens the server's sign-in page in your browser"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.SignInCommand}" CommandParameter="{Binding}" />
+                      <Button Classes="flat" Content="Sign out" IsVisible="{Binding CanSignOut}" ToolTip.Tip="Forget this server's sign-in; connecting it again asks you to sign in"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.SignOutCommand}" CommandParameter="{Binding}" />
+                      <Button Classes="flat" Content="Reconnect" IsVisible="{Binding CanReconnect}"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ReconnectCommand}" CommandParameter="{Binding}" />
+                      <Button Classes="flat" Content="Turn off" IsVisible="{Binding !IsDisabled}" ToolTip.Tip="Disconnect it and remove its tools, for this session"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ToggleCommand}" CommandParameter="{Binding}" />
+                      <Button Classes="flat" Content="Turn on" IsVisible="{Binding IsDisabled}"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ToggleCommand}" CommandParameter="{Binding}" />
+                    </WrapPanel>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </controls:ShownWidth>
+        </ScrollViewer>
+      </DockPanel>
+
+      <!-- Processes (DESIGN.md §4, "Process monitor") -->
+      <DockPanel IsVisible="{Binding IsProcessesPage}">
+        <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="12,0,12,6" Text="{Binding ProcessMonitor.SummaryText, TargetNullValue='Only Claude Code is running.'}" />
+        <!-- Each process's name and numbers stay in view; its command line is shown whole and scrolls sideways -->
+        <ScrollViewer x:Name="ProcessesScroller" HorizontalScrollBarVisibility="Auto">
+          <ItemsControl ItemsSource="{Binding ProcessMonitor.Processes}" Margin="8,0,8,8">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:ProcessRow">
+                <Border Padding="4,3" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
+                  <StackPanel Margin="{Binding Indent, Converter={x:Static vm:Converters.LeftMargin}}" Spacing="1">
+                    <controls:ShownWidth>
+                      <StackPanel Spacing="1">
+                        <Grid ColumnDefinitions="*,Auto,Auto">
+                          <TextBlock TextTrimming="CharacterEllipsis">
+                            <Run Text="{Binding Name}" FontWeight="SemiBold" />
+                            <Run Classes="muted" Text="{Binding Pid}" FontSize="11" />
+                          </TextBlock>
+                          <TextBlock Grid.Column="1" Classes="mono small" Text="{Binding CpuText}" Margin="8,0,0,0" MinWidth="44" TextAlignment="Right" />
+                          <TextBlock Grid.Column="2" Classes="mono small muted" Text="{Binding MemoryText}" Margin="8,0,0,0" MinWidth="56" TextAlignment="Right" />
+                        </Grid>
+                        <TextBlock Classes="muted small" TextTrimming="CharacterEllipsis">
+                          <Run Text="{Binding RunningText}" />
+                          <Run Text="{Binding IsDetached, Converter={x:Static vm:Converters.DetachedText}}" />
+                        </TextBlock>
+                      </StackPanel>
+                    </controls:ShownWidth>
+                    <TextBlock Classes="mono muted small" Text="{Binding CommandLine}" IsVisible="{Binding HasCommandLine}" />
+                    <Button Classes="flat" Padding="0" IsVisible="{Binding HasTool}" HorizontalAlignment="Left"
+                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.ShowProcessToolCommand}" CommandParameter="{Binding}">
+                      <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding ToolText}" />
+                    </Button>
+                  </StackPanel>
+                  <Border.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem Header="Stop…" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.StopProcessCommand}" CommandParameter="{Binding}" IsEnabled="{Binding !IsRoot}" />
+                      <MenuItem Header="Copy command line" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.CopyCommandLineCommand}" CommandParameter="{Binding}" />
+                      <MenuItem Header="Reveal executable" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.RevealExecutableCommand}" CommandParameter="{Binding}" />
+                      <MenuItem Header="Show in conversation" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.ShowProcessToolCommand}" CommandParameter="{Binding}" IsEnabled="{Binding HasTool}" />
+                    </ContextMenu>
+                  </Border.ContextMenu>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </DockPanel>
+    </Panel>
+  </DockPanel>
+</UserControl>

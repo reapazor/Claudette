@@ -43,6 +43,14 @@ public class RevertTests
         Assert.Equal("one\r\ntwo\r\nthree", reverted);
     }
 
+    [Theory]
+    [InlineData("a\nb\n", "x\r\ny\r\n", "a\r\nb\r\n")]
+    [InlineData("a\nb\n", "x\ny\n", "a\nb\n")]
+    [InlineData("a\r\nb\n", "x\r\ny\r\n", "a\r\nb\n")]
+    [InlineData(null, "x\r\n", null)]
+    public void Git_copies_take_the_files_line_endings_when_it_has_Windows_ones(string? text, string like, string? expected) =>
+        Assert.Equal(expected, Revert.WithLineEndingsOf(text, like));
+
     [Fact]
     public void A_file_changed_since_the_diff_isnt_touched()
     {
@@ -67,5 +75,53 @@ public class RevertTests
         // A file Claude created goes back to not existing.
         Assert.True(Revert.Write(path, "old\n", null));
         Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public void Writing_back_keeps_a_utf16_file_utf16()
+    {
+        using var temp = new TempFolder();
+        var path = temp.Combine("a.txt");
+        var utf16 = new System.Text.UnicodeEncoding(bigEndian: false, byteOrderMark: true);
+        File.WriteAllBytes(path, [.. utf16.Preamble, .. utf16.GetBytes("néw\n")]);
+
+        Assert.True(Revert.Write(path, "néw\n", "öld\n"));
+
+        Assert.Equal([.. utf16.Preamble, .. utf16.GetBytes("öld\n")], File.ReadAllBytes(path));
+    }
+
+    [Fact]
+    public void A_file_that_isnt_utf8_isnt_written_back()
+    {
+        using var temp = new TempFolder();
+        var path = temp.Combine("latin1.txt");
+        // "café" in Latin-1: reading it as UTF-8 would turn the é into a replacement character for good.
+        byte[] latin1 = [(byte)'c', (byte)'a', (byte)'f', 0xE9, (byte)'\n'];
+        File.WriteAllBytes(path, latin1);
+
+        var error = Assert.Throws<IOException>(() => Revert.Write(path, "caf\uFFFD\n", "old\n"));
+
+        Assert.Contains("isn't UTF-8 or UTF-16 text", error.Message, StringComparison.Ordinal);
+        Assert.Equal(latin1, File.ReadAllBytes(path));
+    }
+
+    [Fact]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public void Writing_back_keeps_a_files_permissions_and_writes_through_a_link()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Permissions and links as on macOS and Linux");
+        using var temp = new TempFolder();
+        var script = temp.Combine("run.sh");
+        File.WriteAllText(script, "echo new\n");
+        const UnixFileMode Executable = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute;
+        File.SetUnixFileMode(script, Executable);
+        var link = temp.Combine("link.sh");
+        File.CreateSymbolicLink(link, script);
+
+        Assert.True(Revert.Write(link, "echo new\n", "echo old\n"));
+
+        Assert.Equal(script, new FileInfo(link).LinkTarget);
+        Assert.Equal("echo old\n", File.ReadAllText(script));
+        Assert.Equal(Executable, File.GetUnixFileMode(script));
     }
 }

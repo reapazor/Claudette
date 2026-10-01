@@ -320,7 +320,7 @@ public sealed partial class UsageViewModel
     private static (DateTimeOffset? Session, DateTimeOffset? Week) Resets(UsageSnapshot? snapshot) =>
         (snapshot?.Session?.ResetsAt, snapshot?.WeeklyAll?.ResetsAt);
 
-    private void OnTurnRecorded()
+    private void OnTurnRecorded(string tabId)
     {
         if (IsDetailed)
         {

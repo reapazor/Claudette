@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Files;
 using Claudette.Core.Json;
 using Claudette.Core.Protocol;
 using Claudette.Core.Transcripts;
@@ -14,7 +15,8 @@ namespace Claudette.Core.History;
 /// <c>&lt;projectsDirectory&gt;/&lt;project-folder&gt;/&lt;session-id&gt;.jsonl</c>; subagent transcripts in
 /// <c>&lt;session-id&gt;/subagents/</c> are ignored.
 /// <list type="bullet">
-/// <item>Summaries are cached by path, length and last-write time, so a rescan only reads files that changed.</item>
+/// <item>Summaries are cached by path, length and last-write time, so a rescan only reads files that changed. A file
+/// that only grew, as a session's transcript does each turn, is read on from where the last read stopped.</item>
 /// <item>Transcripts can be tens of MB, so they're read line by line, and a line is only parsed as JSON when a cheap
 /// substring check says it might hold a prompt, an assistant text or a title.</item>
 /// <item>The format is internal to Claude Code (DESIGN.md §13, "Transcripts"): unknown entries are skipped, and a file
@@ -31,8 +33,17 @@ public sealed class HistoryIndex(string projectsDirectory)
 
     public const int SearchTextLength = 16_000;
 
+    /// <summary>How many of the most recently written files keep what's needed to read on from where they stopped.</summary>
+    internal const int ResumableFiles = 32;
+
+    /// <summary>How many bytes before a read's end are kept, to check the file still has them before reading on.</summary>
+    private const int TailLength = 64;
+
     private readonly SemaphoreSlim _scanLock = new(1, 1);
     private readonly Dictionary<string, CacheEntry> _cache = new(StringComparer.Ordinal);
+
+    /// <summary>Transcripts outside Claude Code's storage (the session library's), for <see cref="SummarizeAsync"/>.</summary>
+    private readonly Dictionary<string, CacheEntry> _otherCache = new(StringComparer.Ordinal);
 
     public string ProjectsDirectory { get; } = projectsDirectory;
 
@@ -43,6 +54,38 @@ public sealed class HistoryIndex(string projectsDirectory)
         try
         {
             return await Task.Run(() => Scan(cancellationToken), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _scanLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Summaries of transcripts elsewhere, such as the session library's copies, cached as Claude Code's own are: History
+    /// opening again doesn't read them again. Null for one with neither a prompt nor a title, or that can't be read.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, SessionSummary?>> SummarizeAsync(IEnumerable<string> transcriptPaths, CancellationToken cancellationToken = default)
+    {
+        await _scanLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await Task.Run(() =>
+            {
+                var summaries = new Dictionary<string, SessionSummary?>(StringComparer.Ordinal);
+                foreach (var path in transcriptPaths)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var file = new FileInfo(path);
+                    summaries[path] = file.Exists ? Cached(_otherCache, file, cancellationToken) : null;
+                }
+                foreach (var gone in _otherCache.Keys.Where(k => !summaries.ContainsKey(k)).ToArray())
+                {
+                    _otherCache.Remove(gone);
+                }
+                Forget(_otherCache);
+                return (IReadOnlyDictionary<string, SessionSummary?>)summaries;
+            }, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -65,7 +108,7 @@ public sealed class HistoryIndex(string projectsDirectory)
     public static SessionSummary? ReadSummary(string transcriptPath)
     {
         var file = new FileInfo(transcriptPath);
-        return Read(file, file.LastWriteTimeUtc, CancellationToken.None);
+        return Read(file, file.Length, file.LastWriteTimeUtc, resume: null, CancellationToken.None).Summary;
     }
 
     private IReadOnlyList<SessionSummary> Scan(CancellationToken cancellationToken)
@@ -76,26 +119,7 @@ public sealed class HistoryIndex(string projectsDirectory)
         {
             cancellationToken.ThrowIfCancellationRequested();
             seen.Add(file.FullName);
-            // From the enumeration, so no extra call per file. If the file changes while it's read, the next scan
-            // sees a different length or time and reads it again.
-            var length = file.Length;
-            var lastWrite = file.LastWriteTimeUtc;
-
-            if (!_cache.TryGetValue(file.FullName, out var cached) || cached.Length != length || cached.LastWriteUtc != lastWrite)
-            {
-                try
-                {
-                    cached = new CacheEntry(length, lastWrite, Read(file, lastWrite, cancellationToken));
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    // Not cached, so the next scan tries again.
-                    _cache.Remove(file.FullName);
-                    continue;
-                }
-                _cache[file.FullName] = cached;
-            }
-            if (cached.Summary is { } summary)
+            if (Cached(_cache, file, cancellationToken) is { } summary)
             {
                 summaries.Add(summary);
             }
@@ -105,6 +129,7 @@ public sealed class HistoryIndex(string projectsDirectory)
         {
             _cache.Remove(gone);
         }
+        Forget(_cache);
 
         return summaries
             .OrderByDescending(s => s.LastActivity)
@@ -151,23 +176,87 @@ public sealed class HistoryIndex(string projectsDirectory)
         }
     }
 
-    private static SessionSummary? Read(FileInfo file, DateTime lastWriteUtc, CancellationToken cancellationToken)
+    /// <summary>
+    /// The file's summary from <paramref name="cache"/>, reading it if it changed: from where the last read stopped when
+    /// it only grew. If the file changes while it's read, the next scan sees a different length or time and reads again.
+    /// </summary>
+    private static SessionSummary? Cached(Dictionary<string, CacheEntry> cache, FileInfo file, CancellationToken cancellationToken)
     {
-        var builder = new SummaryBuilder();
-        using (var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 64 * 1024, FileOptions.SequentialScan))
-        using (var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+        // From the enumeration, so no extra call per file.
+        var length = file.Length;
+        var lastWrite = file.LastWriteTimeUtc;
+        if (cache.TryGetValue(file.FullName, out var cached) && cached.Length == length && cached.LastWriteUtc == lastWrite)
         {
-            var count = 0;
-            while (reader.ReadLine() is { } line)
+            return cached.Summary;
+        }
+        try
+        {
+            var resume = cached is { Builder: not null } && length > cached.Length && lastWrite >= cached.LastWriteUtc ? cached : null;
+            // The builder carries on from the cached one, so it's no longer that entry's: a failed read leaves nothing.
+            cache.Remove(file.FullName);
+            cached = Read(file, length, lastWrite, resume, cancellationToken);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Not cached, so the next scan tries again.
+            return null;
+        }
+        cache[file.FullName] = cached;
+        return cached.Summary;
+    }
+
+    /// <summary>Keeps what's needed to read on only for the most recently written files: older ones rarely grow.</summary>
+    private static void Forget(Dictionary<string, CacheEntry> cache)
+    {
+        foreach (var (path, entry) in cache.Where(e => e.Value.Builder is not null).OrderByDescending(e => e.Value.LastWriteUtc).Skip(ResumableFiles).ToArray())
+        {
+            cache[path] = entry with { Builder = null };
+        }
+    }
+
+    private static CacheEntry Read(FileInfo file, long length, DateTime lastWriteUtc, CacheEntry? resume, CancellationToken cancellationToken)
+    {
+        using var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 64 * 1024, FileOptions.SequentialScan);
+        var builder = resume is { Builder: { } carried } && TailMatches(stream, resume) ? carried : new SummaryBuilder();
+        var start = ReferenceEquals(builder, resume?.Builder) ? resume!.Offset : 0;
+        var complete = start;
+        var partial = false;
+        foreach (var line in Utf8Lines.Read(stream, start, cancellationToken))
+        {
+            builder.Add(line.Text);
+            if (line.End >= 0)
             {
-                if (++count % 256 == 0)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
-                builder.Add(line);
+                complete = line.End;
+            }
+            else
+            {
+                // Still being written: the builder has it now, so it can't read on from before it later.
+                partial = true;
             }
         }
-        return builder.Build(Path.GetFileNameWithoutExtension(file.Name), file.FullName, new DateTimeOffset(lastWriteUtc, TimeSpan.Zero));
+        var summary = builder.Build(Path.GetFileNameWithoutExtension(file.Name), file.FullName, new DateTimeOffset(lastWriteUtc, TimeSpan.Zero));
+        return new CacheEntry(length, lastWriteUtc, summary, partial ? null : builder, complete, partial ? [] : ReadTail(stream, complete));
+    }
+
+    private static byte[] ReadTail(Stream stream, long end)
+    {
+        var tail = new byte[(int)Math.Min(TailLength, end)];
+        stream.Position = end - tail.Length;
+        stream.ReadExactly(tail);
+        return tail;
+    }
+
+    /// <summary>The file still has what the last read ended with: it was only appended to since, not rewritten.</summary>
+    private static bool TailMatches(Stream stream, CacheEntry cached)
+    {
+        if (stream.Length < cached.Offset)
+        {
+            return false;
+        }
+        var tail = new byte[cached.Tail.Length];
+        stream.Position = cached.Offset - tail.Length;
+        stream.ReadExactly(tail);
+        return tail.AsSpan().SequenceEqual(cached.Tail);
     }
 
     /// <summary>One line, compacted to a single line of about <paramref name="length"/> characters.</summary>
@@ -201,7 +290,13 @@ public sealed class HistoryIndex(string projectsDirectory)
         return builder.ToString(0, cut).TrimEnd() + "…";
     }
 
-    private sealed record CacheEntry(long Length, DateTime LastWriteUtc, SessionSummary? Summary);
+    /// <param name="Builder">What was read, to read on from <paramref name="Offset"/>; null when that can't be done.</param>
+    /// <param name="Offset">Where the last complete line read ends.</param>
+    /// <param name="Tail">The bytes just before <paramref name="Offset"/>.</param>
+    private sealed record CacheEntry(long Length, DateTime LastWriteUtc, SessionSummary? Summary, SummaryBuilder? Builder = null, long Offset = 0, byte[]? Tail = null)
+    {
+        public byte[] Tail { get; init; } = Tail ?? [];
+    }
 
     private sealed class SummaryBuilder
     {

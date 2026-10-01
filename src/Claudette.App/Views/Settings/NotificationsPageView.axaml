@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.NotificationsPageView"
+             x:DataType="settings:NotificationsPage">
+  <!-- Notifications (DESIGN.md §10) -->
+  <StackPanel Spacing="12">
+    <TextBlock Classes="section" Text="Notifications" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="Claudette sends a notification when something needs you and you aren't looking at it. Clicking one brings Claudette to the front, on that tab." />
+    <TextBlock Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding !NotificationsAvailable}"
+               Text="Notifications aren't available here. On macOS, Claudette has to run from its app (not with dotnet run); on Linux, it needs notify-send." />
+    <TextBlock Text="Notify me when" FontWeight="SemiBold" />
+    <CheckBox Content="A tab finishes its turn" IsChecked="{Binding NotifyTurnFinished}" />
+    <CheckBox Content="A tab needs permission or an answer" IsChecked="{Binding NotifyNeedsInput}" />
+    <CheckBox Content="A tab's Claude Code stops with an error" IsChecked="{Binding NotifyProcessErrors}" />
+    <CheckBox Content="Usage crosses a warning level, is on pace to run out, or resets" IsChecked="{Binding NotifyUsageAlerts}" />
+    <CheckBox Content="Claude Code needs me to sign in" IsChecked="{Binding NotifySignIn}" />
+    <CheckBox Content="A Claude Code update is ready" IsChecked="{Binding NotifyUpdateReady}" />
+    <CheckBox Content="A project action finishes" IsChecked="{Binding NotifyProjectActions}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Check-in notifications are in Check-ins." />
+    <CheckBox Content="Show the number of tabs needing input on the Dock or taskbar icon" IsChecked="{Binding ShowBadge}" Margin="0,8,0,0" />
+    <CheckBox Content="Animate the Dock or taskbar icon while tabs are working or waiting" IsChecked="{Binding AnimateIcon}" />
+    <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
+  </StackPanel>
+</UserControl>

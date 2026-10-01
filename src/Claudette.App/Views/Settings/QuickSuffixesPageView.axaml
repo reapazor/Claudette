@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.QuickSuffixesPageView"
+             x:DataType="settings:QuickSuffixesPage">
+  <!-- Quick suffixes -->
+  <StackPanel Spacing="12">
+    <TextBlock Classes="section" Text="Quick suffixes" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="{Binding SuffixesShortcutText, StringFormat='Snippets you can add to the end of a message from the Suffixes menu ({0}), or with their own shortcut. The label shows on the chip, and the text is sent.'}" />
+    <ItemsControl ItemsSource="{Binding Suffixes}">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <StackPanel Spacing="10" />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate DataType="settings:QuickSuffixEditor">
+          <Border BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
+              <TextBox Text="{Binding Label, UpdateSourceTrigger=LostFocus}" PlaceholderText="Label" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                <Button Content="↑" ToolTip.Tip="Move up" AutomationProperties.Name="Move up"
+                        Command="{Binding $parent[UserControl].((settings:QuickSuffixesPage)DataContext).MoveSuffixUpCommand}" CommandParameter="{Binding}" />
+                <Button Content="↓" ToolTip.Tip="Move down" AutomationProperties.Name="Move down"
+                        Command="{Binding $parent[UserControl].((settings:QuickSuffixesPage)DataContext).MoveSuffixDownCommand}" CommandParameter="{Binding}" />
+                <Button Content="Delete" Command="{Binding $parent[UserControl].((settings:QuickSuffixesPage)DataContext).RemoveSuffixCommand}" CommandParameter="{Binding}" />
+              </StackPanel>
+              <TextBox Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Text, UpdateSourceTrigger=LostFocus}" PlaceholderText="Text added to the message" AcceptsReturn="True" TextWrapping="Wrap" />
+              <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="small" Text="Shortcut" VerticalAlignment="Center" />
+                <Button Content="{Binding ShortcutText}" FontFamily="{DynamicResource MonoFont}" MinWidth="150" HorizontalContentAlignment="Left"
+                        Classes.accent="{Binding IsRecording}" ToolTip.Tip="Click, then press the keys that add this suffix"
+                        Command="{Binding $parent[UserControl].((settings:QuickSuffixesPage)DataContext).StartRecordingCommand}" CommandParameter="{Binding}" />
+                <Button Classes="flat" Content="Remove" IsVisible="{Binding HasShortcut}"
+                        Command="{Binding $parent[UserControl].((settings:QuickSuffixesPage)DataContext).ClearShortcutCommand}" CommandParameter="{Binding}" />
+                <TextBlock Classes="small error" Text="{Binding Error}" IsVisible="{Binding HasError}" VerticalAlignment="Center" TextWrapping="Wrap" />
+              </StackPanel>
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+    <StackPanel Orientation="Horizontal" Spacing="8">
+      <Button Classes="accent" Content="Add suffix" Command="{Binding AddSuffixCommand}" />
+      <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
+    </StackPanel>
+  </StackPanel>
+</UserControl>

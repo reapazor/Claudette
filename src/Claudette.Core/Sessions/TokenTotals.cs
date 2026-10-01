@@ -69,6 +69,5 @@ public sealed class TokenTotals
         _ => $"{tokens} tok",
     };
 
-    private static long Number(JsonNode? node) =>
-        node is JsonValue value && value.GetValueKind() == JsonValueKind.Number ? (long)value.GetValue<double>() : 0;
+    private static long Number(JsonNode? node) => node.AsWholeNumber() ?? 0;
 }

@@ -2,7 +2,6 @@ using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 using Claudette.Core.LoginItems;
-using Claudette.Core.Tests.Support;
 using Claudette.Core.Updates;
 
 namespace Claudette.App.Tests;
@@ -24,21 +23,21 @@ public sealed class StartAtLoginTests
         await using var h = new TabTestHarness();
         h.Services.ThisCopy = SourceBuild(h);
         var settings = new SettingsViewModel(h.Services, null);
-        Assert.False(settings.StartsAtLogin);
-        Assert.True(settings.CanChangeStartAtLogin);
+        Assert.False(settings.General.StartsAtLogin);
+        Assert.True(settings.General.CanChangeStartAtLogin);
         Assert.Equal(
             "Claudette opens minimized when you log in to this computer. It starts this source build's newest build. Once Claudette is installed, the installed one starts instead.",
-            settings.StartAtLoginText);
+            settings.General.StartAtLoginText);
 
-        settings.StartsAtLogin = true;
+        settings.General.StartsAtLogin = true;
 
-        Assert.True(settings.StartsAtLogin);
+        Assert.True(settings.General.StartsAtLogin);
         Assert.Equal(h.Services.ThisCopy, h.LoginItems.EntryStarts);
         Assert.Equal(h.Services.ThisCopy, h.Services.State.LoginItem.Target);
 
-        settings.StartsAtLogin = false;
+        settings.General.StartsAtLogin = false;
 
-        Assert.False(settings.StartsAtLogin);
+        Assert.False(settings.General.StartsAtLogin);
         Assert.Equal(LoginEntryState.Missing, h.LoginItems.Entry);
     }
 
@@ -51,12 +50,12 @@ public sealed class StartAtLoginTests
         h.Services.State.LoginItem.Installed = MacApp;
         var settings = new SettingsViewModel(h.Services, null);
 
-        settings.StartsAtLogin = true;
+        settings.General.StartsAtLogin = true;
 
         Assert.Equal(MacApp, h.LoginItems.EntryStarts);
         Assert.Equal(
             "Claudette opens minimized when you log in to this computer. It starts the installed Claudette 0.2.0 rather than this source build.",
-            settings.StartAtLoginText);
+            settings.General.StartAtLoginText);
     }
 
     [Fact]
@@ -70,9 +69,9 @@ public sealed class StartAtLoginTests
 
         var settings = new SettingsViewModel(h.Services, null);
 
-        Assert.True(settings.StartsAtLogin);
-        Assert.False(settings.CanChangeStartAtLogin);
-        Assert.Equal("The installed Claudette 0.2.0 starts at login. Turn it off in that Claudette, or in Task Manager's Startup apps.", settings.StartAtLoginNote);
+        Assert.True(settings.General.StartsAtLogin);
+        Assert.False(settings.General.CanChangeStartAtLogin);
+        Assert.Equal("The installed Claudette 0.2.0 starts at login. Turn it off in that Claudette, or in Task Manager's Startup apps.", settings.General.StartAtLoginNote);
     }
 
     [Fact]
@@ -82,11 +81,11 @@ public sealed class StartAtLoginTests
         h.LoginItems.WriteFailure = new UnauthorizedAccessException("Access to the registry key is denied.");
         var settings = new SettingsViewModel(h.Services, null);
 
-        settings.StartsAtLogin = true;
+        settings.General.StartsAtLogin = true;
 
-        Assert.False(settings.StartsAtLogin);
-        Assert.True(settings.HasStartAtLoginError);
-        Assert.Equal("Couldn't turn it on: Access to the registry key is denied.", settings.StartAtLoginError);
+        Assert.False(settings.General.StartsAtLogin);
+        Assert.True(settings.General.HasStartAtLoginError);
+        Assert.Equal("Couldn't turn it on: Access to the registry key is denied.", settings.General.StartAtLoginError);
     }
 
     [Fact]
@@ -94,11 +93,11 @@ public sealed class StartAtLoginTests
     {
         await using var h = new TabTestHarness();
         var settings = new SettingsViewModel(h.Services, null);
-        settings.StartsAtLogin = true;
+        settings.General.StartsAtLogin = true;
 
-        settings.ResetGeneralCommand.Execute(null);
+        settings.General.ResetCommand.Execute(null);
 
-        Assert.True(settings.StartsAtLogin);
+        Assert.True(settings.General.StartsAtLogin);
         Assert.Equal(LoginEntryState.Enabled, h.LoginItems.Entry);
     }
 

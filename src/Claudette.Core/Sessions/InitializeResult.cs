@@ -47,6 +47,12 @@ public sealed record InitializeResult(
     string? CurrentPermissionMode,
     JsonObject Raw)
 {
+    /// <summary>The output style the session uses (<c>output_style</c>), such as <c>default</c> or <c>Explanatory</c>.</summary>
+    public string? OutputStyle => Raw.GetString("output_style");
+
+    /// <summary>The output styles the session can use (<c>available_output_styles</c>), built-in and the user's own.</summary>
+    public IReadOnlyList<string> AvailableOutputStyles => Raw.GetStringList("available_output_styles");
+
     public static InitializeResult Parse(JsonObject response)
     {
         var models = response.GetArray("models")?.OfType<JsonObject>()

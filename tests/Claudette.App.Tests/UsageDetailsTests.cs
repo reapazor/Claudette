@@ -196,16 +196,44 @@ public class UsageDetailsTests
 
         // Settings → Appearance is the same switch, and Reset to defaults turns it off.
         var settings = new SettingsViewModel(h.Services, null);
-        Assert.True(settings.DetailedUsageHeader);
-        settings.DetailedUsageHeader = false;
+        Assert.True(settings.Appearance.DetailedUsageHeader);
+        settings.Appearance.DetailedUsageHeader = false;
         Assert.False(header.IsDetailed);
-        settings.DetailedUsageHeader = true;
+        settings.Appearance.DetailedUsageHeader = true;
         Assert.True(header.IsDetailed);
-        settings.ResetAppearanceCommand.Execute(null);
-        Assert.False(settings.DetailedUsageHeader);
+        settings.Appearance.ResetCommand.Execute(null);
+        Assert.False(settings.Appearance.DetailedUsageHeader);
         Assert.False(h.Services.State.DetailedUsageHeader);
         Assert.False(header.IsDetailed);
         Assert.Equal(new SettingsSearchResult("Appearance", "Detailed usage header"), Assert.Single(settings.SearchResultsFor("detailed usage")));
+    }
+
+    [Fact]
+    public async Task Clearing_the_usage_history_asks_first_and_can_reset_the_tab_totals_too()
+    {
+        await using var h = new TabTestHarness();
+        var cleared = new List<bool>();
+        h.Services.UsageHistoryCleared += (_, alsoTabTotals) => cleared.Add(alsoTabTotals);
+        var usage = new SettingsViewModel(h.Services, null).Usage;
+
+        usage.ClearUsageHistoryCommand.Execute(null);
+        Assert.True(usage.ClearUsageConfirmation.IsOpen);
+        usage.ClearUsageConfirmation.CancelCommand.Execute(null);
+        Assert.False(usage.ClearUsageConfirmation.IsOpen);
+        Assert.Empty(cleared);
+
+        usage.ClearUsageHistoryCommand.Execute(null);
+        usage.AlsoResetTabTotals = true;
+        await usage.ClearUsageConfirmation.ConfirmCommand.ExecuteAsync(null);
+
+        Assert.False(usage.ClearUsageConfirmation.IsOpen);
+        Assert.Equal([true], cleared);
+        Assert.Equal("Usage history and tab token totals cleared.", usage.UsageClearedText);
+
+        // Asking again starts from a clean slate.
+        usage.ClearUsageHistoryCommand.Execute(null);
+        Assert.False(usage.AlsoResetTabTotals);
+        Assert.Null(usage.UsageClearedText);
     }
 
     [Fact]

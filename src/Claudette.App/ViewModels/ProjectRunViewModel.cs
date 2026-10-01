@@ -1,6 +1,7 @@
-using System.Collections.ObjectModel;
 using System.Globalization;
 using Claudette.App.Conversation;
+using Claudette.App.Services;
+using Claudette.Core;
 using Claudette.Core.ProjectTools;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -17,13 +18,16 @@ public sealed partial class ProjectRunViewModel : ObservableObject
     /// <summary>A run keeps at most this many lines of its output.</summary>
     public const int MaxOutputLines = 5000;
 
-    private readonly ProjectToolsViewModel _tools;
+    /// <summary>How many of the oldest lines go at a time once the output is at <see cref="MaxOutputLines"/>.</summary>
+    public const int DroppedTogether = 500;
+
+    private readonly ProjectRunsViewModel _runs;
     private readonly TimeProvider _time;
     private bool _couldntStart;
 
-    internal ProjectRunViewModel(ProjectToolsViewModel tools, string name, ProjectAction? action, TimeProvider time)
+    internal ProjectRunViewModel(ProjectRunsViewModel runs, string name, ProjectAction? action, TimeProvider time)
     {
-        _tools = tools;
+        _runs = runs;
         _time = time;
         Name = name;
         Action = action;
@@ -68,7 +72,7 @@ public sealed partial class ProjectRunViewModel : ObservableObject
     /// <summary>The sidebar entry's tip: the status line, and when it started and how long it took.</summary>
     public string Tip => State == ProjectJobState.Running ? $"{Status}\nStarted {MessageTimes.Short(Started, _time)}."
         : _couldntStart ? Status
-        : $"{Status}\nStarted {MessageTimes.Short(Started, _time)} and took {WorkingLine.Elapsed((Ended ?? Started) - Started)}.";
+        : $"{Status}\nStarted {MessageTimes.Short(Started, _time)} and took {Formats.Elapsed((Ended ?? Started) - Started)}.";
 
     /// <summary>The sidebar entry's state: busy while running, then ✓, ✕ or ■.</summary>
     public string Glyph => State switch
@@ -84,7 +88,7 @@ public sealed partial class ProjectRunViewModel : ObservableObject
     /// "Failed · exit code 6 · 14:32".
     /// </summary>
     public string Detail => State == ProjectJobState.Running
-        ? $"Running · {WorkingLine.Elapsed(_time.GetUtcNow() - Started)}"
+        ? $"Running · {Formats.Elapsed(_time.GetUtcNow() - Started)}"
         : $"{Result} · {MessageTimes.Short(Ended ?? Started, _time)}";
 
     private string Result => State switch
@@ -104,7 +108,7 @@ public sealed partial class ProjectRunViewModel : ObservableObject
     public partial int OutputDropped { get; private set; }
 
     public string? OutputNote => OutputDropped > 0
-        ? $"Showing the last {MaxOutputLines.ToString("N0", CultureInfo.CurrentCulture)} lines; {OutputDropped.ToString("N0", CultureInfo.CurrentCulture)} earlier ones were dropped."
+        ? $"Keeping at most the last {MaxOutputLines.ToString("N0", CultureInfo.CurrentCulture)} lines; {OutputDropped.ToString("N0", CultureInfo.CurrentCulture)} earlier ones were dropped."
         : null;
 
     /// <summary>Its log is on the Project page of its tab, which is the one showing: the sidebar entry is highlighted.</summary>
@@ -114,10 +118,42 @@ public sealed partial class ProjectRunViewModel : ObservableObject
     /// <summary>A batch of lines, with one change to the list for the whole batch.</summary>
     internal void Append(IReadOnlyList<string> lines)
     {
-        if (Output.AddAndTrim(lines, MaxOutputLines) is > 0 and var dropped)
+        if (Output.AddAndTrim(lines, MaxOutputLines, DroppedTogether) is > 0 and var dropped)
         {
             OutputDropped += dropped;
         }
+    }
+
+    private readonly Lock _receivedLock = new();
+
+    /// <summary>Lines from the job waiting for the UI thread; not null while they're on their way.</summary>
+    private List<string>? _received;
+
+    /// <summary>
+    /// Lines from the job, on its thread. While earlier ones wait for the UI thread these join them, so a busy job is a
+    /// batch for each time the UI thread gets to it rather than a post for each line.
+    /// </summary>
+    internal void Receive(IReadOnlyList<string> lines, IUiDispatcher dispatcher)
+    {
+        lock (_receivedLock)
+        {
+            if (_received is not null)
+            {
+                _received.AddRange(lines);
+                return;
+            }
+            _received = [.. lines];
+        }
+        dispatcher.Post(() =>
+        {
+            List<string> batch;
+            lock (_receivedLock)
+            {
+                batch = _received!;
+                _received = null;
+            }
+            Append(batch);
+        });
     }
 
     /// <summary>The job ended: its state, exit code and status line, which also ends the log.</summary>
@@ -144,7 +180,7 @@ public sealed partial class ProjectRunViewModel : ObservableObject
 
     /// <summary>A click on the sidebar entry: selects its tab and shows its log on the Project page.</summary>
     [RelayCommand]
-    private void Open() => _tools.OpenRun(this);
+    private void Open() => _runs.OpenRun(this);
 
     /// <summary>Ends the job's whole process tree, or its work, like the Project page's Stop.</summary>
     [RelayCommand(CanExecute = nameof(IsRunning))]
@@ -154,7 +190,7 @@ public sealed partial class ProjectRunViewModel : ObservableObject
 
     /// <summary>Takes the entry and its log away. A running one has Stop instead, so a stray click never ends a build.</summary>
     [RelayCommand(CanExecute = nameof(CanClose))]
-    private void Close() => _tools.CloseRun(this);
+    private void Close() => _runs.CloseRun(this);
 
     public override string ToString() => $"{Name}: {Status}";
 }

@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Claudette.Core;
+using Claudette.Core.Accessibility;
 using Claudette.Core.Auth;
 using Claudette.Core.Claude;
+using Claudette.Core.Composer;
 using Claudette.Core.Credentials;
 using Claudette.Core.Diffs;
 using Claudette.Core.Git;
@@ -39,6 +41,13 @@ public sealed class AppServices : IAsyncDisposable
     private CancellationTokenSource? _pendingStateSave;
     private readonly SemaphoreSlim _utilityLock = new(1, 1);
     private UtilitySession? _utility;
+    private readonly ISystemMotion _systemMotion;
+    private bool _systemReducesMotion;
+    private bool _claudeCodeReducesMotion;
+    private int _readingMotion;
+    /// <summary>Asked to read while a read was under way: it reads again once that ends, as it may know more now.</summary>
+    private int _readMotionAgain;
+    private DateTimeOffset? _motionReadAt;
 
     /// <param name="processTrees">
     /// Tracks each <c>claude</c> process and everything it starts (DESIGN.md §4, "Process monitor"); the launcher must
@@ -63,6 +72,7 @@ public sealed class AppServices : IAsyncDisposable
     /// keeps nothing awake: tests.
     /// </param>
     /// <param name="loginItems">The OS's login entry (DESIGN.md §9, "Starting at login"). Null has none: tests.</param>
+    /// <param name="systemMotion">Whether the OS asks for less motion (DESIGN.md §3, "Accessibility"). Null never does: tests.</param>
     public AppServices(
         AppPaths paths,
         IProcessLauncher launcher,
@@ -81,7 +91,8 @@ public sealed class AppServices : IAsyncDisposable
         IUnrealEngineRegistry? unrealRegistry = null,
         ProjectToolPaths? projectToolPaths = null,
         ISleepBlocker? sleepBlocker = null,
-        ILoginItems? loginItems = null)
+        ILoginItems? loginItems = null,
+        ISystemMotion? systemMotion = null)
     {
         AppInstaller = appInstaller ?? new NoAppInstaller();
         AppVersion = appVersion ?? BuiltVersion();
@@ -105,6 +116,10 @@ public sealed class AppServices : IAsyncDisposable
         _stateStore = new JsonFileStore<AppState>(paths.StateFile, Loggers.CreateLogger("State"));
         Settings = _settingsStore.Load();
         State = _stateStore.Load();
+        _systemMotion = systemMotion ?? new NoSystemMotion();
+        ReduceMotion = Motion.Reduce(Settings.Appearance.Motion, false, false);
+        // The first launch that knows about folder trust trusts the folders already used here (DESIGN.md §7).
+        State.TrustFoldersAlreadyUsed();
         UserEnvironment = new UserEnvironment(loginShell, () => Settings.ClaudeCode.UseLoginShellEnvironment, Loggers.CreateLogger("LoginShell"));
         RemoteControl = new RemoteControlService(this, sleepBlocker ?? new NoSleepBlocker());
         Locator = new ClaudeLocator(launcher, timeProvider, UserEnvironment, RemoteControl.ClaudeVariables);
@@ -123,6 +138,7 @@ public sealed class AppServices : IAsyncDisposable
         {
             // Turning Use my login shell's environment on reads it now, if this run hasn't yet.
             UserEnvironment.Start();
+            UpdateMotion();
             Library.OnSettingsChanged();
             ClaudeUpdates?.OnSettingsChanged();
             Notifications.OnSettingsChanged();
@@ -134,6 +150,70 @@ public sealed class AppServices : IAsyncDisposable
 
     /// <summary>Tooltips naming the current keyboard shortcuts (DESIGN.md §14, "Keyboard").</summary>
     public ShortcutTips Tips { get; }
+
+    /// <summary>
+    /// Claudette's animations stop (DESIGN.md §3, "Accessibility"): Settings → Appearance → Motion says so, or follows
+    /// the OS or Claude Code's <c>prefersReducedMotion</c>, which ask for it.
+    /// </summary>
+    public bool ReduceMotion { get; private set; }
+
+    /// <summary>Raised on the UI thread when <see cref="ReduceMotion"/> changes.</summary>
+    public event EventHandler? MotionChanged;
+
+    /// <summary>How long a read of the OS's motion setting holds when the window comes back to the front.</summary>
+    internal static readonly TimeSpan MotionRecheckInterval = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Reads, in the background, whether the OS and Claude Code's user settings ask for less motion. The app reads them
+    /// at launch, once Claude Code's config folder is known, and when the window comes back to the front
+    /// (<paramref name="onlyIfStale"/>: unless they were read in the last minute), in case the OS's setting changed.
+    /// </summary>
+    public async Task ReadMotionPreferencesAsync(bool onlyIfStale = false)
+    {
+        if (onlyIfStale && _motionReadAt is { } readAt && Time.GetUtcNow() - readAt < MotionRecheckInterval)
+        {
+            return;
+        }
+        if (Interlocked.Exchange(ref _readingMotion, 1) == 1)
+        {
+            Volatile.Write(ref _readMotionAgain, 1);
+            return;
+        }
+        try
+        {
+            var configDirectory = ClaudeConfigDirectory;
+            var claudeCodeReading = Task.Run(() => Motion.ClaudeCodePrefersReduced(configDirectory));
+            // On the calling thread: macOS's NSWorkspace is asked from the UI thread; Linux's gsettings runs on its own.
+            var system = await _systemMotion.PrefersReducedMotionAsync().ConfigureAwait(false);
+            var claudeCode = await claudeCodeReading.ConfigureAwait(false);
+            Dispatcher.Post(() =>
+            {
+                _motionReadAt = Time.GetUtcNow();
+                _systemReducesMotion = system;
+                _claudeCodeReducesMotion = claudeCode;
+                UpdateMotion();
+            });
+        }
+        finally
+        {
+            Volatile.Write(ref _readingMotion, 0);
+        }
+        // Claude Code's config folder may have become known meanwhile.
+        if (Interlocked.Exchange(ref _readMotionAgain, 0) == 1)
+        {
+            await ReadMotionPreferencesAsync().ConfigureAwait(false);
+        }
+    }
+
+    private void UpdateMotion()
+    {
+        var reduce = Motion.Reduce(Settings.Appearance.Motion, _systemReducesMotion, _claudeCodeReducesMotion);
+        if (reduce != ReduceMotion)
+        {
+            ReduceMotion = reduce;
+            MotionChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     /// <summary>This Claudette's version, as its releases are tagged.</summary>
     public AppVersion AppVersion { get; }
@@ -309,6 +389,46 @@ public sealed class AppServices : IAsyncDisposable
     /// </summary>
     public StartingPermissionMode ReadStartingPermissionMode(string? folder) =>
         StartingPermissionMode.Read(StartingPermissionMode.SettingsFiles(ClaudeManagedSettingsDirectory, ClaudeConfigDirectory, folder));
+
+    /// <summary>
+    /// Claude Code may start in <paramref name="folder"/> without asking about what the folder's own configuration runs
+    /// (DESIGN.md §7, "Folder trust"): the user trusted it or a folder it's in, or turned the question off.
+    /// </summary>
+    public bool IsFolderTrusted(string folder) =>
+        !Settings.ClaudeCode.AskBeforeUsingFolderSettings || FolderTrust.IsTrusted(State.TrustedFolders ?? [], folder);
+
+    /// <summary>Remembers that the user trusts <paramref name="folder"/>.</summary>
+    public void TrustFolder(string folder)
+    {
+        var trusted = State.TrustedFolders ??= [];
+        if (!FolderTrust.IsTrusted(trusted, folder))
+        {
+            trusted.Add(folder);
+            SaveState();
+        }
+    }
+
+    private readonly Dictionary<string, WeakReference<ProjectFileIndex>> _fileIndexes = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The <c>@</c> file index for <paramref name="folder"/>, one for all the tabs in it (DESIGN.md §5, "Composer"). Held
+    /// weakly here: the tabs keep it, and it goes once they've all closed. Called on the UI thread.
+    /// </summary>
+    public ProjectFileIndex FileIndexFor(string folder)
+    {
+        var key = FolderHistory.Normalize(folder);
+        if (_fileIndexes.TryGetValue(key, out var weak) && weak.TryGetTarget(out var index))
+        {
+            return index;
+        }
+        foreach (var gone in _fileIndexes.Where(e => !e.Value.TryGetTarget(out _)).Select(e => e.Key).ToArray())
+        {
+            _fileIndexes.Remove(gone);
+        }
+        index = new ProjectFileIndex(folder, Git, Time);
+        _fileIndexes[key] = new WeakReference<ProjectFileIndex>(index);
+        return index;
+    }
 
     /// <summary>For the working line's verbs (DESIGN.md §5). Tests give it a seed.</summary>
     public Random Random { get; set; } = Random.Shared;

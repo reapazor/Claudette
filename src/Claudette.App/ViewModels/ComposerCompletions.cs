@@ -222,9 +222,22 @@ public sealed partial class ComposerCompletions : ObservableObject
         }
     }
 
+    /// <summary>The match under way: a keystroke that makes it stale stops it rather than letting it finish.</summary>
+    private CancellationTokenSource? _matching;
+
     private async Task ShowMatchesAsync(int version, IReadOnlyList<IndexedPath> paths, string query)
     {
-        var matches = await Task.Run(() => PathMatcher.Match(paths, query, MaxItems)).ConfigureAwait(false);
+        var matching = new CancellationTokenSource();
+        Interlocked.Exchange(ref _matching, matching)?.Cancel();
+        IReadOnlyList<IndexedPath> matches;
+        try
+        {
+            matches = await Task.Run(() => PathMatcher.Match(paths, query, MaxItems, matching.Token), matching.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
         var items = matches.Select(p => new CompletionItem
         {
             Value = p.Path,

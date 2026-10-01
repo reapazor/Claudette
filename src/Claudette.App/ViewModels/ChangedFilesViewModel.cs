@@ -7,7 +7,6 @@ using Claudette.Core.Diffs;
 using Claudette.Core.Git;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
-using Claudette.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -62,15 +61,8 @@ public sealed partial class ChangedFileRow : ObservableObject
 }
 
 /// <summary>What the changed files panel needs from its tab.</summary>
-internal interface IChangedFilesHost
+internal interface IChangedFilesHost : ITabAreaHost
 {
-    string Id { get; }
-
-    string Folder { get; }
-
-    /// <summary>What's saved for the tab: the files marked as reviewed, and whether it syncs to the library.</summary>
-    TabState State { get; }
-
     /// <summary>The tab can copy its session to the library now (DESIGN.md §9, "Writing").</summary>
     bool CanSyncNow { get; }
 
@@ -79,8 +71,6 @@ internal interface IChangedFilesHost
 
     /// <summary>Copies the session to the library in the background, for a tab that syncs.</summary>
     void CopyToLibrary();
-
-    void AddNote(string text, NoteKind kind);
 }
 
 /// <summary>The tab's changed files and diffs (DESIGN.md §8).</summary>
@@ -94,7 +84,7 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
     private ChangedFiles? _changes;
     private ReviewedFiles? _reviewed;
     /// <summary>Writes the library record once the ticking stops, for a tab that syncs.</summary>
-    private ITimer? _reviewSync;
+    private UiTimeout ReviewSync => field ??= new(_services.Time, _services.Dispatcher);
     private bool _reviewSyncStopped;
     private bool _refreshQueued;
     /// <summary>Changes came while the tab was in the background; the rows catch up when it's selected.</summary>
@@ -109,6 +99,17 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
     private readonly record struct InspectionKey(bool Exists, long Length, DateTime LastWriteUtc, string? Before, bool BeforeKnown, bool IsNew);
     /// <summary>Counts refreshes started, so one that finishes after a later one leaves that one's newer rows alone.</summary>
     private int _refreshGeneration;
+
+    /// <summary>
+    /// How long git mode waits after a change before running git: an edit at a time, a turn's dozen edits would each
+    /// start their own <c>git status</c> and <c>git diff</c>.
+    /// </summary>
+    internal static readonly TimeSpan GitRefreshDelay = TimeSpan.FromMilliseconds(500);
+
+    private UiTimeout GitRefreshWait => field ??= new(_services.Time, _services.Dispatcher);
+
+    /// <summary>The git listing under way; a newer refresh stops it.</summary>
+    private CancellationTokenSource? _gitRefresh;
 
     internal ChangedFilesViewModel(AppServices services, IChangedFilesHost host)
     {
@@ -186,11 +187,20 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
 
     private void QueueRefresh()
     {
-        if (!_host.IsSelected && !ShowGitChanges)
+        if (!_host.IsSelected)
         {
-            // Nobody sees a background tab's rows: keep the count, and inspect the files once it's shown.
+            // Nobody sees a background tab's rows: keep the count, and inspect the files (or ask git) once it's shown.
             _stale = true;
-            Count = Changes.Files.Count;
+            if (!ShowGitChanges)
+            {
+                Count = Changes.Files.Count;
+            }
+            return;
+        }
+        if (ShowGitChanges)
+        {
+            // Once the edits pause.
+            GitRefreshWait.Restart(GitRefreshDelay, () => _ = RefreshAsync());
             return;
         }
         if (_refreshQueued)
@@ -213,7 +223,19 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
         List<ChangedFileRow> rows;
         if (ShowGitChanges)
         {
-            var changes = await _services.Git.GetChangesAsync(folder);
+            GitRefreshWait.Cancel();
+            var refresh = new CancellationTokenSource();
+            Interlocked.Exchange(ref _gitRefresh, refresh)?.Cancel();
+            IReadOnlyList<GitChange> changes;
+            try
+            {
+                changes = await _services.Git.GetChangesAsync(folder, refresh.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // A newer refresh took over.
+                return;
+            }
             rows = changes.Select(c => new ChangedFileRow
             {
                 Path = c.Path,
@@ -392,30 +414,25 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
         {
             return;
         }
-        _reviewSync?.Dispose();
-        ITimer? timer = null;
-        timer = _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() =>
+        ReviewSync.Restart(ReviewSyncDelay, () =>
         {
-            if (timer is null || !ReferenceEquals(_reviewSync, timer))
-            {
-                return;
-            }
-            _reviewSync = null;
-            timer.Dispose();
             if (_host.CanSyncNow && !_reviewSyncStopped)
             {
                 _host.CopyToLibrary();
             }
-        }), null, ReviewSyncDelay, Timeout.InfiniteTimeSpan);
-        _reviewSync = timer;
+        });
     }
 
-    /// <summary>The tab is closing: a diff view still open can mark files, but nothing more is written to the library.</summary>
+    /// <summary>
+    /// The tab is closing: a diff view still open can mark files, but nothing more is written to the library, and git
+    /// isn't asked again.
+    /// </summary>
     internal void StopReviewSync()
     {
         _reviewSyncStopped = true;
-        _reviewSync?.Dispose();
-        _reviewSync = null;
+        ReviewSync.Cancel();
+        GitRefreshWait.Cancel();
+        _gitRefresh?.Cancel();
     }
 
     // ---- Opening diffs (DESIGN.md §8) ------------------------------------------------------------------------------
@@ -468,7 +485,8 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
             new DiffReview(
                 () => ReviewedFiles.LatestChange(Changes.Find(row.Path)),
                 () => Reviewed.IsReviewed(row.Path, Changes.Find(row.Path)),
-                change => SetFileReviewed(row.Path, reviewed: true, change))));
+                change => SetFileReviewed(row.Path, reviewed: true, change)),
+            FromGit: row.FromGit));
     }
 
     /// <summary>

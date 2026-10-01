@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.ProjectToolChoicesPageView"
+             x:DataType="settings:ProjectToolChoicesPage">
+  <!-- The tab's project: Tools, this machine's choices for it, as the project menus make them (DESIGN.md §18) -->
+  <StackPanel x:Name="ToolsPage" Spacing="12" DataContext="{Binding Project}" x:DataType="vm:ProjectSettingsViewModel">
+    <TextBlock Classes="section" Text="Tools" />
+    <TextBlock Classes="muted small" Text="{Binding ForTabText, FallbackValue=''}" TextWrapping="Wrap" Margin="0,-10,0,0" />
+    <TextBlock Text="No Unreal, Unity or Godot project in this folder." TextWrapping="Wrap" IsVisible="{Binding !HasToolsProject}" />
+    <StackPanel Spacing="12" IsVisible="{Binding HasToolsProject}">
+      <StackPanel Spacing="2">
+        <TextBlock Text="{Binding ToolsTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <TextBlock Classes="muted small" Text="{Binding ToolsKeyText}" TextWrapping="Wrap" />
+      </StackPanel>
+      <Grid ColumnDefinitions="220,*" IsVisible="{Binding HasSeveralProjects}">
+        <TextBlock Classes="label" Text="Project in this folder" />
+        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectChoices}" SelectedItem="{Binding SelectedProjectChoice}"
+                  AutomationProperties.Name="Project in this folder" />
+      </Grid>
+      <Grid ColumnDefinitions="220,*" IsVisible="{Binding HasToolsChoice}">
+        <TextBlock Classes="label" Text="{Binding ToolsChoiceLabel}" />
+        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ToolsChoiceOptions}" SelectedItem="{Binding SelectedToolsChoice}"
+                  AutomationProperties.Name="{Binding ToolsChoiceLabel}" />
+      </Grid>
+      <StackPanel Spacing="6" IsVisible="{Binding HasToolsFix}">
+        <TextBlock Text="{Binding ToolsFixName}" FontWeight="SemiBold" Margin="0,4,0,0" />
+        <SelectableTextBlock Text="{Binding ToolsFixCurrent}" TextWrapping="Wrap" />
+        <TextBlock Classes="muted small" Text="{Binding ToolsFixSource}" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Content="Choose…" Command="{Binding ChooseToolsFixCommand}" ToolTip.Tip="{Binding ToolsFixTitle}" />
+          <Button Content="Clear" Command="{Binding ClearToolsFixCommand}" ToolTip.Tip="Forget the choice, so Claudette looks for it again" />
+        </StackPanel>
+        <TextBlock Classes="small error" Text="{Binding ToolsFixError}" TextWrapping="Wrap" IsVisible="{Binding HasToolsFixError}" />
+      </StackPanel>
+    </StackPanel>
+    <StackPanel Spacing="2">
+      <TextBlock Classes="muted small" TextWrapping="Wrap"
+                 Text="The defaults for every project, and the Godot executable when a project hasn't got its own, are in Settings → Project tools." />
+      <Button Classes="flat" Padding="0" HorizontalAlignment="Left"
+              Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).ShowProjectToolsDefaultsCommand}">
+        <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="Open Settings → Project tools" TextDecorations="Underline" />
+      </Button>
+    </StackPanel>
+  </StackPanel>
+</UserControl>

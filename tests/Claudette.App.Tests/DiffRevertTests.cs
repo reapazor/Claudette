@@ -10,10 +10,10 @@ public sealed class DiffRevertTests : IDisposable
 
     private const string Before = "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\neleven\ntwelve\n";
 
-    private async Task<DiffWindowViewModel> OpenAsync(string path, string? before, bool beforeKnown = true)
+    private async Task<DiffWindowViewModel> OpenAsync(string path, string? before, bool beforeKnown = true, bool fromGit = false)
     {
         var source = new DiffSource(path, Path.GetFileName(path), before, "before Claude's first change", null,
-            () => Task.CompletedTask, () => Task.CompletedTask, () => Task.CompletedTask, beforeKnown);
+            () => Task.CompletedTask, () => Task.CompletedTask, () => Task.CompletedTask, beforeKnown, FromGit: fromGit);
         var view = new DiffWindowViewModel(source, dark: false);
         await TabTestHarness.Eventually(() => !view.IsLoading, "the diff");
         return view;
@@ -49,13 +49,40 @@ public sealed class DiffRevertTests : IDisposable
         var view = await OpenAsync(path, before: null);
         Assert.True(view.CanRevert);
 
-        view.AskToRevertFileCommand.Execute(null);
-        Assert.True(view.IsConfirmingRevert);
-        await view.RevertFileCommand.ExecuteAsync(null);
+        view.RevertConfirmation.AskCommand.Execute(null);
+        Assert.True(view.RevertConfirmation.IsOpen);
+        await view.RevertConfirmation.ConfirmCommand.ExecuteAsync(null);
 
         Assert.False(File.Exists(path));
-        Assert.False(view.IsConfirmingRevert);
+        Assert.False(view.RevertConfirmation.IsOpen);
         Assert.False(view.CanRevert);
+    }
+
+    [Fact]
+    public async Task From_git_a_file_not_at_HEAD_is_never_deleted()
+    {
+        // Untracked: maybe the user's own, not Claude's.
+        var path = Write("notes.txt", "mine\n");
+        var view = await OpenAsync(path, before: null, fromGit: true);
+
+        Assert.False(view.CanRevert);
+        Assert.DoesNotContain(view.InlineRows, r => r.CanRevert);
+        await view.RevertFileCommand.ExecuteAsync(null);
+
+        Assert.Equal("mine\n", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task From_git_the_file_goes_back_to_HEAD_in_its_own_line_endings()
+    {
+        // Checked out with Windows line endings; git's copy has Unix ones.
+        var path = Write("a.txt", Before.Replace("two\n", "TWO\n", StringComparison.Ordinal).ReplaceLineEndings("\r\n"));
+        var view = await OpenAsync(path, Before, fromGit: true);
+        Assert.Equal("Put the whole file back as it is at HEAD", view.RevertFileTip);
+
+        await view.RevertFileCommand.ExecuteAsync(null);
+
+        Assert.Equal(Before.ReplaceLineEndings("\r\n"), await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
     }
 
     [Fact]
