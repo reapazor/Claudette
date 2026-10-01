@@ -10,6 +10,7 @@ using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 using Claudette.App.Views;
+using Claudette.Core.Settings;
 
 namespace Claudette.App.UiTests;
 
@@ -87,6 +88,34 @@ public class SettingsWindowTests
     /// Typing in a text setting doesn't save and apply it on every keystroke, which refreshed every tab each time; it
     /// takes effect when the box loses focus.
     /// </summary>
+    /// <summary>
+    /// A page's view is made when its category is picked and dropped when another is: none of its dropdowns or boxes
+    /// writes a setting back as it goes.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Going_through_every_category_changes_no_setting()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var appearance = h.Services.Settings.Appearance;
+        appearance.Density = Density.Compact;
+        appearance.Motion = MotionSetting.Reduce;
+        appearance.Zoom = 125;
+        h.Services.SaveSettings();
+        var before = JsonFileStore<AppSettings>.Serialize(h.Services.Settings);
+        var settings = new SettingsViewModel(h.Services, "me@example.com");
+        var window = new SettingsWindow { DataContext = settings, Width = 900, Height = 700 };
+        window.Show();
+
+        foreach (var category in SettingsViewModel.AllCategories.Concat(SettingsViewModel.AllCategories.Reverse()))
+        {
+            settings.SelectedCategory = category;
+            UiText.Settle(window);
+        }
+
+        Assert.Equal(before, JsonFileStore<AppSettings>.Serialize(h.Services.Settings));
+        window.Close();
+    }
+
     [AvaloniaFact]
     public async Task A_text_setting_takes_effect_when_the_box_loses_focus_not_on_each_keystroke()
     {
