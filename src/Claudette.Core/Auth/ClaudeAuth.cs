@@ -1,9 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Claudette.Core.Claude;
+using Claudette.Core.Json;
 using Claudette.Core.Processes;
 using Claudette.Core.Protocol;
-using Claudette.Core.Json;
 
 namespace Claudette.Core.Auth;
 

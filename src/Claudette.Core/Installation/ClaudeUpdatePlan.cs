@@ -2,8 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Claudette.Core.Diffs;
-using Claudette.Core.Processes;
 using Claudette.Core.Json;
+using Claudette.Core.Processes;
 
 namespace Claudette.Core.Installation;
 

@@ -1,8 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Json;
 using Claudette.Core.Protocol;
 using Claudette.Core.Settings;
-using Claudette.Core.Json;
 
 namespace Claudette.Core.Library;
 

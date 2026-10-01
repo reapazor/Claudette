@@ -2,8 +2,8 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
-using Claudette.Core.Protocol;
 using Claudette.Core.Json;
+using Claudette.Core.Protocol;
 
 namespace Claudette.Core.Transcripts;
 

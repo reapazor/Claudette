@@ -1,8 +1,8 @@
 using System.Text.Json.Nodes;
+using Claudette.Core.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Claudette.Core.Json;
 
 namespace Claudette.Usage;
 
