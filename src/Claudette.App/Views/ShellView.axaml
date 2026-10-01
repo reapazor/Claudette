@@ -637,6 +637,17 @@
       </ContentControl>
     </Border>
 
+    <!-- Command palette (DESIGN.md §4, "Command palette") -->
+    <Border Grid.ColumnSpan="2" Classes="overlay" IsVisible="{Binding IsPaletteOpen}" PointerPressed="OnPaletteOverlayPressed">
+      <ContentControl Content="{Binding Palette}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,70,0,0">
+        <ContentControl.DataTemplates>
+          <DataTemplate DataType="vm:CommandPaletteViewModel">
+            <views:CommandPaletteView />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+    </Border>
+
     <!-- History (DESIGN.md §9) -->
     <Border Grid.ColumnSpan="2" Classes="overlay" IsVisible="{Binding IsHistoryOpen}">
       <ContentControl Content="{Binding History}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,50,0,20">

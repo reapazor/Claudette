@@ -15,7 +15,7 @@ public sealed record PaletteEntry(string Label, string Group, Func<Task> Run, st
 }
 
 /// <summary>
-/// The command palette (DESIGN.md §3, "Command palette"): everything it can do, filtered as the user types by the
+/// The command palette (DESIGN.md §4, "Command palette"): everything it can do, filtered as the user types by the
 /// letters of each label in order, best matches first. Up, Down and Enter choose; Escape closes.
 /// </summary>
 public sealed partial class CommandPaletteViewModel : ViewModelBase

@@ -142,6 +142,10 @@ public partial class TabView : UserControl
         {
             return;
         }
+        if (HandleRecallKey(e))
+        {
+            return;
+        }
         if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift) && ViewModel is { } tab)
         {
             e.Handled = true;
@@ -151,6 +155,30 @@ public partial class TabView : UserControl
                 _stickToBottom = true;
             }
         }
+    }
+
+    /// <summary>
+    /// Up on the composer's first line goes back through the tab's earlier prompts, as a terminal's history does, and Down
+    /// on its last line comes forward again, back to what was typed (DESIGN.md §5, "Composer").
+    /// </summary>
+    private bool HandleRecallKey(KeyEventArgs e)
+    {
+        if (ViewModel is not { } tab || e.KeyModifiers != KeyModifiers.None || e.Key is not (Key.Up or Key.Down))
+        {
+            return false;
+        }
+        var text = Composer.Text ?? "";
+        var caret = Math.Clamp(Composer.CaretIndex, 0, text.Length);
+        var recalled = e.Key == Key.Up
+            ? (caret == 0 || text.LastIndexOf('\n', caret - 1) < 0) && tab.RecallOlderPrompt()
+            : tab.IsRecallingPrompt && text.IndexOf('\n', caret) < 0 && tab.RecallNewerPrompt();
+        if (!recalled)
+        {
+            return false;
+        }
+        Composer.CaretIndex = Composer.Text?.Length ?? 0;
+        e.Handled = true;
+        return true;
     }
 
     /// <summary>Follows new output unless the user has scrolled up; then offers "Jump to latest" (DESIGN.md §5).</summary>

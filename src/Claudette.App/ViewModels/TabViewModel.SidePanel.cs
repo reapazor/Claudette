@@ -140,6 +140,13 @@ public sealed partial class TabViewModel
     [RelayCommand]
     private void ShowMcpPage() => Page = SidePanelPage.Mcp;
 
+    /// <summary>Opens the side panel on <paramref name="page"/>: the command palette's way to it.</summary>
+    internal void OpenSidePanelPage(SidePanelPage page)
+    {
+        IsSidePanelOpen = true;
+        Page = page;
+    }
+
     /// <summary>The composer bar's way to the Tasks page: opens the side panel on it.</summary>
     [RelayCommand]
     private void OpenTasksPage()

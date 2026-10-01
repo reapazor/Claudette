@@ -997,6 +997,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         var images = TakeAttachments();
         _autoContinue.UserSent();
         _conversation.AddUserMessage(text, suffixText, images: images);
+        _recall.Add(text);
         _firstPrompt ??= text.Length > 0 ? text : suffixText;
         await SendRawAsync(text, images, suffixText);
         _ = RequestTitleAsync();
@@ -1485,6 +1486,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                         break;
                     case TranscriptPrompt prompt:
                         _conversation.ReplayUserMessage(prompt.Text, prompt.Images, prompt.Time, prompt.Uuid, prompt.ParentUuid);
+                        _recall.Add(prompt.Text);
                         break;
                     case TranscriptNote note:
                         _conversation.AddNote(note.Text);

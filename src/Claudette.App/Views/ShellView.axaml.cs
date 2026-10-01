@@ -327,6 +327,17 @@ public partial class ShellView : UserControl
         var keyboard = shell.Keyboard;
         bool Is(string id) => Shortcuts.Matches(keyboard, id, e.Key, e.KeyModifiers);
 
+        if (shell.IsPaletteOpen)
+        {
+            // The palette has the keys while it's open; its shortcut closes it again.
+            if (Is(KeyboardShortcuts.CommandPalette))
+            {
+                shell.ClosePalette();
+                e.Handled = true;
+            }
+            return;
+        }
+
         if (Is(KeyboardShortcuts.NextTab))
         {
             shell.SelectNextCommand.Execute(null);
@@ -354,6 +365,14 @@ public partial class ShellView : UserControl
         else if (Is(KeyboardShortcuts.ToggleSidebar))
         {
             shell.ToggleSidebarCommand.Execute(null);
+        }
+        else if (Is(KeyboardShortcuts.CommandPalette))
+        {
+            shell.OpenPaletteCommand.Execute(null);
+        }
+        else if (Is(KeyboardShortcuts.NextTabNeedingInput))
+        {
+            shell.SelectNextNeedingInputCommand.Execute(null);
         }
         else if (Is(KeyboardShortcuts.Find) && shell.SelectedTab is { } findTab)
         {
@@ -435,6 +454,15 @@ public partial class ShellView : UserControl
         if (ReferenceEquals(e.Source, sender))
         {
             ViewModel?.ClosePicker();
+        }
+    }
+
+    /// <summary>A click outside the command palette closes it.</summary>
+    private void OnPaletteOverlayPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (ReferenceEquals(e.Source, sender))
+        {
+            ViewModel?.ClosePalette();
         }
     }
 

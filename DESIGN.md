@@ -228,7 +228,19 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
   - Unpinned tabs aren't restored unless **Also restore unpinned tabs** is on in Settings. See [§9](#restore-on-launch) for what's restored.
 - **Syncing.** **Sync to other machines** in the tab's right-click menu (a check item), or in its **Tab settings…**, turns copying the tab's session to the session library on or off ([§9](#session-library-sync-across-machines)). It's off for a new tab unless Settings → Sessions says otherwise. A tab that syncs shows a small sync icon in its row, and **Sync now** in its menu, which copies the session to the library straight away instead of after the next turn.
 - **The Claude app.** **Connect to the Claude app** in the tab's right-click menu (a check item), or in its **Tab settings…**, connects the tab to the Claude app with Remote Control whenever its session runs ([§18](#remote-control-the-claude-app)). It's off for a new tab unless Settings → Claude Code says otherwise. A connected tab shows a small phone icon in its row, and **Open in the Claude app** in its menu.
-- Keyboard: `Ctrl/Cmd+T` new tab, `Ctrl/Cmd+W` close, `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle, `Ctrl/Cmd+1…9` jump to a tab, `Ctrl/Cmd+B` collapse or expand the sidebar.
+- Keyboard: `Ctrl/Cmd+T` new tab, `Ctrl/Cmd+W` close, `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle, `Ctrl/Cmd+1…9` jump to a tab, `Ctrl/Cmd+B` collapse or expand the sidebar, `Ctrl/Cmd+J` go to the next tab waiting for you (a permission prompt, a question or a plan, in sidebar order after the selected tab, going round), `Ctrl/Cmd+Shift+P` the [command palette](#command-palette).
+
+### Command palette
+
+`Ctrl/Cmd+Shift+P` opens a box over the window that does anything Claudette has a command for, by typing a few letters of it.
+
+- **What it lists**, in this order before anything is typed:
+  - **Commands**: new tab, History, Settings, collapsing the sidebar, going to the next tab waiting (when one is); and for the selected tab, find, Stop (while Claude works), the project's main action, the side panel's pages, **Tab settings…**, **Duplicate tab**, restarting Claude Code (when it stopped) and closing the tab. Each shows its shortcut, so the palette teaches them.
+  - **Tabs**, by name with their folder: picking one selects it.
+  - **Folders**: favorites, then recent folders. Picking one opens a new tab there.
+  - **Settings** categories: picking one opens Settings there.
+- **Filtering.** An entry matches when the typed letters appear in its name in order, ignoring case; a match at the start of the name or of a word, or with the letters together, comes first. An entry also matches by its kind ("tab", "folder"), lower down.
+- `Up` and `Down` choose, `Enter` runs the choice (as does a double click), `Esc`, a click outside or the shortcut again closes it. While it's open, the window's other shortcuts are left to it.
 
 ### Sidebar
 
@@ -406,6 +418,7 @@ A user message's **⋯** menu goes back to it. Claude Code does the work: a resu
 - Multi-line text box. `Enter` sends, `Shift+Enter` adds a new line.
 - **Stop.** A Stop button replaces Send while Claude is working, and `Esc` does the same. Stopping interrupts the current turn; it does not close the session.
 - You can type and send while Claude is working; the message is queued and delivered to the session.
+- **Earlier prompts.** `Up` on the composer's first line brings back the tab's previous prompt, as a terminal's history does, and again for the one before; `Down` on its last line comes forward, back to what was being typed. A restored tab has its transcript's prompts too. Typing ends it, so the next `Up` starts from the newest again. The same prompt twice in a row is kept once, and a tab keeps its last 200. With the autocomplete list open, the arrows move in the list instead.
 - `/` opens slash-command autocomplete (built-in plus the project's custom commands), and `@` file autocomplete for the tab's working folder. See [Autocomplete](#autocomplete).
 - Drag and drop, paste, or pick with the attach button images and files to attach them. See [Attachments](#attachments).
 - Per-tab controls in the bar above the composer: working folder (read-only), model, effort level, permission mode, the **Agents** button while the tab has subagents ([§18](#agent-map)), the **running tasks** chip while Claude Code has work going in the background (*"● 2 running tasks"*, [below](#running-tasks)), context window usage %, tokens used.
@@ -1457,7 +1470,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 
 ### Keyboard shortcuts
 
-Settings → Keyboard lists every shortcut Claudette handles, with its default from the section that describes it: new tab, close tab, next and previous tab, go to tab 1–9, History, Settings, collapsing the sidebar, Stop, the quick suffixes menu, allowing or denying the waiting prompt, running the project's main action (`Ctrl/Cmd+Shift+E`, [§18](#project-tools)), finding in the conversation (`Ctrl/Cmd+F`, [§5](#find)), going to the next tab waiting for you (`Ctrl/Cmd+J`, [§4](#keyboard)) and the command palette (`Ctrl/Cmd+Shift+P`, [§4](#command-palette)).
+Settings → Keyboard lists every shortcut Claudette handles, with its default from the section that describes it: new tab, close tab, next and previous tab, go to tab 1–9, History, Settings, collapsing the sidebar, Stop, the quick suffixes menu, allowing or denying the waiting prompt, running the project's main action (`Ctrl/Cmd+Shift+E`, [§18](#project-tools)), finding in the conversation (`Ctrl/Cmd+F`, [§5](#find)), going to the next tab waiting for you (`Ctrl/Cmd+J`, [§4](#4-tabs--sessions)) and the command palette (`Ctrl/Cmd+Shift+P`, [§4](#command-palette)).
 
 - **Rebinding.** Click a shortcut and press the new keys; Esc cancels. **Reset** puts one back, **Remove** clears it, and **Reset to defaults** restores them all.
 - **One key for both OSes.** Shortcuts are stored with a *Primary* modifier: Ctrl on Windows and Linux, Cmd on macOS. That way a shortcut synced between a Windows machine and a Mac means the same thing on both. Ctrl is its own modifier only on macOS; elsewhere it is Primary.
