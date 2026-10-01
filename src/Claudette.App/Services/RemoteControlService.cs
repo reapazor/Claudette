@@ -1,6 +1,5 @@
 using Claudette.Core.Auth;
 using Claudette.Core.RemoteControl;
-using Microsoft.Extensions.Logging;
 
 namespace Claudette.App.Services;
 

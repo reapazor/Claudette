@@ -16,8 +16,8 @@ internal sealed class LinuxProcessTree(int rootPid, TimeProvider time, ILogger l
     private const int ScClkTck = 2;
     private const long DefaultClockTicks = 100;
 
-    private static readonly Lazy<long> s_clockTicks = new(ReadClockTicks);
-    private static readonly Lazy<DateTimeOffset?> s_bootTime = new(ReadBootTime);
+    private static readonly Lazy<long> ClockTicks = new(ReadClockTicks);
+    private static readonly Lazy<DateTimeOffset?> BootTime = new(ReadBootTime);
 
     protected override int SigStop => 19;
 
@@ -51,7 +51,7 @@ internal sealed class LinuxProcessTree(int rootPid, TimeProvider time, ILogger l
         var executable = ReadLink($"/proc/{pid}/exe");
         var memory = ReadText($"/proc/{pid}/status") is { } status ? LinuxProcFs.ParseVmRssBytes(status) ?? 0 : 0;
         var commandLine = includeCommandLines && ReadBytes($"/proc/{pid}/cmdline") is { } bytes ? LinuxProcFs.ParseCmdline(bytes) : null;
-        var ticks = (double)s_clockTicks.Value;
+        var ticks = (double)ClockTicks.Value;
         var name = stat.Comm.Length > 0 ? stat.Comm : Path.GetFileName(executable) ?? $"PID {pid}";
         return new RawProcess(
             pid,
@@ -62,7 +62,7 @@ internal sealed class LinuxProcessTree(int rootPid, TimeProvider time, ILogger l
             commandLine,
             TimeSpan.FromSeconds((stat.UserTicks + stat.SystemTicks) / ticks),
             memory,
-            s_bootTime.Value?.AddSeconds(stat.StartTicks / ticks),
+            BootTime.Value?.AddSeconds(stat.StartTicks / ticks),
             isRoot,
             isDetached);
     }

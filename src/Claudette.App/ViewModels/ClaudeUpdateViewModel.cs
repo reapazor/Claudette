@@ -10,7 +10,6 @@ namespace Claudette.App.ViewModels;
 /// The header's "Claude Code 2.1.290 is ready" badge and its dialog, and the update part of Settings → Claude Code
 /// (DESIGN.md §12, "Applying it").
 /// </summary>
-/// <param name="runningVersions">The Claude Code version each running tab uses.</param>
 public sealed partial class ClaudeUpdateViewModel : ViewModelBase, IDisposable
 {
     private readonly AppServices _services;
@@ -18,6 +17,7 @@ public sealed partial class ClaudeUpdateViewModel : ViewModelBase, IDisposable
     private readonly Func<IReadOnlyCollection<Version>> _runningVersions;
     private readonly StringBuilder _output = new();
 
+    /// <param name="runningVersions">The Claude Code version each running tab uses.</param>
     public ClaudeUpdateViewModel(AppServices services, ClaudeUpdateService updates, Func<IReadOnlyCollection<Version>> runningVersions)
     {
         _services = services;

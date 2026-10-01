@@ -45,7 +45,7 @@ internal sealed record FixtureEntry(string Direction, JsonObject? Message, int? 
 /// <summary>
 /// Plays a fixture back as Claude Code. Output lines are emitted in order; at each recorded host line, playback waits
 /// until the session under test sends its next line. Control request ids line up because both the recording and
-/// <see cref="ClaudeSession"/> number requests <c>req_1</c>, <c>req_2</c>, … in send order.
+/// <see cref="Claudette.Core.Sessions.ClaudeSession"/> number requests <c>req_1</c>, <c>req_2</c>, … in send order.
 /// </summary>
 internal sealed class ReplayTransport : IClaudeTransport
 {

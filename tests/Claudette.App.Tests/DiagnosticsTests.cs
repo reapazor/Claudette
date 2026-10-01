@@ -2,7 +2,6 @@ using Claudette.App.Conversation;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 using Claudette.Core.Installation;
-using Claudette.Core.Protocol;
 
 namespace Claudette.App.Tests;
 

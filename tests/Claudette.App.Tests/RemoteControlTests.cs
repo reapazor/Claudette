@@ -1,6 +1,5 @@
 using System.Text.Json.Nodes;
 using Claudette.App.Conversation;
-using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 using Claudette.Core.Auth;

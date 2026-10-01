@@ -1,4 +1,3 @@
-using Claudette.App.Conversation;
 using Claudette.Core.Settings;
 
 namespace Claudette.App.ViewModels;

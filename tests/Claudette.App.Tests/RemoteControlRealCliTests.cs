@@ -1,6 +1,5 @@
 using Claudette.App.Conversation;
 using Claudette.App.Tests.Support;
-using Claudette.App.ViewModels;
 using Claudette.Core.Installation;
 using Claudette.Core.Processes;
 using Claudette.Core.RemoteControl;

@@ -25,8 +25,8 @@ public sealed unsafe class MacNotifier : INotifier
     private const nuint PresentBanner = 1 << 4;
 
     /// <summary>The one notifier; the delegate's callbacks are static and find it here.</summary>
-    private static MacNotifier? s_current;
-    private static nint s_delegate;
+    private static MacNotifier? _current;
+    private static nint _delegate;
 
     private readonly ILogger _logger;
     private readonly nint _center;
@@ -41,7 +41,7 @@ public sealed unsafe class MacNotifier : INotifier
             return;
         }
         _center = ObjC.Send(ObjC.GetClass("UNUserNotificationCenter"), "currentNotificationCenter");
-        s_current = this;
+        _current = this;
         ObjC.Send(_center, "setDelegate:", CreateDelegate());
         ObjC.Send(_center, "requestAuthorizationWithOptions:completionHandler:", AuthorizationOptions,
             ObjC.GlobalBlock((nint)(delegate* unmanaged<nint, byte, nint, void>)&OnAuthorized, "v@?B@"));
@@ -108,18 +108,18 @@ public sealed unsafe class MacNotifier : INotifier
 
     public void Dispose()
     {
-        if (ReferenceEquals(s_current, this))
+        if (ReferenceEquals(_current, this))
         {
-            s_current = null;
+            _current = null;
         }
     }
 
     /// <summary>An NSObject subclass implementing the two UNUserNotificationCenterDelegate methods Claudette needs.</summary>
     private static nint CreateDelegate()
     {
-        if (s_delegate != 0)
+        if (_delegate != 0)
         {
-            return s_delegate;
+            return _delegate;
         }
         var cls = ObjC.GetClass("ClaudetteNotificationDelegate");
         if (cls == 0)
@@ -136,8 +136,8 @@ public sealed unsafe class MacNotifier : INotifier
             ObjC.RegisterClassPair(cls);
         }
         // The center holds its delegate weakly; this instance is kept for the life of the process.
-        s_delegate = ObjC.Send(ObjC.Send(cls, "alloc"), "init");
-        return s_delegate;
+        _delegate = ObjC.Send(ObjC.Send(cls, "alloc"), "init");
+        return _delegate;
     }
 
     [UnmanagedCallersOnly]
@@ -152,7 +152,7 @@ public sealed unsafe class MacNotifier : INotifier
         try
         {
             var request = ObjC.Send(ObjC.Send(response, "notification"), "request");
-            if (ObjC.ToManagedString(ObjC.Send(request, "identifier")) is { } id && s_current is { } notifier)
+            if (ObjC.ToManagedString(ObjC.Send(request, "identifier")) is { } id && _current is { } notifier)
             {
                 notifier.Activated?.Invoke(id);
             }

@@ -2,7 +2,6 @@ using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 using Claudette.Core.LoginItems;
-using Claudette.Core.Tests.Support;
 using Claudette.Core.Updates;
 
 namespace Claudette.App.Tests;

@@ -1,4 +1,3 @@
-using Claudette.App.Services;
 using Claudette.Core.Installation;
 using Claudette.Core.Settings;
 using CommunityToolkit.Mvvm.Input;

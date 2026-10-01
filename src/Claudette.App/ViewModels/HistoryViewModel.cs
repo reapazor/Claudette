@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using Claudette.App.Services;
 using Claudette.Core;
 using Claudette.Core.History;

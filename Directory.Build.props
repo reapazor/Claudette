@@ -8,6 +8,14 @@
     <AnalysisLevel>latest</AnalysisLevel>
     <!-- .editorconfig's rules marked warning are checked by the build, not only the editor. -->
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- The compiler only reports unused usings (IDE0005) in the build when it reads doc comments. They're checked too
+         (a cref that names nothing, a param that isn't there), but a member without one is fine (CS1591), and so is
+         documenting only the parameters that need it (CS1573). -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+    <!-- The XML files are only for that check: the packages don't carry them. -->
+    <PublishDocumentationFile>false</PublishDocumentationFile>
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
     <Deterministic>true</Deterministic>
     <!-- packages.lock.json in each project: CI restores exactly these (locked mode) and caches them by these files. -->
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>

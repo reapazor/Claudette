@@ -3,7 +3,6 @@ using Claudette.App.Conversation;
 using Claudette.App.Services;
 using Claudette.Core;
 using Claudette.Core.Sessions;
-using Claudette.Core.Settings;
 using Claudette.Platform.Processes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;

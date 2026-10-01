@@ -6,7 +6,6 @@ using Avalonia.Media;
 using Avalonia.VisualTree;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
-using Claudette.App.ViewModels;
 using Claudette.App.Views;
 using Claudette.Core.Settings;
 

@@ -4,7 +4,6 @@ using Claudette.App.Services;
 using Claudette.Core.Accessibility;
 using Claudette.Core.Development;
 using Claudette.Core.Git;
-using Claudette.Core.Library;
 using Claudette.Core.Protocol;
 using Claudette.Core.Settings;
 using Claudette.Platform.Processes;

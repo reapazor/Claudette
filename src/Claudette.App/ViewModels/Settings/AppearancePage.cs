@@ -1,4 +1,3 @@
-using Claudette.Core.Accessibility;
 using Claudette.Core.Settings;
 
 namespace Claudette.App.ViewModels.Settings;

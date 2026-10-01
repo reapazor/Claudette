@@ -1,5 +1,4 @@
 using Claudette.Core.Development;
-using Claudette.Core.Git;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;

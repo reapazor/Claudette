@@ -1,5 +1,4 @@
 using System.Runtime.Versioning;
-using System.Text;
 using Claudette.Core.LoginItems;
 using Claudette.Core.Processes;
 using Claudette.Core.ProjectTools;

@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Globalization;
 using Claudette.App.Conversation;
 using Claudette.App.Services;
