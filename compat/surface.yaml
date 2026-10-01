@@ -498,7 +498,112 @@ items:
     status: documented
     usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
     docs: https://code.claude.com/docs/en/cli-reference
+    test: ClaudeEnvironmentTests, RealCliTests
+
+  # --- Rewind and branch, hook rows, MCP servers, fallback model (DESIGN.md §4, §5, §7) ------------------------
+  - id: "--resume-session-at"
+    kind: flag
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ClaudeEnvironmentTests, RealCliTests
+    fallback: The Agent SDKs' resumeSessionAt option passes it. If it goes, branch from a message by forking the whole session and say the later turns are still in it.
+  - id: "--resume-drops-turn"
+    kind: flag
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: ClaudeEnvironmentTests
+    fallback: The guard for editing and resending a prompt. Without it, resume at the reply before the prompt unguarded.
+  - id: "--replay-user-messages"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/file-checkpointing
+    test: RealCliTests, ClaudeSessionTests
+  - id: "isReplay"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests, ClaudeSessionTests
+  - id: "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"
+    kind: env
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/file-checkpointing
+    test: RealCliTests
+  - id: "rewind_files"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/McpServers.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/file-checkpointing
+    test: RealCliTests, ClaudeSessionTests
+    fallback: See control_request. The documented CLI form is claude -p --resume <id> --rewind-files <uuid> with checkpointing on.
+  - id: "--include-hook-events"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: RealCliTests
+  - id: "hook_started"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+  - id: "hook_progress"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: none yet (sent only while a hook runs over a second with output)
+  - id: "hook_response"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+  - id: "mcp_status"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/McpServers.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests, ClaudeSessionTests
+    fallback: See control_request. Without it, the MCP page lists the servers from system/init's mcp_servers.
+  - id: "mcp_reconnect"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ClaudeSessionTests
+    fallback: See control_request. Hide Reconnect; /mcp in the terminal does the same.
+  - id: "mcp_toggle"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests, ClaudeSessionTests
+    fallback: See control_request. Hide the switch.
+  - id: "elicitation"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/ElicitationRequest.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ClaudeSessionTests
+    fallback: If the wire shape changes, follow the TypeScript SDK's SDKControlElicitationRequest. A request Claudette can't show is declined, as the SDKs do without an onElicitation handler.
+  - id: "elicitation_complete"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: none yet (needs an MCP server that asks through a URL)
+  - id: "--fallback-model"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: ClaudeEnvironmentTests, RealCliTests
   - id: "set_model"
     kind: control
     status: undocumented

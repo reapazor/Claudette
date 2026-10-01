@@ -33,6 +33,7 @@ public sealed class ClaudeSession : IAsyncDisposable
     private readonly ProtocolDiagnostics? _diagnostics;
     private readonly Channel<SessionEvent> _events = Channel.CreateUnbounded<SessionEvent>(new UnboundedChannelOptions { SingleWriter = false, SingleReader = false });
     private readonly ConcurrentDictionary<string, PermissionRequest> _pendingPermissions = new();
+    private readonly ConcurrentDictionary<string, ElicitationRequest> _pendingElicitations = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _pendingHooks = new();
     private HookCallbackRegistry _hooks = new([]);
     private readonly CancellationTokenSource _lifetime = new();
@@ -55,6 +56,12 @@ public sealed class ClaudeSession : IAsyncDisposable
 
     /// <summary>Everything the session reports, in order. Completes after <see cref="SessionExited"/>.</summary>
     public ChannelReader<SessionEvent> Events => _events.Reader;
+
+    /// <summary>
+    /// The host shows MCP servers' requests for input (<see cref="ElicitationRequested"/>). Off, they're declined at
+    /// once, as the Agent SDKs do without a handler: the utility session has nobody to ask.
+    /// </summary>
+    public bool ShowsElicitations { get; set; }
 
     public SessionState State => _state;
 
@@ -185,6 +192,34 @@ public sealed class ClaudeSession : IAsyncDisposable
         ContextUsage.Parse(await SendControlRequestAsync(new JsonObject { ["subtype"] = "get_context_usage" }, cancellationToken: cancellationToken)
             .ConfigureAwait(false));
 
+    /// <summary>
+    /// Puts the files Claude changed back as they were when <paramref name="userMessageId"/> was sent (a prompt's
+    /// <c>uuid</c>, from <see cref="PromptReplayed"/>), or with <paramref name="dryRun"/> says what that would change.
+    /// Needs <c>CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING</c> in the session's environment (DESIGN.md §5, "Rewind and branch").
+    /// </summary>
+    public async Task<RewindResult> RewindFilesAsync(string userMessageId, bool dryRun = false, CancellationToken cancellationToken = default)
+    {
+        var request = new JsonObject { ["subtype"] = "rewind_files", ["user_message_id"] = userMessageId };
+        if (dryRun)
+        {
+            request["dry_run"] = true;
+        }
+        return RewindResult.Parse(await SendControlRequestAsync(request, cancellationToken: cancellationToken).ConfigureAwait(false));
+    }
+
+    /// <summary>The session's MCP servers and how each is connected (DESIGN.md §4, "MCP servers").</summary>
+    public async Task<IReadOnlyList<McpServerStatus>> GetMcpStatusAsync(CancellationToken cancellationToken = default) =>
+        McpServerStatus.ParseList(await SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_status" }, cancellationToken: cancellationToken)
+            .ConfigureAwait(false));
+
+    /// <summary>Connects an MCP server again, such as one that failed or needs signing in.</summary>
+    public Task ReconnectMcpServerAsync(string serverName, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_reconnect", ["serverName"] = serverName }, TimeSpan.FromSeconds(60), cancellationToken);
+
+    /// <summary>Turns an MCP server on or off for this session; off disconnects it and removes its tools.</summary>
+    public Task SetMcpServerEnabledAsync(string serverName, bool enabled, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_toggle", ["serverName"] = serverName, ["enabled"] = enabled }, TimeSpan.FromSeconds(60), cancellationToken);
+
     /// <summary>Stops a background task (for example a <c>run_in_background</c> command) so Claude knows it ended.</summary>
     public Task StopTaskAsync(string taskId, CancellationToken cancellationToken = default) =>
         SendControlRequestAsync(new JsonObject { ["subtype"] = "stop_task", ["task_id"] = taskId }, cancellationToken: cancellationToken);
@@ -277,6 +312,11 @@ public sealed class ClaudeSession : IAsyncDisposable
             request.Cancel();
         }
         _pendingPermissions.Clear();
+        foreach (var request in _pendingElicitations.Values)
+        {
+            request.Withdraw();
+        }
+        _pendingElicitations.Clear();
         foreach (var requestId in _pendingHooks.Keys)
         {
             if (_pendingHooks.TryRemove(requestId, out var hook))
@@ -309,6 +349,11 @@ public sealed class ClaudeSession : IAsyncDisposable
                 {
                     cancelled.Cancel();
                     Publish(new PermissionCancelled(cancel.RequestId));
+                }
+                else if (_pendingElicitations.TryRemove(cancel.RequestId, out var withdrawn))
+                {
+                    withdrawn.Withdraw();
+                    Publish(new ElicitationCancelled(cancel.RequestId));
                 }
                 else if (_pendingHooks.TryRemove(cancel.RequestId, out var hook))
                 {
@@ -357,6 +402,10 @@ public sealed class ClaudeSession : IAsyncDisposable
                 if (user.LocalCommandOutput is { } output)
                 {
                     Publish(new LocalCommandOutputReceived(output));
+                }
+                else if (user.IsReplay && user.ParentToolUseId is null && !user.Content.OfType<ToolResultBlock>().Any())
+                {
+                    Publish(new PromptReplayed(user));
                 }
                 else
                 {
@@ -412,6 +461,22 @@ public sealed class ClaudeSession : IAsyncDisposable
         if (request.Subtype == "hook_callback")
         {
             HandleHookCallback(request);
+            return;
+        }
+        if (request.Subtype == "elicitation")
+        {
+            var elicitation = new ElicitationRequest(request);
+            _pendingElicitations[request.RequestId] = elicitation;
+            if (!ShowsElicitations)
+            {
+                // Nobody shows it: decline, as the SDKs do without an onElicitation handler.
+                elicitation.Decline();
+            }
+            else
+            {
+                Publish(new ElicitationRequested(elicitation));
+            }
+            _ = AnswerElicitationAsync(elicitation);
             return;
         }
         if (request.Subtype != "can_use_tool")
@@ -489,6 +554,23 @@ public sealed class ClaudeSession : IAsyncDisposable
         catch (ObjectDisposedException)
         {
             // It just finished.
+        }
+    }
+
+    private async Task AnswerElicitationAsync(ElicitationRequest elicitation)
+    {
+        JsonObject answer;
+        try
+        {
+            answer = await elicitation.Answer.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        if (_pendingElicitations.TryRemove(elicitation.RequestId, out _))
+        {
+            await RespondSafelyAsync(() => _control.RespondAsync(elicitation.RequestId, answer, _lifetime.Token)).ConfigureAwait(false);
         }
     }
 

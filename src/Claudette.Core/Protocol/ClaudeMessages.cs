@@ -49,6 +49,12 @@ public sealed record UserMessage(
     private const string LocalCommandStart = "<local-command-stdout>";
     private const string LocalCommandEnd = "</local-command-stdout>";
 
+    /// <summary>The transcript entry's id, when Claude Code gives it.</summary>
+    public string? Uuid => Raw.GetString("uuid");
+
+    /// <summary>A prompt the host sent, echoed back (<c>--replay-user-messages</c>), not a tool's result.</summary>
+    public bool IsReplay => Raw.GetBool("isReplay") == true;
+
     /// <summary>The text of a local command's output (for example "Set model to …"), or null.</summary>
     public string? LocalCommandOutput
     {

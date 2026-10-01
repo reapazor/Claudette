@@ -74,6 +74,30 @@ public class ClaudeEnvironmentTests
         Assert.DoesNotContain("--fork-session", without);
     }
 
+    [Fact]
+    public void Rewinding_branching_hooks_and_a_fallback_model_add_their_flags()
+    {
+        var args = ClaudeArguments.ForStreamingSession(new ClaudeLaunchOptions
+        {
+            WorkingDirectory = ".",
+            Resume = "abc",
+            ForkSession = true,
+            ResumeSessionAt = "a-9",
+            ResumeDropsTurn = "u-9",
+            ReplayUserMessages = true,
+            IncludeHookEvents = true,
+            FallbackModel = "sonnet",
+        });
+        // Without a session to resume, there's nothing to resume at.
+        var fresh = ClaudeArguments.ForStreamingSession(new ClaudeLaunchOptions { WorkingDirectory = ".", ResumeSessionAt = "a-9", ResumeDropsTurn = "u-9" });
+
+        Assert.Equal(
+            ["--fallback-model", "sonnet", "--resume", "abc", "--fork-session", "--resume-session-at", "a-9", "--resume-drops-turn", "u-9", "--replay-user-messages", "--include-hook-events"],
+            args.SkipWhile(a => a != "--fallback-model"));
+        Assert.DoesNotContain("--resume-session-at", fresh);
+        Assert.DoesNotContain("--resume-drops-turn", fresh);
+    }
+
     private static IDictionary Source(params (string Key, string Value)[] entries) =>
         entries.ToDictionary(e => e.Key, e => e.Value);
 }

@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Claudette.Core.Diffs;
 using Claudette.Core.Installation;
 using Claudette.Core.Processes;
+using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using Claudette.IntegrationTests.Support;
 using Claudette.MockApi;
@@ -76,6 +77,111 @@ public sealed class RealCliTests : IAsyncLifetime
         await session.RenameSessionAsync("Renamed by Claudette", TestContext.Current.CancellationToken);
         var transcript = Directory.EnumerateFiles(Path.Combine(Config, "projects"), $"{done.Result.SessionId}.jsonl", SearchOption.AllDirectories).Single();
         await Waiting.UntilAsync(() => File.ReadAllText(transcript).Contains("\"customTitle\":\"Renamed by Claudette\"", StringComparison.Ordinal), "the name in the transcript");
+    }
+
+    // ---- Rewind and branch, hook rows, MCP servers (DESIGN.md §5, §4) ------------------------------------------------
+
+    [Fact]
+    public async Task A_prompt_comes_back_with_its_uuid_and_files_rewind_to_it()
+    {
+        await using var session = await StartAsync(replayUserMessages: true,
+            environment: new() { ["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] = "true" });
+        var file = Path.Combine(Work, "rewound.txt");
+
+        await session.SendUserMessageAsync($"WRITE_FILE {file}", TestContext.Current.CancellationToken);
+        var (replayed, _) = await session.ReadUntilAsync<PromptReplayed>();
+        var (requested, _) = await session.ReadUntilAsync<PermissionRequested>();
+        requested.Request.Allow();
+        await session.ReadUntilAsync<TurnCompleted>();
+        Assert.True(File.Exists(file));
+        Assert.False(string.IsNullOrEmpty(replayed.Message.Uuid));
+
+        var preview = await session.RewindFilesAsync(replayed.Message.Uuid!, dryRun: true, TestContext.Current.CancellationToken);
+        Assert.True(preview.CanRewind, preview.Error);
+        Assert.Contains(preview.FilesChanged, f => f.EndsWith("rewound.txt", StringComparison.Ordinal));
+        Assert.True(File.Exists(file));
+
+        var rewound = await session.RewindFilesAsync(replayed.Message.Uuid!, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(rewound.CanRewind, rewound.Error);
+        // It didn't exist before that prompt.
+        Assert.False(File.Exists(file));
+    }
+
+    [Fact]
+    public async Task A_resume_at_a_reply_drops_the_turns_after_it()
+    {
+        string sessionId;
+        string firstReply;
+        await using (var session = await StartAsync())
+        {
+            await session.SendUserMessageAsync("hello one", TestContext.Current.CancellationToken);
+            var (first, seen) = await session.ReadUntilAsync<TurnCompleted>();
+            firstReply = seen.OfType<AssistantMessageReceived>().Last().Message.Raw.GetString("uuid")!;
+            await session.SendUserMessageAsync("hello two", TestContext.Current.CancellationToken);
+            await session.ReadUntilAsync<TurnCompleted>();
+            sessionId = first.Result.SessionId!;
+        }
+
+        await using var branch = await StartAsync(resume: sessionId, forkSession: true, resumeSessionAt: firstReply);
+        await branch.SendUserMessageAsync("hello three", TestContext.Current.CancellationToken);
+        await branch.ReadUntilAsync<TurnCompleted>();
+
+        // The model sees the first turn and the new prompt, not the second turn.
+        var last = _api.Requests.Last(r => r.Path == "/v1/messages" && r.LastUserText.Contains("hello three", StringComparison.Ordinal));
+        Assert.Equal(3, last.MessageCount);
+    }
+
+    [Fact]
+    public async Task Hook_runs_come_through_as_system_messages()
+    {
+        Directory.CreateDirectory(Path.Combine(Work, ".claude"));
+        await File.WriteAllTextAsync(Path.Combine(Work, ".claude", "settings.json"), """
+            {"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"echo checked"}]}]}}
+            """, TestContext.Current.CancellationToken);
+        await using var session = await StartAsync(includeHookEvents: true);
+
+        await session.SendUserMessageAsync("hello", TestContext.Current.CancellationToken);
+        var (_, seen) = await session.ReadUntilAsync<TurnCompleted>();
+
+        var notices = seen.OfType<SystemNotice>().Select(n => n.Message).ToArray();
+        var started = Assert.Single(notices, m => m.Subtype == "hook_started" && m.Raw.GetString("hook_event") == "UserPromptSubmit");
+        var response = Assert.Single(notices, m => m.Subtype == "hook_response" && m.Raw.GetString("hook_event") == "UserPromptSubmit");
+        Assert.Equal(started.Raw.GetString("hook_id"), response.Raw.GetString("hook_id"));
+        Assert.Equal("success", response.Raw.GetString("outcome"));
+        Assert.Contains("checked", response.Raw.GetString("stdout") ?? response.Raw.GetString("output"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Mcp_servers_report_their_state_and_can_be_turned_off()
+    {
+        var config = new JsonObject
+        {
+            ["mcpServers"] = new JsonObject { ["broken"] = new JsonObject { ["type"] = "stdio", ["command"] = "false" } },
+        }.ToJsonString();
+        await using var session = await StartAsync(additionalArguments: ["--mcp-config", config, "--strict-mcp-config"]);
+
+        McpServerStatus? broken = null;
+        await Waiting.UntilAsync(() =>
+        {
+            broken = session.GetMcpStatusAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult().SingleOrDefault(s => s.Name == "broken");
+            return broken is { State: not McpServerState.Pending };
+        }, "the server to fail", TimeSpan.FromSeconds(30));
+        Assert.Equal(McpServerState.Failed, broken!.State);
+
+        await session.SetMcpServerEnabledAsync("broken", false, TestContext.Current.CancellationToken);
+        var after = Assert.Single(await session.GetMcpStatusAsync(TestContext.Current.CancellationToken), s => s.Name == "broken");
+        Assert.Equal(McpServerState.Disabled, after.State);
+    }
+
+    [Fact]
+    public async Task A_fallback_model_is_accepted()
+    {
+        await using var session = await StartAsync(fallbackModel: "claude-sonnet-5-5");
+
+        await session.SendUserMessageAsync("hello", TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.Equal("pong", done.Result.Result);
     }
 
     [Fact]
@@ -660,7 +766,8 @@ public sealed class RealCliTests : IAsyncLifetime
             .ToDictionary(name => name, _ => (string?)null);
 
     private async Task<ClaudeSession> StartAsync(string? permissionMode = null, string? resume = null, IReadOnlyList<HookRegistration>? hooks = null, string? appendSystemPrompt = null, Dictionary<string, string?>? environment = null,
-        string model = "claude-haiku-4-5")
+        string model = "claude-haiku-4-5", bool replayUserMessages = false, bool includeHookEvents = false, bool forkSession = false, string? resumeSessionAt = null,
+        string? fallbackModel = null, IReadOnlyList<string>? additionalArguments = null)
     {
         Assert.SkipWhen(_factory is null, "Claude Code isn't installed.");
         var overrides = new Dictionary<string, string?>
@@ -685,6 +792,12 @@ public sealed class RealCliTests : IAsyncLifetime
             Hooks = hooks ?? [],
             AppendSystemPrompt = appendSystemPrompt,
             EnvironmentOverrides = overrides,
+            ReplayUserMessages = replayUserMessages,
+            IncludeHookEvents = includeHookEvents,
+            ForkSession = forkSession,
+            ResumeSessionAt = resumeSessionAt,
+            FallbackModel = fallbackModel,
+            AdditionalArguments = additionalArguments ?? [],
         }, TestContext.Current.CancellationToken);
     }
 }
