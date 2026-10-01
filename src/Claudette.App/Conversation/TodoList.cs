@@ -24,7 +24,7 @@ public sealed partial class TodoItem(string content, string? activeForm, string 
 
     /// <summary>Who's working on it, such as a subagent or teammate, when Claude says.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasOwner))]
+    [NotifyPropertyChangedFor(nameof(HasOwner), nameof(DetailText), nameof(HasDetail))]
     public partial string? Owner { get; set; }
 
     public bool HasOwner => !string.IsNullOrWhiteSpace(Owner);
@@ -41,15 +41,15 @@ public sealed partial class TodoItem(string content, string? activeForm, string 
 
     /// <summary>When Claude added it, started it and finished it, by the tab's clock; null when not seen.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TimeText))]
+    [NotifyPropertyChangedFor(nameof(TimeText), nameof(DetailText), nameof(HasDetail))]
     public partial DateTimeOffset? CreatedAt { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TimeText))]
+    [NotifyPropertyChangedFor(nameof(TimeText), nameof(DetailText), nameof(HasDetail))]
     public partial DateTimeOffset? StartedAt { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TimeText))]
+    [NotifyPropertyChangedFor(nameof(TimeText), nameof(DetailText), nameof(HasDetail))]
     public partial DateTimeOffset? CompletedAt { get; set; }
 
     /// <summary>"Took 4m", "Started 14:05" or "Added 14:02", for the Tasks page.</summary>
@@ -59,6 +59,16 @@ public sealed partial class TodoItem(string content, string? activeForm, string 
         : StartedAt is { } started ? $"Started {started.ToLocalTime():t}"
         : CreatedAt is { } created ? $"Added {created.ToLocalTime():t}"
         : null;
+
+    /// <summary>"Explore · Took 4m": who's on it and its time, under the task on the Tasks page; null with neither.</summary>
+    public string? DetailText => (HasOwner, TimeText) switch
+    {
+        (true, { } time) => $"{Owner} · {time}",
+        (true, null) => Owner,
+        (false, var time) => time,
+    };
+
+    public bool HasDetail => DetailText is not null;
 
     private static string Duration(TimeSpan span) => span switch
     {

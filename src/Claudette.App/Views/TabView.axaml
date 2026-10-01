@@ -898,10 +898,7 @@
                           </TextBlock>
                           <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
                           <TextBlock Classes="small warning" Text="{Binding BlockedText}" IsVisible="{Binding IsBlocked}" />
-                          <TextBlock Classes="muted small">
-                            <Run Text="{Binding Owner}" />
-                            <Run Text="{Binding TimeText}" />
-                          </TextBlock>
+                          <TextBlock Classes="muted small" Text="{Binding DetailText}" IsVisible="{Binding HasDetail}" />
                         </StackPanel>
                       </Grid>
                     </DataTemplate>

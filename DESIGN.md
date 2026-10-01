@@ -472,7 +472,7 @@ While Claude works, a line above the composer says so, the way Claude Code's ter
 When Claude keeps a task list (`TodoWrite`, or `TaskCreate` and `TaskUpdate`), the side panel gets a **Tasks** page, with *"2 of 5"* done on its tab. The pinned list at the top of the conversation stays as it was; the page has room for more.
 
 - **The plan** the user approved last (`ExitPlanMode`), as Markdown, with when it was approved. The tasks Claude makes from it follow.
-- **Each task:** its state (to do, in progress, done), its number as Claude refers to it (*#3*, for `TaskCreate` tasks), its subject and its description, who's working on it when Claude says (a subagent or teammate), *"Waiting on #1, #2"* while a task it depends on isn't done, and its times: *Took 4m*, *Started 14:05* or *Added 14:02*.
+- **Each task:** its state (to do, in progress, done), its number as Claude refers to it (*#3*, for `TaskCreate` tasks), its subject and its description, *"Waiting on #1, #2"* while a task it depends on isn't done, and a line with who's working on it when Claude says (a subagent or teammate) and its time: *Explore · Took 4m*, *Started 14:05* or *Added 14:02*.
 - The one in progress shows its active form (*"Running the tests"*) in bold.
 - A `TaskList` result fills in what the tool calls didn't show. A restored tab's tasks are dated by their transcript entries.
 - The command palette's **Show tasks** opens the side panel on this page. `/clear` empties it, as it does the pinned list.

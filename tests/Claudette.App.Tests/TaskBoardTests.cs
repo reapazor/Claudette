@@ -58,6 +58,9 @@ public class TaskBoardTests
         Assert.Equal("Find where the shipping config is chosen.", first.Description);
         Assert.Equal("explorer", first.Owner);
         Assert.Equal("Took 4m", first.TimeText);
+        // One line under the task: who's on it, then its time, with nothing in front when nobody is.
+        Assert.Equal("explorer · Took 4m", first.DetailText);
+        Assert.StartsWith("Added ", _list.Items[1].DetailText, StringComparison.Ordinal);
         Assert.Equal("1 of 2", _list.Badge);
         Assert.Null(_list.Current);
     }
