@@ -19,7 +19,7 @@ namespace Claudette.Usage;
 /// </summary>
 public sealed class UsageStore : IDisposable
 {
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
 
     /// <summary>The <c>imports</c> row that holds back every machine's samples up to a time: the last Clear.</summary>
     private const string EveryMachine = "*";
@@ -295,8 +295,8 @@ public sealed class UsageStore : IDisposable
                 using var command = _connection.CreateCommand();
                 command.Transaction = transaction;
                 command.CommandText = """
-                    INSERT INTO turns (timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd)
-                    VALUES ($timestamp, $tabId, $sessionId, $model, $input, $output, $cacheWrite, $cacheRead, $costUsd)
+                    INSERT INTO turns (timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd, project)
+                    VALUES ($timestamp, $tabId, $sessionId, $model, $input, $output, $cacheWrite, $cacheRead, $costUsd, $project)
                     """;
                 foreach (var turn in turns)
                 {
@@ -310,6 +310,7 @@ public sealed class UsageStore : IDisposable
                     Add(command, "$cacheWrite", turn.CacheWrite);
                     Add(command, "$cacheRead", turn.CacheRead);
                     Add(command, "$costUsd", turn.CostUsd);
+                    Add(command, "$project", turn.Project);
                     command.ExecuteNonQuery();
                 }
                 transaction.Commit();
@@ -332,7 +333,7 @@ public sealed class UsageStore : IDisposable
                 ObjectDisposedException.ThrowIf(_disposed, this);
                 using var command = _connection.CreateCommand();
                 command.CommandText = """
-                    SELECT timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd FROM turns
+                    SELECT timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd, project FROM turns
                     WHERE timestamp >= $from AND timestamp <= $to AND ($tabId IS NULL OR tab_id = $tabId)
                     ORDER BY timestamp, id
                     """;
@@ -352,7 +353,8 @@ public sealed class UsageStore : IDisposable
                         reader.GetInt64(5),
                         reader.GetInt64(6),
                         reader.GetInt64(7),
-                        reader.GetDouble(8)));
+                        reader.GetDouble(8),
+                        reader.IsDBNull(9) ? null : reader.GetString(9)));
                 }
                 return turns;
             }
@@ -383,6 +385,47 @@ public sealed class UsageStore : IDisposable
                 Add(command, "$tabId", tabId);
                 Add(command, "$name", name);
                 command.ExecuteNonQuery();
+            }
+            catch (SqliteException ex) when (IsCorrupt(ex))
+            {
+                StartAfresh(ex);
+                throw;
+            }
+        }
+    }
+
+    /// <summary>Tokens per project since <paramref name="from"/>, the heaviest first; turns without a project together.</summary>
+    public IReadOnlyList<ProjectTokenSum> GetTokensByProject(DateTimeOffset from)
+    {
+        lock (_lock)
+        {
+            try
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                using var command = _connection.CreateCommand();
+                // A turn's records (one per model) share its timestamp and tab.
+                command.CommandText = """
+                    SELECT project, SUM(input), SUM(output), SUM(cache_write), SUM(cache_read), SUM(cost_usd), COUNT(DISTINCT tab_id || '|' || timestamp)
+                    FROM turns
+                    WHERE timestamp >= $from
+                    GROUP BY project
+                    ORDER BY SUM(input + output + cache_write + cache_read) DESC, project
+                    """;
+                Add(command, "$from", from.ToUnixTimeMilliseconds());
+                using var reader = command.ExecuteReader();
+                var sums = new List<ProjectTokenSum>();
+                while (reader.Read())
+                {
+                    sums.Add(new ProjectTokenSum(
+                        reader.IsDBNull(0) ? null : reader.GetString(0),
+                        reader.GetInt64(1),
+                        reader.GetInt64(2),
+                        reader.GetInt64(3),
+                        reader.GetInt64(4),
+                        reader.GetDouble(5),
+                        reader.GetInt32(6)));
+                }
+                return sums;
             }
             catch (SqliteException ex) when (IsCorrupt(ex))
             {
@@ -617,6 +660,12 @@ public sealed class UsageStore : IDisposable
                 if (!HasColumn(connection, transaction, "samples", "machine"))
                 {
                     create.CommandText = "ALTER TABLE samples ADD COLUMN machine TEXT";
+                    create.ExecuteNonQuery();
+                }
+                // Version 4: the tab's folder, for usage by project; null for turns recorded before.
+                if (!HasColumn(connection, transaction, "turns", "project"))
+                {
+                    create.CommandText = "ALTER TABLE turns ADD COLUMN project TEXT";
                     create.ExecuteNonQuery();
                 }
                 create.CommandText = $"PRAGMA user_version = {SchemaVersion}";

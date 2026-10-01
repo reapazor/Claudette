@@ -187,9 +187,10 @@ public sealed class UsageTracker : IAsyncDisposable
     }
 
     /// <summary>A tab finished a turn: record its tokens and its name, and poll soon (at most once a minute).</summary>
-    public void OnTurnCompleted(string tabId, string tabName, ResultMessage result)
+    /// <param name="project">The tab's folder, for usage by project.</param>
+    public void OnTurnCompleted(string tabId, string tabName, ResultMessage result, string? project = null)
     {
-        var records = TurnRecord.FromResult(result, tabId, _services.Time.GetUtcNow());
+        var records = TurnRecord.FromResult(result, tabId, _services.Time.GetUtcNow(), project);
         if (records.Count > 0)
         {
             WriteHistory(() =>

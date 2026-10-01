@@ -699,11 +699,14 @@ A sample is saved only when a value changes, and at most once a minute. These fe
 
 - Timestamp.
 - Tab and session ID.
+- The tab's folder (its project). Turns recorded before Claudette kept it have none.
 - Model.
 - Input, output, cache write and cache read tokens.
 - Estimated cost.
 
-These feed each tab's per-turn chart, the "which tab is burning the most" view, and the detailed header's busiest tabs.
+These feed each tab's per-turn chart, the "which tab is burning the most" view, the detailed header's busiest tabs, and the Usage panel's **Projects** list.
+
+**Projects** (Usage panel): tokens, estimated cost and turns per folder, across every tab that worked in it, open or closed, heaviest first, with each one's share of the total. A picker chooses the period: **This session window**, **This week** (the default, like the chart beside it) or **The last 30 days** (as far as **Keep usage history** allows). A row is named by its folder; two folders of the same name show their parent folder too, and the tooltip has the full path. Turns from before projects were kept are one row, **Earlier turns**.
 
 **Tab names** (per tab): each tab's last known name, so its rows are still named once it's closed. It's kept when a turn is recorded and whenever the name changes after that, and only for a tab with turn records. Turns and names are written in the order they happen, so a rename just after a turn isn't lost. A name goes when its tab's last turn record does (retention or **Clear usage history**). Turns recorded before names were kept show as "A closed tab".
 

@@ -65,6 +65,30 @@
         </ItemsControl>
       </StackPanel>
 
+      <!-- Tokens per project (DESIGN.md §6, "Usage history") -->
+      <StackPanel Spacing="6">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Classes="section" Text="Projects" VerticalAlignment="Center" />
+          <ComboBox Grid.Column="1" MinWidth="170" ItemsSource="{Binding ProjectPeriods}" SelectedItem="{Binding SelectedProjectPeriod}"
+                    AutomationProperties.Name="Period" />
+        </Grid>
+        <TextBlock Classes="muted small" Text="Tokens used in each folder, across all its tabs." TextWrapping="Wrap" />
+        <TextBlock Classes="muted" Text="No turns in this period." IsVisible="{Binding !HasProjects}" />
+        <ItemsControl ItemsSource="{Binding Projects}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="vm:ProjectBurnRow">
+              <Grid ColumnDefinitions="*,120,80,70,70" Margin="0,3" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <ProgressBar Grid.Column="1" Classes="share" Value="{Binding Share}" VerticalAlignment="Center" Margin="8,0" />
+                <TextBlock Grid.Column="2" Classes="mono small" Text="{Binding Tokens}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="3" Classes="mono small muted" Text="{Binding Cost}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="4" Classes="small muted" Text="{Binding Turns}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+
       <!-- The week -->
       <StackPanel Spacing="6">
         <TextBlock Classes="section" Text="This week" />

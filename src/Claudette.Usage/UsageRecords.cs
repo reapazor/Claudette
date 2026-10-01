@@ -39,6 +39,7 @@ public sealed record UsageSample(
 /// One model's tokens for one turn of one tab (DESIGN.md §6, "Usage history"). Counts only: no conversation content.
 /// </summary>
 /// <param name="CostUsd">Claude Code's client-side estimate at list price; not a bill.</param>
+/// <param name="Project">The tab's folder, for usage by project; null for turns recorded before it was kept.</param>
 public sealed record TurnRecord(
     DateTimeOffset Timestamp,
     string TabId,
@@ -48,12 +49,13 @@ public sealed record TurnRecord(
     long Output,
     long CacheWrite,
     long CacheRead,
-    double CostUsd)
+    double CostUsd,
+    string? Project = null)
 {
     public long Total => Input + Output + CacheWrite + CacheRead;
 
     /// <summary>One record per model in the result's <c>modelUsage</c>, read the same way as <c>TokenTotals.Add</c>.</summary>
-    public static IReadOnlyList<TurnRecord> FromResult(ResultMessage result, string tabId, DateTimeOffset timestamp)
+    public static IReadOnlyList<TurnRecord> FromResult(ResultMessage result, string tabId, DateTimeOffset timestamp, string? project = null)
     {
         if (result.ModelUsage is not { Count: > 0 } byModel)
         {
@@ -75,7 +77,8 @@ public sealed record TurnRecord(
                 Tokens(usage, "outputTokens"),
                 Tokens(usage, "cacheCreationInputTokens"),
                 Tokens(usage, "cacheReadInputTokens"),
-                usage.GetDouble("costUSD") ?? 0));
+                usage.GetDouble("costUSD") ?? 0,
+                project));
         }
         return records;
     }
@@ -87,6 +90,14 @@ public sealed record TurnRecord(
 /// <param name="Turns">Turns, not records: a turn that used two models counts once.</param>
 /// <param name="Name">The tab's last known name; null for turns recorded before names were kept.</param>
 public sealed record TabTokenSum(string TabId, long Input, long Output, long CacheWrite, long CacheRead, double CostUsd, int Turns, string? Name = null)
+{
+    public long Total => Input + Output + CacheWrite + CacheRead;
+}
+
+/// <summary>A project's tokens over a period, for usage by project (DESIGN.md §6, "Usage history").</summary>
+/// <param name="Project">The tab's folder; null for turns recorded before projects were kept.</param>
+/// <param name="Turns">Turns, not records: a turn that used two models counts once.</param>
+public sealed record ProjectTokenSum(string? Project, long Input, long Output, long CacheWrite, long CacheRead, double CostUsd, int Turns)
 {
     public long Total => Input + Output + CacheWrite + CacheRead;
 }

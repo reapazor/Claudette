@@ -36,6 +36,55 @@ public sealed record TabBurnRow(string Name, string Tokens, string Cost, string 
     }
 }
 
+/// <summary>A project's tokens over the period the Usage panel's <b>Projects</b> list shows (DESIGN.md §6).</summary>
+/// <param name="Folder">The full path, for the tooltip; null for turns recorded before projects were kept.</param>
+/// <param name="Share">The project's part of all the projects' tokens in the period, from 0 to 1.</param>
+public sealed record ProjectBurnRow(string Name, string? Folder, string Tokens, string Cost, string Turns, double Share)
+{
+    public string Tooltip => Folder ?? "Turns recorded before Claudette kept each turn's folder.";
+
+    /// <summary>One row per project, the heaviest first, named by folder; the parent folder tells apart two of a name.</summary>
+    public static IReadOnlyList<ProjectBurnRow> From(IReadOnlyList<ProjectTokenSum> sums)
+    {
+        var total = Math.Max(1, sums.Sum(s => s.Total));
+        var names = sums.Select(s => s.Project is { } folder ? FolderName(folder) : null).ToArray();
+        return sums
+            .Select((s, i) => new ProjectBurnRow(
+                s.Project is not { } folder ? "Earlier turns"
+                    : names.Count(n => n == names[i]) > 1 && Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(folder)) is { Length: > 0 } parent
+                        ? $"{names[i]} ({FolderName(parent)})"
+                        : names[i]!,
+                s.Project,
+                TokenTotals.Short(s.Total),
+                $"${s.CostUsd:0.00}",
+                $"{s.Turns} turn{(s.Turns == 1 ? "" : "s")}",
+                (double)s.Total / total))
+            .ToArray();
+
+        static string FolderName(string path) =>
+            Path.GetFileName(Path.TrimEndingDirectorySeparator(path)) is { Length: > 0 } name ? name : path;
+    }
+}
+
+/// <summary>The period the Usage panel's <b>Projects</b> list covers.</summary>
+public enum ProjectPeriod
+{
+    SessionWindow,
+    Week,
+    Month,
+}
+
+/// <summary>A choice in the Projects list's period picker, shown by its label.</summary>
+public sealed record ProjectPeriodChoice(ProjectPeriod Period)
+{
+    public override string ToString() => Period switch
+    {
+        ProjectPeriod.SessionWindow => "This session window",
+        ProjectPeriod.Month => "The last 30 days",
+        _ => "This week",
+    };
+}
+
 /// <summary>A past session window or week, with the highest usage it reached.</summary>
 public sealed record PastWindowRow(string When, string Peak, double Percent);
 
@@ -79,6 +128,21 @@ public sealed partial class UsagePanelViewModel : ViewModelBase
     public partial IReadOnlyList<TabBurnRow> Tabs { get; set; } = [];
 
     public bool HasTabs => Tabs.Count > 0;
+
+    /// <summary>Tokens per project over <see cref="SelectedProjectPeriod"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasProjects))]
+    public partial IReadOnlyList<ProjectBurnRow> Projects { get; set; } = [];
+
+    public bool HasProjects => Projects.Count > 0;
+
+    public IReadOnlyList<ProjectPeriodChoice> ProjectPeriods { get; } = [.. Enum.GetValues<ProjectPeriod>().Select(p => new ProjectPeriodChoice(p))];
+
+    /// <summary>The week by default, like the chart above it.</summary>
+    [ObservableProperty]
+    public partial ProjectPeriodChoice SelectedProjectPeriod { get; set; } = new(ProjectPeriod.Week);
+
+    partial void OnSelectedProjectPeriodChanged(ProjectPeriodChoice value) => Refresh();
 
     [ObservableProperty]
     public partial IReadOnlyList<PastWindowRow> PastSessions { get; set; } = [];
@@ -151,12 +215,19 @@ public sealed partial class UsagePanelViewModel : ViewModelBase
         var weekStart = weekEnd - TimeSpan.FromDays(7);
         // Tokens per tab since the current session window started.
         var windowStart = snapshot?.Session?.ResetsAt is { } sessionReset ? sessionReset - SessionWindow : now - SessionWindow;
-        (IReadOnlyList<UsageSample> Samples, IReadOnlyList<TabTokenSum> Tabs, IReadOnlyList<WindowPeak> Sessions, IReadOnlyList<WindowPeak> Weeks) data;
+        var projectsFrom = SelectedProjectPeriod.Period switch
+        {
+            ProjectPeriod.SessionWindow => windowStart,
+            ProjectPeriod.Month => now - TimeSpan.FromDays(30),
+            _ => weekStart,
+        };
+        (IReadOnlyList<UsageSample> Samples, IReadOnlyList<TabTokenSum> Tabs, IReadOnlyList<ProjectTokenSum> Projects, IReadOnlyList<WindowPeak> Sessions, IReadOnlyList<WindowPeak> Weeks) data;
         try
         {
             data = await Task.Run(() => (
                 store.GetSamples(weekStart, now),
                 store.GetTokensByTab(windowStart),
+                store.GetTokensByProject(projectsFrom),
                 store.GetPastWindows(UsageWindow.Session, now),
                 store.GetPastWindows(UsageWindow.Weekly, now)));
         }
@@ -174,6 +245,7 @@ public sealed partial class UsagePanelViewModel : ViewModelBase
         WeekPoints = data.Samples.Where(s => s.WeeklyPercent is not null).Select(s => new ChartPoint(s.Timestamp, s.WeeklyPercent!.Value)).ToArray();
         Tabs = TabBurnRow.From(data.Tabs, _tabName);
         OnPropertyChanged(nameof(HasTabs));
+        Projects = ProjectBurnRow.From(data.Projects);
 
         // Past windows, as far back as the history goes; the lists show a page at a time.
         _pastSessions = data.Sessions
