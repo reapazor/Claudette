@@ -103,6 +103,9 @@ public class ProjectToolsUiTests
         var output = window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "ProjectOutputList");
         Assert.True(output.IsEffectivelyVisible);
         Assert.Same(failed.Output, output.ItemsSource);
+        // The actions are in the project's menu at the sidebar's foot, not on the page.
+        var page = window.GetVisualDescendants().OfType<DockPanel>().Single(p => p.Name == "ProjectPage");
+        Assert.DoesNotContain(page.GetVisualDescendants().OfType<Button>(), b => tab.ProjectActions.Any(a => Equals(b.Content, a.Label)));
 
         // Stop, and the running one becomes a closable entry; closing takes the entry away.
         Visible(rows[1], "Stop").Command!.Execute(null);

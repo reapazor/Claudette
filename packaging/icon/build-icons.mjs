@@ -6,7 +6,8 @@
 //   src/Claudette.App/Assets/claudette.ico    the window and executable icon
 //   packaging/windows/Assets/*.png            the MSIX logos, and the taskbar's unplated sizes
 //   src/Claudette.App/Assets/AppIcon/*.png    the animations' frames (DESIGN.md §10): the taskbar overlay's pulsing
-//                                             spark, and the Dock icon typing and waving (AppIconAnimations)
+//                                             spark and running hourglass, and the Dock icon typing, waving and
+//                                             waiting by an hourglass (AppIconAnimations)
 // Run from anywhere: node packaging/icon/build-icons.mjs
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -53,6 +54,47 @@ const spark = [
   ['X...X...X', '.X..X..X.', '..X.X.X..', '...XXX...', 'XXXXXXXXX', '...XXX...', '..X.X.X..', '.X..X..X.', 'X...X...X'],
 ];
 const sparkColors = { X: tile };
+
+// An hourglass, while a tab waits for a usage limit to reset: X its frame, E the empty glass, S the sand. A dark frame
+// and ivory glass, so it reads on a light or dark taskbar, and Claude's orange sand.
+const hourglass = [
+  'XXXXXXXXX',
+  '.XEEEEEX.',
+  '.XEEEEEX.',
+  '.XEEEEEX.',
+  '..XEEEX..',
+  '...XEX...',
+  '..XEEEX..',
+  '.XEEEEEX.',
+  '.XEEEEEX.',
+  '.XEEEEEX.',
+  'XXXXXXXXX',
+];
+const hourglassColors = { X: palette.E, E: tile, S: palette.O };
+
+/**
+ * The hourglass with sand in the lowest `top` rows of the top bulb and the lowest `bottom` rows of the bottom one, and
+ * running through the neck between them while both have some.
+ */
+function sand(top, bottom) {
+  const neck = hourglass.length >> 1;
+  const middle = hourglass[0].length >> 1;
+  const last = hourglass.length - 1;
+  return hourglass.map((row, y) => [...row].map((ch, x) => {
+    if (ch !== 'E') return ch;
+    const inTop = y < neck && y >= neck - top;
+    const inBottom = y > neck && y >= last - bottom;
+    const running = top > 0 && bottom > 0 && x === middle && y >= neck;
+    return inTop || inBottom || running ? 'S' : 'E';
+  }).join(''));
+}
+
+/** Rows turned a quarter clockwise. */
+const turn = rows => [...rows[0]].map((_, x) => rows.map((_, y) => rows[rows.length - 1 - y][x]).join(''));
+
+// The sand runs down, rests, and the hourglass turns over: once sideways, then full at the top again.
+const sandFrames = [sand(4, 0), sand(3, 1), sand(2, 2), sand(1, 3), sand(0, 4)];
+sandFrames.push(turn(sandFrames[4]));
 
 // Pixels per cell at each size. At 24, 36 and 48, the taskbar at 100%, 150% and 200%, she fills the icon.
 const scale = { 16: 1, 20: 1, 24: 2, 30: 2, 32: 2, 36: 3, 40: 3, 44: 3, 48: 4, 50: 3, 64: 5, 128: 9, 150: 8, 256: 18 };
@@ -125,6 +167,31 @@ function sparkIcon(rows) {
   const img = image(32, 32);
   const at = 16 - rows.length;
   drawSprite(img, 2, at, at, rows, sparkColors);
+  return img;
+}
+
+/**
+ * A frame of the taskbar overlay's hourglass: 32 px, 2 px a cell, as near the middle as an even pixel goes, so its cells
+ * stay whole when the taskbar halves it at 100%.
+ */
+function hourglassIcon(rows) {
+  const img = image(32, 32);
+  const even = cells => 2 * Math.floor((16 - cells) / 2);
+  drawSprite(img, 2, even(rows[0].length), even(rows.length), rows, hourglassColors);
+  return img;
+}
+
+/**
+ * A frame of the Dock's waiting animation: Claudette standing, and the hourglass on the tile's bottom-right corner,
+ * like a badge, its cells three-fifths of hers so it reads at Dock sizes.
+ */
+function waitingIcon(rows) {
+  const size = 512;
+  const img = macIcon(size);
+  const unit = size / 1024;
+  const k = 24 * unit;
+  const centre = 808 * unit;
+  drawSprite(img, k, centre - (rows[0].length * k) / 2, centre - (rows.length * k) / 2, rows, hourglassColors);
   return img;
 }
 
@@ -224,3 +291,5 @@ const frames = 'src/Claudette.App/Assets/AppIcon';
 [spark[0], spark[1], spark[2], spark[3], spark[2], spark[1]].forEach((rows, i) => write(`${frames}/spark-${i}.png`, png(sparkIcon(rows))));
 [pose.typeLeft, pose.typeRight].forEach((body, i) => write(`${frames}/typing-${i}.png`, png(macIcon(512, claudette(body)))));
 [pose.wave, pose.stand].forEach((body, i) => write(`${frames}/waving-${i}.png`, png(macIcon(512, claudette(body)))));
+sandFrames.forEach((rows, i) => write(`${frames}/hourglass-${i}.png`, png(hourglassIcon(rows))));
+sandFrames.forEach((rows, i) => write(`${frames}/waiting-${i}.png`, png(waitingIcon(rows))));

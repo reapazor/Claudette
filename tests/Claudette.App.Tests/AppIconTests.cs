@@ -2,11 +2,16 @@ using Claudette.App.Conversation;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
+using Claudette.Core.Sessions;
+using Claudette.Core.Settings;
 using Claudette.Platform.Notifications;
 
 namespace Claudette.App.Tests;
 
-/// <summary>The Dock icon and taskbar button while tabs work or wait (DESIGN.md §10): the animation and the flash.</summary>
+/// <summary>
+/// The Dock icon and taskbar button while tabs work, need input or wait for a usage limit to reset (DESIGN.md §10): the
+/// animation and the flash.
+/// </summary>
 public class AppIconTests
 {
     private const string BashRequest = """
@@ -38,7 +43,7 @@ public class AppIconTests
     [Fact]
     public void Every_animation_has_its_frames()
     {
-        foreach (var animation in new[] { AppIconAnimations.Spark, AppIconAnimations.Typing, AppIconAnimations.Waving })
+        foreach (var animation in new[] { AppIconAnimations.Spark, AppIconAnimations.Typing, AppIconAnimations.Waving, AppIconAnimations.Hourglass, AppIconAnimations.Waiting })
         {
             Assert.True(animation.Frames.Count > 1, animation.Name);
             Assert.All(animation.Frames, frame => Assert.Equal([0x89, (byte)'P', (byte)'N', (byte)'G'], frame.Png[..4]));
@@ -93,7 +98,7 @@ public class AppIconTests
         await using var h = new TabTestHarness(settings => settings.Notifications.Badge = false);
         h.Notifier.Surface = AppIconSurface.Overlay;
 
-        h.Services.Notifications.SetTabActivity(needingInput: 1, working: 1);
+        h.Services.Notifications.SetTabActivity(needingInput: 1, limited: 0, working: 1);
 
         Assert.Equal(0, h.Notifier.Badge);
         Assert.Same(AppIconAnimations.Spark.Frames[0].Png, h.Notifier.Frame);
@@ -121,6 +126,118 @@ public class AppIconTests
 
         h.Transport.EmitTurn("done");
         await TabTestHarness.Eventually(() => h.Notifier.Frame is null, "Claudette's own icon");
+    }
+
+    [Fact]
+    public async Task While_a_usage_limit_stops_a_task_the_taskbar_overlay_runs_the_hourglass_until_it_continues()
+    {
+        await using var h = new TabTestHarness();
+        h.Notifier.Surface = AppIconSurface.Overlay;
+        var tab = await h.OpenTabAsync();
+        var reset = h.Time.GetUtcNow() + TimeSpan.FromHours(2);
+
+        await AutoContinueTests.HitLimitAsync(h, tab, reset);
+
+        var hourglass = AppIconAnimations.Hourglass.Frames;
+        Assert.Same(hourglass[0].Png, h.Notifier.Frame);
+        Assert.Equal("Waiting for a usage limit to reset", h.Notifier.FrameDescription);
+        foreach (var frame in hourglass)
+        {
+            h.Time.Advance(frame.Duration);
+        }
+        Assert.Same(hourglass[0].Png, h.Notifier.Frame);
+        Assert.False(h.Notifier.Flashing);
+
+        await AutoContinueTests.AdvanceToAsync(h, reset + AutoContinueMonitor.Grace);
+
+        await TabTestHarness.Eventually(() => !tab.HasLimitWait && tab.Status == TabStatus.Working, "the continue");
+        Assert.Same(AppIconAnimations.Spark.Frames[0].Png, h.Notifier.Frame);
+    }
+
+    [Fact]
+    public async Task On_the_taskbar_the_hourglass_comes_after_the_count_and_before_the_spark()
+    {
+        await using var h = new TabTestHarness();
+        h.Notifier.Surface = AppIconSurface.Overlay;
+        var notifications = h.Services.Notifications;
+
+        notifications.SetTabActivity(needingInput: 0, limited: 1, working: 1);
+        Assert.Same(AppIconAnimations.Hourglass.Frames[0].Png, h.Notifier.Frame);
+
+        notifications.SetTabActivity(needingInput: 1, limited: 1, working: 1);
+        Assert.Equal(1, h.Notifier.Badge);
+        Assert.Null(h.Notifier.Frame);
+
+        notifications.SetTabActivity(needingInput: 0, limited: 0, working: 1);
+        Assert.Same(AppIconAnimations.Spark.Frames[0].Png, h.Notifier.Frame);
+    }
+
+    [Fact]
+    public async Task The_Dock_icon_waits_by_the_hourglass_unless_a_tab_needs_input()
+    {
+        await using var h = new TabTestHarness();
+        h.Notifier.Surface = AppIconSurface.Icon;
+        var notifications = h.Services.Notifications;
+
+        notifications.SetTabActivity(needingInput: 0, limited: 1, working: 1);
+        Assert.Same(AppIconAnimations.Waiting.Frames[0].Png, h.Notifier.Frame);
+        Assert.Equal("Waiting for a usage limit to reset", h.Notifier.FrameDescription);
+
+        notifications.SetTabActivity(needingInput: 1, limited: 1, working: 0);
+        Assert.Same(AppIconAnimations.Waving.Frames[0].Png, h.Notifier.Frame);
+    }
+
+    [Fact]
+    public async Task Dont_continue_takes_the_hourglass_away()
+    {
+        await using var h = new TabTestHarness();
+        h.Notifier.Surface = AppIconSurface.Overlay;
+        var tab = await h.OpenTabAsync();
+        await AutoContinueTests.HitLimitAsync(h, tab, h.Time.GetUtcNow() + TimeSpan.FromHours(2));
+
+        tab.DontContinueCommand.Execute(null);
+
+        await TabTestHarness.Eventually(() => tab.CanContinueAfterLimit, "the wait to stop");
+        Assert.Null(h.Notifier.Frame);
+    }
+
+    [Fact]
+    public async Task A_wait_that_wont_continue_by_itself_shows_the_hourglass_until_the_limit_resets()
+    {
+        await using var h = new TabTestHarness();
+        h.Notifier.Surface = AppIconSurface.Overlay;
+        var tab = await h.OpenTabAsync();
+        tab.State.Overrides.ContinueAfterLimitReset = false;
+        var reset = h.Time.GetUtcNow() + TimeSpan.FromHours(2);
+
+        await AutoContinueTests.HitLimitAsync(h, tab, reset);
+        Assert.Same(AppIconAnimations.Hourglass.Frames[0].Png, h.Notifier.Frame);
+
+        await AutoContinueTests.AdvanceToAsync(h, reset);
+
+        await TabTestHarness.Eventually(() => tab.LimitWait is { HasReset: true }, "the reset");
+        Assert.Null(h.Notifier.Frame);
+    }
+
+    [Fact]
+    public async Task A_restored_tab_still_waiting_for_its_limit_shows_the_hourglass()
+    {
+        await using var h = new TabTestHarness();
+        h.Notifier.Surface = AppIconSurface.Overlay;
+        var reset = h.Time.GetUtcNow() + TimeSpan.FromHours(1);
+        h.Services.State.Tabs =
+        [
+            new TabState
+            {
+                Folder = h.WorkFolder,
+                IsPinned = true,
+                LimitWait = new LimitWait(reset, "five_hour", reset + AutoContinueMonitor.Grace, LimitWaitHold.None),
+            },
+        ];
+
+        h.Shell.Restore(null);
+
+        Assert.Same(AppIconAnimations.Hourglass.Frames[0].Png, h.Notifier.Frame);
     }
 
     [Fact]

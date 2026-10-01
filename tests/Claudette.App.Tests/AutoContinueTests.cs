@@ -204,7 +204,7 @@ public class AutoContinueTests
     }
 
     /// <summary>Sends a message, and the turn runs into the limit, as Claude Code reports it.</summary>
-    private static async Task HitLimitAsync(TabTestHarness h, TabViewModel tab, DateTimeOffset reset)
+    internal static async Task HitLimitAsync(TabTestHarness h, TabViewModel tab, DateTimeOffset reset)
     {
         tab.ComposerText = "Refactor the parser";
         await tab.SendCommand.ExecuteAsync(null);
@@ -235,7 +235,7 @@ public class AutoContinueTests
     }
 
     /// <summary>Moves the clock on a tick at a time, as it passes while the computer is awake.</summary>
-    private static async Task AdvanceToAsync(TabTestHarness h, DateTimeOffset time)
+    internal static async Task AdvanceToAsync(TabTestHarness h, DateTimeOffset time)
     {
         while (h.Time.GetUtcNow() < time)
         {

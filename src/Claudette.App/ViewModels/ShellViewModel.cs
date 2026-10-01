@@ -111,12 +111,13 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     internal void OnRunningVersionsChanged() => RunningVersionsChanged?.Invoke();
 
     /// <summary>
-    /// A tab's status changed: the Dock/taskbar badge counts tabs needing input, and the icon animates while tabs work
-    /// (DESIGN.md §10).
+    /// A tab's status changed, or it started or stopped waiting for a usage limit to reset: the Dock/taskbar badge
+    /// counts tabs needing input, and the icon animates while tabs wait or work (DESIGN.md §10).
     /// </summary>
     internal void OnTabStatusChanged()
     {
-        _services.Notifications.SetTabActivity(AllTabs.Count(t => t.NeedsInput), AllTabs.Count(t => t.Status == TabStatus.Working));
+        _services.Notifications.SetTabActivity(AllTabs.Count(t => t.NeedsInput), AllTabs.Count(t => t.IsWaitingForLimitReset),
+            AllTabs.Count(t => t.Status == TabStatus.Working));
         // A closed tab's processes leave the header's total.
         OnTabProcessesSampled();
         TabStatusChanged?.Invoke();

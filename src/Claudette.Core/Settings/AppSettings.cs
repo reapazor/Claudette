@@ -71,8 +71,9 @@ public sealed class NotificationSettings
     public bool Badge { get; set; } = true;
 
     /// <summary>
-    /// The Dock icon or taskbar button moves while tabs work (DESIGN.md §10): the taskbar overlay's spark (Windows), or
-    /// Claudette typing, and waving while a tab needs input (macOS).
+    /// The Dock icon or taskbar button moves while tabs work or wait (DESIGN.md §10): the taskbar overlay's spark, and an
+    /// hourglass while a tab waits for a usage limit to reset (Windows); or Claudette typing, waving while a tab needs
+    /// input, and waiting by an hourglass (macOS).
     /// </summary>
     public bool AnimateIcon { get; set; } = true;
 }
