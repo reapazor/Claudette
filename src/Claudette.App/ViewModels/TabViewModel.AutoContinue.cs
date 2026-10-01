@@ -118,7 +118,8 @@ public sealed partial class TabViewModel
         {
             return;
         }
-        _conversation.AddUserMessage(message, isAutoContinue: true);
-        _ = SendRawAsync(message);
+        var stamp = NewStamp(fromUser: false);
+        _conversation.AddUserMessage(message, isAutoContinue: true).SentId = stamp.Uuid;
+        _ = SendRawAsync(message, stamp: stamp);
     }
 }

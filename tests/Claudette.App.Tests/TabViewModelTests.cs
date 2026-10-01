@@ -224,6 +224,43 @@ public class TabViewModelTests
         await TabTestHarness.Eventually(() => h.Transport.SentUserTexts.Contains("Status?"), "the check-in");
         Assert.Contains(tab.Items.OfType<UserMessageItem>(), m => m.IsCheckIn);
         await TabTestHarness.Eventually(() => !tab.HasCheckInCountdown, "the bar to close");
+
+        // The prompt the user typed says so, and the check-in doesn't: each has its own id, as its card knows it.
+        var sent = h.Transport.Sent.Where(m => m["type"]?.GetValue<string>() == "user").ToList();
+        var cards = tab.Items.OfType<UserMessageItem>().ToList();
+        Assert.Equal("human", sent[0]["origin"]?["kind"]?.GetValue<string>());
+        Assert.Null(sent[1]["origin"]);
+        Assert.Equal(cards.Select(c => c.SentId), sent.Select(m => m["uuid"]?.GetValue<string>()));
+        Assert.All(cards, c => Assert.True(Guid.TryParse(c.SentId, out _)));
+    }
+
+    [Fact]
+    public async Task An_echo_finds_its_prompt_by_the_id_it_was_sent_with()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        tab.ComposerText = "first";
+        await tab.SendCommand.ExecuteAsync(null);
+        tab.ComposerText = "second";
+        await tab.SendCommand.ExecuteAsync(null);
+        await TabTestHarness.Eventually(() => h.Transport.SentUserTexts.Count() == 2, "both prompts");
+        var (first, second) = (tab.Items.OfType<UserMessageItem>().First(), tab.Items.OfType<UserMessageItem>().Last());
+
+        // The second is echoed first, reading differently (Claude Code expanded a mention, say): its id still finds it.
+        h.Transport.Emit(new JsonObject { ["type"] = "user", ["isReplay"] = true, ["uuid"] = second.SentId, ["message"] = new JsonObject { ["role"] = "user", ["content"] = "second, expanded" } }.ToJsonString());
+        await TabTestHarness.Eventually(() => second.Uuid is not null, "the echo");
+        Assert.Equal(second.SentId, second.Uuid);
+        Assert.Null(first.Uuid);
+
+        // Compact's /compact, the user's choice with no card of its own, is no prompt's echo.
+        tab.ComposerText = "";
+        await tab.CompactCommand.ExecuteAsync(null);
+        var compact = h.Transport.Sent.Last(m => m["type"]?.GetValue<string>() == "user");
+        Assert.Equal("human", compact["origin"]?["kind"]?.GetValue<string>());
+        h.Transport.Emit(new JsonObject { ["type"] = "user", ["isReplay"] = true, ["uuid"] = compact["uuid"]!.GetValue<string>(), ["message"] = new JsonObject { ["role"] = "user", ["content"] = "/compact" } }.ToJsonString());
+        h.Transport.EmitTurn();
+        await TabTestHarness.Eventually(() => tab.Items.OfType<TurnSummaryItem>().Any(), "a turn");
+        Assert.Null(first.Uuid);
     }
 
     [Fact]

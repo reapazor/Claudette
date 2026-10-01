@@ -401,7 +401,7 @@ The conversation is virtualized: only the items in view, and a screen's worth ei
 A user message's **⋯** menu goes back to it. Claude Code does the work: a resume with `--resume-session-at <entry>` keeps the conversation up to and including that transcript entry, and the `rewind_files` control request puts back files it kept copies of.
 
 - **Where to go back to.** Each prompt knows its transcript id (`uuid`) and the entry just before it, the point to resume at.
-  - A live prompt gets its id when Claude Code echoes it back (`--replay-user-messages`): the echo's `uuid`. Its point is the last entry of the main conversation before the echo, an assistant message or tool results, so a prompt sent while Claude worked follows what it actually came after. A restored prompt has both from its transcript entry (`uuid`, `parentUuid`), which may point at an entry that shows nothing, such as an attachment.
+  - A live prompt gets its id when Claude Code echoes it back (`--replay-user-messages`): the echo's `uuid`, which is the id Claudette sent it with ([§13](#integration-with-claude-code)), so the echo finds its prompt even when it reads differently. Its point is the last entry of the main conversation before the echo, an assistant message or tool results, so a prompt sent while Claude worked follows what it actually came after. A restored prompt has both from its transcript entry (`uuid`, `parentUuid`), which may point at an entry that shows nothing, such as an attachment.
   - The first prompt of a conversation, and the first after `/clear`, has no point: going back to it starts a new session.
 - **Edit and resend…** The conversation goes back to just before the message, and the message (its text and images) goes in the composer to change and send.
   - Only while Claude isn't working: going back mid-turn would cut a turn in half. The menu says so in a note instead.
@@ -1416,7 +1416,7 @@ The `system/init` message that follows gives `session_id`, `model`, `permissionM
 
 | Need | How | Documented |
 |---|---|---|
-| Send a message, with images | A `user` message as one JSON line on stdin. Images are base64 `image` content blocks before the text ([§5](#attachments)). See "Messages sent while Claude is working" below. | Yes |
+| Send a message, with images | A `user` message as one JSON line on stdin. Images are base64 `image` content blocks before the text ([§5](#attachments)). Each carries a `uuid` Claudette makes, which the echo, the transcript and the replies' `user_message_uuid` keep; one the user typed or chose (**Compact**) also carries `origin: {kind: "human"}` (below). See "Messages sent while Claude is working" below. | Yes |
 | Receive output | JSON lines on stdout: `system/init`, `system/status`, `assistant`, `user` (tool results, with `tool_use_result`), `stream_event` (partial text), `result`, `rate_limit_event`, `auth_status`, `permission_denied`, `informational`, `api_retry`, `conversation_reset`, `task_started` / `task_progress` / `task_updated` / `task_notification`, `tool_progress`, `thinking_tokens`, `autocompact_state` | Yes |
 | Stop the current turn | `interrupt`. The reply lists `still_queued` messages; the turn ends with a `result` of `error_during_execution` / `aborted_streaming`. SIGINT is a fallback. Never SIGTERM: it leaves the turn unfinished with no result. | Yes |
 | Permission prompts | Incoming `can_use_tool`; reply allow, allow with `updatedPermissions`, or deny with a message ([§7](#7-permission-prompts)) | Behavior yes, wire format no |
@@ -1459,6 +1459,8 @@ Confirmed against Claude Code 2.1.284 with the mock Messages API (2026-09-29):
 - Interrupting the turn while a hook waits also sends a `control_cancel_request` for it, and the tool call is rejected.
 
 `ClaudeSession` runs each callback off the read loop and answers with its output; an unknown callback or a failing one gets an error answer, and a withdrawn one is cancelled and not answered. The initialize request still sends `"hooks": null` when there are none.
+
+**Who a message is from.** Since 2.1.210 Claude Code treats a user message without an `origin` as unattributed: checks that need a person's prompt, such as the `ultracode` workflow keyword, don't accept it, and a result's `queued_turn_count` doesn't count it. So a prompt the user typed, and the `/compact` behind **Compact**, say `origin: {kind: "human"}`. Check-ins, continuing after a usage limit and Claudette's other messages (the Perforce retry, the `/remote-control` fallback) carry no origin, as before: they aren't the user's words. Every message Claudette sends has its own `uuid`, and a message sent without a card (**Compact**) is never taken for a prompt's echo.
 
 **Messages sent while Claude is working.**
 

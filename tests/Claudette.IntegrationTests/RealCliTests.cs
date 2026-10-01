@@ -82,6 +82,22 @@ public sealed class RealCliTests : IAsyncLifetime
     // ---- Rewind and branch, hook rows, MCP servers (DESIGN.md §5, §4) ------------------------------------------------
 
     [Fact]
+    public async Task A_typed_prompt_comes_back_with_the_id_and_origin_it_was_sent_with()
+    {
+        await using var session = await StartAsync(replayUserMessages: true);
+        var stamp = new MessageStamp(Guid.NewGuid().ToString(), FromUser: true);
+
+        await session.SendUserMessageAsync("hello", [], null, stamp, TestContext.Current.CancellationToken);
+        var (replayed, _) = await session.ReadUntilAsync<PromptReplayed>();
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        // DESIGN.md §13: Claude Code keeps the id, and counts the prompt as a person's (checked with 2.1.286).
+        Assert.Equal(stamp.Uuid, replayed.Message.Uuid);
+        Assert.Equal("human", replayed.Message.Raw["origin"]?["kind"]?.GetValue<string>());
+        Assert.Equal(stamp.Uuid, done.Result.Raw["user_message_uuid"]?.GetValue<string>());
+    }
+
+    [Fact]
     public async Task A_prompt_comes_back_with_its_uuid_and_files_rewind_to_it()
     {
         await using var session = await StartAsync(replayUserMessages: true,

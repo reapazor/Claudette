@@ -108,7 +108,7 @@ public partial class TabViewModel
         _heldForTrust.Clear();
         foreach (var message in held)
         {
-            await SendRawAsync(message.Text, message.Images, message.Suffix);
+            await SendRawAsync(message.Text, message.Images, message.Suffix, message.Stamp);
         }
     }
 }

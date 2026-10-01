@@ -17,6 +17,18 @@ public sealed class QuickSuffixMessageTests
     }
 
     [Fact]
+    public void A_message_carries_its_id_and_a_typed_one_says_a_person_sent_it()
+    {
+        var typed = OutgoingMessages.Stamped(OutgoingMessages.UserMessage("Fix it", [], null), new MessageStamp("0b8e6c70-1d1f-4c8e-9a43-5e2f0b9c1a77", FromUser: true));
+        var checkIn = OutgoingMessages.Stamped(OutgoingMessages.UserText("Status?"), new MessageStamp("5f1c2a9e-3b7d-4e60-8d21-9c4b7a6e0f13", FromUser: false));
+
+        Assert.Equal("""{"type":"user","message":{"role":"user","content":"Fix it"},"parent_tool_use_id":null,"session_id":"","uuid":"0b8e6c70-1d1f-4c8e-9a43-5e2f0b9c1a77","origin":{"kind":"human"}}""", typed.ToJsonString());
+        Assert.Equal("5f1c2a9e-3b7d-4e60-8d21-9c4b7a6e0f13", checkIn["uuid"]!.GetValue<string>());
+        Assert.False(checkIn.ContainsKey("origin"));
+        Assert.False(OutgoingMessages.Stamped(OutgoingMessages.UserText("x"), null).ContainsKey("uuid"));
+    }
+
+    [Fact]
     public void A_suffix_can_be_the_whole_message()
     {
         var message = OutgoingMessages.UserMessage("", [], Suffix);

@@ -123,14 +123,21 @@ public sealed class ClaudeSession : IAsyncDisposable
         SendUserMessageAsync(text, images, null, cancellationToken);
 
     /// <summary>Sends a message with attached images and quick suffixes (DESIGN.md §5, "Quick suffixes").</summary>
-    public async ValueTask SendUserMessageAsync(string text, IReadOnlyList<MessageImage> images, string? suffix, CancellationToken cancellationToken = default)
+    public ValueTask SendUserMessageAsync(string text, IReadOnlyList<MessageImage> images, string? suffix, CancellationToken cancellationToken = default) =>
+        SendUserMessageAsync(text, images, suffix, null, cancellationToken);
+
+    /// <summary>
+    /// Sends a message with attached images and quick suffixes, stamped with its id and, for one the user typed, its
+    /// origin (<see cref="OutgoingMessages.Stamped"/>).
+    /// </summary>
+    public async ValueTask SendUserMessageAsync(string text, IReadOnlyList<MessageImage> images, string? suffix, MessageStamp? stamp, CancellationToken cancellationToken = default)
     {
         // Working before the message goes, not after: a local command can be answered before the write's continuation
         // runs, and a Working set then would never be cleared.
         var started = TrySetState(SessionState.Idle, SessionState.Working);
         try
         {
-            await _transport.SendAsync(OutgoingMessages.UserMessage(text, images, suffix).ToJsonString(), cancellationToken).ConfigureAwait(false);
+            await _transport.SendAsync(OutgoingMessages.Stamped(OutgoingMessages.UserMessage(text, images, suffix), stamp).ToJsonString(), cancellationToken).ConfigureAwait(false);
         }
         catch
         {

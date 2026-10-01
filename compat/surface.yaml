@@ -534,6 +534,13 @@ items:
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: ClaudeEnvironmentTests, RewindAndBranchTests
     fallback: The guard for editing and resending a prompt. Without it, resume at the reply before the prompt unguarded.
+  - id: "user message uuid and origin"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/OutgoingMessages.cs, src/Claudette.App/ViewModels/TabViewModel.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkmessageorigin
+    test: QuickSuffixMessageTests, TabViewModelTests, RealCliTests
+    fallback: Each message Claudette sends has a uuid, kept by the echo, the transcript and user_message_uuid (checked with 2.1.286); a typed one has origin {kind:"human"}. A Claude Code that made its own ids instead would have each echo matched by its text, then by order, as before.
   - id: "--replay-user-messages"
     kind: flag
     status: documented

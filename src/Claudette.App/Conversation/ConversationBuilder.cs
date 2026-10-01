@@ -109,6 +109,12 @@ public sealed class ConversationBuilder
         init => _tasks = value;
     }
 
+    /// <summary>Ids of messages Claudette sent without a card, such as Compact's <c>/compact</c>: their echoes are no prompt's.</summary>
+    private readonly HashSet<string> _sentWithoutCard = new(StringComparer.Ordinal);
+
+    /// <summary>A message went with this id and no card of its own.</summary>
+    public void SentWithoutCard(string uuid) => _sentWithoutCard.Add(uuid);
+
     public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null, bool isAutoContinue = false) =>
         AddUser(new UserMessageItem(text, suffixText, isCheckIn, isAutoContinue) { Images = images ?? [], ResumeAt = _lastEntryUuid }, Now());
 
@@ -229,8 +235,10 @@ public sealed class ConversationBuilder
                 break;
 
             case PromptReplayed replayed when replayed.Message.Uuid is { } uuid:
-                // A prompt that was sent, echoed back with its id. Prompts sent while Claude worked wait their turn, so
-                // it's the earliest still without one that reads the same, else the earliest still without one.
+                // A prompt that was sent, echoed back with its id: the id Claudette sent it with. A message Claudette sent
+                // without a card of its own (Compact) is no prompt's. Otherwise, as for a Claude Code that made its own
+                // id: prompts sent while Claude worked wait their turn, so it's the earliest still without one that reads
+                // the same, else the earliest still without one.
                 var waiting = Items.OfType<UserMessageItem>().Where(m => m.Uuid is null).ToArray();
                 var sent = replayed.Message.Raw.GetObject("message")?["content"] switch
                 {
@@ -238,7 +246,9 @@ public sealed class ConversationBuilder
                     JsonArray blocks => string.Join("\n", blocks.OfType<JsonObject>().Where(b => b.GetString("type") == "text").Select(b => b.GetString("text"))),
                     _ => null,
                 };
-                if ((waiting.FirstOrDefault(m => sent is not null && m.CopyText.Trim() == sent.Trim()) ?? waiting.FirstOrDefault()) is { } prompt)
+                var echoed = waiting.FirstOrDefault(m => m.SentId == uuid)
+                    ?? (_sentWithoutCard.Remove(uuid) ? null : waiting.FirstOrDefault(m => sent is not null && m.CopyText.Trim() == sent.Trim()) ?? waiting.FirstOrDefault());
+                if (echoed is { } prompt)
                 {
                     prompt.Uuid = uuid;
                     // One sent while Claude worked joined the conversation later than it was sent: it follows what came

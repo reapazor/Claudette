@@ -11,7 +11,7 @@ namespace Claudette.App.ViewModels;
 public sealed partial class TabViewModel
 {
     /// <summary>A message on its way, with the images attached to it and its quick suffixes.</summary>
-    private sealed record PendingMessage(string Text, IReadOnlyList<MessageImage> Images, string? Suffix = null);
+    private sealed record PendingMessage(string Text, IReadOnlyList<MessageImage> Images, string? Suffix = null, MessageStamp? Stamp = null);
 
     /// <summary>Messages sent while Claude Code needed a sign-in, in the order they were sent.</summary>
     private readonly List<PendingMessage> _heldForSignIn = [];
@@ -133,7 +133,7 @@ public sealed partial class TabViewModel
         _conversation.AddNote(held.Length == 1 ? "Signed in. Sending your message." : $"Signed in. Sending your {held.Length} messages.");
         foreach (var message in held)
         {
-            await SendRawAsync(message.Text, message.Images, message.Suffix);
+            await SendRawAsync(message.Text, message.Images, message.Suffix, message.Stamp);
         }
         _ = RequestTitleAsync();
     }

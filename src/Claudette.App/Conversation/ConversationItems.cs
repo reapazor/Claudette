@@ -89,6 +89,9 @@ public sealed partial class UserMessageItem(string text, string? suffixText = nu
     [NotifyPropertyChangedFor(nameof(CanRestoreFiles))]
     public partial string? Uuid { get; set; }
 
+    /// <summary>The id Claudette sent the prompt with, which Claude Code echoes back (DESIGN.md §13, "Wire format").</summary>
+    public string? SentId { get; set; }
+
     /// <summary>
     /// The conversation entry just before this prompt: resuming there leaves the prompt out. Null for the first prompt,
     /// before which there's nothing to keep.

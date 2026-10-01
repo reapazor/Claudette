@@ -732,7 +732,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     private async Task CompactAsync()
     {
         _conversation.AddNote("Compacting the conversation…");
-        await SendRawAsync("/compact");
+        var stamp = NewStamp(fromUser: true);
+        _conversation.SentWithoutCard(stamp.Uuid);
+        await SendRawAsync("/compact", stamp: stamp);
     }
 
     private bool CanCompact() => Status is TabStatus.Idle or TabStatus.Unread;
@@ -1027,19 +1029,29 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         var images = TakeAttachments();
         _autoContinue.UserSent();
-        _conversation.AddUserMessage(text, suffixText, images: images);
+        var stamp = NewStamp(fromUser: true);
+        _conversation.AddUserMessage(text, suffixText, images: images).SentId = stamp.Uuid;
         _recall.Add(text);
         _firstPrompt ??= text.Length > 0 ? text : suffixText;
-        await SendRawAsync(text, images, suffixText);
+        await SendRawAsync(text, images, suffixText, stamp);
         _ = RequestTitleAsync();
     }
 
     private bool CanSend() => !IsReadOnly && (Status is not (TabStatus.Starting or TabStatus.Error) || IsWaitingForSignIn) && (ComposerText.Trim().Length > 0 || Chips.Count > 0 || Attachments.Count > 0);
 
+    /// <summary>A new id for a message, and whether the user typed or chose it (DESIGN.md §13, "Wire format").</summary>
+    private static MessageStamp NewStamp(bool fromUser) => new(Guid.NewGuid().ToString(), fromUser);
+
     /// <param name="suffix">Quick suffixes, which Claude Code gets after the message, or beside a slash command (DESIGN.md §5).</param>
-    private async Task SendRawAsync(string message, IReadOnlyList<MessageImage>? images = null, string? suffix = null)
+    /// <param name="stamp">The message's id, and whether the user typed it. Without one it's Claudette's own, with no card.</param>
+    private async Task SendRawAsync(string message, IReadOnlyList<MessageImage>? images = null, string? suffix = null, MessageStamp? stamp = null)
     {
-        var pending = new PendingMessage(message, images ?? [], suffix);
+        if (stamp is null)
+        {
+            stamp = NewStamp(fromUser: false);
+            _conversation.SentWithoutCard(stamp.Uuid);
+        }
+        var pending = new PendingMessage(message, images ?? [], suffix, stamp);
         // Held while Claude Code needs a sign-in, and sent once it's done (DESIGN.md §11).
         if (HoldForSignIn(pending))
         {
@@ -1061,7 +1073,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
             _awaitingReply.Add(pending);
-            await _session.SendUserMessageAsync(message, pending.Images, suffix);
+            await _session.SendUserMessageAsync(message, pending.Images, suffix, stamp);
         }
         catch (Exception ex)
         {
@@ -1169,8 +1181,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             return;
         }
-        _conversation.AddUserMessage(message, isCheckIn: true);
-        _ = SendRawAsync(message);
+        var stamp = NewStamp(fromUser: false);
+        _conversation.AddUserMessage(message, isCheckIn: true).SentId = stamp.Uuid;
+        _ = SendRawAsync(message, stamp: stamp);
         NotifyCheckIn();
     });
 
