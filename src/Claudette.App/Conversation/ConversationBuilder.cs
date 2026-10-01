@@ -15,6 +15,7 @@ public sealed class ConversationBuilder
     private readonly Dictionary<string, ToolUseItem> _toolUses = [];
     private readonly Dictionary<string, PromptItem> _permissions = [];
     private readonly Dictionary<string, HookRunItem> _hookRuns = [];
+    private readonly Dictionary<string, McpInputItem> _mcpInputs = [];
     private readonly Dictionary<string, ConversationBuilder> _subagents = [];
     private readonly HashSet<string> _todoToolUses = [];
     private readonly TodoList? _todoList;
@@ -65,6 +66,9 @@ public sealed class ConversationBuilder
 
     /// <summary>Show messages Claudette skipped as rows with their JSON: protocol logging is on (DESIGN.md §16).</summary>
     public bool ShowUnsupportedMessages { get; set; }
+
+    /// <summary>Opens an MCP server's link in the browser, for its requests that ask the user to finish something there.</summary>
+    public Func<string, Task>? OpenUrl { get; set; }
 
     /// <summary>
     /// Show a row for every hook run (Settings → Sessions). Off, only runs that fail, or print something while they
@@ -255,6 +259,29 @@ public sealed class ConversationBuilder
                 _agents?.OnToolProgress(progress.Message);
                 break;
 
+            case ElicitationRequested elicitation:
+                CloseOpen();
+                var input = new McpInputItem(elicitation.Request, OpenUrl);
+                _mcpInputs[elicitation.Request.RequestId] = input;
+                Items.Add(input);
+                break;
+
+            case ElicitationCancelled withdrawn:
+                if (_mcpInputs.Remove(withdrawn.RequestId, out var withdrawnInput))
+                {
+                    withdrawnInput.Withdraw(WithdrawnOutcome?.Invoke());
+                }
+                break;
+
+            case SystemNotice { Message.Subtype: "elicitation_complete" } complete:
+                // A URL request the server says is done: the user finished in the browser.
+                var elicitationId = complete.Message.Raw.GetString("elicitation_id");
+                if (_mcpInputs.Values.FirstOrDefault(i => i.IsUrl && i.Request.ElicitationId == elicitationId && elicitationId is not null) is { } done)
+                {
+                    done.Complete();
+                }
+                break;
+
             case PermissionCancelled cancelled:
                 if (_permissions.TryGetValue(cancelled.RequestId, out var cancelledItem))
                 {
@@ -310,6 +337,11 @@ public sealed class ConversationBuilder
                 {
                     pending.Cancel();
                 }
+                foreach (var pending in _mcpInputs.Values)
+                {
+                    pending.Withdraw();
+                }
+                _mcpInputs.Clear();
                 var code = exited.Exit.ExitCode?.ToString() ?? "unknown";
                 var detail = string.IsNullOrWhiteSpace(exited.Exit.StandardErrorTail) ? "" : $"\n{LastLines(exited.Exit.StandardErrorTail, 5)}";
                 AddNote($"Claude Code exited (code {code}).{detail}", exited.Exit.ExitCode == 0 ? NoteKind.Info : NoteKind.Error);
