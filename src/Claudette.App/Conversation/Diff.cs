@@ -1,3 +1,4 @@
+using Claudette.Core.Protocol;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -121,6 +122,5 @@ public sealed record DiffView(IReadOnlyList<DiffLine> Lines, int Added, int Remo
         return text.EndsWith('\n') ? lines[..^1] : lines;
     }
 
-    private static int Number(JsonNode? node) =>
-        node is JsonValue value && value.GetValueKind() == JsonValueKind.Number ? value.GetValue<int>() : 0;
+    private static int Number(JsonNode? node) => (int)Math.Clamp(node.AsWholeNumber() ?? 0, 0, int.MaxValue);
 }

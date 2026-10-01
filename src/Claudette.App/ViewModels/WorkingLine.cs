@@ -1,5 +1,4 @@
 using Claudette.Core;
-using System.Globalization;
 using Claudette.App.Services;
 using Claudette.Core.Claude;
 using Claudette.Core.Sessions;
@@ -188,7 +187,7 @@ public sealed partial class WorkingLine(
         Verb = _activity is { } activity && (showActivity?.Invoke() ?? false)
             ? activity.EndsWith('…') ? activity : activity + "…"
             : _funVerb;
-        var parts = new List<string> { Elapsed(timeProvider.GetUtcNow() - _startedAt) };
+        var parts = new List<string> { Formats.Elapsed(timeProvider.GetUtcNow() - _startedAt) };
         if (turnTokens() is > 0 and var tokens)
         {
             parts.Add(TokenTotals.Short(tokens).Replace(" tok", " tokens", StringComparison.Ordinal));
@@ -221,8 +220,6 @@ public sealed partial class WorkingLine(
         return next;
     }
 
-    /// <summary>"8s", "1m 05s", "1h 02m".</summary>
-    public static string Elapsed(TimeSpan span) => Formats.Elapsed(span);
 
     public void Dispose() => Stop();
 }

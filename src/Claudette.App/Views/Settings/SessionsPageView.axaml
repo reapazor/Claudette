@@ -25,12 +25,12 @@
       <Button Grid.Column="2" Content="Move library…" Command="{Binding MoveLibraryCommand}" ToolTip.Tip="Copy the existing sessions to another folder and use it" />
     </Grid>
     <Button Classes="flat" Content="Use the default folder" Command="{Binding UseDefaultLibraryFolderCommand}" IsVisible="{Binding !IsDefaultLibraryFolder}" HorizontalAlignment="Left" />
-    <Border Classes="codeblock" IsVisible="{Binding IsConfirmingLibraryFolder}">
+    <Border Classes="codeblock" IsVisible="{Binding LibraryFolderConfirmation.IsOpen}">
       <StackPanel Spacing="8">
         <TextBlock TextWrapping="Wrap" Text="{Binding LibraryConfirmText}" />
         <StackPanel Orientation="Horizontal" Spacing="8">
-          <Button Classes="accent" Content="Use this folder" Command="{Binding ConfirmLibraryFolderCommand}" />
-          <Button Content="Cancel" Command="{Binding CancelLibraryFolderCommand}" />
+          <Button Classes="accent" Content="Use this folder" Command="{Binding LibraryFolderConfirmation.ConfirmCommand}" />
+          <Button Content="Cancel" Command="{Binding LibraryFolderConfirmation.CancelCommand}" />
         </StackPanel>
       </StackPanel>
     </Border>

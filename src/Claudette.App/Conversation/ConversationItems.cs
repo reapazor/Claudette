@@ -1,3 +1,4 @@
+using Claudette.Core;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text.Json;
@@ -406,7 +407,7 @@ public partial class ToolUseItem : ConversationItem
     {
         if (result.GetDouble("timedOutAfterMs") is { } timedOut)
         {
-            return $"Reached its {ViewModels.WorkingLine.Elapsed(TimeSpan.FromMilliseconds(timedOut))} time limit; carries on in the background";
+            return $"Reached its {Formats.Elapsed(TimeSpan.FromMilliseconds(timedOut))} time limit; carries on in the background";
         }
         if (result.GetString("backgroundTaskId") is not null)
         {
@@ -455,8 +456,7 @@ public partial class ToolUseItem : ConversationItem
         _ => input.Count > 0 ? input.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) : null,
     };
 
-    protected static string? Str(JsonObject obj, string name) =>
-        obj[name] is JsonValue value && value.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : null;
+    protected static string? Str(JsonObject obj, string name) => obj.GetString(name);
 
     protected static string? FirstLine(string? text)
     {
@@ -709,6 +709,5 @@ public sealed class TurnSummaryItem(string text) : ConversationItem
         _ => count.ToString(),
     };
 
-    private static long? Number(JsonNode? node) =>
-        node is JsonValue value && value.GetValueKind() == JsonValueKind.Number ? (long)value.GetValue<double>() : null;
+    private static long? Number(JsonNode? node) => node.AsWholeNumber();
 }

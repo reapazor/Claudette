@@ -62,11 +62,7 @@ public sealed partial class SessionsPage(SettingsContext context) : SettingsPage
     public bool IsDefaultLibraryFolder => Settings.Sessions.LibraryFolder is null;
 
     /// <summary>A folder the user picked, waiting for them to confirm it's fine to sync transcripts there.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsConfirmingLibraryFolder))]
-    public partial string? PendingLibraryFolder { get; set; }
-
-    public bool IsConfirmingLibraryFolder => PendingLibraryFolder is not null;
+    public InlineConfirmation<string> LibraryFolderConfirmation => field ??= new(folder => ApplyLibraryFolderAsync(folder));
 
     [ObservableProperty]
     public partial string LibraryConfirmText { get; set; } = "";
@@ -93,24 +89,11 @@ public sealed partial class SessionsPage(SettingsContext context) : SettingsPage
         if (SessionLibrary.IsInCloudSyncFolder(folder, out var provider))
         {
             LibraryConfirmText = $"This folder is synced by {provider}. Session transcripts contain your code, command output and anything else Claude read in your projects, and they'll be uploaded there. Use it anyway?";
-            PendingLibraryFolder = folder;
+            LibraryFolderConfirmation.Ask(folder);
             return;
         }
         await ApplyLibraryFolderAsync(folder);
     }
-
-    [RelayCommand]
-    private async Task ConfirmLibraryFolderAsync()
-    {
-        if (PendingLibraryFolder is { } folder)
-        {
-            PendingLibraryFolder = null;
-            await ApplyLibraryFolderAsync(folder);
-        }
-    }
-
-    [RelayCommand]
-    private void CancelLibraryFolder() => PendingLibraryFolder = null;
 
     [RelayCommand]
     private Task UseDefaultLibraryFolderAsync() => ApplyLibraryFolderAsync(null);

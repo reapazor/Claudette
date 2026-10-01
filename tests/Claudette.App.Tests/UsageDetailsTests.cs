@@ -209,6 +209,34 @@ public class UsageDetailsTests
     }
 
     [Fact]
+    public async Task Clearing_the_usage_history_asks_first_and_can_reset_the_tab_totals_too()
+    {
+        await using var h = new TabTestHarness();
+        var cleared = new List<bool>();
+        h.Services.UsageHistoryCleared += (_, alsoTabTotals) => cleared.Add(alsoTabTotals);
+        var usage = new SettingsViewModel(h.Services, null).Usage;
+
+        usage.ClearUsageHistoryCommand.Execute(null);
+        Assert.True(usage.ClearUsageConfirmation.IsOpen);
+        usage.ClearUsageConfirmation.CancelCommand.Execute(null);
+        Assert.False(usage.ClearUsageConfirmation.IsOpen);
+        Assert.Empty(cleared);
+
+        usage.ClearUsageHistoryCommand.Execute(null);
+        usage.AlsoResetTabTotals = true;
+        await usage.ClearUsageConfirmation.ConfirmCommand.ExecuteAsync(null);
+
+        Assert.False(usage.ClearUsageConfirmation.IsOpen);
+        Assert.Equal([true], cleared);
+        Assert.Equal("Usage history and tab token totals cleared.", usage.UsageClearedText);
+
+        // Asking again starts from a clean slate.
+        usage.ClearUsageHistoryCommand.Execute(null);
+        Assert.False(usage.AlsoResetTabTotals);
+        Assert.Null(usage.UsageClearedText);
+    }
+
+    [Fact]
     public async Task Without_plan_limits_there_is_no_detailed_header()
     {
         await using var h = new TabTestHarness();

@@ -75,7 +75,7 @@ public class VersionFooterTests
         Assert.StartsWith("Runtime: .NET", lines[3], StringComparison.Ordinal);
         Assert.Equal("Copied", settings.VersionLabel);
 
-        h.Time.Advance(SettingsViewModel.CopiedFor);
+        h.Time.Advance(TabViewModel.CopiedFor);
 
         Assert.Equal("Claudette 0.1.0", settings.VersionLabel);
     }

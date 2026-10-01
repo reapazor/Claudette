@@ -11,10 +11,7 @@ namespace Claudette.App.ViewModels;
 /// </summary>
 public sealed partial class SettingsViewModel
 {
-    /// <summary>How long the version says "Copied" after a click.</summary>
-    public static readonly TimeSpan CopiedFor = TimeSpan.FromSeconds(2);
-
-    private ITimer? _copiedTimer;
+    private UiTimeout CopiedWait => field ??= new(_services.Time, _services.Dispatcher);
 
     /// <summary>The version details were just copied.</summary>
     [ObservableProperty]
@@ -44,9 +41,8 @@ public sealed partial class SettingsViewModel
     private async Task CopyVersionAsync()
     {
         await _services.Platform.SetClipboardTextAsync(string.Join(Environment.NewLine, VersionDetails()));
-        _copiedTimer?.Dispose();
         VersionCopied = true;
-        _copiedTimer = _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() => VersionCopied = false), null, CopiedFor, Timeout.InfiniteTimeSpan);
+        CopiedWait.Restart(TabViewModel.CopiedFor, () => VersionCopied = false);
     }
 
     /// <summary>A new issue on Claudette's GitHub with the versions filled in. Nothing is sent until the user submits it.</summary>

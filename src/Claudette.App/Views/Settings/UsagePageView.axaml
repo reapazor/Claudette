@@ -26,14 +26,14 @@
       <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding HistoryRetentionChoices}" SelectedItem="{Binding KeepUsageHistory}" />
       <Button Grid.Column="2" Content="Clear usage history…" Command="{Binding ClearUsageHistoryCommand}" />
     </Grid>
-    <Border Classes="codeblock" IsVisible="{Binding IsConfirmingClearUsage}">
+    <Border Classes="codeblock" IsVisible="{Binding ClearUsageConfirmation.IsOpen}">
       <StackPanel Spacing="8">
         <TextBlock FontWeight="SemiBold" Text="Clear all usage history?" />
         <TextBlock TextWrapping="Wrap" Text="This deletes every stored usage sample and per-turn token record. The header fills in again at the next update from Claude Code." />
         <CheckBox Content="Also reset per-tab token totals" IsChecked="{Binding AlsoResetTabTotals}" />
         <StackPanel Orientation="Horizontal" Spacing="8">
-          <Button Classes="accent" Content="Clear" Command="{Binding ConfirmClearUsageCommand}" />
-          <Button Content="Cancel" Command="{Binding CancelClearUsageCommand}" />
+          <Button Classes="accent" Content="Clear" Command="{Binding ClearUsageConfirmation.ConfirmCommand}" />
+          <Button Content="Cancel" Command="{Binding ClearUsageConfirmation.CancelCommand}" />
         </StackPanel>
       </StackPanel>
     </Border>

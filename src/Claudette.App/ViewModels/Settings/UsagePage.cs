@@ -78,9 +78,8 @@ public sealed partial class UsagePage(SettingsContext context) : SettingsPage(co
         set => Set(value?.Period ?? RetentionPeriod.OneMonth, v => Settings.Usage.KeepHistory = v);
     }
 
-    /// <summary>"Clear usage history" waiting for confirmation.</summary>
-    [ObservableProperty]
-    public partial bool IsConfirmingClearUsage { get; set; }
+    /// <summary>"Clear usage history" asks first.</summary>
+    public InlineConfirmation ClearUsageConfirmation => field ??= new(ClearUsageAsync);
 
     /// <summary>The confirmation's checkbox: also reset the token totals saved with each tab.</summary>
     [ObservableProperty]
@@ -94,19 +93,14 @@ public sealed partial class UsagePage(SettingsContext context) : SettingsPage(co
     {
         AlsoResetTabTotals = false;
         UsageClearedText = null;
-        IsConfirmingClearUsage = true;
+        ClearUsageConfirmation.Ask();
     }
 
-    [RelayCommand]
-    private async Task ConfirmClearUsageAsync()
+    private async Task ClearUsageAsync()
     {
-        IsConfirmingClearUsage = false;
         await Services.ClearUsageHistoryAsync(AlsoResetTabTotals);
         UsageClearedText = AlsoResetTabTotals ? "Usage history and tab token totals cleared." : "Usage history cleared.";
     }
-
-    [RelayCommand]
-    private void CancelClearUsage() => IsConfirmingClearUsage = false;
 
     /// <summary><b>Keep usage history</b> stays as it is.</summary>
     protected override void ResetSettings()

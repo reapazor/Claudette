@@ -1,3 +1,4 @@
+using Claudette.Core;
 using System.Collections.ObjectModel;
 using Claudette.Core.Settings;
 using CommunityToolkit.Mvvm.Input;
@@ -122,7 +123,7 @@ public sealed partial class NewTabsPage : SettingsPage
         Favorites.Clear();
         foreach (var path in Services.State.FavoriteFolders)
         {
-            Favorites.Add(new FavoriteFolderRow(path, Path.GetFileName(path.TrimEnd('/', '\\')) is { Length: > 0 } name ? name : path));
+            Favorites.Add(new FavoriteFolderRow(path, Formats.FolderName(path)));
         }
         OnPropertyChanged(nameof(HasFavorites));
     }

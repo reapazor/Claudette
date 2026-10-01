@@ -1,3 +1,4 @@
+using Claudette.Core;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using Claudette.App.Conversation;
@@ -137,7 +138,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     public string Folder => State.Folder;
 
-    public string FolderName => Path.GetFileName(Folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) is { Length: > 0 } name ? name : Folder;
+    public string FolderName => Formats.FolderName(Folder);
 
     public BatchedCollection<ConversationItem> Items { get; } = [];
 
@@ -434,9 +435,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     [NotifyPropertyChangedFor(nameof(EffortName), nameof(ModelBadge), nameof(InfoRows), nameof(RowDetail))]
     public partial string? Effort { get; set; }
 
-    public string EffortName => (Effort is null ? "Default effort" : Capitalize(Effort)) + (IsUltracode ? " · Ultracode" : "");
+    public string EffortName => (Effort is null ? "Default effort" : Formats.Capitalize(Effort)) + (IsUltracode ? " · Ultracode" : "");
 
-    public string ModelBadge => $"{ShortModel(ModelName)} · {(Effort is null ? "Default" : Capitalize(Effort))}";
+    public string ModelBadge => $"{ShortModel(ModelName)} · {(Effort is null ? "Default" : Formats.Capitalize(Effort))}";
 
     /// <summary>
     /// The second line of the tab's row in the sidebar (DESIGN.md §4): the model and effort, or what needs attention
@@ -1968,5 +1969,4 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     private static string ShortModel(string? name) => name?.Split(' ', '(')[0] is { Length: > 0 } s ? s : "Default";
 
-    private static string Capitalize(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
 }

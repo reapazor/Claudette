@@ -728,19 +728,19 @@ items:
   - id: "hook_started"
     kind: message
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Protocol/SystemNotices.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: RealCliTests
   - id: "hook_progress"
     kind: message
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Protocol/SystemNotices.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: none yet (sent only while a hook runs over a second with output)
   - id: "hook_response"
     kind: message
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Protocol/SystemNotices.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: RealCliTests
   - id: "mcp_status"
@@ -774,7 +774,7 @@ items:
   - id: "elicitation_complete"
     kind: message
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Protocol/SystemNotices.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: none yet (needs an MCP server that asks through a URL)
   - id: "--setting-sources"
@@ -1305,7 +1305,7 @@ items:
   - id: "supportedEffortLevels"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Services/AppServices.cs, src/Claudette.App/ViewModels/SettingsViewModel.Defaults.cs, src/Claudette.App/ViewModels/TabSettingsViewModel.cs
+    usedIn: src/Claudette.App/Services/AppServices.cs, src/Claudette.App/ViewModels/Settings/NewTabsPage.cs, src/Claudette.App/ViewModels/TabSettingsViewModel.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: SettingsDefaultsTests
     # The models (and their effort levels) in the initialize reply, kept per machine for the lists in Settings.
