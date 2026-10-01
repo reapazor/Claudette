@@ -52,6 +52,19 @@ public sealed class GitWorktreesTests : IDisposable
     }
 
     [Fact]
+    public void The_list_reads_the_newline_format_of_git_before_2_36_too()
+    {
+        var porcelain = "worktree /src/app\nHEAD 1111111\nbranch refs/heads/main\n\n"
+            + "worktree /src/app/.claude/worktrees/brisk-otter\r\nHEAD 2222222\r\nbranch refs/heads/worktree-brisk-otter\r\nlocked\r\n\r\n";
+
+        var list = GitWorktrees.ParseList(porcelain);
+
+        Assert.Equal(2, list.Count);
+        Assert.Equal(("worktree-brisk-otter", true), (list[1].Branch, list[1].IsLocked));
+        Assert.Equal(Path.GetFullPath("/src/app/.claude/worktrees/brisk-otter"), list[1].Path);
+    }
+
+    [Fact]
     public void New_names_are_two_words_and_avoid_taken_ones()
     {
         var taken = new HashSet<string>();
@@ -108,6 +121,48 @@ public sealed class GitWorktreesTests : IDisposable
         Assert.Null(await _worktrees.RemoveAsync(_repo, worktree, discard: true, ownCommits: 1, Token));
         Assert.False(Directory.Exists(path));
         Assert.DoesNotContain("worktree-calm-heron", await BranchesAsync());
+    }
+
+    [Fact]
+    public async Task Files_git_ignores_are_noted_but_arent_work()
+    {
+        Assert.SkipWhen(!IsolatedGitLauncher.GitInstalled, "git isn't on PATH.");
+        var path = await AddWorktreeAsync("tidy-wren", locked: true);
+        var worktree = Assert.IsType<GitWorktree>(await _worktrees.FindAsync(_repo, path, Token));
+        Assert.Equal(new GitWorktreeWork(false, 0, HasIgnoredFiles: false), await _worktrees.InspectAsync(worktree, Token));
+
+        // The exclude file is the repository's, so every worktree has it.
+        await File.AppendAllTextAsync(Path.Combine(_repo, ".git", "info", "exclude"), "build/\n", Token);
+        Directory.CreateDirectory(Path.Combine(path, "build"));
+        await File.WriteAllTextAsync(Path.Combine(path, "build", "app.o"), "x", Token);
+
+        var work = await _worktrees.InspectAsync(worktree, Token);
+        Assert.Equal(new GitWorktreeWork(false, 0, HasIgnoredFiles: true), work);
+        Assert.True(work!.IsEmpty);
+    }
+
+    [Fact]
+    public async Task A_removal_git_refuses_leaves_a_locked_worktree_locked()
+    {
+        Assert.SkipWhen(!IsolatedGitLauncher.GitInstalled, "git isn't on PATH.");
+        var path = await AddWorktreeAsync("quiet-pine", locked: true);
+        await File.WriteAllTextAsync(Path.Combine(path, "notes.md"), "draft\n", Token);
+        var worktree = Assert.IsType<GitWorktree>(await _worktrees.FindAsync(_repo, path, Token));
+
+        Assert.NotNull(await _worktrees.RemoveAsync(_repo, worktree, discard: false, ownCommits: 0, Token));
+
+        Assert.True(Directory.Exists(path));
+        Assert.True(Assert.IsType<GitWorktree>(await _worktrees.FindAsync(_repo, path, Token)).IsLocked);
+    }
+
+    [Fact]
+    public async Task Branches_worktrees_left_behind_are_listed()
+    {
+        Assert.SkipWhen(!IsolatedGitLauncher.GitInstalled, "git isn't on PATH.");
+        await AddWorktreeAsync("keen-fern", locked: false);
+        await _launcher.RunAsync(_repo, "branch", "feature");
+
+        Assert.Equal(["worktree-keen-fern"], await _worktrees.BranchesAsync(_repo, Token));
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using Claudette.App.Conversation;
 using Claudette.Core.Settings;
 
 namespace Claudette.App.ViewModels;
@@ -23,8 +24,14 @@ public sealed partial class TabViewModel
     /// <summary>The folders Claude may also read and edit (<c>--add-dir</c>).</summary>
     public IReadOnlyList<string> ExtraFolders => State.ExtraFolders;
 
-    /// <summary>The extra folders changed while Claude worked: Claude Code starts again with them once the turn ends.</summary>
+    /// <summary>
+    /// The extra folders changed while Claude worked: Claude Code starts again with them once it has nothing left to
+    /// do, the messages sent meanwhile included. Any start takes them, so a start clears it.
+    /// </summary>
     private bool _restartForExtraFolders;
+
+    /// <summary>How many turns this tab's sessions have started, so a restart can tell whether another began.</summary>
+    private int _turnsStarted;
 
     private void AddWorktreeRows(List<InfoRow> rows)
     {
@@ -94,8 +101,16 @@ public sealed partial class TabViewModel
         await RestartForExtraFoldersAsync();
     }
 
-    private async Task RestartForExtraFoldersAsync()
+    /// <param name="afterTurn">The turn whose end asked for it: a turn started since then is running.</param>
+    private async Task RestartForExtraFoldersAsync(int? afterTurn = null)
     {
+        // A message sent while Claude worked runs next: a restart now would take it with the session, so the restart
+        // waits for that turn to end too.
+        if (afterTurn is { } turn && turn != _turnsStarted || Items.OfType<UserMessageItem>().Any(m => m.IsQueued))
+        {
+            _restartForExtraFolders = true;
+            return;
+        }
         _restartForExtraFolders = false;
         await StopSessionAsync();
         _conversation.AddNote(State.ExtraFolders.Count == 0

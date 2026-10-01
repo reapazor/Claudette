@@ -452,7 +452,11 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     private async Task CloseAndTidyAsync(TabViewModel tab, bool killProcesses = true)
     {
         await RemoveTabAsync(tab, killProcesses);
-        await OfferToRemoveWorktreesAsync([tab.State]);
+        // What the user chose to leave running may still be working in the tab's worktree.
+        if (killProcesses)
+        {
+            await OfferToRemoveWorktreesAsync([tab.State]);
+        }
     }
 
     /// <summary>Closes several tabs side by side, then offers to remove the worktrees they leave unused.</summary>

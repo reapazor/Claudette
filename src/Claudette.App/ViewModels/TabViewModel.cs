@@ -1107,6 +1107,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             return;
         }
+        // This start takes the extra folders as they are now.
+        _restartForExtraFolders = false;
         if (!Directory.Exists(Folder))
         {
             MarkFolderMissing();
@@ -1610,6 +1612,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 UpdateStatus();
                 break;
             case TurnStarted started:
+                _turnsStarted++;
                 HasMcpServers = started.Init.McpServerCount > 0;
                 State.SessionId = started.Init.SessionId;
                 OnWorkingFolderReported(started.Init.Cwd);
@@ -1692,7 +1695,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 if (_restartForExtraFolders)
                 {
                     // After this event is handled: the restart stops the session it came from.
-                    _services.Dispatcher.Post(() => _ = RestartForExtraFoldersAsync());
+                    var turn = _turnsStarted;
+                    _services.Dispatcher.Post(() => _ = RestartForExtraFoldersAsync(afterTurn: turn));
                 }
                 break;
             case ConversationReset:

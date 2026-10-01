@@ -194,7 +194,11 @@ public sealed class GitWorkingTree(IProcessLauncher launcher, TimeProvider timeP
         return result is { ExitCode: 0 } ? TrimOutput(result.StandardOutput).Length > 0 : null;
     }
 
-    internal async Task<ProcessResult?> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+    internal Task<ProcessResult?> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, CancellationToken cancellationToken) =>
+        RunAsync(workingDirectory, arguments, Timeout, cancellationToken);
+
+    /// <param name="timeout">How long git may take, for a command that can take longer than most (deleting a worktree).</param>
+    internal async Task<ProcessResult?> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, TimeSpan timeout, CancellationToken cancellationToken)
     {
         try
         {
@@ -207,7 +211,7 @@ public sealed class GitWorkingTree(IProcessLauncher launcher, TimeProvider timeP
             {
                 spec = await environment.ApplyAsync(spec, cancellationToken).ConfigureAwait(false);
             }
-            return await ProcessRunner.RunAsync(launcher, spec, Timeout, timeProvider, cancellationToken).ConfigureAwait(false);
+            return await ProcessRunner.RunAsync(launcher, spec, timeout, timeProvider, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is TimeoutException or Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
         {
