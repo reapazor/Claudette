@@ -409,6 +409,40 @@ items:
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: RealCliTests
     fallback: See control_request. SIGINT also ends a turn (documented in headless mode).
+  - id: "cancel_queued"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkcontrolinterruptresponse
+    test: QueuedMessageTests, RealCliTests
+    fallback: Sent on Stop only when system/init lists interrupt_cancel_queued_v1; the receipt's cancelled ids take those cards back to the composer. Without the capability Stop is a plain interrupt and queued messages run afterwards, as before.
+  - id: "interrupt_cancel_queued_v1"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdksystemmessage
+    test: QueuedMessageTests, RealCliTests
+    fallback: See cancel_queued.
+  - id: "still_queued"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkcontrolinterruptresponse
+    test: QueuedMessageTests, RealCliTests
+    fallback: Read with cancelled from the interrupt receipt. Ids Claudette didn't send are ignored, as the SDK says to.
+  - id: "cancel_async_message"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: QueuedMessageTests, RealCliTests
+    fallback: The TypeScript SDK's cancelAsyncMessage. With message_uuid, 2.1.286 answers {"cancelled":true} and the message never runs, or false when it's no longer waiting. Rejected or false, the card stays queued with a note; Stop still takes everything back.
+  - id: "command_lifecycle"
+    kind: message
+    status: undocumented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs
+    test: MessageParserTests
+    fallback: Seen in 2.1.286 for each message sent with a uuid ({command_uuid, state queued/cancelled/completed}, capability msg_lifecycle_v1). Skipped on purpose, so Diagnostics doesn't count it as unknown; the echo and the interrupt receipt say the same.
   - id: "can_use_tool"
     kind: control
     status: undocumented

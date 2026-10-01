@@ -46,6 +46,16 @@ public class MessageParserTests
         Assert.Empty(diagnostics.Snapshot().UnknownFields);
     }
 
+    [Theory]
+    [InlineData("""{"type":"active_goal","value":null,"uuid":"u1","session_id":"s1"}""")]
+    [InlineData("""{"type":"command_lifecycle","command_uuid":"bbbbbbbb-0000-4000-8000-000000000002","state":"queued","uuid":"u2","session_id":"s1"}""")]
+    public void Types_with_no_use_are_skipped_without_counting_as_unknown(string line)
+    {
+        Assert.True(MessageParser.TryParse(line, out var message, out _));
+
+        Assert.IsType<IgnoredMessage>(message);
+    }
+
     [Fact]
     public void A_conversation_reset_carries_its_trigger_and_new_id()
     {

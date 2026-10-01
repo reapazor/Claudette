@@ -115,6 +115,9 @@ public sealed class ConversationBuilder
     /// <summary>A message went with this id and no card of its own.</summary>
     public void SentWithoutCard(string uuid) => _sentWithoutCard.Add(uuid);
 
+    /// <summary>Takes a prompt's card away: Claude Code cancelled it before it ran (DESIGN.md §5, "Queued messages").</summary>
+    public void Remove(UserMessageItem prompt) => Items.Remove(prompt);
+
     public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null, bool isAutoContinue = false) =>
         AddUser(new UserMessageItem(text, suffixText, isCheckIn, isAutoContinue) { Images = images ?? [], ResumeAt = _lastEntryUuid }, Now());
 
@@ -251,6 +254,7 @@ public sealed class ConversationBuilder
                 if (echoed is { } prompt)
                 {
                     prompt.Uuid = uuid;
+                    prompt.IsQueued = false;
                     // One sent while Claude worked joined the conversation later than it was sent: it follows what came
                     // before it now.
                     prompt.ResumeAt = _lastEntryUuid ?? prompt.ResumeAt;
@@ -362,6 +366,11 @@ public sealed class ConversationBuilder
 
             case SessionExited exited:
                 CloseOpen();
+                // Claude Code took what was waiting with it.
+                foreach (var queued in Items.OfType<UserMessageItem>().Where(m => m.IsQueued))
+                {
+                    queued.IsQueued = false;
+                }
                 foreach (var pending in _permissions.Values)
                 {
                     pending.Cancel();

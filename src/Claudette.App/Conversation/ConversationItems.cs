@@ -93,6 +93,13 @@ public sealed partial class UserMessageItem(string text, string? suffixText = nu
     public string? SentId { get; set; }
 
     /// <summary>
+    /// Sent while Claude worked, and waiting its turn: Claude Code hasn't taken it yet (DESIGN.md §5, "Queued messages").
+    /// Its echo ends the wait.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsQueued { get; set; }
+
+    /// <summary>
     /// The conversation entry just before this prompt: resuming there leaves the prompt out. Null for the first prompt,
     /// before which there's nothing to keep.
     /// </summary>

@@ -436,12 +436,21 @@ A user message's **⋯** menu goes back to it. Claude Code does the work: a resu
 
 - Multi-line text box. `Enter` sends, `Shift+Enter` adds a new line.
 - **Stop.** A Stop button replaces Send while Claude is working, and `Esc` does the same. Stopping interrupts the current turn; it does not close the session.
-- You can type and send while Claude is working; the message is queued and delivered to the session.
+- You can type and send while Claude is working; the message is queued and delivered to the session. See [Queued messages](#queued-messages).
 - **Earlier prompts.** `Up` on the composer's first line brings back the tab's previous prompt, as a terminal's history does, and again for the one before; `Down` on its last line comes forward, back to what was being typed. A restored tab has its transcript's prompts too. Typing ends it, so the next `Up` starts from the newest again. The same prompt twice in a row is kept once, and a tab keeps its last 200. With the autocomplete list open, the arrows move in the list instead.
 - `/` opens slash-command autocomplete (built-in plus the project's custom commands), and `@` file autocomplete for the tab's working folder. See [Autocomplete](#autocomplete).
 - Drag and drop, paste, or pick with the attach button images and files to attach them. See [Attachments](#attachments).
 - Per-tab controls in the bar above the composer: working folder (read-only), model, effort level, permission mode, the **Agents** button while the tab has subagents ([§18](#agent-map)), the **running tasks** chip while Claude Code has work going in the background (*"● 2 running tasks"*, [below](#running-tasks)), context window usage %, tokens used.
 - **The bar keeps Send in view.** The choices (model, effort, permission mode) are at its left, and the counts (processes, Agents, running tasks, Files, context, tokens) with **Send** at its right. When they don't all fit on one line, as in a narrow window, the right-hand group moves to a second line under the choices, still at the right, rather than being pushed out of sight (`ControlBarPanel`).
+
+### Queued messages
+
+A message sent while Claude is working waits its turn: Claude Code reads it at the next tool call, or after the reply that's being written ([§13](#integration-with-claude-code), "Messages sent while Claude is working").
+
+- Its card says *"Queued: sent when Claude can take it"*, with **Cancel**, until Claude Code takes it (its echo comes back). So does a check-in waiting the same way.
+- **Stop** takes back everything that's waiting along with the turn, rather than letting it run as soon as the turn ends: the `interrupt` has `cancel_queued`, when Claude Code lists the `interrupt_cancel_queued_v1` capability. Without it, Stop is the plain interrupt and what waits runs afterwards, as before.
+- **Cancel** takes one message back on its own (`cancel_async_message`, undocumented). If Claude Code has already taken it, or can't, the card stays as it is and a note says so.
+- A message taken back loses its card, and what the user wrote goes back into the composer with its images, ahead of anything typed since, so nothing is lost; a note says how many were taken back. A check-in taken back just goes.
 
 ### Working line
 
@@ -1418,7 +1427,8 @@ The `system/init` message that follows gives `session_id`, `model`, `permissionM
 |---|---|---|
 | Send a message, with images | A `user` message as one JSON line on stdin. Images are base64 `image` content blocks before the text ([§5](#attachments)). Each carries a `uuid` Claudette makes, which the echo, the transcript and the replies' `user_message_uuid` keep; one the user typed or chose (**Compact**) also carries `origin: {kind: "human"}` (below). See "Messages sent while Claude is working" below. | Yes |
 | Receive output | JSON lines on stdout: `system/init`, `system/status`, `assistant`, `user` (tool results, with `tool_use_result`), `stream_event` (partial text), `result`, `rate_limit_event`, `auth_status`, `permission_denied`, `informational`, `api_retry`, `conversation_reset`, `task_started` / `task_progress` / `task_updated` / `task_notification`, `tool_progress`, `thinking_tokens`, `autocompact_state` | Yes |
-| Stop the current turn | `interrupt`. The reply lists `still_queued` messages; the turn ends with a `result` of `error_during_execution` / `aborted_streaming`. SIGINT is a fallback. Never SIGTERM: it leaves the turn unfinished with no result. | Yes |
+| Stop the current turn | `interrupt`, with `cancel_queued` when `interrupt_cancel_queued_v1` is listed ([§5](#queued-messages)). The reply lists `still_queued` messages and, with `cancel_queued`, the `cancelled` ones; the turn ends with a `result` of `error_during_execution` / `aborted_streaming`. SIGINT is a fallback. Never SIGTERM: it leaves the turn unfinished with no result. | Yes |
+| Take one queued message back | `cancel_async_message` with `message_uuid`; 2.1.286 answers `{"cancelled": true}` ([§5](#queued-messages)) | **No** |
 | Permission prompts | Incoming `can_use_tool`; reply allow, allow with `updatedPermissions`, or deny with a message ([§7](#7-permission-prompts)) | Behavior yes, wire format no |
 | Hook callbacks | `hooks` in `initialize`; incoming `hook_callback`, answered with the hook's output (below) | Behavior yes, wire format no |
 | Change model | `set_model` with `model`. Applied in place, even mid-turn, and the conversation is kept. Claude Code also emits a `user` message containing `<local-command-stdout>Set model to …</local-command-stdout>`, which Claudette shows as a small system note. | Yes |

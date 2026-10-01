@@ -153,6 +153,44 @@ public sealed class ClaudeSession : IAsyncDisposable
     public Task InterruptAsync(CancellationToken cancellationToken = default) =>
         SendControlRequestAsync(new JsonObject { ["subtype"] = "interrupt" }, cancellationToken: cancellationToken);
 
+    /// <summary>The capability that says <c>interrupt</c> honors <c>cancel_queued</c> (Claude Code 2.1.219 and later).</summary>
+    public const string InterruptCancelQueuedCapability = "interrupt_cancel_queued_v1";
+
+    /// <summary>
+    /// Stops the current turn and, with <paramref name="cancelQueued"/> on a Claude Code that lists
+    /// <see cref="InterruptCancelQueuedCapability"/>, the messages waiting behind it, which then never run (DESIGN.md §5,
+    /// "Queued messages"). The receipt says which messages were still waiting and which were cancelled, by id.
+    /// </summary>
+    public async Task<InterruptReceipt> InterruptAsync(bool cancelQueued, CancellationToken cancellationToken = default)
+    {
+        var request = new JsonObject { ["subtype"] = "interrupt" };
+        if (cancelQueued && Capabilities.Contains(InterruptCancelQueuedCapability))
+        {
+            request["cancel_queued"] = true;
+        }
+        var response = await SendControlRequestAsync(request, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return new InterruptReceipt(response.GetStringList("still_queued"), response.GetStringList("cancelled"));
+    }
+
+    /// <summary>
+    /// Takes one message that's waiting its turn back, by the id it was sent with, so it never runs. Undocumented: the
+    /// TypeScript SDK's <c>cancelAsyncMessage</c>, answered with <c>{"cancelled": true}</c> by 2.1.286. False when Claude
+    /// Code had already taken the message, or doesn't know the request.
+    /// </summary>
+    public async Task<bool> CancelQueuedMessageAsync(string messageUuid, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await SendControlRequestAsync(new JsonObject { ["subtype"] = "cancel_async_message", ["message_uuid"] = messageUuid }, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+            return response.GetBool("cancelled") == true;
+        }
+        catch (ControlRequestException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Switches model in place; the conversation is kept. Null returns to Claude Code's default model.</summary>
     public Task SetModelAsync(string? model, CancellationToken cancellationToken = default) =>
         SendControlRequestAsync(new JsonObject { ["subtype"] = "set_model", ["model"] = model }, cancellationToken: cancellationToken);

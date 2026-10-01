@@ -412,6 +412,34 @@ public sealed class RealCliTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Messages_waiting_their_turn_are_taken_back_one_by_one_or_with_the_interrupt()
+    {
+        await using var session = await StartAsync(replayUserMessages: true);
+        var ct = TestContext.Current.CancellationToken;
+        string Id() => Guid.NewGuid().ToString();
+
+        // DESIGN.md §5, "Queued messages" (checked with 2.1.286): cancel_async_message takes one back...
+        await session.SendUserMessageAsync("SLOW", [], null, new MessageStamp(Id(), FromUser: true), ct);
+        await session.ReadUntilAsync<TextDelta>();
+        var one = Id();
+        await session.SendUserMessageAsync("one", [], null, new MessageStamp(one, FromUser: true), ct);
+        Assert.True(await session.CancelQueuedMessageAsync(one, ct));
+        Assert.False(await session.CancelQueuedMessageAsync(Id(), ct));
+
+        // ...and an interrupt with cancel_queued takes back the rest, which never run.
+        var two = Id();
+        await session.SendUserMessageAsync("two", [], null, new MessageStamp(two, FromUser: true), ct);
+        var receipt = await session.InterruptAsync(cancelQueued: true, ct);
+        var (done, seen) = await session.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(15));
+
+        Assert.Contains(ClaudeSession.InterruptCancelQueuedCapability, session.Capabilities);
+        Assert.Equal([two], receipt.Cancelled);
+        Assert.Empty(receipt.StillQueued);
+        Assert.Equal("aborted_streaming", done.Result.TerminalReason);
+        Assert.DoesNotContain(seen.OfType<PromptReplayed>(), p => p.Message.Uuid == one || p.Message.Uuid == two);
+    }
+
+    [Fact]
     public async Task An_attached_image_reaches_the_api()
     {
         await using var session = await StartAsync();

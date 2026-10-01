@@ -363,6 +363,15 @@
             </ItemsControl>
             <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" IsVisible="{Binding Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             <SelectableTextBlock Classes="muted small" Text="{Binding SuffixText}" TextWrapping="Wrap" IsVisible="{Binding HasSuffix}" />
+            <!-- Waiting its turn behind Claude's work (DESIGN.md §5, "Queued messages") -->
+            <StackPanel Classes="queued" Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsQueued}">
+              <TextBlock Classes="muted small" Text="Queued: sent when Claude can take it" VerticalAlignment="Center" />
+              <Button Classes="flat" Padding="0" VerticalAlignment="Center"
+                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CancelQueuedMessageCommand}" CommandParameter="{Binding}"
+                      ToolTip.Tip="Takes the message back before Claude reads it, and puts it in the composer">
+                <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="Cancel" TextDecorations="Underline" />
+              </Button>
+            </StackPanel>
           </StackPanel>
         </Border>
         <ContentControl Classes="messagetools" Content="{Binding}" ContentTemplate="{StaticResource UserMessageTools}" />

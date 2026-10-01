@@ -1030,7 +1030,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         var images = TakeAttachments();
         _autoContinue.UserSent();
         var stamp = NewStamp(fromUser: true);
-        _conversation.AddUserMessage(text, suffixText, images: images).SentId = stamp.Uuid;
+        var card = _conversation.AddUserMessage(text, suffixText, images: images);
+        card.SentId = stamp.Uuid;
+        // Sent while Claude works, it waits its turn (DESIGN.md §5, "Queued messages").
+        card.IsQueued = IsWorking;
         _recall.Add(text);
         _firstPrompt ??= text.Length > 0 ? text : suffixText;
         await SendRawAsync(text, images, suffixText, stamp);
@@ -1091,11 +1094,74 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         RemoteControl.OnStoppedHere();
         try
         {
-            await _session.InterruptAsync();
+            // What was waiting its turn is cancelled with it, and comes back to the composer (DESIGN.md §5).
+            var receipt = await _session.InterruptAsync(cancelQueued: true);
+            TakeBack(receipt.Cancelled);
         }
         catch (Exception ex)
         {
             _conversation.AddNote($"Couldn't stop Claude: {ex.Message}", NoteKind.Error);
+        }
+    }
+
+    /// <summary>
+    /// <b>Cancel</b> on a message that waits its turn: Claude Code takes it back, and its text and images return to the
+    /// composer. One Claude Code has already taken stays as it is.
+    /// </summary>
+    [RelayCommand]
+    private async Task CancelQueuedMessageAsync(UserMessageItem? message)
+    {
+        if (message is not { IsQueued: true, SentId: { } id } || _session is null)
+        {
+            return;
+        }
+        if (await _session.CancelQueuedMessageAsync(id))
+        {
+            TakeBack([id]);
+        }
+        else if (message.IsQueued)
+        {
+            _conversation.AddNote("Couldn't take that message back: Claude Code has it already, or can't cancel one message on its own.", NoteKind.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Messages Claude Code cancelled before they ran: their cards go, and what the user wrote goes back to the
+    /// composer, ahead of anything typed since. Claudette's own (a check-in) just go. Ids Claudette didn't send are
+    /// ignored.
+    /// </summary>
+    private void TakeBack(IReadOnlyCollection<string> ids)
+    {
+        if (ids.Count == 0)
+        {
+            return;
+        }
+        var cards = Items.OfType<UserMessageItem>().Where(m => m.SentId is { } id && ids.Contains(id)).ToList();
+        var texts = new List<string>();
+        foreach (var card in cards)
+        {
+            _conversation.Remove(card);
+            _awaitingReply.RemoveAll(p => p.Stamp?.Uuid == card.SentId);
+            if (card.IsCheckIn || card.IsAutoContinue)
+            {
+                continue;
+            }
+            if (card.CopyText.Trim() is { Length: > 0 } text)
+            {
+                texts.Add(text);
+            }
+            foreach (var image in card.Images)
+            {
+                AddImage(image.Data, "Attached image");
+            }
+        }
+        if (texts.Count > 0)
+        {
+            ComposerText = string.Join("\n\n", ComposerText.Trim() is { Length: > 0 } typed ? [.. texts, typed] : texts);
+        }
+        if (cards.Count > 0)
+        {
+            _conversation.AddNote(cards.Count == 1 ? "Took back a message that was waiting its turn." : $"Took back {cards.Count} messages that were waiting their turn.");
         }
     }
 
@@ -1182,7 +1248,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
         var stamp = NewStamp(fromUser: false);
-        _conversation.AddUserMessage(message, isCheckIn: true).SentId = stamp.Uuid;
+        var card = _conversation.AddUserMessage(message, isCheckIn: true);
+        card.SentId = stamp.Uuid;
+        card.IsQueued = true;
         _ = SendRawAsync(message, stamp: stamp);
         NotifyCheckIn();
     });
