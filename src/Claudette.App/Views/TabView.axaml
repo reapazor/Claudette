@@ -1004,7 +1004,7 @@
         <!-- Find in the conversation (DESIGN.md §5, "Find"): Enter for the next match, Shift+Enter the one before, Esc closes -->
         <Border DockPanel.Dock="Top" Classes="findbar" IsVisible="{Binding Find.IsOpen}">
           <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-            <TextBox x:Name="FindBox" Classes="findbox" Watermark="Find in the conversation" Text="{Binding Find.Query}"
+            <TextBox x:Name="FindBox" Classes="findbox" PlaceholderText="Find in the conversation" Text="{Binding Find.Query}"
                      AutomationProperties.Name="Find in the conversation" KeyDown="OnFindKeyDown" />
             <TextBlock Classes="muted small" Text="{Binding Find.CountText}" VerticalAlignment="Center" MinWidth="64" TextAlignment="Center" />
             <Button Classes="flat" Padding="6,4" VerticalAlignment="Center" Command="{Binding Find.PreviousCommand}"

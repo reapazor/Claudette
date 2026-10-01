@@ -84,6 +84,12 @@ public sealed class RewindAndBranchTests
         // The point is used once: the next start is a plain resume of the copy.
         Assert.Null(tab.State.ResumeAt);
         Assert.False(tab.State.ForkOnNextStart);
+        // Reading the transcript again doesn't put its prompts in the composer's history twice.
+        Assert.True(tab.RecallOlderPrompt());
+        Assert.Equal("second", tab.ComposerText);
+        Assert.True(tab.RecallOlderPrompt());
+        Assert.Equal("first", tab.ComposerText);
+        Assert.False(tab.RecallOlderPrompt());
     }
 
     [Fact]

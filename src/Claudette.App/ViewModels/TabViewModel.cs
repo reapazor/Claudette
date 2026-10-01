@@ -1477,6 +1477,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             State.SessionStartedAt ??= transcript.StartedAt;
             // The agent map shows the finished tree, with no live status (DESIGN.md §18).
             Agents.IsReplaying = true;
+            // Read again after going back (DESIGN.md §5, "Rewind and branch"), the prompts are already there to recall.
+            var recallPrompts = _recall.Count == 0;
             foreach (var item in transcript.Items)
             {
                 switch (item)
@@ -1486,7 +1488,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                         break;
                     case TranscriptPrompt prompt:
                         _conversation.ReplayUserMessage(prompt.Text, prompt.Images, prompt.Time, prompt.Uuid, prompt.ParentUuid);
-                        _recall.Add(prompt.Text);
+                        if (recallPrompts)
+                        {
+                            _recall.Add(prompt.Text);
+                        }
                         break;
                     case TranscriptNote note:
                         _conversation.AddNote(note.Text);
