@@ -793,14 +793,16 @@ public class LibraryAndHistoryTests
 
     private static Conversation.NoteItem[] Notes(TabViewModel tab) => InlineDispatcher.Read(() => tab.Items.OfType<Conversation.NoteItem>().ToArray());
 
-    /// <summary>Gives a copy that would follow a turn every chance to: past the settle delay, with time for background work.</summary>
-    private static async Task SettleAsync(TabTestHarness h)
+    /// <summary>
+    /// Lets a copy that would follow a turn run its course: past the settle delay, until the library has no copy under
+    /// way and every tab has heard how its last one went.
+    /// </summary>
+    private static Task SettleAsync(TabTestHarness h)
     {
-        for (var i = 0; i < 5; i++)
-        {
-            h.Time.Advance(TimeSpan.FromSeconds(1));
-            await Task.Delay(20, TestContext.Current.CancellationToken);
-        }
+        h.Time.Advance(Claudette.App.Services.LibraryService.SettleDelay);
+        return Waiting.UntilAsync(
+            () => h.Services.Library.IsIdle && InlineDispatcher.Read(() => h.Shell.AllTabs.All(t => t.LibraryCopy.IsCompleted)),
+            "the library copies to finish");
     }
 
     /// <summary>Another machine has the session open, with a fresh lease.</summary>

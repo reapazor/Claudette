@@ -1739,8 +1739,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 
 - xUnit v3, Avalonia.Headless.XUnit, Verify (snapshot testing, `Verify.XunitV3`) and Microsoft.Extensions.TimeProvider.Testing (`FakeTimeProvider`). xunit.v3 stays on 3.2.x until Avalonia.Headless.XUnit supports 4.x, and so Verify.XunitV3 stays on 32.0.x, the last built against it.
 - GitHub Actions (`.github/workflows/ci.yml`):
-  - A build-and-test job on Windows, macOS and Linux runs everything except `RealCli` and `Live`, for every push and pull request.
-  - A second Linux job installs Claude Code, at `lastTested` from `compat/surface.yaml` so a new release can't turn a pull request red, and runs every `RealCli` test in the solution. The daily compatibility check tries new releases and the minimum version ([§16](#daily-compatibility-check)).
+  - A build-and-test job on Windows, macOS and Linux runs everything except `Live`, for every push and pull request. Only Linux runs the `RealCli` tests: it installs Claude Code first (tried three times), at `lastTested` from `compat/surface.yaml` so a new release can't turn a pull request red, and sets `CLAUDETTE_REQUIRE_CLAUDE=1`, so a `RealCli` test that can't find Claude Code fails rather than skips and the leg can't pass while running none. Running them on the same runner saves a second restore and build. The daily compatibility check tries new releases and the minimum version ([§16](#daily-compatibility-check)).
   - A test that hangs fails its job after 10 minutes, naming the test (`--blame-hang-timeout`), and no job runs longer than 30 minutes. A newer push to a pull request cancels its running checks.
   - Packages are restored exactly as each project's `packages.lock.json` says (`--locked-mode`), and cached by those files. A package change updates the lock files when restored locally; commit them with it.
   - Each job's summary page lists its test counts per assembly and its failures. A failed job keeps its test results, the blame files naming a hung test, and any changed view's `*.received.txt` as an artifact for a week.
@@ -2053,7 +2052,7 @@ Features beyond v1. All six below are built (milestones 10, 11, 13, 14 and 15); 
 
 **The goal.** Claudette keeps each Perforce tab logged in, so Claude can query and use Perforce without stopping. Claude never sees the password.
 
-**Turning it on.** Settings → Perforce → **Keep Perforce logins fresh**, off by default. It applies to tabs started after the change. The code is in `Claudette.Core/Perforce` (the `p4` runner, the ticket keeper, the changelist tracker), `TabViewModel.Perforce.cs` and `Services/PerforceService.cs`.
+**Turning it on.** Settings → Perforce → **Keep Perforce logins fresh**, off by default. It applies to tabs started after the change. The code is in `Claudette.Core/Perforce` (the `p4` runner, the ticket keeper, the changelist tracker), `ViewModels/PerforceViewModel.cs` (`tab.Perforce`) and `Services/PerforceService.cs`.
 
 **Detecting a Perforce workspace.**
 

@@ -22,7 +22,7 @@ public sealed class RemoteControlRealCliTests
     public async Task Turning_a_tabs_switch_on_asks_Claude_Code_and_shows_why_it_cant_connect()
     {
         var located = await new ClaudeLocator(new ProcessLauncher(), TimeProvider.System).LocateAsync(null, TestContext.Current.CancellationToken);
-        Assert.SkipWhen(!located.IsUsable, "Claude Code isn't installed.");
+        RealCli.SkipUnlessInstalled(located.IsUsable);
         await using var api = await MockAnthropicApi.StartAsync();
         await using var h = new TabTestHarness();
         var config = Directory.CreateDirectory(Path.Combine(h.Root, "claude-config")).FullName;

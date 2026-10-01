@@ -101,7 +101,7 @@ public sealed class RealCliTests : IAsyncLifetime
     [Fact]
     public async Task A_worktree_tab_works_in_the_worktree_Claude_Code_makes_and_leaves_locked()
     {
-        Assert.SkipWhen(_factory is null, "Claude Code isn't installed.");
+        RealCli.SkipUnlessInstalled(_factory is not null);
         // --worktree branches from HEAD when there's no remote, so the repository needs a commit.
         Process.Start(new ProcessStartInfo("git", ["-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "init"])
             { WorkingDirectory = Work, CreateNoWindow = true })?.WaitForExit(10_000);
@@ -915,7 +915,7 @@ public sealed class RealCliTests : IAsyncLifetime
         string? fallbackModel = null, IReadOnlyList<string>? additionalArguments = null, bool agentProgressSummaries = false, string? worktree = null,
         IReadOnlyList<string>? addDirectories = null)
     {
-        Assert.SkipWhen(_factory is null, "Claude Code isn't installed.");
+        RealCli.SkipUnlessInstalled(_factory is not null);
         var overrides = new Dictionary<string, string?>
         {
             ["ANTHROPIC_BASE_URL"] = _api.BaseAddress.ToString().TrimEnd('/'),

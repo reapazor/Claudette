@@ -43,7 +43,13 @@ public abstract record LibraryCopyResult
 public sealed class LibraryService : IDisposable
 {
     /// <summary>Claude Code finishes writing the transcript around the result message; give it a moment.</summary>
-    private static readonly TimeSpan SettleDelay = TimeSpan.FromSeconds(1);
+    internal static readonly TimeSpan SettleDelay = TimeSpan.FromSeconds(1);
+
+    /// <summary>Copies to the library under way, waiting out <see cref="SettleDelay"/> or writing.</summary>
+    private int _copying;
+
+    /// <summary>No copy to the library is under way: for tests, which can't await the copies turns start.</summary>
+    internal bool IsIdle => Volatile.Read(ref _copying) == 0;
 
     /// <summary>
     /// What syncs (DESIGN.md §14), by section; <see cref="ApplySettings"/> copies each of them back. The path to claude,
@@ -141,6 +147,7 @@ public sealed class LibraryService : IDisposable
     /// <param name="force">Copies every file again, even ones that look unchanged (<b>Sync now</b>).</param>
     public async Task<LibraryCopyResult> CopyToLibraryAsync(SessionRecord record, string? localCopy, Func<bool> stillSyncing, bool force = false)
     {
+        Interlocked.Increment(ref _copying);
         try
         {
             await Task.Delay(SettleDelay, _services.Time).ConfigureAwait(false);
@@ -185,6 +192,10 @@ public sealed class LibraryService : IDisposable
         {
             _logger.LogWarning(ex, "Couldn't copy session {SessionId} to the library.", record.SessionId);
             return new LibraryCopyResult.Failed(ex.Message);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _copying);
         }
     }
 

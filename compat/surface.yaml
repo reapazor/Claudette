@@ -1734,7 +1734,7 @@ items:
   - id: "--append-system-prompt"
     kind: flag
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/PerforceViewModel.cs
     docs: https://code.claude.com/docs/en/cli-reference
     test: HookCallbackTests, PerforceTabTests
   - id: "hooks"
@@ -1774,7 +1774,7 @@ items:
   - id: "tool_input"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Sessions/HookCallbacks.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    usedIn: src/Claudette.Core/Sessions/HookCallbacks.cs, src/Claudette.App/ViewModels/PerforceViewModel.cs
     docs: https://code.claude.com/docs/en/hooks
     test: HookCallbackTests, PerforceTabTests, RealCliTests
   - id: "`continue`"
@@ -1786,7 +1786,7 @@ items:
   - id: "PreToolUse hook did not respond before its timeout"
     kind: behavior
     status: undocumented
-    usedIn: src/Claudette.App/Services/PerforceService.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    usedIn: src/Claudette.App/Services/PerforceService.cs, src/Claudette.App/ViewModels/PerforceViewModel.cs
     docs: https://code.claude.com/docs/en/hooks
     test: RealCliTests
     fallback: "In 2.1.284 a hook_callback that isn't answered within its timeout gets a control_cancel_request, and the tool call isn't run (its result is this error). So the Perforce hook answers by itself 15 seconds before its 5-minute timeout, even with a password prompt still open; recovery then renews the login and asks Claude to retry. If Claude Code instead ran the tool after a timeout, nothing would need to change."
@@ -1800,7 +1800,7 @@ items:
   - id: "BashInput"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Perforce/BashCommandLog.cs, src/Claudette.App/ViewModels/TabViewModel.Perforce.cs
+    usedIn: src/Claudette.Core/Perforce/BashCommandLog.cs, src/Claudette.App/ViewModels/PerforceViewModel.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: PerforceTabTests
   - id: "control_cancel_request for hook_callback"

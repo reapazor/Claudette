@@ -507,22 +507,11 @@ internal sealed class TabTestHarness : IAsyncDisposable
     }
 
     /// <summary>
-    /// Waits until <paramref name="condition"/> holds, checking every 10 ms. The deadline is generous because some
-    /// waits are on real processes (git, for the file index), which a busy CI machine can take seconds to start.
+    /// Waits until <paramref name="condition"/> holds, read the way the UI thread would (<see cref="InlineDispatcher.Read"/>),
+    /// by the clock (<see cref="Waiting.UntilAsync"/>). Some waits are on real processes (git, for the file index).
     /// </summary>
-    public static async Task Eventually(Func<bool> condition, string? what = null)
-    {
-        var deadline = System.Diagnostics.Stopwatch.StartNew();
-        while (deadline.Elapsed < TimeSpan.FromSeconds(10))
-        {
-            if (InlineDispatcher.Read(condition))
-            {
-                return;
-            }
-            await Task.Delay(10);
-        }
-        Assert.Fail($"Timed out waiting for {what ?? "the condition"}.");
-    }
+    public static Task Eventually(Func<bool> condition, string? what = null) =>
+        Waiting.UntilAsync(() => InlineDispatcher.Read(condition), what);
 
     public async ValueTask DisposeAsync()
     {

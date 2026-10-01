@@ -73,7 +73,7 @@ public sealed class ClaudeUpdaterTests : IDisposable
     public async Task Reads_the_real_claude_doctor()
     {
         var located = await new ClaudeLocator(new ProcessLauncher(), TimeProvider.System).LocateAsync(null, TestContext.Current.CancellationToken);
-        Assert.SkipWhen(!located.IsUsable, "Claude Code isn't installed.");
+        RealCli.SkipUnlessInstalled(located.IsUsable);
         var config = _root.Combine("config");
         Directory.CreateDirectory(config);
         var updater = new ClaudeUpdater(located.Install!.Path, _root.Combine("work"), new ProcessLauncher(), TimeProvider.System, environmentOverrides: new Dictionary<string, string?>
