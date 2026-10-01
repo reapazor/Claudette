@@ -226,7 +226,7 @@ internal sealed class ScriptedSessionFactory(ScriptedTransport transport, TimePr
         {
             transport.RestartIfExited();
         }
-        var session = new ClaudeSession(transport.ForSession(), time);
+        var session = new ClaudeSession(transport.ForSession(), time, showsElicitations: options.ShowsElicitations);
         Sessions.Add(session);
         try
         {

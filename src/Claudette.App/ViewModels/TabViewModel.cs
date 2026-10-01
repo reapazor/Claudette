@@ -1285,6 +1285,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 // Each prompt comes back with its id, the point to rewind or branch from; hook runs come as messages.
                 ReplayUserMessages = true,
                 IncludeHookEvents = true,
+                // MCP servers' requests for input are cards in the conversation, including ones as the servers connect.
+                ShowsElicitations = true,
                 FallbackModel = settings.ClaudeCode.FallbackModel,
                 Model = State.Overrides.Model ?? settings.NewTabs.DefaultModel,
                 Effort = State.Overrides.Effort ?? settings.NewTabs.DefaultEffort,
@@ -1303,7 +1305,6 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
             _session = session;
-            session.ShowsElicitations = true;
             if (!fork)
             {
                 State.ResumeAt = null;

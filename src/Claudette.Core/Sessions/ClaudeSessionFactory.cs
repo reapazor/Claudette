@@ -48,7 +48,7 @@ public sealed class ClaudeSessionFactory(
         {
             transport = new LoggingTransport(transport, log);
         }
-        var session = new ClaudeSession(transport, timeProvider, _loggerFactory.CreateLogger<ClaudeSession>(), diagnostics);
+        var session = new ClaudeSession(transport, timeProvider, _loggerFactory.CreateLogger<ClaudeSession>(), diagnostics, options.ShowsElicitations);
         try
         {
             await session.InitializeAsync(options.Hooks, cancellationToken).ConfigureAwait(false);

@@ -44,8 +44,14 @@ public sealed class ClaudeSession : IAsyncDisposable
     private volatile SessionState _state = SessionState.Starting;
 
     /// <param name="diagnostics">Counts what Claude Code sends that Claudette doesn't know yet (DESIGN.md §16).</param>
-    public ClaudeSession(IClaudeTransport transport, TimeProvider timeProvider, ILogger<ClaudeSession>? logger = null, ProtocolDiagnostics? diagnostics = null)
+    /// <param name="showsElicitations">
+    /// Sets <see cref="ShowsElicitations"/> before anything is read, so a request that comes while the session starts,
+    /// as an MCP server connects, is shown rather than declined.
+    /// </param>
+    public ClaudeSession(IClaudeTransport transport, TimeProvider timeProvider, ILogger<ClaudeSession>? logger = null, ProtocolDiagnostics? diagnostics = null,
+        bool showsElicitations = false)
     {
+        ShowsElicitations = showsElicitations;
         _transport = transport;
         _time = timeProvider;
         _logger = logger ?? NullLogger<ClaudeSession>.Instance;

@@ -66,6 +66,12 @@ public sealed record ClaudeLaunchOptions
     /// <summary>Hook callbacks registered with <c>initialize</c> (DESIGN.md §13, "Hook callbacks"). Not command-line arguments.</summary>
     public IReadOnlyList<HookRegistration> Hooks { get; init; } = [];
 
+    /// <summary>
+    /// The host shows MCP servers' requests for input, from the start (<see cref="ClaudeSession.ShowsElicitations"/>).
+    /// Not a command-line argument.
+    /// </summary>
+    public bool ShowsElicitations { get; init; }
+
     /// <summary>Applied on top of the clean environment. A null value removes the variable.</summary>
     public IReadOnlyDictionary<string, string?> EnvironmentOverrides { get; init; } = new Dictionary<string, string?>();
 }

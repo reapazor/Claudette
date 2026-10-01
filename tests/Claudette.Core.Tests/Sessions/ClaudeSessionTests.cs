@@ -184,6 +184,19 @@ public class ClaudeSessionTests
     }
 
     [Fact]
+    public async Task An_mcp_servers_request_while_the_session_starts_is_shown_when_the_host_shows_them()
+    {
+        // As an MCP server connects, before initialize has its answer.
+        await using var session = new ClaudeSession(_transport, _time, showsElicitations: true);
+        _transport.Emit("""{"type":"control_request","request_id":"cli_e0","request":{"subtype":"elicitation","mcp_server_name":"auth","message":"Sign in","mode":"url","url":"https://example.com/login","elicitation_id":"el-0"}}""");
+
+        var (requested, _) = await session.ReadUntilAsync<ElicitationRequested>();
+
+        Assert.Equal("auth", requested.Request.ServerName);
+        Assert.DoesNotContain(_transport.Sent, m => Type(m) == "control_response");
+    }
+
+    [Fact]
     public async Task Without_anyone_to_show_it_an_mcp_servers_request_is_declined()
     {
         await using var session = await StartAsync();
