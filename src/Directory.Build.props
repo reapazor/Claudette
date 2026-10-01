@@ -1,0 +1,8 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+  <!-- The rules that keep the app testable (CLAUDE.md, DESIGN.md §15), checked by the compiler: BannedSymbols.txt. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" Link="BannedSymbols.txt" />
+  </ItemGroup>
+</Project>

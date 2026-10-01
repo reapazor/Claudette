@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest</AnalysisLevel>
+    <!-- .editorconfig's rules marked warning are checked by the build, not only the editor. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <Deterministic>true</Deterministic>
     <!-- The version being worked on, tagged vX.Y.Z when it's released. Releases pass it too: -p:Version=1.2.3 (packaging/).
          Source builds also show the commit they were built from (DESIGN.md §14, "Version"). -->

@@ -88,10 +88,12 @@ public sealed class AppServices : IAsyncDisposable
         LoginItems = loginItems ?? new NoLoginItems("Claudette can't start at login here.");
         ThisCopy = new ClaudetteCopy(AppInstallKind.Other, Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory), AppVersion.ToString());
         BuildCommit = AppBuild.CommitOf(InformationalVersion());
+#pragma warning disable RS0030 // This is AppServices.Http: the one client, whose handler tests replace.
         Http = new HttpClient(httpHandler ?? new SocketsHttpHandler { AutomaticDecompression = System.Net.DecompressionMethods.All }, disposeHandler: true)
         {
             Timeout = TimeSpan.FromSeconds(60),
         };
+#pragma warning restore RS0030
         Paths = paths;
         _launcher = launcher;
         Time = timeProvider;

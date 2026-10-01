@@ -59,8 +59,10 @@ public sealed class ProcessLauncher(TimeProvider? timeProvider = null, TimeSpan?
             }
         }
 
+#pragma warning disable RS0030 // This is IProcessLauncher: every process starts here.
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Could not start '{spec.FileName}'.");
+#pragma warning restore RS0030
         return new RunningProcess(process, redirect, _time, _drain);
     }
 

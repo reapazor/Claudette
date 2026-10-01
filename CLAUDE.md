@@ -48,6 +48,7 @@ The backlog is the open GitHub issues on `reapazor/Claudette` assigned to `reapa
 - Use the injected `TimeProvider` for anything time-based. Never use `DateTime.Now`, `DateTime.UtcNow` or real delays in logic.
 - Never hard-code paths to the app data folder, the session library or `~/.claude`. Inject them.
 - Secrets (Perforce passwords) go only to the OS credential store (`ICredentialStore`) and to child processes on standard input (`ProcessRunner`'s `inputLine`). Never in arguments, settings, state or logs.
+- The build enforces these: `src/BannedSymbols.txt` bans the clock, sleeps, timeouts without a `TimeProvider`, `Process.Start`, `new HttpClient` and `Environment.SetEnvironmentVariable` under `src/`. Don't add a `#pragma warning disable RS0030` unless the code is the one place that has to (like `ProcessLauncher`), and say why on the same line.
 
 ## Claude Code integration (§13, §16)
 

@@ -1489,6 +1489,7 @@ These apply from milestone 1:
 - Processes are started through `IProcessLauncher`, so tests can check the exact command line and environment, and fake the process.
 - All time-based code (burn rate, check-ins, leases, usage retention, update checks, service status checks, sampling) uses .NET's `TimeProvider`. Tests move the clock forward with `FakeTimeProvider` instead of waiting.
 - File locations (app data, the session library, Claude Code's config folder) are injected, so tests use temporary folders.
+- The compiler checks the first three, and that web requests go through `AppServices.Http` and child environments aren't set on Claudette's own: `src/BannedSymbols.txt` lists what code under `src/` can't call (`Microsoft.CodeAnalysis.BannedApiAnalyzers`). The one place that has to, such as `ProcessLauncher` starting processes, says why with `#pragma warning disable RS0030`. `.editorconfig`'s warnings are checked by the build too (`EnforceCodeStyleInBuild`).
 
 ### Test layers
 

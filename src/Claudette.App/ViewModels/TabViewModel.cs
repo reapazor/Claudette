@@ -1793,7 +1793,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             // Interrupt first, so the turn ends cleanly with a result (DESIGN.md §13, "Shutdown").
             try
             {
-                await session.InterruptAsync().WaitAsync(TimeSpan.FromSeconds(3));
+                await session.InterruptAsync().WaitAsync(TimeSpan.FromSeconds(3), _services.Time);
             }
             catch (Exception)
             {
