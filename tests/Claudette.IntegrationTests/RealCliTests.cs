@@ -184,6 +184,14 @@ public sealed class RealCliTests : IAsyncLifetime
         }, "the server to fail", TimeSpan.FromSeconds(30));
         Assert.Equal(McpServerState.Failed, broken!.State);
 
+        Assert.Equal("stdio", broken.Transport);
+
+        // DESIGN.md §4, "MCP servers": the sign-in requests are known (checked with 2.1.286); a stdio server has no sign-in.
+        var signIn = await Assert.ThrowsAsync<ControlRequestException>(() => session.SignInToMcpServerAsync("broken", TestContext.Current.CancellationToken));
+        Assert.Contains("does not support OAuth", signIn.Message, StringComparison.Ordinal);
+        var signOut = await Assert.ThrowsAsync<ControlRequestException>(() => session.SignOutOfMcpServerAsync("broken", TestContext.Current.CancellationToken));
+        Assert.Contains("Cannot clear auth", signOut.Message, StringComparison.Ordinal);
+
         await session.SetMcpServerEnabledAsync("broken", false, TestContext.Current.CancellationToken);
         var after = Assert.Single(await session.GetMcpStatusAsync(TestContext.Current.CancellationToken), s => s.Name == "broken");
         Assert.Equal(McpServerState.Disabled, after.State);

@@ -465,6 +465,27 @@ items:
     docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkcontrolinterruptresponse
     test: QueuedMessageTests, RealCliTests
     fallback: Read with cancelled from the interrupt receipt. Ids Claudette didn't send are ignored, as the SDK says to.
+  - id: "mcp_authenticate"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/McpServersViewModel.cs
+    docs: https://code.claude.com/docs/en/mcp
+    test: McpServersTests, ClaudeSessionTests, RealCliTests
+    fallback: The TypeScript SDK's host request. With serverName, 2.1.286 answers {authUrl, requiresUserAction, callbackExpected, redirectScheme, callbackPort} and connects the server once the browser comes back on localhost, or {requiresUserAction:false} when signed in already. Refused, the MCP page says to sign in with /mcp in a terminal.
+  - id: "mcp_oauth_callback_url"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/McpServersViewModel.cs
+    docs: https://code.claude.com/docs/en/mcp
+    test: McpServersTests
+    fallback: With serverName and callbackUrl (the address the browser ended on), answered once the sign-in is done. Only for a sign-in whose page couldn't come back to Claude Code by itself.
+  - id: "mcp_clear_auth"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/McpServersViewModel.cs
+    docs: https://code.claude.com/docs/en/mcp
+    test: McpServersTests, RealCliTests
+    fallback: With serverName, for a connected HTTP or SSE server (config.type from mcp_status). Refused, the page shows Claude Code's error.
   - id: "cancel_async_message"
     kind: control
     status: undocumented

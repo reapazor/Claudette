@@ -101,7 +101,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         TodoList.Time = services.Time;
         ProcessMonitor = new ProcessMonitorViewModel(services, this);
         ChangedFiles = new ChangedFilesViewModel(services, this);
-        McpServers = new McpServersViewModel(() => _session);
+        McpServers = new McpServersViewModel(() => _session, url => _services.Platform.OpenUrlAsync(url));
         ProjectTools = new ProjectToolsViewModel(services, this);
         RemoteControl = new RemoteControlViewModel(services, this);
         Agents = new AgentMap(services.Time, ModelDisplayName);

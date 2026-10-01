@@ -358,6 +358,9 @@ The **MCP** page of the side panel lists the session's MCP servers, for a tab wh
 - Each server shows its name, how it's connected (*Connected · 12 tools*, *Connecting…*, *Needs signing in*, *Failed*, *Off*), where it's configured and its version when Claude Code says, and the error for one that failed.
 - **Reconnect**, on a server that isn't connected, asks Claude Code to connect it again (`mcp_reconnect`), for example after starting the program it talks to or signing in.
 - **Turn off** and **Turn on** take a server out of the session, and its tools with it, or put it back (`mcp_toggle`). It's for this session only: the user's and project's MCP settings aren't changed.
+- **Sign in**, on a server that needs signing in, asks Claude Code for the server's sign-in page (`mcp_authenticate`) and opens it in the browser. Claude Code waits on this machine for the browser to come back, then connects the server by itself; **Refresh** shows it. If the page the browser ends on doesn't load, its address can be pasted into the row, which finishes the sign-in (`mcp_oauth_callback_url`). A server already signed in is just read again. All three requests are undocumented, so one Claude Code refuses says so, with *"You can sign in with /mcp in Claude Code in a terminal."*
+- **Sign out**, on a connected remote (HTTP or SSE) server, makes Claude Code forget its sign-in (`mcp_clear_auth`), so connecting it again asks again.
+- Only web addresses are opened: a sign-in page that isn't `https` or `http` isn't.
 - The list is read from Claude Code (`mcp_status`) when the page opens and after each change, and **Refresh** reads it again. A failed server puts a warning dot on the page's tab, with *"1 needs attention"* as its tip.
 - The server's name and its error are the server's own text, shown as text.
 

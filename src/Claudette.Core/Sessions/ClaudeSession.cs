@@ -273,6 +273,25 @@ public sealed class ClaudeSession : IAsyncDisposable
     public Task ReconnectMcpServerAsync(string serverName, CancellationToken cancellationToken = default) =>
         SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_reconnect", ["serverName"] = serverName }, TimeSpan.FromSeconds(60), cancellationToken);
 
+    /// <summary>
+    /// Starts signing in to an MCP server that needs it (DESIGN.md §4, "MCP servers"): Claude Code answers with the address
+    /// to open, and connects the server once the browser comes back. Undocumented: the TypeScript SDK's host request.
+    /// </summary>
+    public async Task<McpSignIn> SignInToMcpServerAsync(string serverName, CancellationToken cancellationToken = default) =>
+        McpSignIn.Parse(await SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_authenticate", ["serverName"] = serverName }, TimeSpan.FromSeconds(60), cancellationToken)
+            .ConfigureAwait(false));
+
+    /// <summary>
+    /// Finishes an MCP sign-in with the address the browser ended on, for when it couldn't come back to Claude Code by
+    /// itself. Answered once the sign-in is done. Undocumented, like <see cref="SignInToMcpServerAsync"/>.
+    /// </summary>
+    public Task FinishMcpSignInAsync(string serverName, string callbackUrl, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_oauth_callback_url", ["serverName"] = serverName, ["callbackUrl"] = callbackUrl }, TimeSpan.FromSeconds(60), cancellationToken);
+
+    /// <summary>Forgets a remote MCP server's sign-in. Undocumented, like <see cref="SignInToMcpServerAsync"/>.</summary>
+    public Task SignOutOfMcpServerAsync(string serverName, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_clear_auth", ["serverName"] = serverName }, TimeSpan.FromSeconds(60), cancellationToken);
+
     /// <summary>Turns an MCP server on or off for this session; off disconnects it and removes its tools.</summary>
     public Task SetMcpServerEnabledAsync(string serverName, bool enabled, CancellationToken cancellationToken = default) =>
         SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_toggle", ["serverName"] = serverName, ["enabled"] = enabled }, TimeSpan.FromSeconds(60), cancellationToken);

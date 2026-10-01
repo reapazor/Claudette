@@ -411,6 +411,18 @@ public class ClaudeSessionTests
         Assert.Equal("Claude Code refused to start (something new).", new StartupFailure("something_new", "").Summary);
     }
 
+    [Theory]
+    [InlineData("""{"authUrl":"https://auth.example.com/authorize","requiresUserAction":true,"callbackExpected":true,"redirectScheme":"localhost","callbackPort":54321}""", "https://auth.example.com/authorize", true)]
+    [InlineData("""{"requiresUserAction":false,"callbackExpected":false}""", null, false)]
+    [InlineData("""{"authUrl":"file:///etc/passwd","requiresUserAction":true}""", null, false)]
+    [InlineData("""{"authUrl":"javascript:alert(1)","requiresUserAction":true}""", null, false)]
+    public void An_MCP_sign_in_only_opens_a_web_address(string response, string? url, bool callback)
+    {
+        var signIn = McpSignIn.Parse(JsonNode.Parse(response)!.AsObject());
+
+        Assert.Equal((url, callback), (signIn.AuthUrl, signIn.CallbackExpected));
+    }
+
     [Fact]
     public async Task Bad_and_unknown_lines_are_skipped_and_counted()
     {
