@@ -159,7 +159,7 @@
                 <TextBlock Classes="small" Text="Run this in a terminal to update:" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                   <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6">
-                    <SelectableTextBlock Text="{Binding ManualCommand}" FontFamily="{StaticResource MonoFont}" TextWrapping="Wrap" />
+                    <SelectableTextBlock Text="{Binding ManualCommand}" FontFamily="{DynamicResource MonoFont}" TextWrapping="Wrap" />
                   </Border>
                   <Button Grid.Column="1" Content="Copy" Command="{Binding CopyManualCommandCommand}" VerticalAlignment="Center" />
                 </Grid>
@@ -167,7 +167,7 @@
               <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
               <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6" MaxHeight="180" IsVisible="{Binding HasOutput}">
                 <ScrollViewer>
-                  <SelectableTextBlock Text="{Binding Output}" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
+                  <SelectableTextBlock Text="{Binding Output}" FontFamily="{DynamicResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
                 </ScrollViewer>
               </Border>
               <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" IsVisible="{Binding ResultText, Converter={x:Static ObjectConverters.IsNotNull}}" />
@@ -539,14 +539,16 @@
                   <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
                     <TextBox Text="{Binding Label, UpdateSourceTrigger=LostFocus}" PlaceholderText="Label" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                      <Button Content="↑" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).MoveSuffixUpCommand}" CommandParameter="{Binding}" />
-                      <Button Content="↓" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).MoveSuffixDownCommand}" CommandParameter="{Binding}" />
+                      <Button Content="↑" ToolTip.Tip="Move up" AutomationProperties.Name="Move up"
+                              Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).MoveSuffixUpCommand}" CommandParameter="{Binding}" />
+                      <Button Content="↓" ToolTip.Tip="Move down" AutomationProperties.Name="Move down"
+                              Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).MoveSuffixDownCommand}" CommandParameter="{Binding}" />
                       <Button Content="Delete" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).RemoveSuffixCommand}" CommandParameter="{Binding}" />
                     </StackPanel>
                     <TextBox Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Text, UpdateSourceTrigger=LostFocus}" PlaceholderText="Text added to the message" AcceptsReturn="True" TextWrapping="Wrap" />
                     <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
                       <TextBlock Classes="small" Text="Shortcut" VerticalAlignment="Center" />
-                      <Button Content="{Binding ShortcutText}" FontFamily="{StaticResource MonoFont}" MinWidth="150" HorizontalContentAlignment="Left"
+                      <Button Content="{Binding ShortcutText}" FontFamily="{DynamicResource MonoFont}" MinWidth="150" HorizontalContentAlignment="Left"
                               Classes.accent="{Binding IsRecording}" ToolTip.Tip="Click, then press the keys that add this suffix"
                               Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).StartRecordingCommand}" CommandParameter="{Binding}" />
                       <Button Classes="flat" Content="Remove" IsVisible="{Binding HasShortcut}"
@@ -602,7 +604,7 @@
                   <Grid ColumnDefinitions="220,190,Auto,Auto" ColumnSpacing="8">
                     <TextBlock Classes="label" Text="{Binding Label}" VerticalAlignment="Center" />
                     <Button Grid.Column="1" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Content="{Binding ShortcutText}"
-                            FontFamily="{StaticResource MonoFont}" Classes.accent="{Binding IsRecording}"
+                            FontFamily="{DynamicResource MonoFont}" Classes.accent="{Binding IsRecording}"
                             Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).StartRecordingCommand}" CommandParameter="{Binding}"
                             ToolTip.Tip="Click, then press the new shortcut" />
                     <Button Grid.Column="2" Classes="flat" Content="Reset" IsVisible="{Binding IsCustomized}"
@@ -692,7 +694,7 @@
         <StackPanel Spacing="12" IsVisible="{Binding IsAdvanced}">
           <TextBlock Classes="section" Text="Advanced" />
           <TextBlock Text="Extra arguments for every claude process" />
-          <TextBox Text="{Binding ExtraArguments, UpdateSourceTrigger=LostFocus}" FontFamily="{StaticResource MonoFont}" PlaceholderText="for example --add-dir ../shared" />
+          <TextBox Text="{Binding ExtraArguments, UpdateSourceTrigger=LostFocus}" FontFamily="{DynamicResource MonoFont}" PlaceholderText="for example --add-dir ../shared" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Split on spaces and added after Claudette's own arguments. Applies to tabs started after the change." />
 
           <!-- DESIGN.md §13, "Logging" -->
@@ -718,7 +720,7 @@
             <SelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding KeepAwakeText}" TextWrapping="Wrap" />
           </Grid>
           <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6">
-            <SelectableTextBlock Text="{Binding DiagnosticsText}" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
+            <SelectableTextBlock Text="{Binding DiagnosticsText}" FontFamily="{DynamicResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
           </Border>
           <TextBlock Classes="muted small" TextWrapping="Wrap"
                      Text="Things Claude Code sent this run that Claudette doesn't know yet. They're skipped safely; a count here after a Claude Code update is worth a bug report." />

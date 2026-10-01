@@ -482,7 +482,7 @@
                         <TextBlock Classes="small" Text="Run this in a terminal to update:" />
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                           <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6">
-                            <SelectableTextBlock Text="{Binding ManualCommand}" FontFamily="{StaticResource MonoFont}" TextWrapping="Wrap" />
+                            <SelectableTextBlock Text="{Binding ManualCommand}" FontFamily="{DynamicResource MonoFont}" TextWrapping="Wrap" />
                           </Border>
                           <Button Grid.Column="1" Content="Copy" Command="{Binding CopyManualCommandCommand}" VerticalAlignment="Center" />
                         </Grid>
@@ -497,7 +497,7 @@
                       <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
                       <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6" MaxHeight="180" IsVisible="{Binding HasOutput}">
                         <ScrollViewer>
-                          <SelectableTextBlock Text="{Binding Output}" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
+                          <SelectableTextBlock Text="{Binding Output}" FontFamily="{DynamicResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
                         </ScrollViewer>
                       </Border>
                       <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" IsVisible="{Binding ResultText, Converter={x:Static ObjectConverters.IsNotNull}}" />

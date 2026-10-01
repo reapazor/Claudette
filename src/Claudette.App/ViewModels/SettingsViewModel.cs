@@ -133,7 +133,11 @@ public sealed partial class QuickSuffixEditor(QuickSuffix suffix, Action changed
 public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 {
     public static readonly IReadOnlyList<string> AllCategories =
-        ["General", "Sessions", "Processes", "Claude Code", "New tabs", "Appearance", "Usage", "Quick suffixes", "Check-ins", "Diff tool", "Project tools", "Notifications", "Keyboard", "Perforce", "Advanced"];
+    [
+        SettingsCategory.General, SettingsCategory.Sessions, SettingsCategory.Processes, SettingsCategory.ClaudeCode, SettingsCategory.NewTabs,
+        SettingsCategory.Appearance, SettingsCategory.Usage, SettingsCategory.QuickSuffixes, SettingsCategory.CheckIns, SettingsCategory.DiffTool,
+        SettingsCategory.ProjectTools, SettingsCategory.Notifications, SettingsCategory.Keyboard, SettingsCategory.Perforce, SettingsCategory.Advanced,
+    ];
 
     private readonly AppServices _services;
     private readonly AppSettings _settings;
@@ -196,91 +200,91 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     /// </summary>
     private static readonly IReadOnlyList<SettingsSearchResult> SearchIndex =
     [
-        new("General", "Start Claudette when I log in"),
-        new("General", "Confirm before closing a tab where Claude is working"),
-        new("General", "Also rename the session in Claude Code when I rename a tab"),
-        new("General", "Show Claude's service status"),
-        new("General", "Claudette version"),
-        new("General", "Check for Claudette updates automatically"),
-        new("General", "Include pre-releases"),
-        new("General", "Check for Claudette updates now"),
-        new("Sessions", "Also restore unpinned tabs when Claudette starts"),
-        new("Sessions", "Name for this machine"),
-        new("Sessions", "Keep library sessions for"),
-        new("Sessions", "Session library folder"),
-        new("Sessions", "Move library"),
-        new("Sessions", "Sync new tabs to the session library"),
-        new("Sessions", "Sync Claudette's settings through the library"),
-        new("Processes", "Show the process monitor"),
-        new("Processes", "Refresh the panel every (seconds)"),
-        new("Processes", "Show command lines"),
-        new("Claude Code", "Installed version and install method"),
-        new("Claude Code", "Check for Claude Code updates automatically"),
-        new("Claude Code", "Update Claude Code"),
-        new("Claude Code", "Signed-in account"),
-        new("Claude Code", "Sign in"),
-        new("Claude Code", "Sign out"),
-        new("Claude Code", "Path to claude"),
+        new(SettingsCategory.General, "Start Claudette when I log in"),
+        new(SettingsCategory.General, "Confirm before closing a tab where Claude is working"),
+        new(SettingsCategory.General, "Also rename the session in Claude Code when I rename a tab"),
+        new(SettingsCategory.General, "Show Claude's service status"),
+        new(SettingsCategory.General, "Claudette version"),
+        new(SettingsCategory.General, "Check for Claudette updates automatically"),
+        new(SettingsCategory.General, "Include pre-releases"),
+        new(SettingsCategory.General, "Check for Claudette updates now"),
+        new(SettingsCategory.Sessions, "Also restore unpinned tabs when Claudette starts"),
+        new(SettingsCategory.Sessions, "Name for this machine"),
+        new(SettingsCategory.Sessions, "Keep library sessions for"),
+        new(SettingsCategory.Sessions, "Session library folder"),
+        new(SettingsCategory.Sessions, "Move library"),
+        new(SettingsCategory.Sessions, "Sync new tabs to the session library"),
+        new(SettingsCategory.Sessions, "Sync Claudette's settings through the library"),
+        new(SettingsCategory.Processes, "Show the process monitor"),
+        new(SettingsCategory.Processes, "Refresh the panel every (seconds)"),
+        new(SettingsCategory.Processes, "Show command lines"),
+        new(SettingsCategory.ClaudeCode, "Installed version and install method"),
+        new(SettingsCategory.ClaudeCode, "Check for Claude Code updates automatically"),
+        new(SettingsCategory.ClaudeCode, "Update Claude Code"),
+        new(SettingsCategory.ClaudeCode, "Signed-in account"),
+        new(SettingsCategory.ClaudeCode, "Sign in"),
+        new(SettingsCategory.ClaudeCode, "Sign out"),
+        new(SettingsCategory.ClaudeCode, "Path to claude"),
         .. LoginShellSearchEntries(),
-        new("Claude Code", "Connect new tabs to the Claude app (Remote Control)"),
-        new("Claude Code", "Push notifications on your phone"),
-        new("Claude Code", "Keep this computer awake while tabs are connected"),
-        new("New tabs", "Default model"),
-        new("New tabs", "Default effort"),
-        new("New tabs", "Default permission mode"),
-        new("New tabs", "Recent folders to keep"),
-        new("New tabs", "Clear recent folders"),
-        new("New tabs", "Favorite folders"),
-        new("Appearance", "Theme"),
-        new("Appearance", "Style"),
-        new("Appearance", "Conversation font"),
-        new("Appearance", "Conversation font size"),
-        new("Appearance", "Code font"),
-        new("Appearance", "Code font size"),
-        new("Appearance", "Show thinking expanded"),
-        new("Appearance", "Show fun words while Claude works"),
-        new("Appearance", "Show what Claude is doing while it works"),
-        new("Appearance", "Detailed usage header"),
-        new("Appearance", "Show context on tab rows"),
-        new("Appearance", "Density"),
-        new("Usage", "Warn at (% of session used)"),
-        new("Usage", "Alert at (% of session used)"),
-        new("Usage", "Burn rate window (minutes)"),
-        new("Usage", "Show model-specific weekly limits"),
-        new("Usage", "Read model limits from /usage"),
-        new("Usage", "Continue tasks when a usage limit resets"),
-        new("Usage", "Keep usage history"),
-        new("Usage", "Clear usage history"),
-        new("Usage", "Share usage with my other machines"),
-        new("Quick suffixes", "Add suffix"),
-        new("Quick suffixes", "Suffix shortcuts"),
-        new("Check-ins", "Check in on long turns"),
-        new("Check-ins", "After the turn has run (minutes)"),
-        new("Check-ins", "After no output for (minutes)"),
-        new("Check-ins", "Check-in message"),
-        new("Check-ins", "Notify me when a check-in is sent"),
-        new("Diff tool", "Diff tool"),
-        new("Diff tool", "Custom diff command"),
-        new("Diff tool", "Test the diff tool"),
+        new(SettingsCategory.ClaudeCode, "Connect new tabs to the Claude app (Remote Control)"),
+        new(SettingsCategory.ClaudeCode, "Push notifications on your phone"),
+        new(SettingsCategory.ClaudeCode, "Keep this computer awake while tabs are connected"),
+        new(SettingsCategory.NewTabs, "Default model"),
+        new(SettingsCategory.NewTabs, "Default effort"),
+        new(SettingsCategory.NewTabs, "Default permission mode"),
+        new(SettingsCategory.NewTabs, "Recent folders to keep"),
+        new(SettingsCategory.NewTabs, "Clear recent folders"),
+        new(SettingsCategory.NewTabs, "Favorite folders"),
+        new(SettingsCategory.Appearance, "Theme"),
+        new(SettingsCategory.Appearance, "Style"),
+        new(SettingsCategory.Appearance, "Conversation font"),
+        new(SettingsCategory.Appearance, "Conversation font size"),
+        new(SettingsCategory.Appearance, "Code font"),
+        new(SettingsCategory.Appearance, "Code font size"),
+        new(SettingsCategory.Appearance, "Show thinking expanded"),
+        new(SettingsCategory.Appearance, "Show fun words while Claude works"),
+        new(SettingsCategory.Appearance, "Show what Claude is doing while it works"),
+        new(SettingsCategory.Appearance, "Detailed usage header"),
+        new(SettingsCategory.Appearance, "Show context on tab rows"),
+        new(SettingsCategory.Appearance, "Density"),
+        new(SettingsCategory.Usage, "Warn at (% of session used)"),
+        new(SettingsCategory.Usage, "Alert at (% of session used)"),
+        new(SettingsCategory.Usage, "Burn rate window (minutes)"),
+        new(SettingsCategory.Usage, "Show model-specific weekly limits"),
+        new(SettingsCategory.Usage, "Read model limits from /usage"),
+        new(SettingsCategory.Usage, "Continue tasks when a usage limit resets"),
+        new(SettingsCategory.Usage, "Keep usage history"),
+        new(SettingsCategory.Usage, "Clear usage history"),
+        new(SettingsCategory.Usage, "Share usage with my other machines"),
+        new(SettingsCategory.QuickSuffixes, "Add suffix"),
+        new(SettingsCategory.QuickSuffixes, "Suffix shortcuts"),
+        new(SettingsCategory.CheckIns, "Check in on long turns"),
+        new(SettingsCategory.CheckIns, "After the turn has run (minutes)"),
+        new(SettingsCategory.CheckIns, "After no output for (minutes)"),
+        new(SettingsCategory.CheckIns, "Check-in message"),
+        new(SettingsCategory.CheckIns, "Notify me when a check-in is sent"),
+        new(SettingsCategory.DiffTool, "Diff tool"),
+        new(SettingsCategory.DiffTool, "Custom diff command"),
+        new(SettingsCategory.DiffTool, "Test the diff tool"),
         .. ProjectToolsSearchEntries(),
-        new("Notifications", "A tab finishes its turn"),
-        new("Notifications", "A tab needs permission or an answer"),
-        new("Notifications", "A tab's Claude Code stops with an error"),
-        new("Notifications", "Usage alerts"),
-        new("Notifications", "Claude Code needs me to sign in"),
-        new("Notifications", "A Claude Code update is ready"),
-        new("Notifications", "A project action finishes"),
-        new("Notifications", "Dock or taskbar badge"),
-        new("Notifications", "Animate the Dock or taskbar icon"),
+        new(SettingsCategory.Notifications, "A tab finishes its turn"),
+        new(SettingsCategory.Notifications, "A tab needs permission or an answer"),
+        new(SettingsCategory.Notifications, "A tab's Claude Code stops with an error"),
+        new(SettingsCategory.Notifications, "Usage alerts"),
+        new(SettingsCategory.Notifications, "Claude Code needs me to sign in"),
+        new(SettingsCategory.Notifications, "A Claude Code update is ready"),
+        new(SettingsCategory.Notifications, "A project action finishes"),
+        new(SettingsCategory.Notifications, "Dock or taskbar badge"),
+        new(SettingsCategory.Notifications, "Animate the Dock or taskbar icon"),
         .. KeyboardShortcuts.All.Select(c => new SettingsSearchResult("Keyboard", $"{c.Label} shortcut")),
         .. PerforceSearchEntries(),
-        new("Advanced", "Extra arguments for every claude process"),
-        new("Advanced", "Log protocol traffic"),
-        new("Advanced", "Open log folder"),
-        new("Advanced", "Diagnostics"),
-        new("Advanced", "Copy diagnostics"),
-        new("Advanced", "Minimum supported Claude Code version"),
-        new("Advanced", "Open data folder"),
+        new(SettingsCategory.Advanced, "Extra arguments for every claude process"),
+        new(SettingsCategory.Advanced, "Log protocol traffic"),
+        new(SettingsCategory.Advanced, "Open log folder"),
+        new(SettingsCategory.Advanced, "Diagnostics"),
+        new(SettingsCategory.Advanced, "Copy diagnostics"),
+        new(SettingsCategory.Advanced, "Minimum supported Claude Code version"),
+        new(SettingsCategory.Advanced, "Open data folder"),
     ];
 
     [ObservableProperty]
@@ -328,31 +332,31 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsUsage), nameof(IsProcesses), nameof(IsDiffTool), nameof(IsNotifications), nameof(IsKeyboard), nameof(IsProjectTools))]
     public partial string SelectedCategory { get; set; }
 
-    public bool IsKeyboard => SelectedCategory == "Keyboard";
+    public bool IsKeyboard => SelectedCategory == SettingsCategory.Keyboard;
 
-    public bool IsNotifications => SelectedCategory == "Notifications";
+    public bool IsNotifications => SelectedCategory == SettingsCategory.Notifications;
 
-    public bool IsUsage => SelectedCategory == "Usage";
+    public bool IsUsage => SelectedCategory == SettingsCategory.Usage;
 
-    public bool IsProcesses => SelectedCategory == "Processes";
+    public bool IsProcesses => SelectedCategory == SettingsCategory.Processes;
 
-    public bool IsDiffTool => SelectedCategory == "Diff tool";
+    public bool IsDiffTool => SelectedCategory == SettingsCategory.DiffTool;
 
-    public bool IsGeneral => SelectedCategory == "General";
+    public bool IsGeneral => SelectedCategory == SettingsCategory.General;
 
-    public bool IsClaudeCode => SelectedCategory == "Claude Code";
+    public bool IsClaudeCode => SelectedCategory == SettingsCategory.ClaudeCode;
 
-    public bool IsNewTabs => SelectedCategory == "New tabs";
+    public bool IsNewTabs => SelectedCategory == SettingsCategory.NewTabs;
 
-    public bool IsAppearance => SelectedCategory == "Appearance";
+    public bool IsAppearance => SelectedCategory == SettingsCategory.Appearance;
 
-    public bool IsSessions => SelectedCategory == "Sessions";
+    public bool IsSessions => SelectedCategory == SettingsCategory.Sessions;
 
-    public bool IsCheckIns => SelectedCategory == "Check-ins";
+    public bool IsCheckIns => SelectedCategory == SettingsCategory.CheckIns;
 
-    public bool IsQuickSuffixes => SelectedCategory == "Quick suffixes";
+    public bool IsQuickSuffixes => SelectedCategory == SettingsCategory.QuickSuffixes;
 
-    public bool IsAdvanced => SelectedCategory == "Advanced";
+    public bool IsAdvanced => SelectedCategory == SettingsCategory.Advanced;
 
     // ---- General ---------------------------------------------------------------------------------------------
 
@@ -532,7 +536,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     public static bool ShowLoginShellSetting => !OperatingSystem.IsWindows();
 
     private static IEnumerable<SettingsSearchResult> LoginShellSearchEntries() =>
-        ShowLoginShellSetting ? [new("Claude Code", "Use my login shell's environment")] : [];
+        ShowLoginShellSetting ? [new(SettingsCategory.ClaudeCode, "Use my login shell's environment")] : [];
 
     // ---- The Claude app (DESIGN.md §18, "Remote Control") --------------------------------------------------------
 

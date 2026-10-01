@@ -10,7 +10,7 @@
       <SelectableTextBlock Classes="muted"
                            Text="{Binding FoundPath}"
                            IsVisible="{Binding HasFoundPath}"
-                           FontFamily="{StaticResource MonoFont}"
+                           FontFamily="{DynamicResource MonoFont}"
                            TextWrapping="Wrap" />
       <TextBlock Classes="muted" TextWrapping="Wrap"
                  Text="Claudette runs your installed Claude Code. Install it, or point Claudette at the claude executable." />
@@ -25,7 +25,7 @@
       <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsUpdating}" />
       <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="10,8" IsVisible="{Binding HasOutput}" MaxHeight="200">
         <ScrollViewer>
-          <SelectableTextBlock Text="{Binding Output}" FontFamily="{StaticResource MonoFont}" TextWrapping="Wrap" />
+          <SelectableTextBlock Text="{Binding Output}" FontFamily="{DynamicResource MonoFont}" TextWrapping="Wrap" />
         </ScrollViewer>
       </Border>
       <TextBlock Text="{Binding UpdateResult}" TextWrapping="Wrap"

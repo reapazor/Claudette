@@ -75,7 +75,7 @@ public sealed partial class SettingsViewModel
 
     /// <summary>From the Tools page: the app-wide defaults are in Settings → Project tools.</summary>
     [RelayCommand]
-    private void ShowProjectToolsDefaults() => SelectedCategory = "Project tools";
+    private void ShowProjectToolsDefaults() => SelectedCategory = SettingsCategory.ProjectTools;
 
     /// <summary>
     /// The project pages' entries for the search box, named with the project's group ("NightOwl → Links"). The Tools

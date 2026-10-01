@@ -48,7 +48,7 @@
           <ToggleButton Content="Whole file" IsChecked="{Binding ShowWholeFile}" />
           <Button Content="Open in diff tool" Command="{Binding OpenInDiffToolCommand}" IsVisible="{Binding CanOpenInDiffTool}" />
           <Button Content="Open in editor" Command="{Binding OpenInEditorCommand}" />
-          <Button Content="…">
+          <Button Content="…" ToolTip.Tip="More" AutomationProperties.Name="More actions">
             <Button.Flyout>
               <MenuFlyout>
                 <MenuItem Header="Reveal in folder" Command="{Binding RevealCommand}" />
