@@ -44,7 +44,21 @@ public sealed class CustomProjectAction
     /// <summary>The OSes it's for (<c>"os"</c>: <c>windows</c>, <c>macos</c>, <c>linux</c>); null for all of them.</summary>
     public IReadOnlyList<string>? Os { get; set; }
 
+    /// <summary>
+    /// Files or folders, relative to the tab's folder (<c>"ifExists"</c>), that must all exist for it to be shown, such
+    /// as the build it runs; null to show it always.
+    /// </summary>
+    public IReadOnlyList<string>? IfExists { get; set; }
+
     public CustomProjectAction Clone() => (CustomProjectAction)MemberwiseClone();
+
+    /// <summary>Does everything in <see cref="IfExists"/> exist under <paramref name="tabFolder"/>?</summary>
+    public bool IsShownIn(string tabFolder) =>
+        IfExists is null || IfExists.All(path =>
+        {
+            var full = Path.Combine(tabFolder, path);
+            return File.Exists(full) || Directory.Exists(full);
+        });
 
     /// <summary>The folder it runs in: <see cref="WorkingFolder"/> under <paramref name="tabFolder"/>.</summary>
     public string WorkingDirectory(string tabFolder) =>

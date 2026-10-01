@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 namespace Claudette.Core.ProjectTools;
 
 /// <summary>What a folder's project files hold, both merged: the shared file's entries, then the local file's.</summary>
-/// <param name="Actions">The actions for this OS, in order.</param>
+/// <param name="Actions">The actions for this OS, in order. <see cref="ProjectFile.Read"/> also leaves out those whose <c>ifExists</c> is missing.</param>
 /// <param name="Problems">Why entries (or a whole file) were skipped, such as "claudette.json: actions[2] has no command".</param>
 public sealed record ProjectFileContents(IReadOnlyList<CustomProjectAction> Actions, IReadOnlyList<ProjectLink> Links, IReadOnlyList<string> Problems)
 {
@@ -40,7 +40,8 @@ public sealed record ProjectFileLinkEntry(JsonNode? Raw, ProjectLink? Link, stri
 /// {
 ///   "actions": [
 ///     { "name": "Run tests", "command": "dotnet test", "folder": "src", "mode": "output" },
-///     { "name": "Open Grafana", "command": "start https://grafana", "mode": "launch", "os": ["windows"] }
+///     { "name": "Open Grafana", "command": "start https://grafana", "mode": "launch", "os": ["windows"] },
+///     { "name": "Play", "command": "Build\\Game.exe", "mode": "launch", "ifExists": "Build/Game.exe" }
 ///   ],
 ///   "links": [
 ///     { "name": "Pull request", "url": "https://github.com/org/repo/compare/{branch}?expand=1" }
@@ -65,13 +66,16 @@ public static class ProjectFile
 
     public static string PathFor(string folder, ProjectFileScope scope) => Path.Combine(folder, FileName(scope));
 
-    /// <summary>Both files of <paramref name="folder"/>, the shared one first.</summary>
+    /// <summary>
+    /// Both files of <paramref name="folder"/>, the shared one first. Actions whose <c>ifExists</c> paths aren't all
+    /// there are left out; they're checked again each time the files are read.
+    /// </summary>
     public static ProjectFileContents Read(string folder, ToolOS os)
     {
         var shared = Parse(ReadText(PathFor(folder, ProjectFileScope.Shared), out var sharedError), ProjectFileScope.Shared, os);
         var local = Parse(ReadText(PathFor(folder, ProjectFileScope.Local), out var localError), ProjectFileScope.Local, os);
         return new ProjectFileContents(
-            [.. shared.Actions, .. local.Actions],
+            [.. shared.Actions.Concat(local.Actions).Where(a => a.IsShownIn(folder))],
             [.. shared.Links, .. local.Links],
             [.. Error(SharedName, sharedError), .. shared.Problems, .. Error(LocalName, localError), .. local.Problems]);
 
@@ -187,6 +191,18 @@ public static class ProjectFile
         {
             json["folder"] = action.WorkingFolder.Trim();
         }
+        switch (action.IfExists)
+        {
+            case null or []:
+                json.Remove("ifExists");
+                break;
+            case [var one]:
+                json["ifExists"] = one;
+                break;
+            case var several:
+                json["ifExists"] = new JsonArray([.. several.Select(p => (JsonNode?)p)]);
+                break;
+        }
         json["mode"] = action.Mode == CustomActionMode.LaunchAndForget ? "launch" : "output";
         return json;
     }
@@ -233,12 +249,7 @@ public static class ProjectFile
         IReadOnlyList<string>? osList = null;
         if (entry["os"] is JsonNode osNode)
         {
-            osList = osNode switch
-            {
-                JsonValue value when value.TryGetValue<string>(out var one) => [one],
-                JsonArray array => array.Select(n => n is JsonValue v && v.TryGetValue<string>(out var s) ? s : null).OfType<string>().ToArray(),
-                _ => null,
-            };
+            osList = StringList(osNode);
             if (osList is null)
             {
                 return new ProjectFileEntry(node, null, $"{where}: \"os\" should be a list such as [\"windows\", \"macos\"], so it was skipped.", true);
@@ -264,6 +275,16 @@ public static class ProjectFile
         {
             return new ProjectFileEntry(node, null, $"{where} (\"{name}\") has mode \"{modeText}\"; it can be \"output\" or \"launch\", so it was skipped.", forThisOS);
         }
+        IReadOnlyList<string>? ifExists = null;
+        if (entry["ifExists"] is JsonNode existsNode)
+        {
+            if (StringList(existsNode) is not { } paths)
+            {
+                return new ProjectFileEntry(node, null, $"{where} (\"{name}\"): \"ifExists\" should be a path or a list of paths, such as \"Build/Game.exe\", so it was skipped.", forThisOS);
+            }
+            var given = paths.Select(p => p.Trim()).Where(p => p.Length > 0).ToArray();
+            ifExists = given.Length > 0 ? given : null;
+        }
         var folder = LenientJson.String(entry, "folder")?.Trim();
         var action = new CustomProjectAction
         {
@@ -274,9 +295,18 @@ public static class ProjectFile
             WorkingFolder = string.IsNullOrEmpty(folder) ? null : folder,
             Mode = mode.Value,
             Os = osList,
+            IfExists = ifExists,
         };
         return new ProjectFileEntry(node, action, null, forThisOS);
     }
+
+    /// <summary>A string or a list of strings, such as <c>"os"</c>; null when it's neither. Other values in a list are ignored.</summary>
+    private static IReadOnlyList<string>? StringList(JsonNode node) => node switch
+    {
+        JsonValue value when value.TryGetValue<string>(out var one) => [one],
+        JsonArray array => array.Select(n => n is JsonValue v && v.TryGetValue<string>(out var s) ? s : null).OfType<string>().ToArray(),
+        _ => null,
+    };
 
     private static ProjectFileLinkEntry ReadLink(JsonNode? node, int index, ProjectFileScope scope)
     {

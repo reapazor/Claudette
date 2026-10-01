@@ -2124,7 +2124,8 @@ A tab can do things for the project in its folder: launch the editor, generate p
 {
   "actions": [
     { "name": "Run tests", "command": "dotnet test", "folder": "src", "mode": "output" },
-    { "name": "Open Grafana", "command": "start https://grafana.example", "mode": "launch", "os": ["windows"] }
+    { "name": "Open Grafana", "command": "start https://grafana.example", "mode": "launch", "os": ["windows"] },
+    { "name": "Play the build", "command": "Build\\Game.exe", "mode": "launch", "ifExists": "Build/Game.exe" }
   ],
   "links": [
     { "name": "Board", "url": "https://example.atlassian.net/jira/software/projects/ABC/boards/1" },
@@ -2138,15 +2139,17 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - `folder` is relative to the tab's folder; the tab's folder by default.
   - `mode` is `output` (the default: a run in the sidebar with its log on the Project page, **Stop**, and the notification) or `launch` (started and left alone).
   - `os` is optional: `windows`, `macos` or `linux`. An action whose `os` leaves out this machine isn't shown.
+  - `ifExists` is optional: a path, or a list of paths, relative to the tab's folder. The action is shown only while every one of them exists, as a file or a folder; otherwise it's left out without a reason, like an action for another OS. It's checked each time the files are read (below), so an action that runs a build appears once a build has made it, at the latest when the build's own action ends or the menu opens.
   - Commands run through the user's shell: `cmd.exe /d /s /c "<command>"` on Windows, `$SHELL -c` (or `/bin/sh -c`) elsewhere. Otherwise they run like built-in actions.
   - An action's id is its file and position, such as `shared:0`, which Stop and the notification use.
   - They're listed in the project's menu after the project's actions, under a separator.
 - **Picking up edits.** The files are read again when the tab is selected, when Claudette comes to the front, when a turn ends (Claude may have edited them), when the project's menu opens, and after the in-app editor saves. Reads are numbered as they start, and one that finishes after a later one has been shown is dropped, so quick saves in a row never leave a tab showing an older file (and a detection from before a choice never undoes it). Claudette doesn't watch them with the file system: a watcher per tab runs into the OS's limits (128 inotify instances per user on many Linux machines) and doesn't work on some network drives, and these moments cover when an edit can matter.
 - **The in-app editor.**
   - It's in Settings, on the tab's **Actions** page ([§14](#the-projects-pages)); it was in **Tab settings…** until milestone 15, which now points there.
-  - **Add an action…** opens Settings on that page with a small dialog: name, command, working folder, **Run with output** or **Launch and forget**, and which file it goes in, **Just me (claudette.local.json)** (the default) or **Shared with the project (claudette.json)**.
-  - The page has a choice of the two files, and the chosen file's actions with **Add…**, **Edit…**, **Remove**, **Move up**, **Move down** and **Open file**. Entries for other OSes are listed, marked "only on …", and entries that can't be read are listed with their reason and can only be removed. Like the rest of Settings, each change is saved as it's made.
-  - Saving reads the file as JSON, replaces only `actions`, keeps every other key and each entry's other fields (such as `os`), and writes it indented. The page says so: saving rewrites the file, so comments in it are dropped. A file that isn't valid JSON is never overwritten; the editor says to fix it by hand first.
+  - **Add an action…** opens Settings on that page with a small dialog: name, command, working folder, **Only show when this exists** (`ifExists`), **Run with output** or **Launch and forget**, and which file it goes in, **Just me (claudette.local.json)** (the default) or **Shared with the project (claudette.json)**. The dialog scrolls when the window is shorter than it, as it is at the size Settings opens at.
+    - **Only show when this exists** is empty for an action that's always shown. **Browse…** picks a file and writes it relative to the tab's folder, with forward slashes so a shared file works on every OS; a folder is typed. Several paths are separated by semicolons.
+  - The page has a choice of the two files, and the chosen file's actions with **Add…**, **Edit…**, **Remove**, **Move up**, **Move down** and **Open file**. Entries for other OSes are listed, marked "only on …", entries with `ifExists` are marked "only when … exists" (whether it does now or not), and entries that can't be read are listed with their reason and can only be removed. Like the rest of Settings, each change is saved as it's made.
+  - Saving reads the file as JSON, replaces only `actions`, keeps every other key and each entry's other fields (such as `os`, which the dialog doesn't edit), and writes it indented. The page says so: saving rewrites the file, so comments in it are dropped. A file that isn't valid JSON is never overwritten; the editor says to fix it by hand first.
 - **No confirmation.** Actions from `claudette.json` run on a click, exactly like those from `claudette.local.json`: the user chose not to be asked first, although a project from someone else can put any command behind a friendly name. Nothing in either file runs on its own: only an explicit click runs an action, and hovering one shows its whole command first.
   - `claudette.local.json` is the user's own file, so its actions run without asking.
   - Nothing from these files runs except on an explicit click or the main action's shortcut: no automatic runs and no hooks.

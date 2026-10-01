@@ -1,3 +1,4 @@
+using Claudette.App.Services;
 using Claudette.Core.ProjectTools;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -5,24 +6,28 @@ using CommunityToolkit.Mvvm.Input;
 namespace Claudette.App.ViewModels;
 
 /// <summary>
-/// The small dialog for one custom project action (DESIGN.md §18, "Custom actions"): its name, command, working folder
-/// and mode. It hands back a new action, or a changed copy of the one it was given, and changes nothing itself.
+/// The small dialog for one custom project action (DESIGN.md §18, "Custom actions"): its name, command, working folder,
+/// what must exist for it to be shown, and mode. It hands back a new action, or a changed copy of the one it was given,
+/// and changes nothing itself.
 /// </summary>
 public sealed partial class ProjectActionEditorViewModel : ViewModelBase
 {
+    private readonly IPlatformServices _platform;
     private readonly CustomProjectAction? _existing;
     private readonly Action<CustomProjectAction, ProjectFileScope> _save;
     private readonly Action _close;
 
-    public ProjectActionEditorViewModel(string folder, CustomProjectAction? existing, Action<CustomProjectAction, ProjectFileScope> save, Action close)
+    public ProjectActionEditorViewModel(string folder, IPlatformServices platform, CustomProjectAction? existing, Action<CustomProjectAction, ProjectFileScope> save, Action close)
     {
         Folder = folder;
+        _platform = platform;
         _existing = existing;
         _save = save;
         _close = close;
         Name = existing?.Name ?? "";
         Command = existing?.Command ?? "";
         WorkingFolder = existing?.WorkingFolder ?? "";
+        IfExists = string.Join("; ", existing?.IfExists ?? []);
         LaunchAndForget = existing?.Mode == CustomActionMode.LaunchAndForget;
         SaveToShared = existing?.Scope == ProjectFileScope.Shared;
     }
@@ -73,6 +78,28 @@ public sealed partial class ProjectActionEditorViewModel : ViewModelBase
     [ObservableProperty]
     public partial string WorkingFolder { get; set; }
 
+    /// <summary>
+    /// The file or folder that must exist for the action to be shown (<c>ifExists</c>), relative to the tab's folder;
+    /// empty to show it always. Several are separated by semicolons.
+    /// </summary>
+    [ObservableProperty]
+    public partial string IfExists { get; set; }
+
+    /// <summary>
+    /// Picks the file for <see cref="IfExists"/>. One under the tab's folder is written relative to it, with forward
+    /// slashes, so a shared file works on every OS.
+    /// </summary>
+    [RelayCommand]
+    private async Task BrowseIfExistsAsync()
+    {
+        if (await _platform.PickFileAsync("Show the action only when this file exists") is not { } path)
+        {
+            return;
+        }
+        var relative = Path.GetRelativePath(Folder, path);
+        IfExists = Path.IsPathRooted(relative) ? relative : relative.Replace(Path.DirectorySeparatorChar, '/');
+    }
+
     /// <summary>"Launch and forget" rather than the default, "Run with output".</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RunWithOutput))]
@@ -91,6 +118,8 @@ public sealed partial class ProjectActionEditorViewModel : ViewModelBase
         action.Name = Name.Trim();
         action.Command = Command.Trim();
         action.WorkingFolder = string.IsNullOrWhiteSpace(WorkingFolder) ? null : WorkingFolder.Trim();
+        var paths = IfExists.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        action.IfExists = paths.Length > 0 ? paths : null;
         action.Mode = LaunchAndForget ? CustomActionMode.LaunchAndForget : CustomActionMode.RunWithOutput;
         _close();
         _save(action, SaveToShared ? ProjectFileScope.Shared : ProjectFileScope.Local);

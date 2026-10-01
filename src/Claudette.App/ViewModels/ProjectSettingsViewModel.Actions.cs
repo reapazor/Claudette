@@ -20,7 +20,8 @@ public sealed record CustomActionRow(JsonNode? Raw, CustomProjectAction? Action,
         ? Problem ?? ""
         : (action.Mode == CustomActionMode.LaunchAndForget ? "Launch and forget: " : "")
             + action.Command + (string.IsNullOrWhiteSpace(action.WorkingFolder) ? "" : $"  (in {action.WorkingFolder})")
-            + (ForThisOS ? "" : $"  · only on {string.Join(", ", action.Os ?? [])}");
+            + (ForThisOS ? "" : $"  · only on {string.Join(", ", action.Os ?? [])}")
+            + (action.IfExists is { } paths ? $"  · only when {string.Join(" and ", paths)} {(paths.Count == 1 ? "exists" : "exist")}" : "");
 
     /// <summary>The entry to write back: its JSON with the edited fields over it.</summary>
     public JsonNode? ToJson() => Action is { } action ? ProjectFile.ToJson(action, Raw) : Raw?.DeepClone();
@@ -28,8 +29,9 @@ public sealed record CustomActionRow(JsonNode? Raw, CustomProjectAction? Action,
 
 /// <summary>
 /// Settings → the tab's project → <b>Actions</b> (DESIGN.md §14, §18): the actions editor that was in Tab settings…, a
-/// choice of the two files and the chosen file's actions. Entries for other OSes are listed, marked "only on …", and
-/// entries that can't be read are listed with their reason and can only be removed. Each change saves the file at once.
+/// choice of the two files and the chosen file's actions. Entries for other OSes are listed, marked "only on …", entries
+/// with <c>ifExists</c> are marked "only when … exists" whether it does or not, and entries that can't be read are
+/// listed with their reason and can only be removed. Each change saves the file at once.
 /// </summary>
 public sealed partial class ProjectSettingsViewModel
 {
@@ -96,7 +98,7 @@ public sealed partial class ProjectSettingsViewModel
     /// <b>Add an action…</b> from the project's menu: the dialog asks which file the action goes in, as it did
     /// over the main window, and the page shows that file once it's saved.
     /// </summary>
-    internal void StartNewAction() => Editor = new ProjectActionEditorViewModel(Folder, null, (action, scope) =>
+    internal void StartNewAction() => Editor = new ProjectActionEditorViewModel(Folder, _services.Platform, null, (action, scope) =>
     {
         SelectedProjectActionFile = ProjectActionFiles.Single(f => f.Value == scope);
         AddActionRow(action, scope);
@@ -107,7 +109,7 @@ public sealed partial class ProjectSettingsViewModel
     private void AddProjectAction()
     {
         var scope = Scope;
-        Editor = new ProjectActionEditorViewModel(Folder, null, (action, _) => AddActionRow(action, scope), CloseEditor);
+        Editor = new ProjectActionEditorViewModel(Folder, _services.Platform, null, (action, _) => AddActionRow(action, scope), CloseEditor);
     }
 
     private void AddActionRow(CustomProjectAction action, ProjectFileScope scope)
@@ -129,7 +131,7 @@ public sealed partial class ProjectSettingsViewModel
         }
         var rows = ProjectActions;
         var scope = Scope;
-        Editor = new ProjectActionEditorViewModel(Folder, existing, (action, _) =>
+        Editor = new ProjectActionEditorViewModel(Folder, _services.Platform, existing, (action, _) =>
         {
             var index = rows.IndexOf(row);
             if (index >= 0)
