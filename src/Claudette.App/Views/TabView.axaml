@@ -422,9 +422,13 @@
             </ScrollViewer>
           </Border>
           <Border Classes="codeblock" IsVisible="{Binding HasOutput}">
-            <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Auto">
-              <SelectableTextBlock Classes="mono small" Text="{Binding Output}" />
-            </ScrollViewer>
+            <StackPanel Spacing="4">
+              <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Auto">
+                <SelectableTextBlock Classes="mono small" Text="{Binding ShownOutput}" />
+              </ScrollViewer>
+              <Button Classes="flat" HorizontalAlignment="Left" Content="{Binding ShowAllOutputText}" Command="{Binding ShowAllOutputCommand}" IsVisible="{Binding IsOutputCut}"
+                      ToolTip.Tip="Only the start of this long output is shown, to keep the conversation quick" />
+            </StackPanel>
           </Border>
         </StackPanel>
       </StackPanel>

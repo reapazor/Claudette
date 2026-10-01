@@ -423,7 +423,8 @@ public partial class TabView : UserControl
     /// <summary>A project job's output follows its newest line, as a terminal does.</summary>
     private void OnProjectOutputChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
-        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
+        // A batch of lines is one Add, or a Reset when the start was trimmed to keep to the limit.
+        if (e.Action is System.Collections.Specialized.NotifyCollectionChangedAction.Add or System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
         {
             ScrollProjectOutputToEnd();
         }

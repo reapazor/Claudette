@@ -96,7 +96,7 @@ public sealed partial class ProjectRunViewModel : ObservableObject
     };
 
     /// <summary>The run's output, at most <see cref="MaxOutputLines"/> lines.</summary>
-    public ObservableCollection<string> Output { get; } = [];
+    public BatchedCollection<string> Output { get; } = [];
 
     /// <summary>Lines dropped from the start of the output to keep it to the limit.</summary>
     [ObservableProperty]
@@ -111,20 +111,12 @@ public sealed partial class ProjectRunViewModel : ObservableObject
     [ObservableProperty]
     public partial bool IsShowing { get; internal set; }
 
+    /// <summary>A batch of lines, with one change to the list for the whole batch.</summary>
     internal void Append(IReadOnlyList<string> lines)
     {
-        foreach (var line in lines)
+        if (Output.AddAndTrim(lines, MaxOutputLines) is > 0 and var dropped)
         {
-            Output.Add(line);
-        }
-        var extra = Output.Count - MaxOutputLines;
-        if (extra > 0)
-        {
-            for (var i = 0; i < extra; i++)
-            {
-                Output.RemoveAt(0);
-            }
-            OutputDropped += extra;
+            OutputDropped += dropped;
         }
     }
 

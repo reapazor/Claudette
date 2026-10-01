@@ -341,7 +341,7 @@ The conversation is drawn from Claude Code's structured output stream, not from 
 | User message | Right-aligned bubble; attached images as thumbnails. Its time and **Copy** on hover ([below](#copy-and-times)). |
 | Assistant text | Markdown with syntax-highlighted code blocks, each with **Copy**. Streams in as it's generated. Its time and **Copy** on hover. |
 | Thinking | Collapsed "Thinking…" row; click to expand. |
-| Tool call | Compact card: tool icon, name and a one-line summary (file path, command, search pattern). Expand to see full input and output. |
+| Tool call | Compact card: tool icon, name and a one-line summary (file path, command, search pattern). Expand to see full input and output; an output over 20,000 characters shows its start, with **Show all (n KB)**. |
 | Edit / Write | Card shows `+added −removed`; expand for an inline diff, or **Open diff** to see the file in the diff view ([§8](#8-file-changes--diff-view)): from before Claude's first change in this session to the file now, as Changed files shows it. |
 | Bash | Shows the command; output is collapsed and uses a monospace font. |
 | Subagent (Task) | Nested, collapsible group holding that agent's text and tool calls, with its result line (its report). A background subagent's group stays running until it finishes. The agent map shows every subagent as a tree ([§18](#agent-map)). |

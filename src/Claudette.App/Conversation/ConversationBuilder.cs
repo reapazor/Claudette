@@ -535,7 +535,7 @@ public sealed class ConversationBuilder
             _openThinking = new ThinkingItem { IsExpanded = ExpandThinking };
             Items.Add(_openThinking);
         }
-        _openThinking.Text += text;
+        _openThinking.Append(text);
     }
 
     private void CloseText()

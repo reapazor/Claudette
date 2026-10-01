@@ -107,6 +107,52 @@ public class ConversationBuilderTests
     }
 
     [Fact]
+    public void Long_thinking_streams_in_without_copying_it_for_every_piece()
+    {
+        _builder.Apply(new ThinkingDelta("a", null));
+        var thinking = Assert.IsType<ThinkingItem>(_items[0]);
+        var changes = 0;
+        thinking.PropertyChanged += (_, e) => changes += e.PropertyName == nameof(ThinkingItem.Text) ? 1 : 0;
+
+        for (var i = 0; i < 2000; i++)
+        {
+            _builder.Apply(new ThinkingDelta("bc", null));
+        }
+
+        Assert.Equal(2000, changes);
+        Assert.Equal(4001, thinking.Text.Length);
+        Assert.Same(thinking.Text, thinking.Text);
+        Assert.True(thinking.HasText);
+    }
+
+    [Fact]
+    public void A_tool_card_keeps_its_input_but_not_the_message_it_came_in()
+    {
+        Apply("""{"type":"assistant","message":{"content":[{"type":"text","text":"big reply"},{"type":"tool_use","id":"r1","name":"Read","input":{"file_path":"a.cs"}}]}}""");
+
+        var read = Assert.IsType<ToolUseItem>(_items[1]);
+        Assert.Null(read.Input.Parent);
+        Assert.Equal("a.cs", read.Input["file_path"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void A_long_output_shows_its_start_until_Show_all()
+    {
+        Apply("""{"type":"assistant","message":{"content":[{"type":"tool_use","id":"g1","name":"Grep","input":{"pattern":"x"}}]}}""");
+        var grep = Assert.IsType<ToolUseItem>(Assert.Single(_items));
+        var output = new string('x', ToolUseItem.ShownOutputLimit + 5000);
+
+        grep.ApplyResult(output, isError: false, toolUseResult: null);
+
+        Assert.True(grep.IsOutputCut);
+        Assert.Equal(ToolUseItem.ShownOutputLimit, grep.ShownOutput!.Length);
+        Assert.Equal("Show all (25 KB)", grep.ShowAllOutputText);
+        grep.ShowAllOutputCommand.Execute(null);
+        Assert.False(grep.IsOutputCut);
+        Assert.Equal(output, grep.ShownOutput);
+    }
+
+    [Fact]
     public void Todo_write_fills_the_pinned_list_instead_of_a_card()
     {
         var todos = new TodoList();

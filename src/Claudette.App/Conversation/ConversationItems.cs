@@ -123,9 +123,38 @@ public sealed partial class AssistantTextItem : MessageItem
 /// <summary>Claude's thinking, collapsed by default.</summary>
 public sealed partial class ThinkingItem : ConversationItem
 {
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasText))]
-    public partial string Text { get; set; } = "";
+    private readonly System.Text.StringBuilder _text = new();
+    private string? _textAsString = "";
+
+    /// <summary>
+    /// The thinking so far. It streams in small pieces, so it's kept in a builder and made into a string only when read
+    /// (by the view, while the row is expanded), rather than copied whole for every piece.
+    /// </summary>
+    public string Text
+    {
+        get => _textAsString ??= _text.ToString();
+        set
+        {
+            _text.Clear().Append(value);
+            TextChanged();
+        }
+    }
+
+    public void Append(string text)
+    {
+        if (text.Length > 0)
+        {
+            _text.Append(text);
+            TextChanged();
+        }
+    }
+
+    private void TextChanged()
+    {
+        _textAsString = null;
+        OnPropertyChanged(nameof(Text));
+        OnPropertyChanged(nameof(HasText));
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Header))]
@@ -134,7 +163,7 @@ public sealed partial class ThinkingItem : ConversationItem
     [ObservableProperty]
     public partial bool IsExpanded { get; set; }
 
-    public bool HasText => Text.Length > 0;
+    public bool HasText => _text.Length > 0;
 
     public string Header => IsStreaming ? "Thinking…" : "Thinking";
 
@@ -152,7 +181,8 @@ public partial class ToolUseItem : ConversationItem
     {
         ToolUseId = toolUseId;
         Name = name;
-        Input = input;
+        // A copy without its parent: the input is a node of the whole message, which it would otherwise keep alive.
+        Input = input.Parent is null ? input : input.DeepClone().AsObject();
         Summary = Summarize(name, input);
         Command = name == "Bash" ? Str(input, "command") : null;
         Detail = DetailText(name, input);
@@ -221,10 +251,32 @@ public partial class ToolUseItem : ConversationItem
     public string? DiffStats => Diff?.Stats;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasOutput))]
+    [NotifyPropertyChangedFor(nameof(HasOutput), nameof(ShownOutput), nameof(IsOutputCut), nameof(ShowAllOutputText))]
     public partial string? Output { get; set; }
 
     public bool HasOutput => !string.IsNullOrEmpty(Output);
+
+    /// <summary>How much of a long output the card shows until **Show all** (a whole file Read, a big Grep).</summary>
+    public const int ShownOutputLimit = 20_000;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShownOutput), nameof(IsOutputCut))]
+    public partial bool ShowsAllOutput { get; private set; }
+
+    /// <summary>
+    /// The output as the card shows it: the start of a long one, since laying out a hundred kilobytes of text in one block
+    /// is slow even while most of it is scrolled out of sight.
+    /// </summary>
+    public string? ShownOutput => IsOutputCut ? Output![..ShownOutputLimit] : Output;
+
+    public bool IsOutputCut => !ShowsAllOutput && Output is { Length: > ShownOutputLimit };
+
+    public string ShowAllOutputText => Output is { } output
+        ? $"Show all ({(output.Length + 1023) / 1024:N0} KB)"
+        : "Show all";
+
+    [RelayCommand]
+    private void ShowAllOutput() => ShowsAllOutput = true;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasResultSummary))]
