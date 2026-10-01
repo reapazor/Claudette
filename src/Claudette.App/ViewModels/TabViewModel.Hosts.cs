@@ -5,14 +5,23 @@ using Claudette.Platform.Processes;
 namespace Claudette.App.ViewModels;
 
 /// <summary>
-/// What the tab gives its child view models: the process monitor, changed files, project tools and Remote Control. Each
-/// sees only its own host interface; where one area needs another, it goes through the tab.
+/// What the tab gives its child view models: the process monitor, changed files, project tools, Remote Control and
+/// Perforce. Each sees only its own host interface, over the <see cref="ITabAreaHost"/> they share; where one area needs
+/// another, it goes through the tab.
 /// </summary>
-public sealed partial class TabViewModel : IProcessMonitorHost, IChangedFilesHost, IProjectToolsHost, IRemoteControlHost
+public sealed partial class TabViewModel : IProcessMonitorHost, IChangedFilesHost, IProjectToolsHost, IRemoteControlHost, IPerforceHost
 {
-    // ---- The process monitor -----------------------------------------------------------------------------------------
+    // ---- Every area ------------------------------------------------------------------------------------------------
 
-    ClaudeSession? IProcessMonitorHost.Session => _session;
+    ClaudeSession? ITabAreaHost.Session => _session;
+
+    void ITabAreaHost.AddNote(string text, NoteKind kind, string? link) => _conversation.AddNote(text, kind, link);
+
+    void ITabAreaHost.Confirm(string title, string message, string confirmText, Func<Task> onConfirm) => _shell.Confirm(title, message, confirmText, onConfirm);
+
+    void ITabAreaHost.InfoRowsChanged() => OnPropertyChanged(nameof(InfoRows));
+
+    // ---- The process monitor -----------------------------------------------------------------------------------------
 
     IEnumerable<ToolUseItem> IProcessMonitorHost.ToolItems => Items.OfType<ToolUseItem>();
 
@@ -24,10 +33,6 @@ public sealed partial class TabViewModel : IProcessMonitorHost, IChangedFilesHos
 
     void IProcessMonitorHost.ScrollTo(ConversationItem item) => ScrollTo(item);
 
-    void IProcessMonitorHost.Confirm(string title, string message, string confirmText, Func<Task> onConfirm) => _shell.Confirm(title, message, confirmText, onConfirm);
-
-    void IProcessMonitorHost.AddNote(string text, NoteKind kind) => _conversation.AddNote(text, kind);
-
     void IProcessMonitorHost.ProcessesSampled() => _shell.OnTabProcessesSampled();
 
     // ---- Changed files ---------------------------------------------------------------------------------------------
@@ -36,13 +41,11 @@ public sealed partial class TabViewModel : IProcessMonitorHost, IChangedFilesHos
 
     bool IChangedFilesHost.IsSelected => IsSelected;
 
-    void IChangedFilesHost.AddNote(string text, NoteKind kind) => _conversation.AddNote(text, kind);
-
     // ---- Project tools ---------------------------------------------------------------------------------------------
 
     bool IProjectToolsHost.IsProjectPageShowing => IsSelected && IsSidePanelOpen && IsProjectPage;
 
-    long? IProjectToolsHost.CurrentChangelist => Changelists.Current?.Number;
+    long? IProjectToolsHost.CurrentChangelist => Perforce.CurrentChangelist;
 
     void IProjectToolsHost.AddNote(string text, NoteKind kind) => _conversation.AddNote(text, kind);
 
@@ -58,12 +61,6 @@ public sealed partial class TabViewModel : IProcessMonitorHost, IChangedFilesHos
 
     // ---- Remote Control --------------------------------------------------------------------------------------------
 
-    ClaudeSession? IRemoteControlHost.Session => _session;
-
-    void IRemoteControlHost.AddNote(string text, NoteKind kind, string? link) => _conversation.AddNote(text, kind, link);
-
-    void IRemoteControlHost.InfoRowsChanged() => OnPropertyChanged(nameof(InfoRows));
-
     void IRemoteControlHost.CommandTurnEnded() => _checkIns.TurnEnded();
 
     async Task IRemoteControlHost.RestartSessionAsync()
@@ -71,4 +68,19 @@ public sealed partial class TabViewModel : IProcessMonitorHost, IChangedFilesHos
         await StopSessionAsync();
         await EnsureStartedAsync();
     }
+
+    // ---- Perforce --------------------------------------------------------------------------------------------------
+
+    Task IPerforceHost.SendRawAsync(string text) => SendRawAsync(text);
+
+    void IPerforceHost.WaitOnUser(object key)
+    {
+        _waitingOnUser.Add(key);
+        _checkIns.SetWaitingOnUser(true);
+        UpdateStatus();
+    }
+
+    void IPerforceHost.Resolved(object key) => PermissionResolved(key);
+
+    void IPerforceHost.LinkValuesChanged() => ProjectTools.OnLinkValuesChanged();
 }

@@ -10,24 +10,8 @@ using CommunityToolkit.Mvvm.Input;
 namespace Claudette.App.ViewModels;
 
 /// <summary>What Remote Control needs from its tab.</summary>
-internal interface IRemoteControlHost
+internal interface IRemoteControlHost : ITabAreaHost
 {
-    string Id { get; }
-
-    /// <summary>The tab's name, which the session has in the Claude app.</summary>
-    string DisplayName { get; }
-
-    /// <summary>What's saved for the tab: the switch, and the session id.</summary>
-    TabState State { get; }
-
-    /// <summary>The tab's session while it runs.</summary>
-    ClaudeSession? Session { get; }
-
-    void AddNote(string text, NoteKind kind = NoteKind.Info, string? link = null);
-
-    /// <summary>The tab info card's "Claude app" row changed.</summary>
-    void InfoRowsChanged();
-
     /// <summary>The <c>/remote-control</c> fallback's own turn ended: the check-ins stop, as at the end of any turn.</summary>
     void CommandTurnEnded();
 

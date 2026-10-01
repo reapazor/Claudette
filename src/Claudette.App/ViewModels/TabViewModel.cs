@@ -104,6 +104,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         McpServers = new McpServersViewModel(() => _session, url => _services.Platform.OpenUrlAsync(url));
         ProjectTools = new ProjectToolsViewModel(services, this);
         RemoteControl = new RemoteControlViewModel(services, this);
+        Perforce = new PerforceViewModel(services, this);
         Agents = new AgentMap(services.Time, ModelDisplayName);
         Agents.Changed += OnAgentsChanged;
         Tasks = new RunningTasks(services.Time, Agents);
@@ -199,6 +200,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     /// <summary>The tab's connection to the Claude app (DESIGN.md §18, "Remote Control").</summary>
     public RemoteControlViewModel RemoteControl { get; }
+
+    /// <summary>Perforce ticket handling and the changelist in the tab title (DESIGN.md §18).</summary>
+    public PerforceViewModel Perforce { get; }
 
     // ---- Name (DESIGN.md §4, "Naming") -------------------------------------------------------------------
 
@@ -377,7 +381,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 rows.Add(new InfoRow("Running tasks", tasks));
             }
             ProjectTools.AddInfoRows(rows);
-            AddPerforceRows(rows);
+            Perforce.AddInfoRows(rows);
             RemoteControl.AddInfoRows(rows);
             AddLimitWaitRows(rows);
             rows.Add(new InfoRow("Status", StatusTip));
@@ -993,7 +997,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(ShowContextRing));
         ProcessMonitor.UpdateSampler();
         _autoContinue.SettingsChanged();
-        OnPerforceSettingsChanged();
+        Perforce.OnSettingsChanged();
         ProjectTools.OnSettingsChanged();
     }
 
@@ -1410,7 +1414,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 environment["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] = "true";
             }
             var resumeAt = resume is null ? null : State.ResumeAt;
-            var options = await WithPerforceAsync(await ProjectTools.WithNoteAsync(new ClaudeLaunchOptions
+            var options = await Perforce.WithPerforceAsync(await ProjectTools.WithNoteAsync(new ClaudeLaunchOptions
             {
                 WorkingDirectory = Folder,
                 Resume = resume,
@@ -1833,7 +1837,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         ChangedFiles.Record(sessionEvent);
         TrackReplies(sessionEvent);
         ObserveForComposer(sessionEvent);
-        OnPerforceSessionEvent(sessionEvent);
+        Perforce.OnSessionEvent(sessionEvent);
         TrackToolsForWorkingLine(sessionEvent);
         if (ApiTrouble.Reports(sessionEvent))
         {
@@ -2210,7 +2214,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         // timer would keep this tab alive.
         Working.Dispose();
         _services.Notifications.ClearTab(Id);
-        StopPerforce();
+        Perforce.Stop();
         ProjectTools.CloseRuns(killProcesses);
         ChangedFiles.StopReviewSync();
         if (_starting is { } starting)

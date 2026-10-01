@@ -1183,8 +1183,8 @@
 
       <!-- Perforce password (DESIGN.md §18): "Ask each time", or a first "Stored by Claudette" login. A new prompt
            makes a new password box, which takes the focus. -->
-      <Border Classes="overlay" IsVisible="{Binding HasPerforcePrompt}">
-        <ContentControl Content="{Binding PerforcePrompt}" HorizontalAlignment="Center" VerticalAlignment="Center">
+      <Border Classes="overlay" IsVisible="{Binding Perforce.HasPrompt}">
+        <ContentControl Content="{Binding Perforce.Prompt}" HorizontalAlignment="Center" VerticalAlignment="Center">
           <ContentControl.ContentTemplate>
             <DataTemplate DataType="vm:PerforcePasswordPrompt">
               <Border Classes="dialog" MaxWidth="460">
@@ -1661,15 +1661,15 @@
                         </ItemsControl.ItemTemplate>
                       </ItemsControl>
                       <!-- Perforce changelists, with Copy and Open in P4V (DESIGN.md §18) -->
-                      <ItemsControl ItemsSource="{Binding ChangelistRows}" IsVisible="{Binding HasChangelists}">
+                      <ItemsControl ItemsSource="{Binding Perforce.ChangelistRows}" IsVisible="{Binding Perforce.HasChangelists}">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate DataType="vm:ChangelistRow">
                             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
                               <TextBlock Classes="small" Text="{Binding Text}" VerticalAlignment="Center" />
                               <Button Grid.Column="1" Classes="flat" Content="Copy" Click="OnFlyoutItemPicked"
-                                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyChangelistCommand}" CommandParameter="{Binding Number}" />
+                                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).Perforce.CopyChangelistCommand}" CommandParameter="{Binding Number}" />
                               <Button Grid.Column="2" Classes="flat" Content="Open in P4V" Click="OnFlyoutItemPicked"
-                                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenChangelistInP4VCommand}" CommandParameter="{Binding Number}" />
+                                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).Perforce.OpenChangelistInP4VCommand}" CommandParameter="{Binding Number}" />
                             </Grid>
                           </DataTemplate>
                         </ItemsControl.ItemTemplate>

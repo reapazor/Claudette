@@ -62,15 +62,8 @@ public sealed partial class ChangedFileRow : ObservableObject
 }
 
 /// <summary>What the changed files panel needs from its tab.</summary>
-internal interface IChangedFilesHost
+internal interface IChangedFilesHost : ITabAreaHost
 {
-    string Id { get; }
-
-    string Folder { get; }
-
-    /// <summary>What's saved for the tab: the files marked as reviewed, and whether it syncs to the library.</summary>
-    TabState State { get; }
-
     /// <summary>The tab can copy its session to the library now (DESIGN.md §9, "Writing").</summary>
     bool CanSyncNow { get; }
 
@@ -79,8 +72,6 @@ internal interface IChangedFilesHost
 
     /// <summary>Copies the session to the library in the background, for a tab that syncs.</summary>
     void CopyToLibrary();
-
-    void AddNote(string text, NoteKind kind);
 }
 
 /// <summary>The tab's changed files and diffs (DESIGN.md §8).</summary>

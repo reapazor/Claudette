@@ -68,16 +68,10 @@ public sealed partial class ProcessRow : ObservableObject
 }
 
 /// <summary>What the process monitor needs from its tab.</summary>
-internal interface IProcessMonitorHost
+internal interface IProcessMonitorHost : ITabAreaHost
 {
-    /// <summary>What's saved for the tab: its own process monitor setting, from Tab settings….</summary>
-    TabState State { get; }
-
     /// <summary>The side panel is open, so the composer bar leaves the summary to it.</summary>
     bool IsSidePanelOpen { get; }
-
-    /// <summary>The tab's session while it runs, for stopping a background task through Claude Code.</summary>
-    ClaudeSession? Session { get; }
 
     /// <summary>The conversation's tool calls, for the call that started a process.</summary>
     IEnumerable<ToolUseItem> ToolItems { get; }
@@ -93,10 +87,6 @@ internal interface IProcessMonitorHost
 
     /// <summary>Asks the view to scroll to a conversation item.</summary>
     void ScrollTo(ConversationItem item);
-
-    void Confirm(string title, string message, string confirmText, Func<Task> onConfirm);
-
-    void AddNote(string text, NoteKind kind);
 
     /// <summary>A new sample: the header's total across the tabs changes.</summary>
     void ProcessesSampled();

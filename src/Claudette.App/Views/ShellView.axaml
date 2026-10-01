@@ -207,14 +207,14 @@
                                     </Border>
                                     <!-- The Perforce changelist (DESIGN.md §18): separate from the name, so renaming keeps it -->
                                     <Button DockPanel.Dock="Right" Classes="flat changelist" Padding="0" Margin="5,0,0,0" VerticalAlignment="Center"
-                                            IsVisible="{Binding ShowChangelistBadge}" ToolTip.Tip="{Binding ChangelistBadgeTip}" AutomationProperties.Name="{Binding ChangelistBadge}">
+                                            IsVisible="{Binding Perforce.ShowChangelistBadge}" ToolTip.Tip="{Binding Perforce.ChangelistBadgeTip}" AutomationProperties.Name="{Binding Perforce.ChangelistBadge}">
                                       <Border Background="{DynamicResource SubtleBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1" CornerRadius="4" Padding="4,0">
-                                        <TextBlock Classes="muted small" Text="{Binding ChangelistBadge}" />
+                                        <TextBlock Classes="muted small" Text="{Binding Perforce.ChangelistBadge}" />
                                       </Border>
                                       <Button.Flyout>
                                         <MenuFlyout>
-                                          <MenuItem Header="Copy changelist number" Command="{Binding CopyChangelistCommand}" CommandParameter="{x:Null}" />
-                                          <MenuItem Header="Open in P4V" Command="{Binding OpenChangelistInP4VCommand}" CommandParameter="{x:Null}" />
+                                          <MenuItem Header="Copy changelist number" Command="{Binding Perforce.CopyChangelistCommand}" CommandParameter="{x:Null}" />
+                                          <MenuItem Header="Open in P4V" Command="{Binding Perforce.OpenChangelistInP4VCommand}" CommandParameter="{x:Null}" />
                                         </MenuFlyout>
                                       </Button.Flyout>
                                     </Button>
