@@ -3,6 +3,7 @@
 [toggle] Side by side
 [toggle] Whole file
 [button] Open in editor
+[button] Revert file
 [button] More actions: …
 [button] Reviewed
 "src/auth.cs · compared with before Claude's first change in this session"

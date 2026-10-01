@@ -14,16 +14,21 @@ public sealed record DiffCell(string Number, string Text, IReadOnlyList<ColoredR
 }
 
 /// <summary>A row of the inline diff.</summary>
-public sealed record InlineDiffRow(string OldNumber, string NewNumber, string Marker, string Text, IReadOnlyList<ColoredRun>? Runs, DiffOp Op, bool IsHeader)
+/// <param name="Hunk">On a hunk's header row, the hunk, which <b>Revert</b> undoes (DESIGN.md §8, "Reverting").</param>
+public sealed record InlineDiffRow(string OldNumber, string NewNumber, string Marker, string Text, IReadOnlyList<ColoredRun>? Runs, DiffOp Op, bool IsHeader, DiffHunk? Hunk = null)
 {
+    public bool CanRevert => Hunk is not null;
+
     public bool IsAdded => Op == DiffOp.Added && !IsHeader;
 
     public bool IsRemoved => Op == DiffOp.Removed && !IsHeader;
 }
 
 /// <summary>A row of the side-by-side diff; an empty cell is a line only the other side has.</summary>
-public sealed record SideBySideDiffRow(DiffCell? Left, DiffCell? Right, bool IsHeader, string HeaderText)
+public sealed record SideBySideDiffRow(DiffCell? Left, DiffCell? Right, bool IsHeader, string HeaderText, DiffHunk? Hunk = null)
 {
+    public bool CanRevert => Hunk is not null;
+
     public bool HasLeft => Left is not null;
 
     public bool HasRight => Right is not null;
@@ -66,6 +71,7 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
     private string? _shownChange;
     private IReadOnlyList<IReadOnlyList<ColoredRun>>? _beforeColors;
     private IReadOnlyList<IReadOnlyList<ColoredRun>>? _afterColors;
+    private bool _isBinary;
 
     public DiffWindowViewModel(DiffSource source, bool dark)
     {
@@ -93,6 +99,7 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
     public event Action? CloseRequested;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRevert))]
     public partial bool IsLoading { get; set; } = true;
 
     [ObservableProperty]
@@ -135,6 +142,70 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
 
     [RelayCommand]
     private Task RefreshAsync() => LoadAsync();
+
+    // ---- Reverting (DESIGN.md §8) --------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Claude's changes can be put back: the file as it was before is known, and the view isn't showing a file that's
+    /// gone or binary.
+    /// </summary>
+    public bool CanRevert => _source.BeforeKnown && !IsLoading && _after is not null && !_isBinary && !string.Equals(_after, _source.Before, StringComparison.Ordinal);
+
+    /// <summary><b>Revert file</b> asks first: the second step shows.</summary>
+    [ObservableProperty]
+    public partial bool IsConfirmingRevert { get; set; }
+
+    [RelayCommand]
+    private void AskToRevertFile() => IsConfirmingRevert = true;
+
+    [RelayCommand]
+    private void CancelRevert() => IsConfirmingRevert = false;
+
+    /// <summary>Puts the whole file back as it was before Claude's first change; a file Claude created is deleted.</summary>
+    [RelayCommand]
+    private Task RevertFileAsync()
+    {
+        IsConfirmingRevert = false;
+        return RevertAsync(_source.Before);
+    }
+
+    /// <summary>Undoes one hunk of the diff, leaving the rest of Claude's changes.</summary>
+    [RelayCommand]
+    private Task RevertHunkAsync(DiffHunk? hunk)
+    {
+        if (hunk is null || Revert.Hunk(_after, hunk) is not { } reverted)
+        {
+            Message = ChangedSince;
+            return Task.CompletedTask;
+        }
+        return RevertAsync(reverted);
+    }
+
+    private const string ChangedSince = "The file changed since this was shown, so nothing was reverted. Refresh to see it now.";
+
+    private async Task RevertAsync(string? text)
+    {
+        if (!CanRevert)
+        {
+            return;
+        }
+        var path = _source.Path;
+        var shown = _after;
+        try
+        {
+            if (!await Task.Run(() => Revert.Write(path, shown, text)))
+            {
+                Message = ChangedSince;
+                return;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Message = $"Couldn't revert {Path.GetFileName(path)}: {ex.Message}";
+            return;
+        }
+        await LoadAsync();
+    }
 
     /// <summary>
     /// <b>Reviewed</b>: marks the file as reviewed and closes the view (DESIGN.md §8, "Reviewed"). It marks the change the
@@ -179,6 +250,7 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
             return (current, beforeColors, afterColors, current is null ? "The file has been deleted." : null);
         });
         _after = after;
+        _isBinary = IsBinary(before, after);
         _beforeColors = _source.BeforeKnown ? beforeColors : afterColors;
         _afterColors = afterColors;
         Message = message;
@@ -187,6 +259,7 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
         // Build the rows before saying it's loaded, so nothing sees "loaded" with no rows.
         BuildRows();
         IsLoading = false;
+        OnPropertyChanged(nameof(CanRevert));
         if (dark != _dark)
         {
             // The theme changed while it loaded.
@@ -253,17 +326,18 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
     private void BuildRows()
     {
         var before = Before;
-        var lines = new List<(DiffLineEntry? Line, string? Header)>();
+        var lines = new List<(DiffLineEntry? Line, string? Header, DiffHunk? Hunk)>();
         if (ShowWholeFile)
         {
-            lines.AddRange(LineDiff.Full(before, _after).Select(l => ((DiffLineEntry?)l, (string?)null)));
+            lines.AddRange(LineDiff.Full(before, _after).Select(l => ((DiffLineEntry?)l, (string?)null, (DiffHunk?)null)));
         }
         else
         {
+            var revertable = _source.BeforeKnown && _after is not null && !_isBinary;
             foreach (var hunk in LineDiff.Hunks(before, _after))
             {
-                lines.Add((null, hunk.Header));
-                lines.AddRange(hunk.Lines.Select(l => ((DiffLineEntry?)l, (string?)null)));
+                lines.Add((null, hunk.Header, revertable ? hunk : null));
+                lines.AddRange(hunk.Lines.Select(l => ((DiffLineEntry?)l, (string?)null, (DiffHunk?)null)));
             }
         }
 
@@ -271,7 +345,7 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
         {
             var rows = new List<SideBySideDiffRow>();
             var run = new List<DiffLineEntry>();
-            foreach (var (line, header) in lines)
+            foreach (var (line, header, hunk) in lines)
             {
                 if (line is not null)
                 {
@@ -279,7 +353,7 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
                     continue;
                 }
                 Flush();
-                rows.Add(new SideBySideDiffRow(null, null, true, header!));
+                rows.Add(new SideBySideDiffRow(null, null, true, header!, hunk));
             }
             Flush();
             SideRows = rows;
@@ -298,7 +372,7 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
             InlineRows = lines.Select(item => item.Line is { } l
                 ? new InlineDiffRow(l.OldNumber?.ToString() ?? "", l.NewNumber?.ToString() ?? "",
                     l.Op switch { DiffOp.Added => "+", DiffOp.Removed => "−", _ => " " }, l.Text, Colors(l), l.Op, false)
-                : new InlineDiffRow("", "", "", item.Header!, null, DiffOp.Context, true)).ToArray();
+                : new InlineDiffRow("", "", "", item.Header!, null, DiffOp.Context, true, item.Hunk)).ToArray();
         }
     }
 

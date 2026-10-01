@@ -837,6 +837,15 @@ A tab starts in auto mode, like a Claude Code session in a terminal or VS Code, 
   - An Edit's `null` means a new file only when its `oldString` is empty; otherwise the "before" is unknown, as it is for a Write over a file too large for Claude Code to diff.
   - A file whose "before" is unknown, such as one from a session Claudette didn't run live, is listed as modified, without counts. The diff view shows it as it is now, with nothing marked as changed, and says what it held before isn't known; it opens there even when an external diff tool is set.
 
+### Reverting
+
+The diff view can put back what Claude changed, when it knows what the file held before:
+
+- **Revert** on a hunk's header undoes just that change, leaving Claude's others.
+- **Revert file** puts the whole file back as it was before Claude's first change, after asking in place (*Put the whole file back?*). A file Claude created is deleted.
+- Either only writes if the file is still what the view showed: if Claude, or anything else, changed it since, nothing is written and the view says to refresh. Line endings, a missing newline at the end and a UTF-8 byte order mark are kept.
+- The file is written to a temporary name and renamed, as Claudette's own files are. Changed files picks the change up as it does any other.
+
 ### External diff tool
 
 - In Settings → Diff tool, the user chooses how diffs open: **Built-in** (the default), a **preset**, or a **custom command**.
