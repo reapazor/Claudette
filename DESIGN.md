@@ -351,6 +351,8 @@ The conversation is drawn from Claude Code's structured output stream, not from 
 
 Scrolling follows new output unless the user has scrolled up; a "Jump to latest" button appears when they have.
 
+The conversation is virtualized: only the items in view, and a little either side, have controls, so a long session (a restored one with thousands of tool calls, say) costs no more to show than a short one, and tabs in the background hold no more than a screenful. Scrolling to a card (from the agent map or the Processes page) brings its top-level item into view first, then the card inside it. An expanded Edit or Write card's inline diff is virtualized the same way; the diff window's lists always were.
+
 ### Copy and times
 
 - **Code blocks.** A code block has a header line with its language, **Wrap lines** and **Copy**.

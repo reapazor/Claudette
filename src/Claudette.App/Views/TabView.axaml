@@ -60,11 +60,13 @@
     <Style Selector=".compact ItemsControl#ConversationItems">
       <Setter Property="Margin" Value="20,10,20,14" />
     </Style>
-    <Style Selector="StackPanel.conversation">
-      <Setter Property="Spacing" Value="8" />
+    <!-- The conversation is virtualized (DESIGN.md §5): only the items in view have controls. The panel has no spacing
+         of its own, so each item keeps its distance from the next. -->
+    <Style Selector="ItemsControl#ConversationItems > ContentPresenter">
+      <Setter Property="Margin" Value="0,0,0,8" />
     </Style>
-    <Style Selector=".compact StackPanel.conversation">
-      <Setter Property="Spacing" Value="3" />
+    <Style Selector=".compact ItemsControl#ConversationItems > ContentPresenter">
+      <Setter Property="Margin" Value="0,0,0,3" />
     </Style>
     <Style Selector="Border.usermessage">
       <Setter Property="Background" Value="{DynamicResource UserBoxBrush}" />
@@ -98,7 +100,7 @@
       <Setter Property="Spacing" Value="1" />
     </Style>
     <!-- Tool, thinking and subagent rows -->
-    <Style Selector=".compact StackPanel.conversation Button.row">
+    <Style Selector=".compact VirtualizingStackPanel.conversation Button.row">
       <Setter Property="Padding" Value="4,0" />
     </Style>
     <Style Selector="StackPanel.composerarea">
@@ -410,7 +412,13 @@
           </Border>
           <Border Classes="codeblock" Padding="0" IsVisible="{Binding HasDiff}">
             <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Auto">
-              <ItemsControl ItemsSource="{Binding Diff.Lines}" />
+              <ItemsControl ItemsSource="{Binding Diff.Lines}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <VirtualizingStackPanel />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+              </ItemsControl>
             </ScrollViewer>
           </Border>
           <Border Classes="codeblock" IsVisible="{Binding HasOutput}">
@@ -446,7 +454,13 @@
           <SelectableTextBlock Classes="mono" Text="{Binding Detail}" TextWrapping="Wrap" IsVisible="{Binding HasDetail}" />
           <Border Classes="codeblock" Padding="0" IsVisible="{Binding HasDiff}">
             <ScrollViewer MaxHeight="240" HorizontalScrollBarVisibility="Auto">
-              <ItemsControl ItemsSource="{Binding Diff.Lines}" />
+              <ItemsControl ItemsSource="{Binding Diff.Lines}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <VirtualizingStackPanel />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+              </ItemsControl>
             </ScrollViewer>
           </Border>
           <TextBlock Classes="muted small" Text="{Binding Reason}" TextWrapping="Wrap" IsVisible="{Binding HasReason}" />
@@ -814,7 +828,7 @@
           <ItemsControl x:Name="ConversationItems" ItemsSource="{Binding Items}" MaxWidth="900" ClipToBounds="False">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
-                <StackPanel Classes="conversation" />
+                <VirtualizingStackPanel Classes="conversation" />
               </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
           </ItemsControl>

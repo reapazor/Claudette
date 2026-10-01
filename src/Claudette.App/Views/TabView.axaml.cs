@@ -292,9 +292,23 @@ public partial class TabView : UserControl
             BringTopIntoView(container);
             return;
         }
+        // The conversation is virtualized: bring the top-level item that holds it into view first, so it has controls.
+        if (ViewModel?.TopLevelItemOf(item) is { } outer)
+        {
+            ConversationItems.ScrollIntoView(outer);
+            if (ReferenceEquals(outer, item) && ConversationItems.ContainerFromItem(item) is { } realized)
+            {
+                BringTopIntoView(realized);
+                return;
+            }
+        }
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            if (ConversationItems.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().FirstOrDefault(p => ReferenceEquals(p.Content, item)) is { } nested)
+            if (ConversationItems.ContainerFromItem(item) is { } top)
+            {
+                BringTopIntoView(top);
+            }
+            else if (ConversationItems.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().FirstOrDefault(p => ReferenceEquals(p.Content, item)) is { } nested)
             {
                 BringTopIntoView(nested);
             }

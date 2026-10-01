@@ -91,6 +91,29 @@ public sealed partial class TabViewModel
     /// <summary>Asks the view to scroll to a conversation item, for example the card that started a process.</summary>
     public event Action<ConversationItem>? ScrollToRequested;
 
+    /// <summary>Asks the view to scroll to <paramref name="item"/>, wherever it is in the conversation.</summary>
+    public void ScrollTo(ConversationItem item) => ScrollToRequested?.Invoke(item);
+
+    /// <summary>
+    /// The conversation's top-level item that holds <paramref name="item"/>: itself, or the subagent group it's inside,
+    /// however deep. Null when it isn't in the conversation. The view brings that into view first, since the
+    /// conversation is virtualized and only items in view have controls.
+    /// </summary>
+    public ConversationItem? TopLevelItemOf(ConversationItem item)
+    {
+        foreach (var top in Items)
+        {
+            if (ReferenceEquals(top, item) || top is SubagentItem group && Contains(group, item))
+            {
+                return top;
+            }
+        }
+        return null;
+
+        static bool Contains(SubagentItem group, ConversationItem item) =>
+            group.Items.Any(child => ReferenceEquals(child, item) || child is SubagentItem inner && Contains(inner, item));
+    }
+
     private void AttachProcessTree(ClaudeSession session)
     {
         if (_services.ProcessTrees is not { } trees || session.ProcessId is not { } pid)
