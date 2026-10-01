@@ -13,6 +13,7 @@ using Claudette.Core.Status;
 using Claudette.Core.Transcripts;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 
 namespace Claudette.App.ViewModels;
 
@@ -331,6 +332,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     partial void OnIsSelectedChanged(bool value)
     {
+        Working.SetShown(value);
         if (value)
         {
             if (Status == TabStatus.Unread)
@@ -1494,132 +1496,153 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         foreach (var sessionEvent in events)
         {
-            if (InterceptRemoteCommand(sessionEvent))
+            try
             {
-                continue;
+                ApplyEvent(session, sessionEvent);
             }
-            _conversation.Apply(sessionEvent);
-            RecordFileChanges(sessionEvent);
-            TrackReplies(sessionEvent);
-            ObserveForComposer(sessionEvent);
-            OnPerforceSessionEvent(sessionEvent);
-            TrackToolsForWorkingLine(sessionEvent);
-            if (ApiTrouble.Reports(sessionEvent))
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                // Claude's status may explain it: check now rather than at the next poll (DESIGN.md §18, "Service status").
-                _services.ServiceStatus.OnApiTrouble();
+                // One event Claudette can't show must never take the app, and every tab's claude, down with it
+                // (CLAUDE.md, "Parse tolerantly"). Say so once per kind of event, so a stream of them doesn't flood.
+                _services.Loggers.CreateLogger("Tab").LogError(ex, "Couldn't apply a {Event} event.", sessionEvent.GetType().Name);
+                if (_failedEvents.Add(sessionEvent.GetType().Name))
+                {
+                    _conversation.AddNote($"Claudette couldn't show part of this conversation ({sessionEvent.GetType().Name}: {ex.Message}). The session carries on.", NoteKind.Warning);
+                }
             }
-            switch (sessionEvent)
-            {
-                case StateChanged { State: SessionState.Working }:
-                    _checkIns.TurnStarted();
-                    _autoContinue.TurnStarted();
-                    UpdateStatus();
-                    break;
-                case StateChanged:
-                    UpdateStatus();
-                    break;
-                case TurnStarted started:
-                    State.SessionId = started.Init.SessionId;
-                    _forkAwaitingId = false;
-                    if (started.Init.ClaudeCodeVersion is { } reported && Version.TryParse(reported, out var version))
-                    {
-                        SetRunningVersion(version);
-                    }
-                    _modelId = started.Init.Model ?? _modelId;
-                    ModelName = ModelDisplayName(_modelId) ?? ModelName;
-                    PermissionMode = started.Init.PermissionMode ?? PermissionMode;
-                    _services.SaveState();
-                    break;
-                case AssistantMessageReceived assistant:
-                    _checkIns.OutputSeen();
-                    if (_callUsage.Add(assistant.Message))
-                    {
-                        OnCallUsage();
-                    }
-                    break;
-                case TextDelta or ThinkingDelta or ToolResultsReceived:
-                    _checkIns.OutputSeen();
-                    break;
-                case AutocompactStateChanged autocompact:
-                    _autocompact = autocompact.State;
-                    break;
-                case PermissionRequested requested:
-                    _pendingPermissions++;
-                    _checkIns.SetWaitingOnUser(true);
-                    WatchPermission(requested.Request);
-                    UpdateStatus();
-                    NotifyNeedsInput(requested.Request);
-                    break;
-                case PermissionCancelled:
-                    PermissionResolved();
-                    break;
-                case SystemNotice { Message.Subtype: "status" }:
-                    // Claude Code reports mode changes it makes itself, such as leaving plan mode.
-                    PermissionMode = session.PermissionMode ?? PermissionMode;
-                    break;
-                case SystemNotice { Message.Subtype: "bridge_state" or "worker_shutting_down" } remote:
-                    OnRemoteNotice(remote.Message);
-                    break;
-                case RateLimitUpdated rateLimit:
-                    _services.Usage?.OnRateLimitEvent(rateLimit.Message);
-                    _autoContinue.RateLimit(rateLimit.Message.Info);
-                    break;
-                case TurnCompleted completed:
-                    _checkIns.TurnEnded();
-                    _autoContinue.TurnEnded(completed.Result);
-                    State.SessionId = completed.Result.SessionId ?? State.SessionId;
-                    State.Tokens.Add(completed.Result);
-                    _callUsage.TurnEnded(completed.Result);
-                    _services.Usage?.OnTurnCompleted(Id, DisplayName, completed.Result);
-                    // Only a tab that syncs writes to the library (DESIGN.md §9, "Session library").
-                    CopyToLibrary();
-                    RefreshTokens();
-                    _services.SaveState();
-                    _ = RefreshContextUsageAsync(session);
-                    if (!IsSelected && !completed.Result.IsError)
-                    {
-                        Status = TabStatus.Unread;
-                    }
-                    if (!completed.Result.IsError)
-                    {
-                        NotifyTurnFinished(completed.Result);
-                    }
-                    // Claude may have edited claudette.json or switched branches: the actions and links follow.
-                    _ = RefreshProjectFileAsync();
-                    _stoppedHere = false;
-                    // The switch changed while Claude worked (DESIGN.md §18, "Remote Control").
-                    RunWaitingRemoteChange(session);
-                    break;
-                case ConversationReset:
-                    _callUsage.ContextReset();
-                    State.SessionStartedAt = _services.Time.GetUtcNow();
-                    OnPropertyChanged(nameof(InfoRows));
-                    TodoList.Clear();
-                    State.AutoName = null;
-                    _titleRequested = false;
-                    _firstPrompt = null;
-                    NameChanged();
-                    break;
-                case AuthenticationRequired:
-                    OnAuthenticationRequired();
-                    break;
-                case SessionExited exited:
-                    _session = null;
-                    ResetRemote();
-                    SetRunningVersion(null);
-                    _checkIns.TurnEnded();
-                    _pendingPermissions = 0;
-                    ErrorMessage = exited.Exit.ExitCode == 0 ? null : ExitErrorMessage(exited.Exit);
-                    Status = exited.Exit.ExitCode == 0 ? TabStatus.Exited : TabStatus.Error;
-                    OnPropertyChanged(nameof(CanRestart));
-                    _services.Notifications.ClearTab(Id, NotificationKind.NeedsInput);
-                    if (exited.Exit.ExitCode != 0)
-                    {
-                        NotifyProcessError($"Claude Code stopped unexpectedly (exit code {exited.Exit.ExitCode}).");
-                    }
-                    break;
-            }
+        }
+    }
+
+    /// <summary>The kinds of event that failed to apply, each noted once in the conversation.</summary>
+    private readonly HashSet<string> _failedEvents = new(StringComparer.Ordinal);
+
+    private void ApplyEvent(ClaudeSession session, SessionEvent sessionEvent)
+    {
+        if (InterceptRemoteCommand(sessionEvent))
+        {
+            return;
+        }
+        _conversation.Apply(sessionEvent);
+        RecordFileChanges(sessionEvent);
+        TrackReplies(sessionEvent);
+        ObserveForComposer(sessionEvent);
+        OnPerforceSessionEvent(sessionEvent);
+        TrackToolsForWorkingLine(sessionEvent);
+        if (ApiTrouble.Reports(sessionEvent))
+        {
+            // Claude's status may explain it: check now rather than at the next poll (DESIGN.md §18, "Service status").
+            _services.ServiceStatus.OnApiTrouble();
+        }
+        switch (sessionEvent)
+        {
+            case StateChanged { State: SessionState.Working }:
+                _checkIns.TurnStarted();
+                _autoContinue.TurnStarted();
+                UpdateStatus();
+                break;
+            case StateChanged:
+                UpdateStatus();
+                break;
+            case TurnStarted started:
+                State.SessionId = started.Init.SessionId;
+                _forkAwaitingId = false;
+                if (started.Init.ClaudeCodeVersion is { } reported && Version.TryParse(reported, out var version))
+                {
+                    SetRunningVersion(version);
+                }
+                _modelId = started.Init.Model ?? _modelId;
+                ModelName = ModelDisplayName(_modelId) ?? ModelName;
+                PermissionMode = started.Init.PermissionMode ?? PermissionMode;
+                _services.SaveState();
+                break;
+            case AssistantMessageReceived assistant:
+                _checkIns.OutputSeen();
+                if (_callUsage.Add(assistant.Message))
+                {
+                    OnCallUsage();
+                }
+                break;
+            case TextDelta or ThinkingDelta or ToolResultsReceived:
+                _checkIns.OutputSeen();
+                break;
+            case AutocompactStateChanged autocompact:
+                _autocompact = autocompact.State;
+                break;
+            case PermissionRequested requested:
+                _pendingPermissions++;
+                _checkIns.SetWaitingOnUser(true);
+                WatchPermission(requested.Request);
+                UpdateStatus();
+                NotifyNeedsInput(requested.Request);
+                break;
+            case PermissionCancelled:
+                PermissionResolved();
+                break;
+            case SystemNotice { Message.Subtype: "status" }:
+                // Claude Code reports mode changes it makes itself, such as leaving plan mode.
+                PermissionMode = session.PermissionMode ?? PermissionMode;
+                break;
+            case SystemNotice { Message.Subtype: "bridge_state" or "worker_shutting_down" } remote:
+                OnRemoteNotice(remote.Message);
+                break;
+            case RateLimitUpdated rateLimit:
+                _services.Usage?.OnRateLimitEvent(rateLimit.Message);
+                _autoContinue.RateLimit(rateLimit.Message.Info);
+                break;
+            case TurnCompleted completed:
+                _checkIns.TurnEnded();
+                _autoContinue.TurnEnded(completed.Result);
+                State.SessionId = completed.Result.SessionId ?? State.SessionId;
+                State.Tokens.Add(completed.Result);
+                _callUsage.TurnEnded(completed.Result);
+                _services.Usage?.OnTurnCompleted(Id, DisplayName, completed.Result);
+                // Only a tab that syncs writes to the library (DESIGN.md §9, "Session library").
+                CopyToLibrary();
+                RefreshTokens();
+                _services.SaveState();
+                _ = RefreshContextUsageAsync(session);
+                if (!IsSelected && !completed.Result.IsError)
+                {
+                    Status = TabStatus.Unread;
+                }
+                if (!completed.Result.IsError)
+                {
+                    NotifyTurnFinished(completed.Result);
+                }
+                // Claude may have edited claudette.json or switched branches: the actions and links follow.
+                _ = RefreshProjectFileAsync();
+                _stoppedHere = false;
+                // The switch changed while Claude worked (DESIGN.md §18, "Remote Control").
+                RunWaitingRemoteChange(session);
+                break;
+            case ConversationReset:
+                _callUsage.ContextReset();
+                State.SessionStartedAt = _services.Time.GetUtcNow();
+                OnPropertyChanged(nameof(InfoRows));
+                TodoList.Clear();
+                State.AutoName = null;
+                _titleRequested = false;
+                _firstPrompt = null;
+                NameChanged();
+                break;
+            case AuthenticationRequired:
+                OnAuthenticationRequired();
+                break;
+            case SessionExited exited:
+                _session = null;
+                ResetRemote();
+                SetRunningVersion(null);
+                _checkIns.TurnEnded();
+                _pendingPermissions = 0;
+                ErrorMessage = exited.Exit.ExitCode == 0 ? null : ExitErrorMessage(exited.Exit);
+                Status = exited.Exit.ExitCode == 0 ? TabStatus.Exited : TabStatus.Error;
+                OnPropertyChanged(nameof(CanRestart));
+                _services.Notifications.ClearTab(Id, NotificationKind.NeedsInput);
+                if (exited.Exit.ExitCode != 0)
+                {
+                    NotifyProcessError($"Claude Code stopped unexpectedly (exit code {exited.Exit.ExitCode}).");
+                }
+                break;
         }
     }
 
@@ -1798,6 +1821,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         StopAgentTicker();
         StopTaskTicker();
         StopCheckInTicker();
+        // The session's last events aren't applied once it stops, so nothing else would end the turn's line, and its
+        // timer would keep this tab alive.
+        Working.Dispose();
         _services.Notifications.ClearTab(Id);
         StopPerforce();
         CloseProjectRuns(killProcesses);

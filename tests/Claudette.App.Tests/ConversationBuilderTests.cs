@@ -171,6 +171,19 @@ public class ConversationBuilderTests
     }
 
     [Fact]
+    public void Structured_results_with_unexpected_types_are_read_leniently()
+    {
+        // Claude Code changing a field's type must not throw out of the event (CLAUDE.md, "Parse tolerantly").
+        Apply("""{"type":"assistant","message":{"content":[{"type":"tool_use","id":"b1","name":"Bash","input":{"command":"sleep 5"}},{"type":"tool_use","id":"w1","name":"Write","input":{"file_path":"a.cs","content":"x"}}]}}""");
+        Apply("""{"type":"user","tool_use_result":{"stdout":"done","stderr":"","interrupted":"yes"},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"b1","content":"done"}]}}""");
+        Apply("""{"type":"user","tool_use_result":{"type":7,"content":"x"},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"w1","content":"File created"}]}}""");
+
+        var tools = _items.OfType<ToolUseItem>().ToList();
+        Assert.Equal("done", tools[0].ResultSummary);
+        Assert.True(tools[1].IsComplete);
+    }
+
+    [Fact]
     public void An_edit_shows_the_structured_patch()
     {
         Apply("""{"type":"assistant","message":{"content":[{"type":"tool_use","id":"e1","name":"Edit","input":{"file_path":"a.cs","old_string":"x","new_string":"y"}}]}}""");

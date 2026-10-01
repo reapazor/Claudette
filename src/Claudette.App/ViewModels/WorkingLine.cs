@@ -38,6 +38,8 @@ public sealed partial class WorkingLine(
 
     private readonly Lock _lock = new();
     private ITimer? _timer;
+    private bool _running;
+    private bool _shown = true;
     private DateTimeOffset _startedAt;
     private DateTimeOffset _verbSince;
     private int _frame;
@@ -68,17 +70,53 @@ public sealed partial class WorkingLine(
     {
         lock (_lock)
         {
-            if (_timer is not null)
+            if (_running)
             {
                 return;
             }
+            _running = true;
             _startedAt = _verbSince = timeProvider.GetUtcNow();
             _frame = 0;
-            _timer = timeProvider.CreateTimer(_ => dispatcher.Post(Tick), null, FrameInterval, FrameInterval);
+            UpdateTimer();
         }
         IsActive = true;
         _funVerb = NextVerb(null);
         Update();
+    }
+
+    /// <summary>
+    /// Whether the line is on screen: its tab is the selected one. A hidden line keeps counting the turn but doesn't
+    /// tick, so tabs working in the background don't wake the UI eight times a second; it catches up when shown.
+    /// </summary>
+    public void SetShown(bool shown)
+    {
+        lock (_lock)
+        {
+            if (_shown == shown)
+            {
+                return;
+            }
+            _shown = shown;
+            UpdateTimer();
+        }
+        if (shown && IsActive)
+        {
+            Update();
+        }
+    }
+
+    /// <summary>The frame timer runs while a turn runs and the line is shown. Called under the lock.</summary>
+    private void UpdateTimer()
+    {
+        if (_running && _shown)
+        {
+            _timer ??= timeProvider.CreateTimer(_ => dispatcher.Post(Tick), null, FrameInterval, FrameInterval);
+        }
+        else
+        {
+            _timer?.Dispose();
+            _timer = null;
+        }
     }
 
     /// <summary>What the running tools are doing (<see cref="Conversation.ToolActivity"/>), or null when none is running.</summary>
@@ -97,8 +135,8 @@ public sealed partial class WorkingLine(
     {
         lock (_lock)
         {
-            _timer?.Dispose();
-            _timer = null;
+            _running = false;
+            UpdateTimer();
         }
         IsActive = false;
         _activity = null;

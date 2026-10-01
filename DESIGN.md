@@ -390,7 +390,7 @@ While Claude works, a line above the composer says so, the way Claude Code's ter
   - a subagent's own calls show on the agent map ([§18](#agent-map)), not here;
   - hovering the line shows the running calls in full, one per line: *"Bash: dotnet test Claudette.slnx --filter …"*;
   - **Show what Claude is doing while it works** (Settings → Appearance, on by default) turns it off, leaving the verb.
-- **When it shows.** From the turn's start to its end. It hides while a permission prompt, question or plan waits on the user, and the turn's time keeps running meanwhile.
+- **When it shows.** From the turn's start to its end. It hides while a permission prompt, question or plan waits on the user, and the turn's time keeps running meanwhile. It only animates while its tab is the selected one: a tab working in the background keeps counting its turn without waking the UI, and catches up when it's shown. Closing a tab mid-turn stops its line.
 - **Verbs.** Claudette has its own list, since Claude Code doesn't publish its built-in one. Claude Code's documented `spinnerVerbs` setting changes it:
   - `"append"` adds the user's verbs;
   - `"replace"` shows only theirs (an empty list keeps the built-in ones).
@@ -1219,7 +1219,8 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 - **Threading.** Each session reads its process on a background task. Events go to the UI thread through a channel, and streaming text is batched so the UI isn't updated for every token.
 - **Resilience.** If a process exits unexpectedly, the tab shows an error with a **Restart** button that resumes the same session ID.
 - **Shutdown.** When Claudette closes while a tab is working, it interrupts the turn first so the session is left in a clean state.
-- **Logging.** Raw protocol traffic can be logged per session (off by default) to help debug parsing problems when Claude Code changes its output.
+- **Logging.** Raw protocol traffic can be logged per session (off by default) to help debug parsing problems when Claude Code changes its output. Claudette's own warnings and errors always go to `claudette.log` in the log folder (**Open log folder**), which is kept under 2 MB: past that it becomes `claudette.1.log`, replacing the one before.
+- **Nothing ends the app by surprise.** Each session event is applied on its own: one that fails is logged and noted once in the conversation (*"Claudette couldn't show part of this conversation…"*), and the rest carry on. An exception nothing else caught on the UI thread is logged and handled rather than closing Claudette, which would leave every tab's `claude` running ([§4](#process-monitor)), and a failed background task nobody waited for is logged.
 
 ### Integration with Claude Code
 

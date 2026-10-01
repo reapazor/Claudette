@@ -63,6 +63,42 @@ public class WorkingLineTests
         await TabTestHarness.Eventually(() => tab.Working.Detail == $"0s · 3.1k tokens · {Stop(h)} to stop", "the tokens");
     }
 
+    [Fact]
+    public async Task Closing_a_working_tab_stops_its_line()
+    {
+        var (h, tab) = await WorkingTabAsync(["Noodling"]);
+        await using var _ = h;
+        var line = tab.Working;
+
+        await tab.CloseAsync(killProcesses: false);
+        var glyph = line.Glyph;
+        h.Time.Advance(WorkingLine.FrameInterval * 5);
+
+        Assert.False(line.IsActive);
+        Assert.Equal(glyph, line.Glyph);
+    }
+
+    [Fact]
+    public async Task A_tab_working_in_the_background_doesnt_tick_until_its_shown()
+    {
+        var (h, tab) = await WorkingTabAsync(["Noodling"]);
+        await using var _ = h;
+        var line = tab.Working;
+        // Another tab was selected.
+        tab.IsSelected = false;
+
+        var glyph = line.Glyph;
+        h.Time.Advance(TimeSpan.FromSeconds(65));
+        Assert.Equal(glyph, line.Glyph);
+        Assert.True(line.IsActive);
+
+        tab.IsSelected = true;
+        // It caught up: the turn's time ran on while hidden.
+        Assert.StartsWith("1m 05s · ", line.Detail, StringComparison.Ordinal);
+        h.Time.Advance(WorkingLine.FrameInterval);
+        Assert.NotEqual(glyph, line.Glyph);
+    }
+
     private static string Stop(TabTestHarness h) => h.Services.Tips.Text(Core.Settings.KeyboardShortcuts.Stop)!;
 
     [Fact]

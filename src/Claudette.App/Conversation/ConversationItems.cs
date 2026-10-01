@@ -259,7 +259,7 @@ public partial class ToolUseItem : ConversationItem
             {
                 Diff = DiffView.FromStructuredPatch(patch);
             }
-            else if (Name == "Write" && result["type"]?.GetValue<string>() == "create" && Str(result, "content") is { } content)
+            else if (Name == "Write" && Str(result, "type") == "create" && Str(result, "content") is { } content)
             {
                 Diff = DiffView.FromNewFile(content);
             }
@@ -268,7 +268,9 @@ public partial class ToolUseItem : ConversationItem
                 var stdout = Str(result, "stdout") ?? "";
                 var stderr = Str(result, "stderr") ?? "";
                 Output = string.Join('\n', new[] { stdout, stderr }.Where(s => s.Length > 0));
-                ResultSummary = result["interrupted"]?.GetValue<bool>() == true ? "Interrupted" : FirstLine(Output) ?? FirstLine(text);
+                ResultSummary = result["interrupted"] is JsonValue interrupted && interrupted.GetValueKind() == JsonValueKind.True
+                    ? "Interrupted"
+                    : FirstLine(Output) ?? FirstLine(text);
                 OnPropertyChanged(nameof(CanExpand));
                 return;
             }
