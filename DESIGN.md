@@ -616,6 +616,8 @@ Saved snippets of instructions that can be added to a message in one click, such
 - The model list and each model's effort levels come from Claude Code (see [Integration](#integration-with-claude-code)), not a list built into Claudette.
 - New tabs start with the default model and effort from Settings.
 - **Fallback model.** Settings → Claude Code → **Fallback model** (none by default) starts tabs with `--fallback-model`: when the tab's model is overloaded, Claude Code switches to that one rather than wait. It applies to tabs started after the change.
+- **Ultracode**, a switch at the foot of the effort dropdown, lets Claude run workflows of subagents on its own for big tasks ([ultracode](https://code.claude.com/docs/en/workflows)), at the tab's effort level, as VS Code's switch does since 2.1.284. It applies from the next turn (`apply_flag_settings` with `ultracode`, `null` to turn it off), is kept with the tab and applied again whenever its Claude Code starts, and the effort indicator says so (*"High · Ultracode"*). It uses more of the plan, as its description says.
+- **Output style**, under the switch, lists the styles the session offers (`available_output_styles` from `initialize`, the current one in bold): *Default*, *Explanatory*, *Learning* and the user's own. Choosing one keeps it in the folder's `.claude/settings.local.json` (`update_settings`), where `/output-style` keeps it, so terminal sessions there use it too, and it applies from the next reply. A tab started without the folder's own settings ([§7](#folder-trust)) doesn't offer it, since that's where the choice is kept.
 
 ### Check-ins on long turns
 

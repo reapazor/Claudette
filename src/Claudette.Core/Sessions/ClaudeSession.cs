@@ -216,6 +216,24 @@ public sealed class ClaudeSession : IAsyncDisposable
             new JsonObject { ["subtype"] = "apply_flag_settings", ["settings"] = new JsonObject { ["effortLevel"] = level } },
             cancellationToken: cancellationToken);
 
+    /// <summary>
+    /// Turns ultracode on or off from the next turn, at the session's effort level (<c>apply_flag_settings</c> with
+    /// <c>ultracode</c>; DESIGN.md §5, "Model and effort"): Claude may then run workflows of subagents on its own.
+    /// </summary>
+    public Task SetUltracodeAsync(bool on, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(
+            new JsonObject { ["subtype"] = "apply_flag_settings", ["settings"] = new JsonObject { ["ultracode"] = on ? true : null } },
+            cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Sets the output style in the project's local settings (<c>.claude/settings.local.json</c>), as <c>/output-style</c>
+    /// does; it applies from the next request. The SDK's <c>updateSettings('localSettings', {outputStyle})</c>.
+    /// </summary>
+    public Task SetOutputStyleAsync(string style, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(
+            new JsonObject { ["subtype"] = "update_settings", ["source"] = "localSettings", ["settings"] = new JsonObject { ["outputStyle"] = style } },
+            cancellationToken: cancellationToken);
+
     public async Task SetPermissionModeAsync(string mode, CancellationToken cancellationToken = default)
     {
         await SendControlRequestAsync(new JsonObject { ["subtype"] = "set_permission_mode", ["mode"] = mode }, cancellationToken: cancellationToken)

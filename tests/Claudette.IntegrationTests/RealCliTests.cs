@@ -198,6 +198,24 @@ public sealed class RealCliTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Ultracode_and_the_output_style_are_set_on_a_running_session()
+    {
+        // DESIGN.md §5, "Model and effort" (checked with 2.1.286).
+        await using var session = await StartAsync();
+        var initialization = session.Initialization!;
+        Assert.Contains("default", initialization.AvailableOutputStyles, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("Explanatory", initialization.AvailableOutputStyles);
+        Assert.NotNull(initialization.OutputStyle);
+
+        await session.SetUltracodeAsync(true, TestContext.Current.CancellationToken);
+        await session.SetUltracodeAsync(false, TestContext.Current.CancellationToken);
+        await session.SetOutputStyleAsync("Explanatory", TestContext.Current.CancellationToken);
+
+        var local = Path.Combine(Work, ".claude", "settings.local.json");
+        Assert.Equal("Explanatory", JsonNode.Parse(await File.ReadAllTextAsync(local, TestContext.Current.CancellationToken))!["outputStyle"]?.GetValue<string>());
+    }
+
+    [Fact]
     public async Task Subagent_progress_summaries_are_accepted()
     {
         // DESIGN.md §18, "Agent map": agentProgressSummaries on initialize (checked with 2.1.286).

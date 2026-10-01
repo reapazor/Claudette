@@ -442,7 +442,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     [NotifyPropertyChangedFor(nameof(EffortName), nameof(ModelBadge), nameof(InfoRows), nameof(RowDetail))]
     public partial string? Effort { get; set; }
 
-    public string EffortName => Effort is null ? "Default effort" : Capitalize(Effort);
+    public string EffortName => (Effort is null ? "Default effort" : Capitalize(Effort)) + (IsUltracode ? " · Ultracode" : "");
 
     public string ModelBadge => $"{ShortModel(ModelName)} · {(Effort is null ? "Default" : Capitalize(Effort))}";
 
@@ -1470,6 +1470,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(Models));
             OnPropertyChanged(nameof(EffortLevels));
             OnPropertyChanged(nameof(PermissionModeChoices));
+            if (State.Ultracode)
+            {
+                await ApplyUltracodeAsync(session, on: true);
+            }
+            UpdateOutputStyles(session.Initialization);
             if (chosenMode is null && resume is not null && starting.LaunchMode is { } launchMode
                 && session.PermissionMode == PermissionModeInfo.Manual && IsAutoModeAvailable)
             {

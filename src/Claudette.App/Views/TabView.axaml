@@ -1453,11 +1453,11 @@
                 </Button.Flyout>
               </Button>
 
-              <Button Classes="flat" ToolTip.Tip="Effort">
+              <Button Classes="flat" ToolTip.Tip="Effort, ultracode and output style">
                 <TextBlock Classes="muted small" Text="{Binding EffortName, StringFormat='{}{0} ▾'}" />
                 <Button.Flyout>
                   <Flyout Placement="TopEdgeAlignedLeft">
-                    <StackPanel MinWidth="160">
+                    <StackPanel MinWidth="160" MaxWidth="340">
                       <Button Classes="flat row" Content="Default" Click="OnFlyoutItemPicked" Command="{Binding ChooseEffortCommand}" CommandParameter="{x:Null}" />
                       <ItemsControl ItemsSource="{Binding EffortLevels}">
                         <ItemsControl.ItemTemplate>
@@ -1467,6 +1467,29 @@
                           </DataTemplate>
                         </ItemsControl.ItemTemplate>
                       </ItemsControl>
+                      <!-- DESIGN.md §5, "Model and effort": ultracode and the output style -->
+                      <Separator Margin="0,4" />
+                      <ToggleButton Classes="flat row" IsChecked="{Binding IsUltracode, Mode=OneWay}" Command="{Binding ToggleUltracodeCommand}">
+                        <StackPanel>
+                          <TextBlock Text="Ultracode" />
+                          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                                     Text="Claude can run workflows of subagents on its own for big tasks. Uses more of your plan." />
+                        </StackPanel>
+                      </ToggleButton>
+                      <StackPanel IsVisible="{Binding HasOutputStyles}">
+                        <Separator Margin="0,4" />
+                        <TextBlock Classes="muted small" Margin="8,2" Text="Output style, for this folder" />
+                        <ItemsControl ItemsSource="{Binding OutputStyleChoices}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="vm:OutputStyleChoice">
+                              <Button Classes="flat row" Click="OnFlyoutItemPicked"
+                                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChooseOutputStyleCommand}" CommandParameter="{Binding}">
+                                <TextBlock Text="{Binding Label}" FontWeight="{Binding IsCurrent, Converter={x:Static vm:Converters.BoldIfTrue}}" />
+                              </Button>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </StackPanel>
                     </StackPanel>
                   </Flyout>
                 </Button.Flyout>

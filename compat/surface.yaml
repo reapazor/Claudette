@@ -465,6 +465,27 @@ items:
     docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkcontrolinterruptresponse
     test: QueuedMessageTests, RealCliTests
     fallback: Read with cancelled from the interrupt receipt. Ids Claudette didn't send are ignored, as the SDK says to.
+  - id: "ultracode"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.Styles.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#applyflagsettings
+    test: UltracodeAndStyleTests, RealCliTests
+    fallback: apply_flag_settings with {ultracode:true}, or null to turn it off, from the next turn at the session's effort level (2.1.284 and later). Refused, the tab says so and keeps it as it was.
+  - id: "update_settings"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.Styles.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#updatesettings
+    test: UltracodeAndStyleTests, RealCliTests
+    fallback: The documented updateSettings() method; its wire name is the SDK's. source localSettings with {outputStyle} writes the project's .claude/settings.local.json (checked with 2.1.286). Refused, the tab says so.
+  - id: "available_output_styles"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/InitializeResult.cs, src/Claudette.App/ViewModels/TabViewModel.Styles.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkcontrolinitializeresponse
+    test: UltracodeAndStyleTests, RealCliTests
+    fallback: With output_style from initialize, the effort dropdown's style list. Without it (or one style) there's no list.
   - id: "agentProgressSummaries"
     kind: field
     status: documented

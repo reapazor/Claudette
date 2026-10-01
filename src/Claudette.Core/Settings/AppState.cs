@@ -194,6 +194,9 @@ public sealed class TabState
     /// </summary>
     public bool WithoutProjectSettings { get; set; }
 
+    /// <summary>Ultracode is on in this tab, applied each time its Claude Code starts (DESIGN.md §5, "Model and effort").</summary>
+    public bool Ultracode { get; set; }
+
     /// <summary>The Perforce changelists Claude used in this session (DESIGN.md §18), so a restored tab shows them again.</summary>
     public List<Perforce.TrackedChangelist> Changelists { get; set; } = [];
 

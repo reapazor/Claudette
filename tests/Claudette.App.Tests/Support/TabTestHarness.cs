@@ -52,6 +52,8 @@ internal sealed class ScriptedTransport : IClaudeTransport
                 new JsonObject { ["value"] = "opus", ["resolvedModel"] = "claude-opus-5-5", ["displayName"] = "Opus", ["supportsEffort"] = true, ["supportedEffortLevels"] = new JsonArray("low", "high"), ["supportsAutoMode"] = true },
                 new JsonObject { ["value"] = "haiku", ["resolvedModel"] = "claude-haiku-4-5", ["displayName"] = "Haiku", ["supportsEffort"] = false }),
             ["current_permission_mode"] = "default",
+            ["output_style"] = "default",
+            ["available_output_styles"] = new JsonArray("default", "Explanatory", "Learning"),
         },
         ["get_context_usage"] = _ => new JsonObject { ["totalTokens"] = 1000, ["maxTokens"] = 200000, ["percentage"] = 0.5 },
     };
