@@ -98,6 +98,8 @@ public class SidePanelScrollUiTests
         tab.IsSidePanelOpen = true;
         tab.OpenSidePanelPage(SidePanelPage.Processes);
         h.Time.Advance(TimeSpan.FromSeconds(10));
+        // The panel's pages are only in the visual tree once it has been laid out open.
+        UiText.Settle(window);
         var viewer = window.GetVisualDescendants().OfType<ScrollViewer>().Single(v => v.Name == "ProcessesScroller");
         await UiText.SettleUntilAsync(window, () => viewer.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == $"{LongName} --serve"), "the process");
         UiText.Settle(window);

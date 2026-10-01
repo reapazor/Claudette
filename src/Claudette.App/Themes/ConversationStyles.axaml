@@ -1,0 +1,287 @@
+<!-- A tab's styles (DESIGN.md §3, §5): the conversation, the side panel and the composer. TabView includes them, so
+     they apply inside each tab, and the "compact" and "claude" classes on the shell change them. -->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- The chip with a message's time and Copy button: quiet until the message is hovered or focused. -->
+  <Style Selector="ContentControl.messagetools">
+    <Setter Property="HorizontalAlignment" Value="Right" />
+    <Setter Property="VerticalAlignment" Value="Top" />
+    <Setter Property="Margin" Value="0,-10,4,0" />
+    <Setter Property="Padding" Value="1" />
+    <Setter Property="Background" Value="{DynamicResource DialogBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Opacity" Value="0" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+  </Style>
+  <Style Selector="Panel.message:pointerover > ContentControl.messagetools, Panel.message:focus-within > ContentControl.messagetools">
+    <Setter Property="Opacity" Value="1" />
+    <Setter Property="IsHitTestVisible" Value="True" />
+  </Style>
+
+  <!-- Settings → Appearance → Density (DESIGN.md §14): ShellView takes the "compact" class. -->
+  <Style Selector="ItemsControl#ConversationItems">
+    <Setter Property="Margin" Value="24,16,24,24" />
+  </Style>
+  <Style Selector=".compact ItemsControl#ConversationItems">
+    <Setter Property="Margin" Value="20,10,20,14" />
+  </Style>
+  <!-- The conversation is virtualized (DESIGN.md §5): only the items in view have controls. The panel has no spacing
+       of its own, so each item keeps its distance from the next. -->
+  <Style Selector="ItemsControl#ConversationItems > ContentPresenter">
+    <Setter Property="Margin" Value="0,0,0,8" />
+  </Style>
+  <Style Selector=".compact ItemsControl#ConversationItems > ContentPresenter">
+    <Setter Property="Margin" Value="0,0,0,3" />
+  </Style>
+  <!-- A subagent group's items, the same: the panel has no spacing of its own. -->
+  <Style Selector="ItemsControl.subagentitems > ContentPresenter">
+    <Setter Property="Margin" Value="0,0,0,6" />
+  </Style>
+  <Style Selector=".compact ItemsControl.subagentitems > ContentPresenter">
+    <Setter Property="Margin" Value="0,0,0,3" />
+  </Style>
+  <!-- Find in the conversation (DESIGN.md §5, "Find"): a bar over the conversation, and the match it shows marked. -->
+  <Style Selector="Border.findbar">
+    <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="Padding" Value="16,4" />
+  </Style>
+  <Style Selector="TextBox.findbox">
+    <Setter Property="Width" Value="260" />
+    <Setter Property="MinHeight" Value="26" />
+    <Setter Property="Padding" Value="8,3" />
+  </Style>
+  <Style Selector="ItemsControl#ConversationItems > ContentPresenter.findcurrent">
+    <Setter Property="Background" Value="{DynamicResource SelectedRowBrush}" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="Border.usermessage">
+    <Setter Property="Background" Value="{DynamicResource UserBoxBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource UserBoxBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="Margin" Value="0,6,0,2" />
+  </Style>
+  <Style Selector=".compact Border.usermessage">
+    <Setter Property="Padding" Value="10,4" />
+    <Setter Property="Margin" Value="0,3,0,1" />
+  </Style>
+  <!-- Settings → Appearance → Style → Claude (DESIGN.md §3): your messages are bubbles on the right, as in the Claude
+       apps, and Claude's replies run full width beside them. -->
+  <Style Selector=".claude Border.usermessage">
+    <Setter Property="CornerRadius" Value="18" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="14,9" />
+    <Setter Property="Margin" Value="72,10,0,6" />
+    <Setter Property="HorizontalAlignment" Value="Right" />
+  </Style>
+  <Style Selector=".claude.compact Border.usermessage">
+    <Setter Property="Padding" Value="12,5" />
+    <Setter Property="Margin" Value="72,4,0,2" />
+  </Style>
+  <Style Selector="StackPanel.toolcard">
+    <Setter Property="Spacing" Value="4" />
+  </Style>
+  <Style Selector=".compact StackPanel.toolcard">
+    <Setter Property="Spacing" Value="1" />
+  </Style>
+  <!-- Tool, thinking and subagent rows -->
+  <Style Selector=".compact VirtualizingStackPanel.conversation Button.row">
+    <Setter Property="Padding" Value="4,0" />
+  </Style>
+  <Style Selector="StackPanel.composerarea">
+    <Setter Property="Margin" Value="16,4,16,12" />
+    <Setter Property="Spacing" Value="6" />
+  </Style>
+  <Style Selector=".compact StackPanel.composerarea">
+    <Setter Property="Margin" Value="12,2,12,6" />
+    <Setter Property="Spacing" Value="3" />
+  </Style>
+  <Style Selector="TextBox#Composer">
+    <Setter Property="MinHeight" Value="40" />
+    <Setter Property="Padding" Value="2,6" />
+  </Style>
+  <Style Selector=".compact TextBox#Composer">
+    <Setter Property="MinHeight" Value="30" />
+    <Setter Property="Padding" Value="2,3" />
+  </Style>
+
+  <Style Selector="Border.diffline.added">
+    <Setter Property="Background" Value="{DynamicResource DiffAddedBrush}" />
+  </Style>
+  <Style Selector="Border.diffline.removed">
+    <Setter Property="Background" Value="{DynamicResource DiffRemovedBrush}" />
+  </Style>
+  <Style Selector="Border.diffline.hunk">
+    <Setter Property="Background" Value="{DynamicResource DiffHunkBrush}" />
+  </Style>
+  <Style Selector="Border.codeblock">
+    <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="8,6" />
+  </Style>
+  <Style Selector=".compact Border.codeblock">
+    <Setter Property="Padding" Value="6,3" />
+  </Style>
+  <Style Selector=".claude Border.codeblock">
+    <Setter Property="CornerRadius" Value="10" />
+  </Style>
+  <Style Selector="TextBlock.done">
+    <Setter Property="TextDecorations" Value="Strikethrough" />
+    <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+  </Style>
+  <Style Selector="Border.chip">
+    <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="Padding" Value="10,2,4,2" />
+  </Style>
+  <Style Selector="Border.chip.kept">
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
+  </Style>
+  <!-- Prompts waiting on the user (DESIGN.md §7); quieter once answered. -->
+  <Style Selector="Border.prompt">
+    <Setter Property="Padding" Value="12,10" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Margin" Value="0,2" />
+    <Setter Property="BorderBrush" Value="{DynamicResource CautionBorderBrush}" />
+    <Setter Property="Background" Value="{DynamicResource CautionBackgroundBrush}" />
+  </Style>
+  <Style Selector=".compact Border.prompt">
+    <Setter Property="Padding" Value="10,6" />
+    <Setter Property="Margin" Value="0,1" />
+  </Style>
+  <Style Selector=".claude Border.prompt">
+    <Setter Property="CornerRadius" Value="14" />
+  </Style>
+
+  <!-- Send and Stop. In the Claude style they're round, with an arrow for Send, as in the Claude apps, and a drawn
+       square for Stop: the ■ character sits off-center in a circle, by its font's ascent and descent. The icons fill
+       the button and have no border, so nothing puts them off the middle (IconSendArrow in App.axaml says why). -->
+  <Style Selector="Button.send">
+    <Setter Property="Padding" Value="14,4" />
+  </Style>
+  <Style Selector="Button.stop">
+    <Setter Property="Padding" Value="12,4" />
+  </Style>
+  <Style Selector="Button.send Path.sendarrow, Button.stop Path.stopsquare">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector=".claude Button.send, .claude Button.stop">
+    <Setter Property="CornerRadius" Value="16" />
+    <Setter Property="Width" Value="32" />
+    <Setter Property="Height" Value="32" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector=".claude Button.send TextBlock.sendlabel, .claude Button.stop TextBlock.stoplabel">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector=".claude Button.send Path.sendarrow, .claude Button.stop Path.stopsquare">
+    <Setter Property="IsVisible" Value="True" />
+  </Style>
+  <Style Selector="Border.prompt.question">
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
+    <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
+  </Style>
+  <Style Selector="Border.prompt.answered">
+    <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <!-- Tool card icons (DESIGN.md §5): 12×12 strokes from App.axaml, drawn as they are. -->
+  <Style Selector="Path.toolicon">
+    <Setter Property="Stroke" Value="{DynamicResource MutedTextBrush}" />
+    <Setter Property="StrokeThickness" Value="1.1" />
+    <Setter Property="StrokeLineCap" Value="Round" />
+    <Setter Property="StrokeJoin" Value="Round" />
+    <Setter Property="Width" Value="12" />
+    <Setter Property="Height" Value="12" />
+    <Setter Property="Stretch" Value="None" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <!-- Attached images (DESIGN.md §5, "Attachments") -->
+  <Style Selector="Border.thumbnail">
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="ClipToBounds" Value="True" />
+    <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+  <Style Selector="Border.composer.dropping">
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
+  </Style>
+  <!-- The side panel's pages (DESIGN.md §3), as tabs over a divider: the page showing in full text with an accent line
+       under it, over the divider, and the others muted. -->
+  <Style Selector="Border.pagetabs">
+    <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="Padding" Value="6,4,6,0" />
+  </Style>
+  <Style Selector="Button.pagetab">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0,0,0,2" />
+    <Setter Property="CornerRadius" Value="4,4,0,0" />
+    <Setter Property="Padding" Value="8,6,8,6" />
+    <Setter Property="Margin" Value="0,0,0,-1" />
+    <Setter Property="MinHeight" Value="0" />
+  </Style>
+  <Style Selector=".compact Button.pagetab">
+    <Setter Property="Padding" Value="8,3,8,4" />
+  </Style>
+  <Style Selector="Button.pagetab.selected">
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Button.pagetab:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.pagetab:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.pagetab.selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
+  </Style>
+  <!-- Changed files (DESIGN.md §8, "Reviewed"): a small box before each file, and a reviewed file drawn faintly -->
+  <Style Selector="CheckBox.reviewed">
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Margin" Value="0,0,6,0" />
+    <Setter Property="VerticalAlignment" Value="Top" />
+  </Style>
+  <Style Selector="Grid.changedfile.reviewed > TextBlock, Grid.changedfile.reviewed > StackPanel">
+    <Setter Property="Opacity" Value="0.5" />
+  </Style>
+  <!-- A project job's output (DESIGN.md §18): dense lines, like a terminal -->
+  <Style Selector="ListBox#ProjectOutputList ListBoxItem">
+    <Setter Property="Padding" Value="4,0" />
+    <Setter Property="MinHeight" Value="0" />
+  </Style>
+  <!-- The running tasks list (DESIGN.md §5, "Running tasks"), under the chip in the composer bar -->
+  <Style Selector="StackPanel.tasklist">
+    <Setter Property="Spacing" Value="2" />
+  </Style>
+  <Style Selector=".compact StackPanel.tasklist">
+    <Setter Property="Spacing" Value="0" />
+  </Style>
+  <Style Selector="Button.taskrow">
+    <Setter Property="Padding" Value="6,4" />
+  </Style>
+  <Style Selector=".compact Button.taskrow">
+    <Setter Property="Padding" Value="6,2" />
+  </Style>
+  <Style Selector=".claude Button.taskrow">
+    <Setter Property="CornerRadius" Value="8" />
+  </Style>
+  <!-- The / and @ autocomplete (DESIGN.md §5, "Composer") -->
+  <Style Selector="Button.completion.selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SelectedRowBrush}" />
+  </Style>
+</Styles>
