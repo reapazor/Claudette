@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Claudette.App.Conversation;
@@ -46,6 +47,29 @@ public class McpAndHookUiTests
         System.Text.Json.Nodes.JsonObject? answer = null;
         await UiText.SettleUntilAsync(window, () => (answer = h.Transport.Sent.LastOrDefault(m => m["type"]?.GetValue<string>() == "control_response")) is not null, "the answer");
         Assert.Equal("NEXUS", answer!["response"]!["response"]!["content"]!["project"]!.GetValue<string>());
+    }
+
+    [AvaloniaFact]
+    public async Task The_deny_shortcut_declines_a_waiting_mcp_request()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell }, 1100, 800);
+        h.Transport.Emit("""
+            {"type":"control_request","request_id":"e1","request":{"subtype":"elicitation","mcp_server_name":"tickets","message":"Sign in to continue",
+             "mode":"url","url":"https://tickets.example/auth","elicitation_id":"x1"}}
+            """);
+        await UiText.SettleUntilAsync(window, () => tab.Items.OfType<McpInputItem>().Any(), "the card");
+        var composer = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "Composer");
+        composer.Focus();
+        UiText.Settle(window);
+
+        var primary = OperatingSystem.IsMacOS() ? Avalonia.Input.RawInputModifiers.Meta : Avalonia.Input.RawInputModifiers.Control;
+        window.KeyPressQwerty(Avalonia.Input.PhysicalKey.Backspace, primary);
+        window.KeyReleaseQwerty(Avalonia.Input.PhysicalKey.Backspace, primary);
+        UiText.Settle(window);
+
+        Assert.False(tab.Items.OfType<McpInputItem>().Single().IsPending);
     }
 
     [AvaloniaFact]

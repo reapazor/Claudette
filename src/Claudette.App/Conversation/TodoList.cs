@@ -112,6 +112,9 @@ public sealed partial class TodoList : ObservableObject
 {
     private readonly Dictionary<string, TodoItem> _pendingCreates = [];
 
+    /// <summary><c>TaskList</c> and <c>TaskGet</c> calls whose results haven't come.</summary>
+    private readonly HashSet<string> _pendingReads = [];
+
     public ObservableCollection<TodoItem> Items { get; } = [];
 
     /// <summary>The clock that dates each task's changes, for the Tasks page (DESIGN.md §5, "Tasks"). Null: no times.</summary>
@@ -160,13 +163,17 @@ public sealed partial class TodoList : ObservableObject
 
     public string Summary => $"To-do · {Items.Count(i => i.IsDone)} of {Items.Count} done";
 
-    public static bool IsTodoTool(string name) => name is "TodoWrite" or "TaskCreate" or "TaskUpdate";
-
-    /// <summary>Applies a to-do tool call. Returns true if it was one.</summary>
+    /// <summary>
+    /// Applies a to-do tool call. Returns true if it was one, so it shows here rather than as a card. <c>TaskList</c> and
+    /// <c>TaskGet</c> change nothing, but their results say how the tasks stand.
+    /// </summary>
     public bool ApplyToolUse(string toolUseId, string name, JsonObject input)
     {
         switch (name)
         {
+            case "TaskList" or "TaskGet":
+                _pendingReads.Add(toolUseId);
+                return true;
             case "TodoWrite":
                 // The whole list again: items that read the same keep their times.
                 var previous = Items.ToList();
@@ -246,7 +253,15 @@ public sealed partial class TodoList : ObservableObject
         var details = toolUseResult as JsonObject;
         if (details?["tasks"] is JsonArray listed)
         {
-            ApplyTaskList(listed);
+            ApplyTaskList(listed.OfType<JsonObject>());
+            return;
+        }
+        if (_pendingReads.Remove(toolUseId))
+        {
+            if (details?["task"] is JsonObject task)
+            {
+                ApplyTaskList([task]);
+            }
             return;
         }
         if (!_pendingCreates.Remove(toolUseId, out var item))
@@ -261,9 +276,9 @@ public sealed partial class TodoList : ObservableObject
         };
     }
 
-    private void ApplyTaskList(JsonArray listed)
+    private void ApplyTaskList(IEnumerable<JsonObject> listed)
     {
-        foreach (var task in listed.OfType<JsonObject>())
+        foreach (var task in listed)
         {
             if (Text(task, "id") is not { } id)
             {
@@ -276,6 +291,7 @@ public sealed partial class TodoList : ObservableObject
                 Items.Add(item);
             }
             item.Content = Text(task, "subject") ?? item.Content;
+            item.Description = Text(task, "description") ?? item.Description;
             item.Owner = Text(task, "owner") ?? item.Owner;
             if (Text(task, "status") is { } status)
             {
@@ -293,6 +309,7 @@ public sealed partial class TodoList : ObservableObject
     {
         Items.Clear();
         _pendingCreates.Clear();
+        _pendingReads.Clear();
         Plan = null;
         PlanApprovedAt = null;
         Changed();

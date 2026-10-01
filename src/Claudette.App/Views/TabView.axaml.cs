@@ -112,13 +112,13 @@ public partial class TabView : UserControl
     }
 
     /// <summary>
-    /// Ctrl/Cmd+Enter answers "yes" to the waiting prompt and Ctrl/Cmd+Backspace "no" (DESIGN.md §7), or whatever
-    /// Settings → Keyboard says. Not while typing in one of a prompt's own fields, and Backspace keeps deleting words in
-    /// a field with text.
+    /// Ctrl/Cmd+Enter answers "yes" to the waiting prompt, or sends an MCP server's form, and Ctrl/Cmd+Backspace "no"
+    /// (DESIGN.md §7), or whatever Settings → Keyboard says. Not while typing in one of a prompt's own fields, and
+    /// Backspace keeps deleting words in a field with text.
     /// </summary>
     private void OnPromptKeyDown(object? sender, KeyEventArgs e)
     {
-        if (ViewModel is not { WaitingPrompt: not null } tab)
+        if (ViewModel is not { HasKeyboardAnswer: true } tab)
         {
             return;
         }

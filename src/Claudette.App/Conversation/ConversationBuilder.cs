@@ -18,7 +18,7 @@ public sealed class ConversationBuilder
     private readonly Dictionary<string, McpInputItem> _mcpInputs = [];
     private readonly Dictionary<string, ConversationBuilder> _subagents = [];
     private readonly HashSet<string> _todoToolUses = [];
-    private readonly TodoList? _todoList;
+    private TodoList? _todoList;
     private readonly Func<string?, string?> _modelName;
     private AssistantTextItem? _openText;
     private ThinkingItem? _openThinking;
@@ -44,7 +44,7 @@ public sealed class ConversationBuilder
     private bool _replaying;
     private DateTimeOffset? _replayTime;
 
-    /// <param name="todoList">The pinned to-do list; null for subagent groups, whose to-dos aren't shown.</param>
+    /// <param name="todoList">The pinned to-do list and the Tasks page; a subagent's builder shares its parent's.</param>
     /// <param name="modelName">Turns a model id into a display name for turn summaries.</param>
     public ConversationBuilder(ObservableCollection<ConversationItem> items, TodoList? todoList = null, Func<string?, string?>? modelName = null)
     {
@@ -181,7 +181,10 @@ public sealed class ConversationBuilder
         _hookRuns.Clear();
         _subagents.Clear();
         _todoToolUses.Clear();
-        _todoList?.Clear();
+        if (_parent is null)
+        {
+            _todoList?.Clear();
+        }
         _agents?.Clear();
         _tasks?.OnConversationCleared();
         _openText = null;
@@ -438,7 +441,7 @@ public sealed class ConversationBuilder
         _permissions[request.RequestId] = item;
         Items.Add(item);
         _agents?.OnPrompt(item);
-        if (item is PlanItem plan && _todoList is { } todos)
+        if (item is PlanItem plan && _parent is null && _todoList is { } todos)
         {
             // An approved plan heads the Tasks page (DESIGN.md §5, "Tasks").
             plan.Answered += (_, _) =>
@@ -481,7 +484,9 @@ public sealed class ConversationBuilder
 
                 case ToolUseBlock toolUse:
                     CloseOpen();
-                    if (_todoList?.ApplyToolUse(toolUse.Id, toolUse.Name, toolUse.Input) == true)
+                    // Tasks are the session's, whichever agent makes them; a subagent's TodoWrite list is its own, and
+                    // shows as a card in its group (DESIGN.md §5, "Tasks").
+                    if (!(_parent is not null && toolUse.Name == "TodoWrite") && _todoList?.ApplyToolUse(toolUse.Id, toolUse.Name, toolUse.Input) == true)
                     {
                         // To-do updates show in the pinned list, not as cards.
                         _todoToolUses.Add(toolUse.Id);
@@ -494,7 +499,7 @@ public sealed class ConversationBuilder
                     if (toolUse.Name is "Agent" or "Task")
                     {
                         var subagent = new SubagentItem(toolUse.Id, toolUse.Name, toolUse.Input);
-                        var child = new ConversationBuilder(subagent.Items, todoList: null, _modelName) { ExpandThinking = ExpandThinking, _parent = this };
+                        var child = new ConversationBuilder(subagent.Items, todoList: null, _modelName) { ExpandThinking = ExpandThinking, _parent = this, _todoList = _todoList };
                         // Its traffic fills its group and its node in the agent map, under this agent.
                         child._agents = _agents;
                         child._tasks = _tasks;

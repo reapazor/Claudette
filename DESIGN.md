@@ -474,7 +474,7 @@ When Claude keeps a task list (`TodoWrite`, or `TaskCreate` and `TaskUpdate`), t
 - **The plan** the user approved last (`ExitPlanMode`), as Markdown, with when it was approved. The tasks Claude makes from it follow.
 - **Each task:** its state (to do, in progress, done), its number as Claude refers to it (*#3*, for `TaskCreate` tasks), its subject and its description, *"Waiting on #1, #2"* while a task it depends on isn't done, and a line with who's working on it when Claude says (a subagent or teammate) and its time: *Explore · Took 4m*, *Started 14:05* or *Added 14:02*.
 - The one in progress shows its active form (*"Running the tests"*) in bold.
-- A `TaskList` result fills in what the tool calls didn't show. A restored tab's tasks are dated by their transcript entries.
+- Tasks are the session's, so a subagent's `TaskCreate` and `TaskUpdate` calls land here too; a subagent's own `TodoWrite` list stays a card in its group. The calls themselves show here rather than as cards, as do `TaskList` and `TaskGet`, whose results fill in what the calls didn't show. A restored tab's tasks are dated by their transcript entries.
 - The command palette's **Show tasks** opens the side panel on this page. `/clear` empties it, as it does the pinned list.
 
 ### Hook runs

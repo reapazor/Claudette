@@ -561,6 +561,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>The oldest MCP server's request for input still waiting, when no prompt is (DESIGN.md §7).</summary>
     private McpInputItem? WaitingInput => Items.OfType<McpInputItem>().FirstOrDefault(i => i.IsPending);
 
+    /// <summary>A prompt or an MCP server's request waits: the keyboard's allow and deny shortcuts answer it.</summary>
+    public bool HasKeyboardAnswer => WaitingPrompt is not null || WaitingInput is not null;
+
     public bool AcceptWaitingPrompt()
     {
         if (WaitingPrompt is { } prompt)

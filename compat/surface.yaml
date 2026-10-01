@@ -367,6 +367,18 @@ items:
     usedIn: src/Claudette.App/Conversation/TodoList.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: ConversationBuilderTests
+  - id: "TaskList"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/TodoList.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
+  - id: "TaskGet"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/TodoList.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
   - id: "CLAUDE_CODE_ENABLE_TASKS"
     kind: env
     status: documented

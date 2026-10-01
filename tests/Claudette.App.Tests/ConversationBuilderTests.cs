@@ -386,6 +386,25 @@ public class ConversationBuilderTests
         Assert.Equal("Set model to sonnet", Assert.IsType<NoteItem>(Assert.Single(_items)).Text);
     }
 
+    [Fact]
+    public void A_subagents_tasks_and_a_task_list_reach_the_tasks_but_its_own_todo_list_stays_in_its_group()
+    {
+        var items = new ObservableCollection<ConversationItem>();
+        var tasks = new TodoList();
+        var builder = new ConversationBuilder(items, tasks);
+        Apply(builder, """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"a1","name":"Agent","input":{"description":"Helper"}}]}}""");
+        Apply(builder, """{"type":"assistant","parent_tool_use_id":"a1","message":{"content":[{"type":"tool_use","id":"t1","name":"TaskCreate","input":{"subject":"From the helper"}}]}}""");
+        Apply(builder, """{"type":"user","parent_tool_use_id":"a1","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"Task #1 created"}]},"tool_use_result":{"task":{"id":"1","subject":"From the helper"}}}""");
+        Apply(builder, """{"type":"assistant","parent_tool_use_id":"a1","message":{"content":[{"type":"tool_use","id":"w1","name":"TodoWrite","input":{"todos":[{"content":"Helper's own","status":"pending"}]}}]}}""");
+        Apply(builder, """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"l1","name":"TaskGet","input":{"taskId":"1"}}]}}""");
+        Apply(builder, """{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"l1","content":"…"}]},"tool_use_result":{"task":{"id":"1","subject":"From the helper","status":"in_progress","owner":"helper"}}}""");
+
+        var task = Assert.Single(tasks.Items);
+        Assert.Equal(("1", "From the helper", "helper", true), (task.Id, task.Content, task.Owner, task.IsActive));
+        var group = Assert.IsType<SubagentItem>(Assert.Single(items));
+        Assert.Equal("TodoWrite", Assert.IsType<ToolUseItem>(Assert.Single(group.Items)).Name);
+    }
+
     private void Apply(string line) => Apply(_builder, line);
 
     private static void Apply(ConversationBuilder builder, string line)
