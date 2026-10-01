@@ -14,6 +14,7 @@ public sealed class ConversationBuilder
 {
     private readonly Dictionary<string, ToolUseItem> _toolUses = [];
     private readonly Dictionary<string, PromptItem> _permissions = [];
+    private readonly Dictionary<string, HookRunItem> _hookRuns = [];
     private readonly Dictionary<string, ConversationBuilder> _subagents = [];
     private readonly HashSet<string> _todoToolUses = [];
     private readonly TodoList? _todoList;
@@ -60,6 +61,12 @@ public sealed class ConversationBuilder
 
     /// <summary>Show messages Claudette skipped as rows with their JSON: protocol logging is on (DESIGN.md §16).</summary>
     public bool ShowUnsupportedMessages { get; set; }
+
+    /// <summary>
+    /// Show a row for every hook run (Settings → Sessions). Off, only runs that fail, or print something while they
+    /// work, get one (DESIGN.md §5, "Hook runs").
+    /// </summary>
+    public bool ShowAllHookRuns { get; set; }
 
     /// <summary>
     /// What a prompt Claude Code withdraws says: "Answered in the Claude app" while the tab is connected to it (DESIGN.md
@@ -152,6 +159,7 @@ public sealed class ConversationBuilder
         Items.Clear();
         _toolUses.Clear();
         _permissions.Clear();
+        _hookRuns.Clear();
         _subagents.Clear();
         _todoToolUses.Clear();
         _todoList?.Clear();
@@ -222,6 +230,10 @@ public sealed class ConversationBuilder
                 }
                 break;
 
+            case SystemNotice { Message.Subtype: "hook_started" or "hook_progress" or "hook_response" } hook:
+                ApplyHook(hook.Message);
+                break;
+
             case SystemNotice { Message.Subtype: "api_retry" } retry:
                 ApplyRetry(retry.Message.Raw);
                 break;
@@ -272,6 +284,66 @@ public sealed class ConversationBuilder
                 _agents?.OnSessionExited();
                 _tasks?.Clear();
                 break;
+        }
+    }
+
+    /// <summary>
+    /// A hook's run (DESIGN.md §5, "Hook runs"): a row from its start when every run shows, else from the moment it fails
+    /// or prints something. Its output and how it ended fill in as they come.
+    /// </summary>
+    private void ApplyHook(SystemMessage message)
+    {
+        var raw = message.Raw;
+        if (raw.GetString("hook_id") is not { Length: > 0 } id)
+        {
+            return;
+        }
+        if (!_hookRuns.TryGetValue(id, out var item))
+        {
+            var failed = message.Subtype == "hook_response" && raw.GetString("outcome") is "error";
+            var printed = message.Subtype == "hook_progress" && !string.IsNullOrEmpty(raw.GetString("output") ?? raw.GetString("stdout"));
+            if (!ShowAllHookRuns && !failed && !printed)
+            {
+                return;
+            }
+            CloseOpen();
+            item = new HookRunItem(id, raw.GetString("hook_name") ?? "", raw.GetString("hook_event") ?? "Hook");
+            _hookRuns[id] = item;
+            Items.Add(item);
+        }
+        switch (message.Subtype)
+        {
+            case "hook_progress":
+                // Each progress message has the output so far.
+                item.Output = "";
+                item.Append(HookOutput(raw));
+                break;
+            case "hook_response":
+                item.Output = "";
+                item.Append(HookOutput(raw));
+                item.ExitCode = raw.GetDouble("exit_code") is { } code ? (int)code : null;
+                item.State = raw.GetString("outcome") switch
+                {
+                    "error" => HookRunState.Failed,
+                    "cancelled" => HookRunState.Cancelled,
+                    _ => HookRunState.Succeeded,
+                };
+                // A failure opens, so what went wrong is in view.
+                item.IsExpanded = item.IsFailed && item.HasOutput;
+                _hookRuns.Remove(id);
+                break;
+        }
+
+        static string HookOutput(JsonObject raw)
+        {
+            var output = raw.GetString("output");
+            if (!string.IsNullOrEmpty(output))
+            {
+                return output.TrimEnd();
+            }
+            var stdout = raw.GetString("stdout") ?? "";
+            var stderr = raw.GetString("stderr") ?? "";
+            return string.Join('\n', new[] { stdout.TrimEnd(), stderr.TrimEnd() }.Where(s => s.Length > 0));
         }
     }
 

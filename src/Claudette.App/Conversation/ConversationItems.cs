@@ -512,6 +512,75 @@ public sealed partial class NoteItem(string text, NoteKind kind) : ConversationI
     public bool IsWarning => Kind == NoteKind.Warning;
 }
 
+/// <summary>How a hook run ended, or that it hasn't yet.</summary>
+public enum HookRunState
+{
+    Running,
+    Succeeded,
+    Failed,
+    Cancelled,
+}
+
+/// <summary>
+/// One run of a hook from the user's or project's settings (DESIGN.md §5, "Hook runs"): a compact row, which expands to
+/// what the hook printed. Hook names and output are the hook's own: untrusted text.
+/// </summary>
+public sealed partial class HookRunItem(string hookId, string hookName, string hookEvent) : ConversationItem
+{
+    /// <summary>Most of a hook's output kept for the row; a hook that prints more is cut, as a tool's output is.</summary>
+    public const int OutputLimit = 20_000;
+
+    public string HookId { get; } = hookId;
+
+    /// <summary>The hook's name, such as <c>UserPromptSubmit</c> or the matcher it runs for.</summary>
+    public string HookName { get; } = hookName;
+
+    /// <summary>The event that ran it, such as <c>PreToolUse</c>.</summary>
+    public string HookEvent { get; } = hookEvent;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFailed), nameof(Title), nameof(StatusText))]
+    public partial HookRunState State { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasOutput))]
+    public partial string Output { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusText))]
+    public partial int? ExitCode { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsExpanded { get; set; }
+
+    public bool IsRunning => State == HookRunState.Running;
+
+    public bool IsFailed => State == HookRunState.Failed;
+
+    public bool HasOutput => Output.Length > 0;
+
+    /// <summary>"PreToolUse hook" or "PreToolUse hook (Bash)", for the row.</summary>
+    public string Title => HookName.Length > 0 && HookName != HookEvent ? $"{HookEvent} hook ({HookName})" : $"{HookEvent} hook";
+
+    public string StatusText => State switch
+    {
+        HookRunState.Running => "running…",
+        HookRunState.Failed => ExitCode is { } code ? $"failed (exit code {code})" : "failed",
+        HookRunState.Cancelled => "cancelled",
+        _ => "done",
+    };
+
+    internal void Append(string text)
+    {
+        if (text.Length == 0 || Output.Length >= OutputLimit)
+        {
+            return;
+        }
+        var joined = Output + text;
+        Output = joined.Length > OutputLimit ? joined[..OutputLimit] + "\n…" : joined;
+    }
+}
+
 /// <summary>
 /// A message Claudette doesn't know and skipped, shown only while protocol logging is on (DESIGN.md §16): a collapsed
 /// row that expands to the raw JSON.

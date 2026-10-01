@@ -29,6 +29,70 @@ public class ConversationBuilderTests
         Assert.Equal(2, _items.Count);
     }
 
+    // ---- Hook runs (DESIGN.md §5) -------------------------------------------------------------------------------
+
+    private static string Hook(string subtype, string id, string? outcome = null, int? exitCode = null, string? output = null, string? stdout = null, string? stderr = null)
+    {
+        var message = new System.Text.Json.Nodes.JsonObject
+        {
+            ["type"] = "system", ["subtype"] = subtype, ["hook_id"] = id, ["hook_name"] = "PreToolUse:Bash", ["hook_event"] = "PreToolUse",
+            ["session_id"] = "s", ["uuid"] = "x",
+        };
+        if (outcome is not null)
+        {
+            message["outcome"] = outcome;
+        }
+        if (exitCode is not null)
+        {
+            message["exit_code"] = exitCode;
+        }
+        message["output"] = output;
+        message["stdout"] = stdout;
+        message["stderr"] = stderr;
+        return message.ToJsonString();
+    }
+
+    [Fact]
+    public void A_hook_that_succeeds_quietly_shows_nothing_by_default()
+    {
+        Apply(Hook("hook_started", "h1"));
+        Apply(Hook("hook_response", "h1", "success", 0, "", "", ""));
+
+        Assert.Empty(_items);
+    }
+
+    [Fact]
+    public void A_hook_that_fails_shows_its_output_open()
+    {
+        Apply(Hook("hook_started", "h1"));
+        Apply(Hook("hook_response", "h1", "error", 2, stdout: "", stderr: "lint failed: 3 errors\n"));
+
+        var run = Assert.IsType<HookRunItem>(Assert.Single(_items));
+        Assert.Equal("PreToolUse hook (PreToolUse:Bash)", run.Title);
+        Assert.True(run.IsFailed);
+        Assert.Equal("failed (exit code 2)", run.StatusText);
+        Assert.Equal("lint failed: 3 errors", run.Output);
+        Assert.True(run.IsExpanded);
+    }
+
+    [Fact]
+    public void Every_run_shows_when_asked_and_progress_fills_it_in()
+    {
+        _builder.ShowAllHookRuns = true;
+        Apply(Hook("hook_started", "h1"));
+        var run = Assert.IsType<HookRunItem>(Assert.Single(_items));
+        Assert.True(run.IsRunning);
+
+        Apply(Hook("hook_progress", "h1", output: "step 1", stdout: "step 1\n", stderr: ""));
+        Assert.Equal("step 1", run.Output);
+        Apply(Hook("hook_response", "h1", "success", 0, "step 1\nstep 2", "", ""));
+
+        Assert.Single(_items);
+        Assert.Equal(HookRunState.Succeeded, run.State);
+        Assert.Equal("step 1\nstep 2", run.Output);
+        Assert.False(run.IsExpanded);
+    }
+
     [Fact]
     public void Text_without_deltas_comes_from_the_complete_message()
     {
