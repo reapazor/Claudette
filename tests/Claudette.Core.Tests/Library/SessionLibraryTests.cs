@@ -139,10 +139,16 @@ public sealed class SessionLibraryTests : IDisposable
         File.WriteAllText(copy, "{\"type\":\"xxxx\"}\n");
         File.AppendAllText(transcript, "{\"type\":\"assistant\"}\n");
 
-        using (var held = new FileStream(copy, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        if (OperatingSystem.IsWindows())
         {
+            // Windows never renames over a file another handle has open, so there's no reader to keep the old copy.
             await _library.SaveAsync(Record(), transcript, null, Ct);
-
+        }
+        else
+        {
+            // Replaced rather than rewritten in place: a reader that has the old copy open still reads the old copy.
+            using var held = new FileStream(copy, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            await _library.SaveAsync(Record(), transcript, null, Ct);
             Assert.Equal("{\"type\":\"xxxx\"}\n", new StreamReader(held).ReadToEnd());
         }
         Assert.Equal(File.ReadAllText(transcript), File.ReadAllText(copy));

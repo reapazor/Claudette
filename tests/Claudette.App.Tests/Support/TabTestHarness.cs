@@ -521,6 +521,21 @@ internal sealed class TabTestHarness : IAsyncDisposable
         {
             Directory.Delete(_root, recursive: true);
         }
+        catch (UnauthorizedAccessException)
+        {
+            // Git makes its objects read-only, and Windows won't delete a read-only file.
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
+                {
+                    File.SetAttributes(file, FileAttributes.Normal);
+                }
+                Directory.Delete(_root, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
         catch (IOException)
         {
         }
