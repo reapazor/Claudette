@@ -423,7 +423,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         if (takeOver)
         {
-            _services.Library.Leases.TakeOver(entry.SessionId, _services.Library.Library.GetSessionFolder(entry.SessionId));
+            var library = _services.Library;
+            await Task.Run(() => library.Leases.TakeOver(entry.SessionId, library.Library.GetSessionFolder(entry.SessionId)));
         }
         OpenSession(NewState(entry, folder, transcriptPath: null, fork, _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp));
     }
@@ -484,7 +485,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         if (takeOver)
         {
-            library.Leases.TakeOver(entry.SessionId, library.Library.GetSessionFolder(entry.SessionId));
+            await Task.Run(() => library.Leases.TakeOver(entry.SessionId, library.Library.GetSessionFolder(entry.SessionId)));
         }
         OpenSession(NewState(entry, folder, transcript, fork, _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp));
     }
@@ -567,8 +568,9 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     // ---- Closing tabs -----------------------------------------------------------------------------------
 
-    [RelayCommand]
-    private void CloseTab(TabViewModel? tab)
+    /// <summary>Several tabs can be closing at once: each waits up to a few seconds for its claude to finish.</summary>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task CloseTabAsync(TabViewModel? tab)
     {
         if (tab is null)
         {
@@ -584,7 +586,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             reasons.Add("Claude is still working in it and will be stopped.");
         }
         // Processes the tab started, such as dev servers, are stopped with it unless the user keeps them (DESIGN.md §4).
-        var running = tab.RunningChildProcesses();
+        // Listing them scans every process (ps on macOS): not on the UI thread.
+        var running = await Task.Run(tab.RunningChildProcesses);
         if (running.Count > 0)
         {
             var names = string.Join(", ", running.Take(5).Select(p => $"{p.Name} ({p.Pid})")) + (running.Count > 5 ? $" and {running.Count - 5} more" : "");
@@ -596,7 +599,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         if (reasons.Count == 0)
         {
-            _ = RemoveTabAsync(tab);
+            await RemoveTabAsync(tab);
             return;
         }
         Confirmation = new ConfirmationViewModel($"Close \"{tab.DisplayName}\"?", string.Join(" ", reasons), "Close", () => RemoveTabAsync(tab), () => Confirmation = null);
@@ -615,26 +618,20 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     internal void Confirm(string title, string message, string confirmText, Func<Task> onConfirm) =>
         Confirmation = new ConfirmationViewModel(title, message, confirmText, onConfirm, () => Confirmation = null);
 
+    /// <summary>
+    /// Closes them together: each tab leaves the sidebar at once, then they wait for their claude processes side by
+    /// side rather than one after another (a few seconds each for a working tab).
+    /// </summary>
     [RelayCommand]
-    private async Task CloseOtherTabsAsync(TabViewModel? keep)
-    {
-        foreach (var tab in AllTabs.Where(t => t != keep && !t.IsPinned).ToArray())
-        {
-            await RemoveTabAsync(tab);
-        }
-    }
+    private Task CloseOtherTabsAsync(TabViewModel? keep) =>
+        Task.WhenAll(AllTabs.Where(t => t != keep && !t.IsPinned).ToArray().Select(tab => RemoveTabAsync(tab)));
 
     [RelayCommand]
-    private async Task CloseGroupAsync(TabGroupViewModel? group)
-    {
-        foreach (var tab in group?.Tabs.Where(t => !t.IsPinned).ToArray() ?? [])
-        {
-            await RemoveTabAsync(tab);
-        }
-    }
+    private Task CloseGroupAsync(TabGroupViewModel? group) =>
+        Task.WhenAll((group?.Tabs.Where(t => !t.IsPinned).ToArray() ?? []).Select(tab => RemoveTabAsync(tab)));
 
-    [RelayCommand]
-    private void CloseSelectedTab() => CloseTab(SelectedTab);
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private Task CloseSelectedTabAsync() => CloseTabAsync(SelectedTab);
 
     private async Task RemoveTabAsync(TabViewModel tab, bool killProcesses = true)
     {

@@ -99,6 +99,7 @@ public class UsageHeaderTests
         }
 
         var panel = new UsagePanelViewModel(h.Services, tracker, header, _ => null);
+        await panel.RefreshAsync();
 
         Assert.Equal(UsagePanelViewModel.SessionsPage, panel.PastSessions.Count);
         Assert.Equal("Show 30 more (40 left)", panel.MoreSessionsText);
@@ -256,7 +257,7 @@ public class UsageHeaderTests
         tab.StartRenameCommand.Execute(null);
         tab.RenameText = "refactor auth";
         await tab.CommitRenameCommand.ExecuteAsync(null);
-        h.Shell.CloseTabCommand.Execute(tab);
+        await h.Shell.CloseTabCommand.ExecuteAsync(tab);
         await TabTestHarness.Eventually(() => !h.Shell.AllTabs.Any(), "the tab to close");
 
         await Row("refactor auth", "the closed tab's last name");

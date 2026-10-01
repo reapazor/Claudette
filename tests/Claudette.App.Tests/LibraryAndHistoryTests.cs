@@ -440,7 +440,8 @@ public class LibraryAndHistoryTests
         tab.ToggleSyncToLibraryCommand.Execute(null);
 
         Assert.False(tab.SyncToLibrary);
-        Assert.IsType<LeaseStatus.Free>(h.Services.Library.CheckLease("s1"));
+        // Released in the background, off the UI thread.
+        await TabTestHarness.Eventually(() => h.Services.Library.CheckLease("s1") is LeaseStatus.Free, "the release");
         Assert.Empty(h.Services.Library.Leases.HeldSessions);
         // Later turns stay on this machine; other machines still see the copy as it was.
         h.Transport.EmitTurn();

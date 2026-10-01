@@ -519,7 +519,7 @@ public class SidePanelTests
         tab.State.Overrides = new TabOverrides();
         await tab.ApplyOverridesAsync(previous);
         await TabTestHarness.Eventually(() => h.Shell.ProcessTotalsText is not null, "a sample");
-        h.Shell.CloseTabCommand.Execute(tab);
+        await h.Shell.CloseTabCommand.ExecuteAsync(tab);
         await h.Shell.Confirmation!.ConfirmCommand.ExecuteAsync(null);
         await TabTestHarness.Eventually(() => h.Shell.ProcessTotalsText is null, "the closed tab to leave the total");
     }
@@ -593,7 +593,7 @@ public class SidePanelTests
         var tree = h.Trees.Trees[4242];
         tree.Children.Add((5001, "vite"));
 
-        h.Shell.CloseTabCommand.Execute(first);
+        await h.Shell.CloseTabCommand.ExecuteAsync(first);
 
         var confirmation = Assert.IsType<ConfirmationViewModel>(h.Shell.Confirmation);
         Assert.Contains("vite (5001)", confirmation.Message, StringComparison.Ordinal);
@@ -613,7 +613,7 @@ public class SidePanelTests
         var tree = h.Trees.Trees[4242];
         tree.Children.Add((5001, "vite"));
 
-        h.Shell.CloseTabCommand.Execute(tab);
+        await h.Shell.CloseTabCommand.ExecuteAsync(tab);
         await h.Shell.Confirmation!.ConfirmCommand.ExecuteAsync(null);
 
         Assert.True(tree.Killed);

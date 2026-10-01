@@ -198,11 +198,13 @@ public sealed partial class TabViewModel
         var library = _services.Library;
         try
         {
-            if (library.Library.GetTranscriptPath(sessionId) is null)
+            // File reads on the library folder, which may be a slow or offline drive: not on the UI thread.
+            var status = await Task.Run(() => library.Library.GetTranscriptPath(sessionId) is null ? null : library.CheckLease(sessionId));
+            if (status is null)
             {
                 return true;
             }
-            switch (library.CheckLease(sessionId))
+            switch (status)
             {
                 case LeaseStatus.HeldByOther other:
                     await OnTakenOverAsync(other.Machine);
@@ -213,7 +215,7 @@ public sealed partial class TabViewModel
                     // takes the lease if it's free by then, and refuses if another machine has it.
                     return true;
                 default:
-                    library.Leases.TakeOver(sessionId, library.Library.GetSessionFolder(sessionId));
+                    await Task.Run(() => library.Leases.TakeOver(sessionId, library.Library.GetSessionFolder(sessionId)));
                     return true;
             }
         }
@@ -230,7 +232,9 @@ public sealed partial class TabViewModel
     {
         if (State.SessionId is { } sessionId && TakenOverBy is null)
         {
-            _services.Library.Leases.Release(sessionId);
+            // Deleting a file in the library folder: not on the UI thread.
+            var leases = _services.Library.Leases;
+            _ = Task.Run(() => leases.Release(sessionId));
         }
     }
 }

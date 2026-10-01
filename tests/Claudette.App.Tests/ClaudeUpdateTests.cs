@@ -59,7 +59,7 @@ public class ClaudeUpdateTests
         updater.Installed = New;
         await h.Services.ClaudeUpdates!.CheckNowAsync();
 
-        h.Shell.CloseTabCommand.Execute(tab);
+        await h.Shell.CloseTabCommand.ExecuteAsync(tab);
         await TabTestHarness.Eventually(() => !updates.HasBadge, "the badge to go");
 
         Assert.Empty(h.Shell.RunningVersions);

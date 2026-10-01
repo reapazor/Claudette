@@ -61,6 +61,9 @@ public sealed partial class UsagePanelViewModel : ViewModelBase
         Refresh();
     }
 
+    /// <summary>Counts refreshes, so a slow one that finishes after a later one doesn't overwrite it.</summary>
+    private int _refreshes;
+
     public UsageViewModel Header => _header;
 
     [ObservableProperty]
@@ -129,28 +132,54 @@ public sealed partial class UsagePanelViewModel : ViewModelBase
 
     public string HistoryNote => $"Usage history is kept for {_services.Settings.Usage.KeepHistory.Label().ToLowerInvariant()} (Settings → Usage).";
 
-    public void Refresh()
+    /// <summary>Reloads the panel from the usage history, in the background (after each turn and each import).</summary>
+    public void Refresh() => _ = RefreshAsync();
+
+    /// <summary>
+    /// Queries the usage history off the UI thread (a group-by over all of it, for the past windows), then shows the
+    /// result.
+    /// </summary>
+    public async Task RefreshAsync()
     {
+        var generation = ++_refreshes;
         var now = _services.Time.GetUtcNow();
         var store = _tracker.Store;
         var snapshot = _tracker.Current;
 
         // The week: the weekly limit's own window when known, else the last 7 days.
-        WeekEnd = snapshot?.WeeklyAll?.ResetsAt is { } weekReset && weekReset > now ? weekReset : now;
-        WeekStart = WeekEnd - TimeSpan.FromDays(7);
-        var samples = store.GetSamples(WeekStart, now);
-        WeekPoints = samples.Where(s => s.WeeklyPercent is not null).Select(s => new ChartPoint(s.Timestamp, s.WeeklyPercent!.Value)).ToArray();
-
+        var weekEnd = snapshot?.WeeklyAll?.ResetsAt is { } weekReset && weekReset > now ? weekReset : now;
+        var weekStart = weekEnd - TimeSpan.FromDays(7);
         // Tokens per tab since the current session window started.
         var windowStart = snapshot?.Session?.ResetsAt is { } sessionReset ? sessionReset - SessionWindow : now - SessionWindow;
-        Tabs = TabBurnRow.From(store.GetTokensByTab(windowStart), _tabName);
+        (IReadOnlyList<UsageSample> Samples, IReadOnlyList<TabTokenSum> Tabs, IReadOnlyList<WindowPeak> Sessions, IReadOnlyList<WindowPeak> Weeks) data;
+        try
+        {
+            data = await Task.Run(() => (
+                store.GetSamples(weekStart, now),
+                store.GetTokensByTab(windowStart),
+                store.GetPastWindows(UsageWindow.Session, now),
+                store.GetPastWindows(UsageWindow.Weekly, now)));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The history may be closing as Claudette quits, or damaged (it starts again by itself): show what's there.
+            return;
+        }
+        if (generation != _refreshes)
+        {
+            return;
+        }
+        WeekEnd = weekEnd;
+        WeekStart = weekStart;
+        WeekPoints = data.Samples.Where(s => s.WeeklyPercent is not null).Select(s => new ChartPoint(s.Timestamp, s.WeeklyPercent!.Value)).ToArray();
+        Tabs = TabBurnRow.From(data.Tabs, _tabName);
         OnPropertyChanged(nameof(HasTabs));
 
         // Past windows, as far back as the history goes; the lists show a page at a time.
-        _pastSessions = store.GetPastWindows(UsageWindow.Session, now)
+        _pastSessions = data.Sessions
             .Select(p => Row($"Session ending {p.ResetsAt.ToLocalTime():ddd MMM d, t}", p.PeakPercent))
             .ToArray();
-        _pastWeeks = store.GetPastWindows(UsageWindow.Weekly, now)
+        _pastWeeks = data.Weeks
             .Select(p => Row($"Week ending {p.ResetsAt.ToLocalTime():ddd MMM d}", p.PeakPercent))
             .ToArray();
         ShowPastWindows();

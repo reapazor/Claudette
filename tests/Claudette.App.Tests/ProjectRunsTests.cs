@@ -291,7 +291,7 @@ public class ProjectRunsTests
         Assert.Equal(2, Runs(tab).Count);
         var notified = h.Notifier.Shown.Count;
 
-        h.Shell.CloseTabCommand.Execute(tab);
+        await h.Shell.CloseTabCommand.ExecuteAsync(tab);
         if (h.Shell.Confirmation is { } confirmation)
         {
             // The job's processes are the tab's: stopped with it.

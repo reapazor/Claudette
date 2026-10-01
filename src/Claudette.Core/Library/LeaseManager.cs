@@ -120,10 +120,10 @@ public sealed class LeaseManager : IDisposable
     /// </summary>
     public void TakeOver(string sessionId, string sessionFolder)
     {
+        ThrowIfDisposed();
+        Write(sessionFolder);
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            Write(sessionFolder);
             _held[sessionId] = sessionFolder;
         }
     }
@@ -143,37 +143,46 @@ public sealed class LeaseManager : IDisposable
     /// </summary>
     public bool Renew(string sessionId, string sessionFolder) => Keep(sessionId, sessionFolder, write: true);
 
+    /// <remarks>
+    /// The file is read and written outside the lock, which only guards the list of held sessions: a library folder on
+    /// a slow or offline drive mustn't hold up every other lease, or the UI thread waiting on one.
+    /// </remarks>
     private bool Keep(string sessionId, string sessionFolder, bool write)
     {
-        (string SessionId, string Machine)? lost = null;
+        ThrowIfDisposed();
+        var read = Read(sessionFolder);
+        if (read.Unreadable)
+        {
+            return false;
+        }
+        bool held;
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            var read = Read(sessionFolder);
-            if (read.Unreadable)
+            held = _held.ContainsKey(sessionId);
+        }
+        var free = read.Lease is not { } lease
+            || lease.Owner == OwnerId
+            || !held && _time.GetUtcNow() - lease.UpdatedAt >= StaleAfter;
+        if (free)
+        {
+            if (write)
             {
-                return false;
-            }
-            var free = read.Lease is not { } lease
-                || lease.Owner == OwnerId
-                || !_held.ContainsKey(sessionId) && _time.GetUtcNow() - lease.UpdatedAt >= StaleAfter;
-            if (free)
-            {
-                if (write)
+                Write(sessionFolder);
+                lock (_lock)
                 {
-                    Write(sessionFolder);
                     _held[sessionId] = sessionFolder;
                 }
-                return true;
             }
-            if (_held.Remove(sessionId))
-            {
-                lost = (sessionId, read.Lease!.Machine);
-            }
+            return true;
         }
-        if (lost is { } taken)
+        bool lost;
+        lock (_lock)
         {
-            LeaseLost?.Invoke(taken.SessionId, taken.Machine);
+            lost = _held.Remove(sessionId);
+        }
+        if (lost)
+        {
+            LeaseLost?.Invoke(sessionId, read.Lease!.Machine);
         }
         return false;
     }
@@ -181,47 +190,68 @@ public sealed class LeaseManager : IDisposable
     /// <summary>Stops refreshing the lease and deletes the file, but only if it's still ours.</summary>
     public void Release(string sessionId)
     {
+        string? folder;
         lock (_lock)
         {
-            if (_held.Remove(sessionId, out var folder))
-            {
-                DeleteIfMine(folder);
-            }
+            _held.Remove(sessionId, out folder);
+        }
+        if (folder is not null)
+        {
+            DeleteIfMine(folder);
         }
     }
 
     /// <summary>Refreshes every held lease. Runs every <see cref="RefreshInterval"/>; public so the app can refresh sooner.</summary>
     public void RefreshAll()
     {
-        List<(string SessionId, string Machine)>? lost = null;
+        KeyValuePair<string, string>[] held;
         lock (_lock)
         {
             if (_disposed)
             {
                 return;
             }
-            foreach (var (sessionId, folder) in _held.ToArray())
+            held = [.. _held];
+        }
+        // Outside the lock: each file may take a while on a slow drive.
+        List<(string SessionId, string Machine)>? lost = null;
+        foreach (var (sessionId, folder) in held)
+        {
+            try
             {
-                try
+                var read = Read(folder);
+                if (read.Unreadable)
                 {
-                    var read = Read(folder);
-                    if (read.Unreadable)
+                    // Perhaps another machine's take-over, half synced: don't write over it; look again next time.
+                    continue;
+                }
+                if (read.Lease is { } lease && lease.Owner != OwnerId)
+                {
+                    lock (_lock)
                     {
-                        // Perhaps another machine's take-over, half synced: don't write over it; look again next time.
-                        continue;
-                    }
-                    if (read.Lease is { } lease && lease.Owner != OwnerId)
-                    {
+                        // Released or taken over again meanwhile: nothing to report.
+                        if (!_held.TryGetValue(sessionId, out var still) || still != folder)
+                        {
+                            continue;
+                        }
                         _held.Remove(sessionId);
-                        (lost ??= []).Add((sessionId, lease.Machine));
+                    }
+                    (lost ??= []).Add((sessionId, lease.Machine));
+                    continue;
+                }
+                lock (_lock)
+                {
+                    if (_disposed || !_held.ContainsKey(sessionId))
+                    {
+                        // Released while this ran: don't bring its file back.
                         continue;
                     }
-                    Write(folder);
                 }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    // The folder may be briefly unavailable; try again next time.
-                }
+                Write(folder);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The folder may be briefly unavailable; try again next time.
             }
         }
         foreach (var (sessionId, machine) in lost ?? [])
@@ -234,6 +264,7 @@ public sealed class LeaseManager : IDisposable
     public void Dispose()
     {
         _timer.Dispose();
+        string[] folders;
         lock (_lock)
         {
             if (_disposed)
@@ -241,11 +272,20 @@ public sealed class LeaseManager : IDisposable
                 return;
             }
             _disposed = true;
-            foreach (var folder in _held.Values)
-            {
-                DeleteIfMine(folder);
-            }
+            folders = [.. _held.Values];
             _held.Clear();
+        }
+        foreach (var folder in folders)
+        {
+            DeleteIfMine(folder);
+        }
+    }
+
+    private void ThrowIfDisposed()
+    {
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
         }
     }
 

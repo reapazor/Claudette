@@ -377,7 +377,7 @@ public class RemoteControlTests
         Assert.False(first.RemoteControl);
         Assert.Empty(RemoteRequests(h));
 
-        h.Shell.CloseTabCommand.Execute(first);
+        await h.Shell.CloseTabCommand.ExecuteAsync(first);
         await TabTestHarness.Eventually(() => !h.Shell.HasTabs && !first.IsProcessRunning, "the first tab to close");
         var second = await h.OpenTabAsync();
         Assert.True(second.RemoteControl);
@@ -633,7 +633,7 @@ public class RemoteControlTests
         Assert.True(h.SleepBlocker.IsBlocking);
 
         // Closing the tab disconnects it.
-        h.Shell.CloseTabCommand.Execute(tab);
+        await h.Shell.CloseTabCommand.ExecuteAsync(tab);
         await TabTestHarness.Eventually(() => !h.SleepBlocker.IsBlocking, "the tab to close");
         Assert.Equal([true, false, true, false], h.SleepBlocker.Changes);
 
