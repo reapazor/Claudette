@@ -30,6 +30,11 @@ public sealed partial class TabGroupViewModel : ObservableObject
 
     public string FolderName => Path.GetFileName(Folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) is { Length: > 0 } name ? name : Folder;
 
+    /// <summary>The folder is in a git repository, so a tab can work in a worktree of it (DESIGN.md §4, "Worktree tabs").</summary>
+    public bool CanMakeWorktrees => _canMakeWorktrees ??= Core.Git.GitInfo.TryGetBranch(Folder) is not null;
+
+    private bool? _canMakeWorktrees;
+
     /// <summary>The folder name, or <c>parent/name</c> when two groups would otherwise look the same.</summary>
     [ObservableProperty]
     public partial string Label { get; set; }

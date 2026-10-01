@@ -331,6 +331,9 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         OpenTabs.Remove(tab);
         tab.State.Folder = normalized;
+        // Still a worktree only if the new folder is one Claude Code made (DESIGN.md §4, "Worktree tabs").
+        tab.State.WorktreeOf = GitWorktrees.MainCheckoutOf(normalized);
+        tab.State.NewWorktree = null;
         AddTab(tab);
         UpdateGroupLabels();
         OnPropertyChanged(nameof(HasTabs));
@@ -341,13 +344,15 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     private void AddTab(TabViewModel tab)
     {
-        var group = Groups.FirstOrDefault(g => FolderHistory.SamePath(g.Folder, tab.Folder));
+        // A tab in a worktree is in its main checkout's group (DESIGN.md §4, "Worktree tabs").
+        var folder = tab.GroupFolder;
+        var group = Groups.FirstOrDefault(g => FolderHistory.SamePath(g.Folder, folder));
         if (group is null)
         {
             var state = _services.State;
-            var color = SavedGroupColor(tab.Folder) ?? NextGroupColor();
-            RememberGroupColor(tab.Folder, color);
-            group = new TabGroupViewModel(tab.Folder, color, state.CollapsedGroups.Any(c => FolderHistory.SamePath(c, tab.Folder)));
+            var color = SavedGroupColor(folder) ?? NextGroupColor();
+            RememberGroupColor(folder, color);
+            group = new TabGroupViewModel(folder, color, state.CollapsedGroups.Any(c => FolderHistory.SamePath(c, folder)));
             Groups.Add(group);
             UpdateGroupLabels();
             OnPropertyChanged(nameof(HasTabs));
@@ -587,7 +592,9 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     private void OpenSession(TabState state)
     {
-        FolderHistory.Touch(_services.State, state.Folder, _services.Time.GetUtcNow(), _services.Settings.NewTabs.RecentFolderLimit);
+        // A session that worked in a worktree Claude Code made goes back in its main checkout's group.
+        state.WorktreeOf ??= GitWorktrees.MainCheckoutOf(state.Folder);
+        FolderHistory.Touch(_services.State, state.WorktreeOf ?? state.Folder, _services.Time.GetUtcNow(), _services.Settings.NewTabs.RecentFolderLimit);
         var tab = new TabViewModel(_services, this, state, isRestored: true);
         AddTab(tab);
         SelectedTab = tab;
@@ -621,16 +628,30 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             var names = string.Join(", ", running.Take(5).Select(p => $"{p.Name} ({p.Pid})")) + (running.Count > 5 ? $" and {running.Count - 5} more" : "");
             reasons.Add($"It started {(running.Count == 1 ? "a process that is" : $"{running.Count} processes that are")} still running: {names}.");
             Confirmation = new ConfirmationViewModel($"Close \"{tab.DisplayName}\"?", string.Join(" ", reasons),
-                running.Count == 1 ? "Close and stop it" : "Close and stop them", () => RemoveTabAsync(tab), () => Confirmation = null,
-                "Close, leave running", () => RemoveTabAsync(tab, killProcesses: false));
+                running.Count == 1 ? "Close and stop it" : "Close and stop them", () => CloseAndTidyAsync(tab), () => Confirmation = null,
+                "Close, leave running", () => CloseAndTidyAsync(tab, killProcesses: false));
             return;
         }
         if (reasons.Count == 0)
         {
-            await RemoveTabAsync(tab);
+            await CloseAndTidyAsync(tab);
             return;
         }
-        Confirmation = new ConfirmationViewModel($"Close \"{tab.DisplayName}\"?", string.Join(" ", reasons), "Close", () => RemoveTabAsync(tab), () => Confirmation = null);
+        Confirmation = new ConfirmationViewModel($"Close \"{tab.DisplayName}\"?", string.Join(" ", reasons), "Close", () => CloseAndTidyAsync(tab), () => Confirmation = null);
+    }
+
+    /// <summary>Closes the tab, then offers to remove the worktree it worked in, if no other tab does (DESIGN.md §4).</summary>
+    private async Task CloseAndTidyAsync(TabViewModel tab, bool killProcesses = true)
+    {
+        await RemoveTabAsync(tab, killProcesses);
+        await OfferToRemoveWorktreesAsync([tab.State]);
+    }
+
+    /// <summary>Closes several tabs side by side, then offers to remove the worktrees they leave unused.</summary>
+    private async Task CloseAllAndTidyAsync(IReadOnlyList<TabViewModel> tabs)
+    {
+        await Task.WhenAll(tabs.Select(tab => RemoveTabAsync(tab)));
+        await OfferToRemoveWorktreesAsync([.. tabs.Select(t => t.State)]);
     }
 
     /// <summary>A tab's turn reached the usage history: that tab's "this session window" tokens follow.</summary>
@@ -650,11 +671,11 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     /// </summary>
     [RelayCommand]
     private Task CloseOtherTabsAsync(TabViewModel? keep) =>
-        Task.WhenAll(AllTabs.Where(t => t != keep && !t.IsPinned).ToArray().Select(tab => RemoveTabAsync(tab)));
+        CloseAllAndTidyAsync([.. AllTabs.Where(t => t != keep && !t.IsPinned)]);
 
     [RelayCommand]
     private Task CloseGroupAsync(TabGroupViewModel? group) =>
-        Task.WhenAll((group?.Tabs.Where(t => !t.IsPinned).ToArray() ?? []).Select(tab => RemoveTabAsync(tab)));
+        CloseAllAndTidyAsync(group?.Tabs.Where(t => !t.IsPinned).ToArray() ?? []);
 
     [RelayCommand(AllowConcurrentExecutions = true)]
     private Task CloseSelectedTabAsync() => CloseTabAsync(SelectedTab);

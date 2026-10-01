@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Claudette.App.Services;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
@@ -75,6 +76,8 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
         NotifyOnCheckIn = checkIns.Notify;
         SyncToLibrary = tab.State.SyncToLibrary;
         RemoteControl = tab.State.RemoteControl;
+        ExtraFolders = [.. tab.State.ExtraFolders];
+        ExtraFolders.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasExtraFolders));
     }
 
     public string Title => $"Settings for \"{_tab.DisplayName}\"";
@@ -149,6 +152,36 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
 
     public bool HasRemoteControlUnavailableText => RemoteControlUnavailableText is not null;
 
+    // ---- Extra folders (DESIGN.md §4, "Extra folders"): the tab's own, like SyncToLibrary --------------------------
+
+    /// <summary>Folders Claude may also read and edit, besides the tab's own (<c>--add-dir</c>).</summary>
+    public ObservableCollection<string> ExtraFolders { get; }
+
+    public bool HasExtraFolders => ExtraFolders.Count > 0;
+
+    [RelayCommand]
+    private async Task AddExtraFolderAsync()
+    {
+        if (await _services.Platform.PickFolderAsync("A folder Claude may also use") is not { } picked)
+        {
+            return;
+        }
+        var folder = FolderHistory.Normalize(picked);
+        if (!FolderHistory.SamePath(folder, _tab.Folder) && !ExtraFolders.Any(f => FolderHistory.SamePath(f, folder)))
+        {
+            ExtraFolders.Add(folder);
+        }
+    }
+
+    [RelayCommand]
+    private void RemoveExtraFolder(string? folder)
+    {
+        if (folder is not null)
+        {
+            ExtraFolders.Remove(folder);
+        }
+    }
+
     // ---- Project actions (DESIGN.md §18, "Custom actions"): in Settings, on the tab's Actions page --------------------
 
     /// <summary>"Project actions are in Settings → NightOwl → Actions": the group is named after the tab's project.</summary>
@@ -185,6 +218,7 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
         _tab.SetSyncToLibrary(SyncToLibrary);
         await _tab.RemoteControl.SetAsync(RemoteControl);
         await _tab.ApplyOverridesAsync(previous);
+        await _tab.SetExtraFoldersAsync([.. ExtraFolders]);
     }
 
     [RelayCommand]

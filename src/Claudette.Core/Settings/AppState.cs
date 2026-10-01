@@ -197,6 +197,21 @@ public sealed class TabState
     /// <summary>Ultracode is on in this tab, applied each time its Claude Code starts (DESIGN.md §5, "Model and effort").</summary>
     public bool Ultracode { get; set; }
 
+    /// <summary>
+    /// The main checkout whose worktree the tab works in (DESIGN.md §4, "Worktree tabs"): the group it's in. Null for a
+    /// tab that isn't in a worktree.
+    /// </summary>
+    public string? WorktreeOf { get; set; }
+
+    /// <summary>
+    /// The worktree Claude Code creates, or opens again, with <c>--worktree</c> when it next starts in the main checkout.
+    /// Cleared once <c>system/init</c> says where it is, and <see cref="Folder"/> becomes the worktree.
+    /// </summary>
+    public string? NewWorktree { get; set; }
+
+    /// <summary>Folders Claude may read and edit besides <see cref="Folder"/> (<c>--add-dir</c>; DESIGN.md §4, "Extra folders").</summary>
+    public List<string> ExtraFolders { get; set; } = [];
+
     /// <summary>The Perforce changelists Claude used in this session (DESIGN.md §18), so a restored tab shows them again.</summary>
     public List<Perforce.TrackedChangelist> Changelists { get; set; } = [];
 

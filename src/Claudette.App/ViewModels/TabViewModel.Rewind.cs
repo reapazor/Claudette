@@ -333,6 +333,10 @@ public sealed partial class TabViewModel
             KeptSuffixes = [.. State.KeptSuffixes],
             // A copy has the same changes, so keeps their marks (DESIGN.md §8, "Reviewed").
             ReviewedFiles = sessionId is null ? [] : Copy(State.ReviewedFiles) ?? [],
+            // In the same worktree, with the same extra folders (DESIGN.md §4, "Worktree tabs").
+            WorktreeOf = State.WorktreeOf,
+            NewWorktree = State.NewWorktree,
+            ExtraFolders = [.. State.ExtraFolders],
         };
     }
 }

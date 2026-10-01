@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
 using Claudette.Core.Diffs;
+using Claudette.Core.Git;
 using Claudette.Core.Installation;
 using Claudette.Core.Processes;
 using Claudette.Core.Protocol;
@@ -95,6 +96,33 @@ public sealed class RealCliTests : IAsyncLifetime
         Assert.Equal(stamp.Uuid, replayed.Message.Uuid);
         Assert.Equal("human", replayed.Message.Raw["origin"]?["kind"]?.GetValue<string>());
         Assert.Equal(stamp.Uuid, done.Result.Raw["user_message_uuid"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task A_worktree_tab_works_in_the_worktree_Claude_Code_makes_and_leaves_locked()
+    {
+        Assert.SkipWhen(_factory is null, "Claude Code isn't installed.");
+        // --worktree branches from HEAD when there's no remote, so the repository needs a commit.
+        Process.Start(new ProcessStartInfo("git", ["-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "init"])
+            { WorkingDirectory = Work, CreateNoWindow = true })?.WaitForExit(10_000);
+        var extra = _root.Combine("extra");
+        Directory.CreateDirectory(extra);
+
+        await using (var session = await StartAsync(worktree: "real-check", addDirectories: [extra]))
+        {
+            await session.SendUserMessageAsync("hello", TestContext.Current.CancellationToken);
+            var (started, _) = await session.ReadUntilAsync<TurnStarted>();
+            await session.ReadUntilAsync<TurnCompleted>();
+
+            // DESIGN.md §4, "Worktree tabs": system/init reports the worktree as where it works (checked with 2.1.286).
+            Assert.Equal(Path.GetFullPath(GitWorktrees.PathFor(Work, "real-check")), Path.GetFullPath(started.Init.Cwd!));
+        }
+
+        var worktree = await new GitWorktrees(new GitWorkingTree(new ProcessLauncher(), TimeProvider.System)).FindAsync(Work, GitWorktrees.PathFor(Work, "real-check"), TestContext.Current.CancellationToken);
+        Assert.NotNull(worktree);
+        Assert.Equal("worktree-real-check", worktree.Branch);
+        // -p leaves its lock behind, which removing it has to undo.
+        Assert.True(worktree.IsLocked);
     }
 
     [Fact]
@@ -884,7 +912,8 @@ public sealed class RealCliTests : IAsyncLifetime
 
     private async Task<ClaudeSession> StartAsync(string? permissionMode = null, string? resume = null, IReadOnlyList<HookRegistration>? hooks = null, string? appendSystemPrompt = null, Dictionary<string, string?>? environment = null,
         string model = "claude-haiku-4-5", bool replayUserMessages = false, bool includeHookEvents = false, bool forkSession = false, string? resumeSessionAt = null,
-        string? fallbackModel = null, IReadOnlyList<string>? additionalArguments = null, bool agentProgressSummaries = false)
+        string? fallbackModel = null, IReadOnlyList<string>? additionalArguments = null, bool agentProgressSummaries = false, string? worktree = null,
+        IReadOnlyList<string>? addDirectories = null)
     {
         Assert.SkipWhen(_factory is null, "Claude Code isn't installed.");
         var overrides = new Dictionary<string, string?>
@@ -916,6 +945,8 @@ public sealed class RealCliTests : IAsyncLifetime
             FallbackModel = fallbackModel,
             AdditionalArguments = additionalArguments ?? [],
             AgentProgressSummaries = agentProgressSummaries,
+            Worktree = worktree,
+            AddDirectories = addDirectories ?? [],
         }, TestContext.Current.CancellationToken);
     }
 }

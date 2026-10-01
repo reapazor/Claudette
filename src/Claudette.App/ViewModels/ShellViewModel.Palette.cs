@@ -101,6 +101,10 @@ public sealed partial class ShellViewModel
             }
             Command("Tab settings…", () => OpenTabSettingsCommand.Execute(tab));
             AsyncCommand("Duplicate tab", () => DuplicateTabAsync(tab));
+            if (CanOpenWorktreeTab(tab))
+            {
+                AsyncCommand("New tab in a worktree", () => OpenWorktreeTabAsync(tab.GroupFolder));
+            }
             AsyncCommand("Export conversation…", () => tab.ExportConversationCommand.ExecuteAsync(null));
             if (tab.RestartCommand.CanExecute(null))
             {

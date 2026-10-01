@@ -195,6 +195,13 @@ items:
     usedIn: src/Claudette.Core/Protocol/MessageParser.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: MessageParserTests
+  - id: "system/init cwd"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.App/ViewModels/TabViewModel.Worktree.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: WorktreeTabTests, RealCliTests
+    # Where a worktree tab's Claude Code works once --worktree made the worktree (DESIGN.md §4, "Worktree tabs").
   - id: "capabilities"
     kind: field
     status: documented
@@ -784,6 +791,30 @@ items:
     usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
     docs: https://code.claude.com/docs/en/cli-reference
     test: ClaudeEnvironmentTests, RealCliTests
+  - id: "--worktree"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.Worktree.cs
+    docs: https://code.claude.com/docs/en/worktrees
+    test: ClaudeEnvironmentTests, WorktreeTabTests, RealCliTests
+    # A worktree tab's first start (DESIGN.md §4, "Worktree tabs"). With -p, Claude Code makes
+    # <repo>/.claude/worktrees/<name> on the branch worktree-<name>, reports it as system/init's cwd, keeps the transcript
+    # under the worktree's folder, and leaves the worktree locked when it exits (checked with 2.1.286). Outside a git
+    # repository it exits with an error and no result, so Claudette offers worktree tabs only for folders in one.
+  - id: "--add-dir"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.Worktree.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: ClaudeEnvironmentTests, WorktreeTabTests
+    # A tab's extra folders (DESIGN.md §4, "Extra folders"), one --add-dir each. A folder that's gone isn't passed.
+  - id: ".claude/worktrees/<name>"
+    kind: behavior
+    status: documented
+    usedIn: src/Claudette.Core/Git/GitWorktrees.cs
+    docs: https://code.claude.com/docs/en/worktrees
+    test: GitWorktreesTests
+    fallback: Where --worktree puts a worktree and its worktree-<name> branch. Claudette names new worktrees so it doesn't reuse one, groups a session found there with its main checkout, and deletes the branch only when it has the worktree- prefix. If the place changes, the tab still follows system/init's cwd; only grouping from History and naming around existing folders are off.
   - id: "set_model"
     kind: control
     status: undocumented

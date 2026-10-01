@@ -86,6 +86,16 @@ public sealed record ClaudeLaunchOptions
     /// on <c>initialize</c>; DESIGN.md §18, "Agent map").
     /// </summary>
     public bool AgentProgressSummaries { get; init; }
+
+    /// <summary>
+    /// <c>--worktree</c>: start in the git worktree of this name, which Claude Code creates under
+    /// <c>.claude/worktrees/</c> of <see cref="WorkingDirectory"/>'s repository, or opens when it's there (DESIGN.md §4,
+    /// "Worktree tabs").
+    /// </summary>
+    public string? Worktree { get; init; }
+
+    /// <summary><c>--add-dir</c>, once for each: folders Claude may also read and edit (DESIGN.md §4, "Extra folders").</summary>
+    public IReadOnlyList<string> AddDirectories { get; init; } = [];
 }
 
 public static class ClaudeArguments
@@ -116,6 +126,11 @@ public static class ClaudeArguments
         AddOption(args, "--permission-mode", options.PermissionMode);
         AddOption(args, "--fallback-model", options.FallbackModel);
         AddOption(args, "--setting-sources", options.SettingSources);
+        AddOption(args, "--worktree", options.Worktree);
+        foreach (var directory in options.AddDirectories)
+        {
+            AddOption(args, "--add-dir", directory);
+        }
         AddOption(args, "--resume", options.Resume);
         if (options.ForkSession && options.Resume is not null)
         {

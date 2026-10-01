@@ -346,6 +346,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 rows.Add(new InfoRow("Branch", branch));
             }
+            AddWorktreeRows(rows);
             rows.Add(new InfoRow("Model", $"{ModelName ?? "Default"} · {EffortName}"));
             if (PermissionMode is not null)
             {
@@ -1425,6 +1426,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 SettingSources = State.WithoutProjectSettings ? "user" : null,
                 FallbackModel = settings.ClaudeCode.FallbackModel,
                 AgentProgressSummaries = settings.ClaudeCode.SubagentProgressSummaries,
+                // A worktree tab's first start makes its worktree, or opens it again (DESIGN.md §4, "Worktree tabs").
+                Worktree = State.NewWorktree,
+                AddDirectories = [.. State.ExtraFolders.Where(Directory.Exists)],
                 Model = State.Overrides.Model ?? settings.NewTabs.DefaultModel,
                 Effort = State.Overrides.Effort ?? settings.NewTabs.DefaultEffort,
                 PermissionMode = chosenMode ?? (resume is null ? starting.LaunchMode : null),
@@ -1602,6 +1606,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         Status = TabStatus.NotStarted;
         OnPropertyChanged(nameof(Folder));
         OnPropertyChanged(nameof(FolderName));
+        OnPropertyChanged(nameof(IsInWorktree));
+        OnPropertyChanged(nameof(WorktreeName));
+        OnPropertyChanged(nameof(WorktreeTip));
         OnPropertyChanged(nameof(DisplayName));
         _services.Usage?.OnTabRenamed(Id, DisplayName);
         OnPropertyChanged(nameof(InfoRows));
@@ -1846,6 +1853,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             case TurnStarted started:
                 HasMcpServers = started.Init.Raw.GetArray("mcp_servers") is { Count: > 0 };
                 State.SessionId = started.Init.SessionId;
+                OnWorkingFolderReported(started.Init.Cwd);
                 if (_forkAwaitingId)
                 {
                     // The copy has its own id now and no longer writes to the original.
@@ -1936,6 +1944,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 _ = ProjectTools.RefreshFileAsync();
                 // The switch changed while Claude worked (DESIGN.md §18, "Remote Control").
                 RemoteControl.OnTurnCompleted(session);
+                if (_restartForExtraFolders)
+                {
+                    // After this event is handled: the restart stops the session it came from.
+                    _services.Dispatcher.Post(() => _ = RestartForExtraFoldersAsync());
+                }
                 break;
             case ConversationReset:
                 _callUsage.ContextReset();

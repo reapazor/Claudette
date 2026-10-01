@@ -194,7 +194,7 @@ public sealed class GitWorkingTree(IProcessLauncher launcher, TimeProvider timeP
         return result is { ExitCode: 0 } ? TrimOutput(result.StandardOutput).Length > 0 : null;
     }
 
-    private async Task<ProcessResult?> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+    internal async Task<ProcessResult?> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
     {
         try
         {

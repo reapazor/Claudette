@@ -228,7 +228,7 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
   - Tabs can be dragged to reorder them within their group, and groups can be dragged (by their label) to reorder them. A tab can't be dragged into another group, because its folder is fixed, and pinned tabs stay ahead of the others.
     - A dragged tab is selected, and the list rearranges as soon as the pointer passes the middle of a neighbor. **Move up** and **Move down** in the tab menu do the same from the keyboard or mouse.
   - A group with a single tab still gets a label, so the sidebar always looks the same.
-- Closing a tab that is working asks for confirmation, then stops the process. Right-clicking a group label gives **New tab here**, **Collapse group** (or **Expand group**), **Change color…** and **Close group**.
+- Closing a tab that is working asks for confirmation, then stops the process. Right-clicking a group label gives **New tab here**, **New tab in a worktree** (for a folder in a git repository, [below](#worktree-tabs)), **Collapse group** (or **Expand group**), **Change color…** and **Close group**.
 - **Pinned tabs** come back every time Claudette launches, resuming their sessions.
   - Pin or unpin from the tab's right-click menu. A pinned tab shows a pin icon and sits at the start of its folder group.
   - **Close group** and **Close other tabs** skip pinned tabs.
@@ -236,14 +236,28 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
   - Unpinned tabs aren't restored unless **Also restore unpinned tabs** is on in Settings. See [§9](#restore-on-launch) for what's restored.
 - **Syncing.** **Sync to other machines** in the tab's right-click menu (a check item), or in its **Tab settings…**, turns copying the tab's session to the session library on or off ([§9](#session-library-sync-across-machines)). It's off for a new tab unless Settings → Sessions says otherwise. A tab that syncs shows a small sync icon in its row, and **Sync now** in its menu, which copies the session to the library straight away instead of after the next turn.
 - **The Claude app.** **Connect to the Claude app** in the tab's right-click menu (a check item), or in its **Tab settings…**, connects the tab to the Claude app with Remote Control whenever its session runs ([§18](#remote-control-the-claude-app)). It's off for a new tab unless Settings → Claude Code says otherwise. A connected tab shows a small phone icon in its row, and **Open in the Claude app** in its menu.
+- **Extra folders.** **Tab settings…** lists folders Claude may read and edit besides the tab's own, with **Add folder…** and a remove button on each. Claude Code takes them as `--add-dir`, one each; their own `.claude` settings and `CLAUDE.md` aren't loaded. They're saved with the tab and copied with it. Claude Code takes them when it starts, so changing them starts it again at once, carrying the conversation on, or once the turn ends when Claude is working; a note says so. A folder that's gone isn't passed. The tab info card lists them.
 - Keyboard: `Ctrl/Cmd+T` new tab, `Ctrl/Cmd+W` close, `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle, `Ctrl/Cmd+1…9` jump to a tab, `Ctrl/Cmd+B` collapse or expand the sidebar, `Ctrl/Cmd+J` go to the next tab waiting for you (a permission prompt, a question or a plan, in sidebar order after the selected tab, going round), `Ctrl/Cmd+Shift+P` the [command palette](#command-palette).
+
+### Worktree tabs
+
+Several tabs in one folder edit the same files, so one tab's changes can trip another's. A tab can work in a git worktree of its own instead: a second checkout of the repository, on its own branch, where its edits don't meet the others' ([Claude Code: worktrees](https://code.claude.com/docs/en/worktrees)).
+
+- **Opening one.** **New tab in a worktree**, in a group's menu (for a folder in a git repository) or the command palette, opens a tab in that folder whose Claude Code starts with `--worktree <name>`. Claude Code makes the worktree at `.claude/worktrees/<name>` in the repository, on the branch `worktree-<name>`. Claudette picks the name, two words such as `brisk-otter`, that no folder there or other tab has, so a restart before the first turn opens the same worktree rather than another. A folder outside a git repository says it can't have one.
+- **Working there.** The first turn's `system/init` names the worktree as where Claude Code works. From then on the tab's folder is the worktree: changed files and the git view, `@` files, project tools and the info card follow, a note says *"Working in the worktree brisk-otter, on its own branch"*, and later starts resume the session in it. Claude Code keeps its transcript under the worktree's folder, so History lists it there.
+- **In the sidebar** it stays in the main checkout's group, with a branch icon in its row whose tip names the worktree; the info card has a *Worktree* row. **Duplicate tab** and **Branch from here** copy it into the same worktree. A session opened from History whose folder is a worktree Claude Code made (`<checkout>/.claude/worktrees/<name>`) goes back in its checkout's group too.
+- **Removing it.** Claude Code leaves `-p` worktrees behind, locked, so closing the last tab in a worktree asks what to do with it, once the tab's Claude Code has stopped:
+  - *Nothing of its own* (no changes, no commits on any other branch): **Remove the worktree brisk-otter?** with **Remove** and **Keep**.
+  - *With work in it*: **Keep the worktree brisk-otter?**, saying what it holds (*uncommitted changes and 2 commits on no other branch*), with **Keep** and **Remove and discard**.
+  - Removing unlocks it, runs `git worktree remove` (with `--force` when discarding), and deletes the `worktree-<name>` branch when it has no commits of its own or they're discarded too. Git's refusal is shown as it said it.
+  - **Close group** and **Close other tabs** offer the worktrees they leave with nothing of their own together, and keep the rest. A worktree another open tab still works in isn't asked about. A kept worktree stays with its session in History.
 
 ### Command palette
 
 `Ctrl/Cmd+Shift+P` opens a box over the window that does anything Claudette has a command for, by typing a few letters of it.
 
 - **What it lists**, in this order before anything is typed:
-  - **Commands**: new tab, History, Settings, collapsing the sidebar, going to the next tab waiting (when one is); and for the selected tab, find, Stop (while Claude works), the project's main action, the side panel's pages, **Tab settings…**, **Duplicate tab**, restarting Claude Code (when it stopped) and closing the tab. Each shows its shortcut, so the palette teaches them.
+  - **Commands**: new tab, History, Settings, collapsing the sidebar, zooming in and out (and back to 100% when zoomed, [§3](#accessibility)), going to the next tab waiting (when one is); and for the selected tab, find, Stop (while Claude works), the project's main action, the side panel's pages, **Tab settings…**, **Duplicate tab**, **New tab in a worktree** (for a folder in a git repository, [Worktree tabs](#worktree-tabs)), restarting Claude Code (when it stopped) and closing the tab. Each shows its shortcut, so the palette teaches them.
   - **Tabs**, by name with their folder: picking one selects it.
   - **Folders**: favorites, then recent folders. Picking one opens a new tab there.
   - **Settings** categories: picking one opens Settings there.
@@ -1615,7 +1629,7 @@ The foot of the Settings sidebar shows which Claudette this is, on every page: "
 
 Some settings can be changed for a single tab from the tab's right-click menu, under **Tab settings…**: model, effort level, permission mode, the process monitor ([§4](#process-monitor)), **Auto-continue** (continuing a task when a usage limit resets: Default, On or Off; [§6](#continuing-after-a-limit-resets)), and the check-in settings. The folder's custom project actions belong to the folder, not the tab, so they're edited in Settings, on the tab's **Actions** page ([above](#the-projects-pages)); **Tab settings…** says so and has **Open**. A tab with overrides shows a small dot next to its settings entry, and **Use defaults** clears them. Overrides are saved with the tab.
 
-**Tab settings…** also has **Sync to other machines** ([§9](#session-library-sync-across-machines)) and **Connect to the Claude app** ([§18](#remote-control-the-claude-app)), the same switches as the tab menu's. Neither is an override: the new-tab settings only apply when a tab opens, **Use defaults** leaves them as they are, and they don't count toward the dot.
+**Tab settings…** also has **Sync to other machines** ([§9](#session-library-sync-across-machines)) and **Connect to the Claude app** ([§18](#remote-control-the-claude-app)), the same switches as the tab menu's, and the tab's **Extra folders** ([§4](#4-tabs--sessions)). None of them is an override: the new-tab settings only apply when a tab opens, **Use defaults** leaves them as they are, and they don't count toward the dot.
 
 ### Storage
 

@@ -175,7 +175,7 @@ public sealed partial class NewTabPickerViewModel : ViewModelBase
         var state = _services.State;
         var search = Search.Trim();
         bool Matches(string path) => search.Length == 0 || path.Contains(search, StringComparison.OrdinalIgnoreCase);
-        int OpenTabs(string path) => _shell.AllTabs.Count(t => FolderHistory.SamePath(t.Folder, path));
+        int OpenTabs(string path) => _shell.AllTabs.Count(t => FolderHistory.SamePath(t.GroupFolder, path));
         DateTimeOffset? LastUsed(string path) => state.RecentFolders.FirstOrDefault(r => FolderHistory.SamePath(r.Path, path))?.LastUsed;
 
         var number = 1;

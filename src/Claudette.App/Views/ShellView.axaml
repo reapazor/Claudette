@@ -140,6 +140,9 @@
                       <Button.ContextMenu>
                         <ContextMenu>
                           <MenuItem Header="New tab here" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewTabInGroupCommand}" CommandParameter="{Binding}" />
+                          <!-- Its own git worktree, so its edits don't meet the other tabs' (DESIGN.md §4, "Worktree tabs") -->
+                          <MenuItem Header="New tab in a worktree" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewWorktreeTabCommand}" CommandParameter="{Binding}"
+                                    IsVisible="{Binding CanMakeWorktrees}" ToolTip.Tip="A tab whose Claude works in a separate checkout, on its own branch" />
                           <MenuItem Header="{Binding CollapseMenuText}" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).ToggleGroupCollapsedCommand}" CommandParameter="{Binding}" />
                           <MenuItem Header="Change color…" Click="OnChangeGroupColor" />
                           <Separator />
@@ -182,6 +185,11 @@
                                     <Border DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding SyncToLibrary}" VerticalAlignment="Center" Margin="0,0,5,0"
                                             ToolTip.Tip="Synced to the session library" AutomationProperties.Name="Synced to the session library">
                                       <Path Data="{StaticResource IconSync}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="9" Height="9" Stretch="Uniform" />
+                                    </Border>
+                                    <!-- Works in a git worktree of its own (DESIGN.md §4, "Worktree tabs") -->
+                                    <Border DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding IsInWorktree}" VerticalAlignment="Center" Margin="0,0,5,0"
+                                            ToolTip.Tip="{Binding WorktreeTip}" AutomationProperties.Name="{Binding WorktreeTip}">
+                                      <Path Data="{StaticResource IconBranch}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="9" Height="9" Stretch="Uniform" />
                                     </Border>
                                     <!-- Connected to the Claude app (DESIGN.md §18, "Remote Control"); dimmed while it connects or reconnects,
                                          and more once it's switched off and waiting to disconnect -->
@@ -341,6 +349,9 @@
                     <Button.ContextMenu>
                       <ContextMenu>
                         <MenuItem Header="New tab here" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewTabInGroupCommand}" CommandParameter="{Binding}" />
+                        <!-- Its own git worktree, so its edits don't meet the other tabs' (DESIGN.md §4, "Worktree tabs") -->
+                        <MenuItem Header="New tab in a worktree" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewWorktreeTabCommand}" CommandParameter="{Binding}"
+                                  IsVisible="{Binding CanMakeWorktrees}" ToolTip.Tip="A tab whose Claude works in a separate checkout, on its own branch" />
                         <MenuItem Header="{Binding CollapseMenuText}" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).ToggleGroupCollapsedCommand}" CommandParameter="{Binding}" />
                         <MenuItem Header="Change color…" Click="OnChangeGroupColor" />
                         <Separator />
@@ -687,7 +698,7 @@
           <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="16" TextWrapping="Wrap" />
           <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
           <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-            <Button Content="Cancel" Command="{Binding CancelCommand}" />
+            <Button Content="{Binding CancelText}" Command="{Binding CancelCommand}" IsVisible="{Binding HasCancel}" />
             <Button Content="{Binding SecondaryText}" Command="{Binding SecondaryCommand}" IsVisible="{Binding HasSecondary}" />
             <Button Classes="accent" Content="{Binding ConfirmText}" Command="{Binding ConfirmCommand}" />
           </StackPanel>
