@@ -80,6 +80,12 @@ public sealed record ClaudeLaunchOptions
 
     /// <summary>Applied on top of the clean environment. A null value removes the variable.</summary>
     public IReadOnlyDictionary<string, string?> EnvironmentOverrides { get; init; } = new Dictionary<string, string?>();
+
+    /// <summary>
+    /// Asks Claude Code for one-line progress summaries of subagents on <c>task_progress</c> (<c>agentProgressSummaries</c>
+    /// on <c>initialize</c>; DESIGN.md §18, "Agent map").
+    /// </summary>
+    public bool AgentProgressSummaries { get; init; }
 }
 
 public static class ClaudeArguments

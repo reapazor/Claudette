@@ -228,6 +228,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         new(SettingsCategory.ClaudeCode, "Fallback model"),
         new(SettingsCategory.ClaudeCode, "Keep copies of files Claude changes, so prompts can be rewound"),
         new(SettingsCategory.ClaudeCode, "Show every hook run in the conversation"),
+        new(SettingsCategory.ClaudeCode, "Summarize subagents' progress"),
         new(SettingsCategory.ClaudeCode, "Ask before using a new folder's own configuration (folder trust)"),
         .. LoginShellSearchEntries(),
         new(SettingsCategory.ClaudeCode, "Connect new tabs to the Claude app (Remote Control)"),
@@ -580,6 +581,13 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     {
         get => _settings.ClaudeCode.KeepFileCheckpoints;
         set => Set(value, v => _settings.ClaudeCode.KeepFileCheckpoints = v);
+    }
+
+    /// <summary>Settings → Claude Code → <b>Summarize subagents' progress</b> (DESIGN.md §18, "Agent map").</summary>
+    public bool SubagentProgressSummaries
+    {
+        get => _settings.ClaudeCode.SubagentProgressSummaries;
+        set => Set(value, v => _settings.ClaudeCode.SubagentProgressSummaries = v);
     }
 
     /// <summary>Settings → Claude Code → <b>Show every hook run in the conversation</b>.</summary>

@@ -168,6 +168,14 @@ public sealed partial class AgentNode : ObservableObject
     [NotifyPropertyChangedFor(nameof(ActivityLine), nameof(Subtitle))]
     public partial string? Activity { get; private set; }
 
+    /// <summary>
+    /// Claude Code's one-line summary of how far it has got (<c>task_progress.summary</c>), with Settings → Claude Code →
+    /// <b>Summarize subagents' progress</b> on: shown in place of its latest tool call while it runs.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActivityLine), nameof(Subtitle))]
+    public partial string? ProgressSummary { get; private set; }
+
     /// <summary>Waiting out an API error (<c>tool_progress</c> with <c>subagent_retry</c>).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ActivityLine), nameof(Subtitle))]
@@ -180,7 +188,7 @@ public sealed partial class AgentNode : ObservableObject
     public string ActivityLine => Status switch
     {
         AgentStatus.Waiting => WaitingPrompt is { } prompt ? $"Needs your permission: {Describe(prompt.Request.ToolName, prompt.Request.Input)}" : StatusText,
-        AgentStatus.Running => RetryText ?? Activity ?? (IsRoot ? "Working…" : "Starting…"),
+        AgentStatus.Running => RetryText ?? ProgressSummary ?? Activity ?? (IsRoot ? "Working…" : "Starting…"),
         AgentStatus.Done => FirstLine(ResultText) ?? "Done",
         AgentStatus.Failed => FirstLine(ResultText) is { } error ? $"Failed: {error}" : "Failed",
         AgentStatus.Stopped => StatusText,
@@ -364,6 +372,11 @@ public sealed partial class AgentNode : ObservableObject
     internal void OnTaskProgress(JsonObject raw)
     {
         ApplyUsage(raw.GetObject("usage"), duration: false);
+        // Claude Code's one-line summary of its progress, with Settings → Claude Code → Subagent progress summaries on.
+        if (raw.GetString("summary") is { Length: > 0 } summary)
+        {
+            ProgressSummary = summary.Trim();
+        }
         // Claude Code's own one-line description of what it's doing, when the stream hasn't shown a tool call.
         if (Activity is null && raw.GetString("description") is { Length: > 0 } description)
         {

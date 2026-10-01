@@ -465,6 +465,13 @@ items:
     docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkcontrolinterruptresponse
     test: QueuedMessageTests, RealCliTests
     fallback: Read with cancelled from the interrupt receipt. Ids Claudette didn't send are ignored, as the SDK says to.
+  - id: "agentProgressSummaries"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/Conversation/AgentNode.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#options
+    test: ClaudeSessionTests, AgentMapTests, RealCliTests
+    fallback: Sent as true on initialize when Settings asks for it (the option is documented; the initialize field name is the SDK's, accepted by 2.1.286). task_progress.summary then replaces the subagent row's latest tool call. Without it the row shows the tool call, as before.
   - id: "gitOperation"
     kind: field
     status: documented

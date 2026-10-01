@@ -380,6 +380,19 @@ public class ClaudeSessionTests
         Assert.Equal(SessionState.Exited, session.State);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Progress_summaries_are_asked_for_on_initialize_only_when_wanted(bool wanted)
+    {
+        await using var session = new ClaudeSession(_transport, _time);
+
+        await session.InitializeAsync([], wanted, TestContext.Current.CancellationToken);
+
+        var initialize = _transport.Sent.Single(m => Type(m) == "control_request" && Subtype(m["request"]!) == "initialize")["request"]!.AsObject();
+        Assert.Equal(wanted, initialize.ContainsKey("agentProgressSummaries"));
+    }
+
     [Fact]
     public async Task A_refused_start_says_why()
     {

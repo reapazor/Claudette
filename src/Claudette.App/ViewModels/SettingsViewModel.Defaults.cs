@@ -47,6 +47,7 @@ public sealed partial class SettingsViewModel
         OnPropertyChanged(nameof(FallbackModel));
         OnPropertyChanged(nameof(KeepFileCheckpoints));
         OnPropertyChanged(nameof(ShowAllHookRuns));
+        OnPropertyChanged(nameof(SubagentProgressSummaries));
         OnPropertyChanged(nameof(AskBeforeUsingFolderSettings));
     }
 

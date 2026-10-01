@@ -2108,6 +2108,7 @@ A live view of what a tab's subagents are doing. When Claude fans work out to se
 - **Each row** has two compact lines, following the VS Code extension's compact rows ([§3](#visual-style)):
   - A status mark, the task description, and the running time at the right.
   - The agent type (for example `Explore` or `general-purpose`), then what it's doing right now: its latest tool call, summarized the way the conversation's tool rows are (for example `Grep auth in src/`), or the first line of its latest text. Once it has finished: the first line of its report, or how it ended.
+  - **Summarize subagents' progress** (Settings → Claude Code, off by default) asks Claude Code for a line about how far each subagent has got (`agentProgressSummaries` on `initialize`; the line comes on `task_progress` as `summary`), shown in place of its latest tool call while it runs. Each summary is a small extra model call that counts toward usage, hence off by default. It applies to tabs started after the change.
   - Statuses: running (a pulsing dot), waiting on a permission prompt (`!`, and the row is highlighted like the prompt card), done (a green dot), failed (`✕`), stopped (`■`). A background subagent reads "Running in the background".
 - **Details.** Selecting a node shows, below the tree:
   - Its status, and its type, model, running time, tool calls and tokens.

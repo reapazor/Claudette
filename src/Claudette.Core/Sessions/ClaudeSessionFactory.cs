@@ -59,7 +59,7 @@ public sealed class ClaudeSessionFactory(
         var session = new ClaudeSession(transport, timeProvider, _loggerFactory.CreateLogger<ClaudeSession>(), diagnostics, options.ShowsElicitations);
         try
         {
-            await session.InitializeAsync(options.Hooks, cancellationToken).ConfigureAwait(false);
+            await session.InitializeAsync(options.Hooks, options.AgentProgressSummaries, cancellationToken).ConfigureAwait(false);
             return session;
         }
         catch

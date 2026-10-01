@@ -484,6 +484,31 @@ public class AgentMapTests
     }
 
     [Fact]
+    public async Task A_progress_summary_says_what_a_subagent_has_got_to()
+    {
+        await using var h = new TabTestHarness(s => s.ClaudeCode.SubagentProgressSummaries = true);
+        var tab = await h.OpenTabAsync();
+        Assert.True(h.Factory.Launches.Single().AgentProgressSummaries);
+        h.Transport.Emit(Wire.Init());
+        h.Transport.Emit(Wire.Agent("a1", "Explore the auth code", "p", "Explore"));
+        h.Transport.Emit(Wire.TaskStarted("task-a", "a1"));
+        h.Transport.Emit(Wire.Tool("a1", "g1", "Grep", new JsonObject { ["pattern"] = "auth" }));
+        await TabTestHarness.Eventually(() => tab.Agents.Find("a1")?.Activity is not null, "the tool call");
+
+        // As the Agent SDK documents task_progress with agentProgressSummaries on.
+        h.Transport.Emit(new JsonObject
+        {
+            ["type"] = "system", ["subtype"] = "task_progress", ["task_id"] = "task-a", ["tool_use_id"] = "a1",
+            ["description"] = "Explore the auth code", ["summary"] = "Found the token check in middleware; reading the tests next",
+            ["usage"] = new JsonObject { ["total_tokens"] = 1200, ["tool_uses"] = 1, ["duration_ms"] = 4000 }, ["session_id"] = "s1",
+        }.ToJsonString());
+
+        var node = tab.Agents.Find("a1")!;
+        await TabTestHarness.Eventually(() => node.ProgressSummary is not null, "the summary");
+        Assert.Equal("Found the token check in middleware; reading the tests next", node.ActivityLine);
+    }
+
+    [Fact]
     public void The_hand_back_frame_is_read_down_to_the_report()
     {
         // As Claude Code 2.1.286 frames a subagent's report in the tool result: the frame, the report indented, then

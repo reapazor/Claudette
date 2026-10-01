@@ -110,11 +110,20 @@ public sealed class ClaudeSession : IAsyncDisposable
     /// Hook callbacks to register through the <c>hooks</c> field, as the Agent SDKs do; Claude Code calls them back with
     /// <c>hook_callback</c> control requests (DESIGN.md §13, "Hook callbacks").
     /// </param>
-    public async Task<InitializeResult> InitializeAsync(IReadOnlyList<HookRegistration> hooks, CancellationToken cancellationToken = default)
+    public Task<InitializeResult> InitializeAsync(IReadOnlyList<HookRegistration> hooks, CancellationToken cancellationToken = default) =>
+        InitializeAsync(hooks, agentProgressSummaries: false, cancellationToken);
+
+    /// <inheritdoc cref="InitializeAsync(IReadOnlyList{HookRegistration}, CancellationToken)"/>
+    /// <param name="agentProgressSummaries">One-line progress summaries of subagents on <c>task_progress</c> (documented option).</param>
+    public async Task<InitializeResult> InitializeAsync(IReadOnlyList<HookRegistration> hooks, bool agentProgressSummaries, CancellationToken cancellationToken = default)
     {
         _hooks = new HookCallbackRegistry(hooks);
-        var response = await _control.RequestAsync(new JsonObject { ["subtype"] = "initialize", ["hooks"] = _hooks.Config }, InitializeTimeout, cancellationToken)
-            .ConfigureAwait(false);
+        var request = new JsonObject { ["subtype"] = "initialize", ["hooks"] = _hooks.Config };
+        if (agentProgressSummaries)
+        {
+            request["agentProgressSummaries"] = true;
+        }
+        var response = await _control.RequestAsync(request, InitializeTimeout, cancellationToken).ConfigureAwait(false);
         Initialization = InitializeResult.Parse(response);
         PermissionMode ??= Initialization.CurrentPermissionMode;
         TrySetState(SessionState.Starting, SessionState.Idle);

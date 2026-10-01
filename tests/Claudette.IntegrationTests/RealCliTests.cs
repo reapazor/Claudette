@@ -198,6 +198,18 @@ public sealed class RealCliTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Subagent_progress_summaries_are_accepted()
+    {
+        // DESIGN.md §18, "Agent map": agentProgressSummaries on initialize (checked with 2.1.286).
+        await using var session = await StartAsync(agentProgressSummaries: true);
+
+        await session.SendUserMessageAsync("hello", TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.False(done.Result.IsError);
+    }
+
+    [Fact]
     public async Task A_fallback_model_is_accepted()
     {
         await using var session = await StartAsync(fallbackModel: "claude-sonnet-5-5");
@@ -854,7 +866,7 @@ public sealed class RealCliTests : IAsyncLifetime
 
     private async Task<ClaudeSession> StartAsync(string? permissionMode = null, string? resume = null, IReadOnlyList<HookRegistration>? hooks = null, string? appendSystemPrompt = null, Dictionary<string, string?>? environment = null,
         string model = "claude-haiku-4-5", bool replayUserMessages = false, bool includeHookEvents = false, bool forkSession = false, string? resumeSessionAt = null,
-        string? fallbackModel = null, IReadOnlyList<string>? additionalArguments = null)
+        string? fallbackModel = null, IReadOnlyList<string>? additionalArguments = null, bool agentProgressSummaries = false)
     {
         Assert.SkipWhen(_factory is null, "Claude Code isn't installed.");
         var overrides = new Dictionary<string, string?>
@@ -885,6 +897,7 @@ public sealed class RealCliTests : IAsyncLifetime
             ResumeSessionAt = resumeSessionAt,
             FallbackModel = fallbackModel,
             AdditionalArguments = additionalArguments ?? [],
+            AgentProgressSummaries = agentProgressSummaries,
         }, TestContext.Current.CancellationToken);
     }
 }

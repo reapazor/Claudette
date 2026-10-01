@@ -1424,6 +1424,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 // Chosen when asked about the folder's own configuration (DESIGN.md §7, "Folder trust").
                 SettingSources = State.WithoutProjectSettings ? "user" : null,
                 FallbackModel = settings.ClaudeCode.FallbackModel,
+                AgentProgressSummaries = settings.ClaudeCode.SubagentProgressSummaries,
                 Model = State.Overrides.Model ?? settings.NewTabs.DefaultModel,
                 Effort = State.Overrides.Effort ?? settings.NewTabs.DefaultEffort,
                 PermissionMode = chosenMode ?? (resume is null ? starting.LaunchMode : null),

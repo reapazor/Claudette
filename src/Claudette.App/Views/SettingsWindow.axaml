@@ -236,6 +236,10 @@
           <CheckBox Content="Show every hook run in the conversation" IsChecked="{Binding ShowAllHookRuns}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                      Text="Off, only hooks that fail, or print something while they run, get a row." />
+          <!-- DESIGN.md §18, "Agent map" -->
+          <CheckBox Content="Summarize subagents' progress" IsChecked="{Binding SubagentProgressSummaries}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="Claude Code writes a line about what each subagent has got to, for the Agents page. Each summary is a small extra model call, which counts toward your usage. Applies to tabs started after the change." />
           <!-- DESIGN.md §7, "Folder trust" -->
           <CheckBox Content="Ask before using a new folder's own configuration" IsChecked="{Binding AskBeforeUsingFolderSettings}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"

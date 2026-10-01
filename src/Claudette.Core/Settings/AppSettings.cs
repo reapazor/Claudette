@@ -226,6 +226,12 @@ public sealed class ClaudeCodeSettings
     public bool ShowAllHookRuns { get; set; }
 
     /// <summary>
+    /// Claude Code writes a one-line summary of each subagent's progress, for the agent map (DESIGN.md §18, "Agent map").
+    /// Each is a model call that counts toward usage, so it's off by default.
+    /// </summary>
+    public bool SubagentProgressSummaries { get; set; }
+
+    /// <summary>
     /// Before Claude Code first starts in a folder that isn't trusted, ask about what the folder's own configuration
     /// would run (DESIGN.md §7, "Folder trust"). On by default.
     /// </summary>
