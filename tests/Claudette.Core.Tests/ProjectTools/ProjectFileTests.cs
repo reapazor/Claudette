@@ -84,6 +84,37 @@ public sealed class ProjectFileTests : IDisposable
     }
 
     [Fact]
+    public void An_action_with_ifExists_is_shown_only_while_all_its_paths_exist()
+    {
+        var folder = _temp.CreateFolder("game");
+        _temp.Write("game/claudette.json", """
+            {
+              "actions": [
+                { "name": "Play", "command": "Build/Game", "ifExists": "Build/Game" },
+                { "name": "Open logs", "command": "open Saved/Logs", "ifExists": [" Saved/Logs ", "Build/Game", ""] },
+                { "name": "Always", "command": "make", "ifExists": [] },
+                { "name": "Odd", "command": "x", "ifExists": { "path": "Build" } },
+              ],
+            }
+            """);
+
+        var before = ProjectFile.Read(folder, ToolOS.Linux);
+        Assert.Equal(["Always"], before.Actions.Select(a => a.Name));
+        Assert.Equal(["claudette.json: actions[3] (\"Odd\"): \"ifExists\" should be a path or a list of paths, such as \"Build/Game.exe\", so it was skipped."], before.Problems);
+
+        _temp.Write("game/Build/Game", "");
+        Assert.Equal(["Play", "Always"], ProjectFile.Read(folder, ToolOS.Linux).Actions.Select(a => a.Name));
+
+        // A folder counts as well as a file.
+        _temp.CreateFolder("game/Saved/Logs");
+        var after = ProjectFile.Read(folder, ToolOS.Linux);
+        Assert.Equal(["Play", "Open logs", "Always"], after.Actions.Select(a => a.Name));
+        Assert.Equal("shared:1", after.Actions[1].Id);
+        Assert.Equal(["Saved/Logs", "Build/Game"], after.Actions[1].IfExists!);
+        Assert.Null(after.Actions[2].IfExists);
+    }
+
+    [Fact]
     public void A_file_that_isnt_JSON_is_skipped_with_a_reason_and_the_other_still_counts()
     {
         var folder = _temp.CreateFolder("game");

@@ -4,5 +4,12 @@
       "name": "Issues",
       "url": "https://github.com/reapazor/Claudette/issues"
     }
+  ],
+  "actions": [
+    {
+      "name": "Rebuild Self (Debug)",
+      "command": "dotnet build src\\Claudette.App\\Claudette.App.csproj -c Debug",
+      "mode": "output"
+    }
   ]
 }

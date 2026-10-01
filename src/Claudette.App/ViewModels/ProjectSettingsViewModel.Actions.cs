@@ -8,7 +8,7 @@ namespace Claudette.App.ViewModels;
 
 /// <summary>
 /// An entry of a project file's <c>actions</c> on Settings' Actions page (DESIGN.md §18, "Custom actions"). It keeps the
-/// entry's JSON as written, so saving keeps fields Claudette doesn't edit, such as <c>os</c>.
+/// entry's JSON as written, so saving keeps fields Claudette doesn't edit, such as <c>os</c> and <c>ifExists</c>.
 /// </summary>
 public sealed record CustomActionRow(JsonNode? Raw, CustomProjectAction? Action, string? Problem, bool ForThisOS)
 {
@@ -20,7 +20,8 @@ public sealed record CustomActionRow(JsonNode? Raw, CustomProjectAction? Action,
         ? Problem ?? ""
         : (action.Mode == CustomActionMode.LaunchAndForget ? "Launch and forget: " : "")
             + action.Command + (string.IsNullOrWhiteSpace(action.WorkingFolder) ? "" : $"  (in {action.WorkingFolder})")
-            + (ForThisOS ? "" : $"  · only on {string.Join(", ", action.Os ?? [])}");
+            + (ForThisOS ? "" : $"  · only on {string.Join(", ", action.Os ?? [])}")
+            + (action.IfExists is { } paths ? $"  · only when {string.Join(" and ", paths)} {(paths.Count == 1 ? "exists" : "exist")}" : "");
 
     /// <summary>The entry to write back: its JSON with the edited fields over it.</summary>
     public JsonNode? ToJson() => Action is { } action ? ProjectFile.ToJson(action, Raw) : Raw?.DeepClone();
@@ -28,8 +29,9 @@ public sealed record CustomActionRow(JsonNode? Raw, CustomProjectAction? Action,
 
 /// <summary>
 /// Settings → the tab's project → <b>Actions</b> (DESIGN.md §14, §18): the actions editor that was in Tab settings…, a
-/// choice of the two files and the chosen file's actions. Entries for other OSes are listed, marked "only on …", and
-/// entries that can't be read are listed with their reason and can only be removed. Each change saves the file at once.
+/// choice of the two files and the chosen file's actions. Entries for other OSes are listed, marked "only on …", entries
+/// with <c>ifExists</c> are marked "only when … exists" whether it does or not, and entries that can't be read are
+/// listed with their reason and can only be removed. Each change saves the file at once.
 /// </summary>
 public sealed partial class ProjectSettingsViewModel
 {

@@ -410,6 +410,42 @@ public class ProjectSettingsTests
     }
 
     [Fact]
+    public async Task An_action_with_ifExists_follows_its_file_and_the_Actions_page_lists_it_either_way()
+    {
+        await using var h = new TabTestHarness();
+        var local = Path.Combine(h.WorkFolder, ProjectFile.LocalName);
+        Write(local, """
+            {
+              "actions": [
+                { "name": "Build", "command": "make" },
+                { "name": "Play", "command": "Build/Game", "ifExists": "Build/Game" },
+              ],
+            }
+            """);
+        var tab = await h.OpenTabAsync();
+        await TabTestHarness.Eventually(() => tab.ProjectActions.Select(a => a.Label).SequenceEqual(["Build"]), "the tab's actions");
+        using var settings = await OpenSettingsAsync(h);
+        settings.SelectedProjectPage = SettingsViewModel.ActionsPage;
+        var project = settings.Project!;
+        Assert.Equal(["Build", "Play"], project.ProjectActions.Select(r => r.Name));
+        Assert.EndsWith("  · only when Build/Game exists", project.ProjectActions[1].Detail, StringComparison.Ordinal);
+
+        // The dialog doesn't edit it, and saving keeps it.
+        project.SelectedProjectAction = project.ProjectActions[1];
+        project.EditProjectActionCommand.Execute(null);
+        var editor = Assert.IsType<ProjectActionEditorViewModel>(project.Editor);
+        editor.Name = "Play the build";
+        editor.SaveCommand.Execute(null);
+        Assert.EndsWith("only when Build/Game exists", project.ProjectActions[1].Detail, StringComparison.Ordinal);
+        Assert.Equal("Build/Game", Read(local)["actions"]![1]!["ifExists"]!.GetValue<string>());
+
+        // A build makes it; the next read shows the action.
+        Write(Path.Combine(h.WorkFolder, "Build", "Game"), "");
+        await tab.RefreshProjectFileAsync();
+        Assert.Equal(["Build", "Play the build"], tab.ProjectActions.Select(a => a.Label));
+    }
+
+    [Fact]
     public async Task Add_an_action_from_the_menu_opens_Settings_on_the_Actions_page_with_the_dialog_that_asks_for_the_file()
     {
         await using var h = new TabTestHarness();
