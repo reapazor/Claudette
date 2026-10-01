@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using Claudette.Core.Protocol;
 using Claudette.Core.Json;
 
 namespace Claudette.Usage;

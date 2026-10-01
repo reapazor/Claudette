@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Claudette.Core.Protocol;
 using System.Text.RegularExpressions;
 
 namespace Claudette.Usage;

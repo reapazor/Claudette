@@ -73,6 +73,11 @@ public sealed partial class McpField : ObservableObject
         {
             Selected = Choices.FirstOrDefault(c => c.Value == initial?.ToString());
         }
+        else if (Kind is McpFieldKind.Number or McpFieldKind.Integer && initial is JsonValue number && number.AsDouble() is { } value)
+        {
+            // As it's typed here: 2,5 where that's how a number is written.
+            Text = value.ToString(CultureInfo.CurrentCulture);
+        }
         else
         {
             Text = initial?.ToString() ?? "";
@@ -126,6 +131,18 @@ public sealed partial class McpField : ObservableObject
 
     public bool HasError => Error is not null;
 
+    /// <summary>
+    /// A number as the user writes it, or as JSON does: <c>2.5</c> isn't a number where it's written <c>2,5</c>, but
+    /// can't mean anything else there either. Thousands separators aren't allowed, so <c>2,5</c> is never 25.
+    /// </summary>
+    private static bool TryParse(string text, out double value) =>
+        double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value)
+        || double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+
+    private static bool TryParse(string text, out long value) =>
+        long.TryParse(text, NumberStyles.Integer, CultureInfo.CurrentCulture, out value)
+        || long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+
     /// <summary>Checks the value and returns it as the schema wants it; null when it's left empty or wrong (see <see cref="Error"/>).</summary>
     internal JsonNode? Read(out bool ok)
     {
@@ -151,24 +168,24 @@ public sealed partial class McpField : ObservableObject
             Error = ok ? null : "Required.";
             return null;
         }
-        switch (Kind)
+        if (Kind is McpFieldKind.Integer or McpFieldKind.Number)
         {
-            case McpFieldKind.Integer when !long.TryParse(text, NumberStyles.Integer, CultureInfo.CurrentCulture, out var whole):
-            case McpFieldKind.Number when !double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var number) || !double.IsFinite(number):
+            long whole = 0;
+            var number = 0.0;
+            if (Kind == McpFieldKind.Integer ? !TryParse(text, out whole) : !TryParse(text, out number) || !double.IsFinite(number))
+            {
                 ok = false;
                 Error = Kind == McpFieldKind.Integer ? "A whole number." : "A number.";
                 return null;
-        }
-        if (Kind is McpFieldKind.Integer or McpFieldKind.Number)
-        {
-            var value = double.Parse(text, CultureInfo.CurrentCulture);
+            }
+            var value = Kind == McpFieldKind.Integer ? whole : number;
             if (value < Minimum || value > Maximum)
             {
                 ok = false;
                 Error = Minimum is { } low && Maximum is { } high ? $"From {low} to {high}." : Minimum is { } lowest ? $"At least {lowest}." : $"At most {Maximum}.";
                 return null;
             }
-            return Kind == McpFieldKind.Integer ? JsonValue.Create(long.Parse(text, CultureInfo.CurrentCulture)) : JsonValue.Create(value);
+            return Kind == McpFieldKind.Integer ? JsonValue.Create(whole) : JsonValue.Create(number);
         }
         if (text.Length < MinLength || text.Length > MaxLength)
         {

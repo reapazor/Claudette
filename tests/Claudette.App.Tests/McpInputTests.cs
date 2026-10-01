@@ -78,6 +78,37 @@ public sealed class McpInputTests : IAsyncDisposable
     }
 
     [Fact]
+    public void Numbers_read_as_the_user_writes_them_with_a_default_shown_that_way()
+    {
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("de-DE");
+        try
+        {
+            var ratio = new McpField("ratio", new JsonObject { ["type"] = "number", ["default"] = 2.5, ["maximum"] = 10 }, required: true);
+            Assert.Equal("2,5", ratio.Text);
+            Assert.Equal(2.5, ratio.Read(out var ok)!.GetValue<double>());
+            Assert.True(ok);
+
+            // Written as JSON would be: there's nothing else it could mean.
+            ratio.Text = "3.5";
+            Assert.Equal(3.5, ratio.Read(out _)!.GetValue<double>());
+            ratio.Text = "12,5";
+            Assert.Null(ratio.Read(out ok));
+            Assert.Equal("At most 10.", ratio.Error);
+
+            var count = new McpField("count", new JsonObject { ["type"] = "integer", ["default"] = 3 }, required: false);
+            Assert.Equal(3L, count.Read(out _)!.GetValue<long>());
+            count.Text = "2,5";
+            Assert.Null(count.Read(out ok));
+            Assert.False(ok);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = culture;
+        }
+    }
+
+    [Fact]
     public async Task A_link_opens_in_the_browser_and_the_server_saying_its_done_finishes_the_card()
     {
         var card = await ShowAsync("""{"subtype":"elicitation","mcp_server_name":"auth","message":"Sign in to continue","mode":"url","url":"https://example.com/login","elicitation_id":"el-1"}""");
