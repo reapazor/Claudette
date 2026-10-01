@@ -112,9 +112,9 @@ internal sealed class FakeSystemProcesses : ISystemProcesses
     public IReadOnlyList<SystemProcess> Find(IReadOnlyCollection<string> names) =>
         Running.Where(p => SystemProcessNames.Matches(p.Name, names)).ToArray();
 
-    public void KillTree(int pid)
+    public void KillTree(SystemProcess process)
     {
-        Killed.Add(pid);
-        Running.RemoveAll(p => p.Pid == pid);
+        Killed.Add(process.Pid);
+        Running.RemoveAll(p => p.Pid == process.Pid);
     }
 }

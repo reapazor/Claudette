@@ -28,12 +28,16 @@ internal abstract class UnixProcessTree<TProcess> : ProcessTree
     private readonly SampleHistory _history;
     private readonly Lock _lock = new();
 
-    protected UnixProcessTree(int rootPid, TimeProvider time, ILogger logger)
+    /// <param name="rootStartKey">
+    /// The root's start key, read as the tree is created, right after the root started; null if it couldn't be read.
+    /// Taken then rather than at the first scan, by which time the root may have exited and its PID been reused.
+    /// </param>
+    protected UnixProcessTree(int rootPid, long? rootStartKey, TimeProvider time, ILogger logger)
         : base(rootPid)
     {
         Time = time;
         Logger = logger;
-        _membership = new TreeMembership(rootPid);
+        _membership = new TreeMembership(rootPid, rootStartKey);
         _history = new SampleHistory(time, cpuDivisor: 1);
     }
 
@@ -120,7 +124,12 @@ internal abstract class UnixProcessTree<TProcess> : ProcessTree
             }
             if (stopped.Count == 0)
             {
-                LibC.Kill(RootPid, LibC.SigKill);
+                // None of the tree was found: end the root only if it's still the process the tree started from. It
+                // has usually exited (the tab stopped it first), and its PID may belong to something else by now.
+                if (_membership.RootStartKey is { } rootKey && IsAlive(RootPid, rootKey))
+                {
+                    LibC.Kill(RootPid, LibC.SigKill);
+                }
                 return;
             }
             for (var i = stopped.Count - 1; i >= 0; i--)

@@ -11,7 +11,7 @@ namespace Claudette.Platform.Processes.Unix;
 /// </summary>
 [SupportedOSPlatform("linux")]
 internal sealed class LinuxProcessTree(int rootPid, TimeProvider time, ILogger logger)
-    : UnixProcessTree<LinuxStat>(rootPid, time, logger)
+    : UnixProcessTree<LinuxStat>(rootPid, ReadStat(rootPid) is { IsZombie: false } root ? root.StartKey : null, time, logger)
 {
     private const int ScClkTck = 2;
     private const long DefaultClockTicks = 100;

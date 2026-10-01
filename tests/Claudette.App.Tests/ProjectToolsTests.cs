@@ -706,12 +706,12 @@ public class ProjectToolsTests
             }
         }
 
-        public void KillTree(int pid)
+        public void KillTree(SystemProcess process)
         {
             lock (Running)
             {
-                Killed.Add(pid);
-                Running.RemoveAll(p => p.Pid == pid);
+                Killed.Add(process.Pid);
+                Running.RemoveAll(p => p.Pid == process.Pid);
             }
         }
     }

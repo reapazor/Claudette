@@ -671,7 +671,7 @@ public sealed partial class TabViewModel
                 {
                     foreach (var process in running)
                     {
-                        processes.KillTree(process.Pid);
+                        processes.KillTree(process);
                     }
                 });
                 _conversation.AddNote($"Ended {count}.");

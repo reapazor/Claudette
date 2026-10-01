@@ -30,7 +30,7 @@ public sealed class PsOutputTests
         Assert.Equal(612, claude.ParentPid);
         Assert.Equal(98304, claude.RssKilobytes);
         Assert.Equal(TimeSpan.FromSeconds(3.21), claude.CpuTime);
-        Assert.Equal(new DateTimeOffset(new DateTime(2026, 9, 28, 10, 15, 30, DateTimeKind.Local)), claude.StartTime);
+        Assert.Equal(new DateTimeOffset(2026, 9, 28, 10, 15, 30, TimeSpan.Zero), claude.StartTime);
         Assert.Equal(claude.StartTime!.Value.ToUnixTimeSeconds(), claude.StartKey);
         Assert.Equal("/usr/local/bin/node /usr/local/bin/claude --output-format stream-json", claude.Args);
         Assert.Equal("/usr/local/bin/node", claude.Program);
@@ -41,7 +41,7 @@ public sealed class PsOutputTests
     {
         var sleep = PsOutput.Parse(Output).Single(e => e.Pid == 702);
 
-        Assert.Equal(new DateTimeOffset(new DateTime(2026, 9, 1, 8, 5, 3, DateTimeKind.Local)), sleep.StartTime);
+        Assert.Equal(new DateTimeOffset(2026, 9, 1, 8, 5, 3, TimeSpan.Zero), sleep.StartTime);
         Assert.Equal("sleep", sleep.Program);
         Assert.Equal("sleep 30", sleep.Args);
     }
