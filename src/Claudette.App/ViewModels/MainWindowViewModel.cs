@@ -243,8 +243,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
                     OnPropertyChanged(nameof(HasUsage));
                 }
             };
-            tracker.TurnRecorded += () => _shell?.OnTurnRecorded();
-            _shell?.OnTurnRecorded();
+            tracker.TurnRecorded += id => _shell?.OnTurnRecorded(id);
             Usage = usage;
         }
         catch (Exception ex)

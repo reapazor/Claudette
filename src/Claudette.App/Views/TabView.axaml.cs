@@ -136,6 +136,23 @@ public partial class TabView : UserControl
         e.Handled = allow ? tab.AcceptWaitingPrompt() : tab.DeclineWaitingPrompt();
     }
 
+    /// <summary>The tokens flyout's window and chart are read from the usage history only while it's open.</summary>
+    private void OnTokenDetailsOpened(object? sender, EventArgs e)
+    {
+        if (ViewModel is { } tab)
+        {
+            tab.IsTokenDetailsOpen = true;
+        }
+    }
+
+    private void OnTokenDetailsClosed(object? sender, EventArgs e)
+    {
+        if (ViewModel is { } tab)
+        {
+            tab.IsTokenDetailsOpen = false;
+        }
+    }
+
     private void OnComposerKeyDown(object? sender, KeyEventArgs e)
     {
         if (HandleCompletionKey(e))

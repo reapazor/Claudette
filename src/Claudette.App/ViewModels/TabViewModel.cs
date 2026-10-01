@@ -803,7 +803,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             TokenRows.Add(new TokenRow(ModelDisplayName(model) ?? model, N(t.Input), N(t.Output), N(t.CacheWrite), N(t.CacheRead), $"${t.EstimatedCostUsd:0.00}"));
         }
         TokenSummary = $"{totals.Turns} turn{(totals.Turns == 1 ? "" : "s")} · {totals.Total:N0} tokens · about ${totals.EstimatedCostUsd:0.00} at list price (an estimate, not your bill)";
-        _ = RefreshTokenWindowAsync();
+        RefreshTokenWindow();
 
         static string N(long n) => n.ToString("N0");
     }
@@ -821,7 +821,31 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty]
     public partial double TurnChartMaximum { get; set; } = 1;
 
-    public void RefreshTokenWindow() => _ = RefreshTokenWindowAsync();
+    /// <summary>The tokens flyout is open: the only place its window and chart show, so they're read only then.</summary>
+    public bool IsTokenDetailsOpen
+    {
+        get;
+        set
+        {
+            field = value;
+            if (value)
+            {
+                RefreshTokenWindow();
+            }
+        }
+    }
+
+    /// <summary>Reads the window's tokens and the chart from the usage history, while the tokens flyout shows them.</summary>
+    public void RefreshTokenWindow()
+    {
+        if (IsTokenDetailsOpen)
+        {
+            TokenWindowRefresh = RefreshTokenWindowAsync();
+        }
+    }
+
+    /// <summary>The latest read of the window's tokens, for tests to wait on.</summary>
+    internal Task TokenWindowRefresh { get; private set; } = Task.CompletedTask;
 
     private async Task RefreshTokenWindowAsync()
     {
@@ -835,8 +859,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             var (inWindow, turns) = await Task.Run(() =>
             {
-                var window = usage.Store.GetTurns(windowStart, now, Id).Sum(t => t.Total);
-                var recent = usage.Store.GetTurns(now - TimeSpan.FromDays(7), now, Id)
+                // One query: the session window is inside the week.
+                var week = usage.Store.GetTurns(now - TimeSpan.FromDays(7), now, Id);
+                var window = week.Where(t => t.Timestamp >= windowStart).Sum(t => t.Total);
+                var recent = week
                     .GroupBy(t => t.Timestamp)
                     .Select(g => new Controls.ChartPoint(g.Key, g.Sum(t => t.Total)))
                     .OrderBy(p => p.Time)

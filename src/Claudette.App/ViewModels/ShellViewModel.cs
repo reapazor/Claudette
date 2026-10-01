@@ -628,14 +628,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         Confirmation = new ConfirmationViewModel($"Close \"{tab.DisplayName}\"?", string.Join(" ", reasons), "Close", () => RemoveTabAsync(tab), () => Confirmation = null);
     }
 
-    /// <summary>A turn reached the usage history: refresh each tab's "this session window" tokens.</summary>
-    internal void OnTurnRecorded()
-    {
-        foreach (var tab in AllTabs)
-        {
-            tab.RefreshTokenWindow();
-        }
-    }
+    /// <summary>A tab's turn reached the usage history: that tab's "this session window" tokens follow.</summary>
+    internal void OnTurnRecorded(string tabId) => AllTabs.FirstOrDefault(t => t.Id == tabId)?.RefreshTokenWindow();
 
     /// <summary>A plain confirmation over the whole window.</summary>
     internal void Confirm(string title, string message, string confirmText, Func<Task> onConfirm) =>

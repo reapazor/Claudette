@@ -206,7 +206,7 @@ How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette
   - Input, output, cache write and cache read tokens, split by model when the session used more than one.
   - Two time spans: **this session window** (since the current 5-hour window started, which is the part that counts against the session limit) and **all time** for this tab's session.
   - An estimated cost, labeled as an estimate (Claude Code computes it at list price; it is not your bill).
-  - Shown in short form in the composer bar (for example `1.2M tok`). Click it for a popover with the full breakdown and a small per-turn chart.
+  - Shown in short form in the composer bar (for example `1.2M tok`). Click it for a popover with the full breakdown and a small per-turn chart. The window's tokens and the chart come from the usage history, read once (a week's turns for the tab, by its index) when the popover opens and again as the tab's turns are recorded while it's open; other tabs' turns don't touch it.
   - Saved with the tab, so the counts survive app restarts and session resumes.
   - The same numbers feed the "which tab is burning the most" view in the Usage panel ([§6](#6-token-burn-awareness)).
 - **Grouped by folder.** Tabs that share a working folder sit together in a group, like browser tab groups. In the sidebar a group is a label with its tabs listed under it:

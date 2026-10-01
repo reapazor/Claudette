@@ -333,14 +333,25 @@ public sealed class UsageStore : IDisposable
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
                 using var command = _connection.CreateCommand();
-                command.CommandText = """
-                    SELECT timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd, project FROM turns
-                    WHERE timestamp >= $from AND timestamp <= $to AND ($tabId IS NULL OR tab_id = $tabId)
-                    ORDER BY timestamp, id
-                    """;
+                // Two queries rather than "$tabId IS NULL OR tab_id = $tabId", which SQLite can't answer from the
+                // tab's index (turns_by_tab), so it would read every turn in the range.
+                command.CommandText = tabId is null
+                    ? """
+                      SELECT timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd, project FROM turns
+                      WHERE timestamp >= $from AND timestamp <= $to
+                      ORDER BY timestamp, id
+                      """
+                    : """
+                      SELECT timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd, project FROM turns
+                      WHERE tab_id = $tabId AND timestamp >= $from AND timestamp <= $to
+                      ORDER BY timestamp, id
+                      """;
                 Add(command, "$from", from.ToUnixTimeMilliseconds());
                 Add(command, "$to", to.ToUnixTimeMilliseconds());
-                Add(command, "$tabId", tabId);
+                if (tabId is not null)
+                {
+                    Add(command, "$tabId", tabId);
+                }
                 using var reader = command.ExecuteReader();
                 var turns = new List<TurnRecord>();
                 while (reader.Read())

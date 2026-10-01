@@ -1486,7 +1486,7 @@
               <Button Classes="flat" ToolTip.Tip="Tokens used by this tab">
                 <TextBlock Classes="muted small" Text="{Binding TokensShort}" />
                 <Button.Flyout>
-                  <Flyout Placement="TopEdgeAlignedRight">
+                  <Flyout Placement="TopEdgeAlignedRight" Opened="OnTokenDetailsOpened" Closed="OnTokenDetailsClosed">
                     <StackPanel Spacing="8" MinWidth="420">
                       <TextBlock FontWeight="SemiBold" Text="Tokens used by this tab" />
                       <Grid ColumnDefinitions="*,70,70,80,80,60">

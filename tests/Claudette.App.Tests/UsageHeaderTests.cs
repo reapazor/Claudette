@@ -245,11 +245,11 @@ public class UsageHeaderTests
     {
         await using var h = new TabTestHarness();
         await using var tracker = new UsageTracker(h.Services, new UsageStore(Path.Combine(h.Root, "usage.db"), h.Time));
-        var recorded = new TaskCompletionSource();
-        tracker.TurnRecorded += () => recorded.TrySetResult();
+        var recorded = new TaskCompletionSource<string>();
+        tracker.TurnRecorded += id => recorded.TrySetResult(id);
 
         tracker.OnTurnCompleted("tab-1", "api", Result(100, 20), "/work/api");
-        await recorded.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        Assert.Equal("tab-1", await recorded.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
 
         var sum = Assert.Single(tracker.Store.GetTokensByTab(h.Time.GetUtcNow().AddHours(-1)));
         Assert.Equal(("tab-1", "api"), (sum.TabId, sum.Name));
@@ -275,6 +275,29 @@ public class UsageHeaderTests
         Assert.All(tracker.Store.GetTokensByTab(DateTimeOffset.MinValue), s => Assert.Equal($"refactor auth {s.TabId[4..]}", s.Name));
         Assert.Equal(20, tracker.Store.GetTokensByTab(DateTimeOffset.MinValue).Count);
         tracker.Store.Dispose();
+    }
+
+    [Fact]
+    public async Task A_tabs_session_window_tokens_are_read_while_its_tokens_flyout_shows_them()
+    {
+        await using var h = new TabTestHarness();
+        var tracker = new UsageTracker(h.Services, new UsageStore(Path.Combine(h.Root, "usage.db"), h.Time));
+        h.Services.UseUsageTracker(tracker);
+        var tab = await h.OpenTabAsync();
+        tracker.TurnRecorded += id => h.Shell.OnTurnRecorded(id);
+        // Older than the 5-hour window, but in the week's chart.
+        tracker.Store.AddTurns([new TurnRecord(h.Time.GetUtcNow().AddHours(-8), tab.Id, "s1", "claude-opus-5-5", 1000, 0, 0, 0, 0, null)]);
+
+        h.Transport.EmitTurn();
+        await TabTestHarness.Eventually(() => tab.State.Tokens.Total == 120 && tab.IsSettled, "the turn");
+        await TabTestHarness.Eventually(() => tracker.Store.GetTurns(DateTimeOffset.MinValue, DateTimeOffset.MaxValue).Count == 2, "the turn's record");
+        Assert.Null(tab.TokenWindowText);
+
+        tab.IsTokenDetailsOpen = true;
+        await tab.TokenWindowRefresh;
+
+        Assert.Equal("This session window: 120 tok", tab.TokenWindowText);
+        Assert.Equal(2, tab.TurnPoints.Count);
     }
 
     [Fact]
