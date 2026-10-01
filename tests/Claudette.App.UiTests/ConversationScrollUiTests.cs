@@ -26,6 +26,10 @@ public class ConversationScrollUiTests
         double? NewestBottom() => items.ContainerFromIndex(items.ItemCount - 1) is { } last && last.TranslatePoint(new Point(0, last.Bounds.Height), scroll) is { } point
             ? Math.Round(point.Y)
             : null;
+        // LiveMarkdown parses off the UI thread, so a reply grows once its text is in: only then is there nothing left to
+        // move it. Before that, a reply that fits in the view grows downwards, which is rendering, not flicker.
+        bool Rendered(string text, int times) =>
+            items.GetRealizedContainers().Any(c => UiText.Describe(c).Split(text).Length - 1 >= times);
         // The offset itself can change while what's in view doesn't: the list corrects its estimate of the messages
         // above, which nobody sees. What's in view mustn't move.
         void AssertStill(string when)
@@ -45,7 +49,7 @@ public class ConversationScrollUiTests
             tab.ComposerText = $"question {i}";
             await tab.SendCommand.ExecuteAsync(null);
             h.Transport.EmitTurn(string.Join("\n\n", Enumerable.Repeat($"Reply {i}: some text that wraps over a line or two in the conversation view.", 1 + (i % 5))));
-            await UiText.SettleUntilAsync(window, () => tab.Status == TabStatus.Idle && tab.IsSettled && FromBottom() <= 1, $"turn {i} at the bottom");
+            await UiText.SettleUntilAsync(window, () => tab.Status == TabStatus.Idle && tab.IsSettled && Rendered($"Reply {i}:", 1 + (i % 5)) && FromBottom() <= 1, $"turn {i} at the bottom");
             AssertStill($"after turn {i}");
         }
 
@@ -63,7 +67,7 @@ public class ConversationScrollUiTests
                     ["delta"] = new JsonObject { ["type"] = "text_delta", ["text"] = $"Streaming piece {i} with enough words to wrap now and then. " },
                 },
             });
-            await UiText.SettleUntilAsync(window, () => tab.IsSettled && FromBottom() <= 1, $"piece {i} at the bottom");
+            await UiText.SettleUntilAsync(window, () => tab.IsSettled && Rendered($"Streaming piece {i} ", 1) && FromBottom() <= 1, $"piece {i} at the bottom");
             AssertStill($"after piece {i}");
         }
     }
