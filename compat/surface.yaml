@@ -496,24 +496,24 @@ items:
   - id: "--fork-session"
     kind: flag
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.Rewind.cs
     docs: https://code.claude.com/docs/en/cli-reference
-    test: ClaudeEnvironmentTests, RealCliTests
+    test: ClaudeEnvironmentTests, RealCliTests, RewindAndBranchTests
 
   # --- Rewind and branch, hook rows, MCP servers, fallback model (DESIGN.md §4, §5, §7) ------------------------
   - id: "--resume-session-at"
     kind: flag
     status: undocumented
-    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.cs, src/Claudette.App/ViewModels/TabViewModel.Rewind.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: ClaudeEnvironmentTests, RealCliTests
+    test: ClaudeEnvironmentTests, RealCliTests, RewindAndBranchTests
     fallback: The Agent SDKs' resumeSessionAt option passes it. If it goes, branch from a message by forking the whole session and say the later turns are still in it.
   - id: "--resume-drops-turn"
     kind: flag
     status: undocumented
-    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.Rewind.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: ClaudeEnvironmentTests
+    test: ClaudeEnvironmentTests, RewindAndBranchTests
     fallback: The guard for editing and resending a prompt. Without it, resume at the reply before the prompt unguarded.
   - id: "--replay-user-messages"
     kind: flag
@@ -530,15 +530,15 @@ items:
   - id: "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"
     kind: env
     status: documented
-    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.cs
     docs: https://code.claude.com/docs/en/agent-sdk/file-checkpointing
     test: RealCliTests
   - id: "rewind_files"
     kind: control
     status: undocumented
-    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/McpServers.cs
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/McpServers.cs, src/Claudette.App/ViewModels/TabViewModel.Rewind.cs
     docs: https://code.claude.com/docs/en/agent-sdk/file-checkpointing
-    test: RealCliTests, ClaudeSessionTests
+    test: RealCliTests, ClaudeSessionTests, RewindAndBranchTests
     fallback: See control_request. The documented CLI form is claude -p --resume <id> --rewind-files <uuid> with checkpointing on.
   - id: "--include-hook-events"
     kind: flag
@@ -815,6 +815,18 @@ items:
     usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs, src/Claudette.Core/Diffs/BeforeContentStore.cs
     test: RealCliTests, BeforeContentStoreTests, SidePanelTests
     fallback: "In 2.1.284 the live tool_use_result carries the whole originalFile, but the transcript's toolUseResult has null when it's over 10,000 characters (DESIGN.md §8, \"Large files in transcripts\"). Claudette saves the first change's originalFile when it's over BeforeContentStore.TranscriptLimit and reads it back on replay. If the limit drops, files between the new limit and 10,000 characters replay with an unknown \"before\" (modified, without counts) until TranscriptLimit follows it. If transcripts keep it whole again, nothing breaks."
+  - id: "uuid and parentUuid"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
+    test: TranscriptReaderTests, RewindAndBranchTests
+    fallback: A restored prompt has no point to go back to (DESIGN.md §5, "Rewind and branch"); a later live prompt still gets one from its echo. Without them, Edit and resend and Branch from here on a restored prompt would start a new session, so the menu should offer only Duplicate tab.
+  - id: "fork keeps the copied entries' uuids"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.Rewind.cs
+    test: RewindAndBranchTests
+    fallback: "Checked with 2.1.286 (DESIGN.md §5, \"Rewind and branch\"). If a fork gives its entries new ids, going back again in a copy to a message from before the fork would name an entry the copy hasn't: read the copy's transcript again after its first turn to pick up the new ids."
   - id: "isSidechain"
     kind: file
     status: undocumented

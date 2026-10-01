@@ -93,12 +93,26 @@ public static class TranscriptReader
     /// Reads a transcript, with its subagents' transcripts from <c>&lt;session-id&gt;/subagents/</c> beside it when
     /// there are any, merged in time order so each subagent's traffic follows the <c>Agent</c> call that started it.
     /// </summary>
-    public static async Task<Transcript> ReadAsync(string path, CancellationToken cancellationToken = default)
+    public static Task<Transcript> ReadAsync(string path, CancellationToken cancellationToken = default) =>
+        ReadAsync(path, endAt: null, cancellationToken);
+
+    /// <summary>
+    /// Reads a transcript as <see cref="ReadAsync(string, CancellationToken)"/> does, up to and including the entry
+    /// <paramref name="endAt"/> (its <c>uuid</c>): what a resume with <c>--resume-session-at</c> keeps (DESIGN.md §5,
+    /// "Rewind and branch"). Subagents' entries after it are left out too. Null, or an entry it doesn't have, reads it all.
+    /// </summary>
+    public static async Task<Transcript> ReadAsync(string path, string? endAt, CancellationToken cancellationToken = default)
     {
         var lines = await File.ReadAllLinesAsync(path, cancellationToken).ConfigureAwait(false);
-        var main = ReadEntries(lines, parentToolUseId: null);
+        var main = ReadEntries(lines, parentToolUseId: null, endAt);
         var streams = new List<List<Entry>> { main.Entries };
-        streams.AddRange(await ReadSubagentsAsync(path, cancellationToken).ConfigureAwait(false));
+        var subagents = await ReadSubagentsAsync(path, cancellationToken).ConfigureAwait(false);
+        if (main.Ended)
+        {
+            // An entry without a time follows the one before it.
+            subagents = subagents.Select(stream => stream.TakeWhile(e => e.Time is null || main.EndTime is null || e.Time <= main.EndTime).ToList()).ToList();
+        }
+        streams.AddRange(subagents);
         return new Transcript(Merge(streams), main.AiTitle, main.CustomTitle, main.StartedAt);
     }
 
@@ -122,15 +136,19 @@ public static class TranscriptReader
         public TranscriptItem Item { get; }
     }
 
-    private sealed record ReadResult(List<Entry> Entries, string? AiTitle, string? CustomTitle, DateTimeOffset? StartedAt);
+    /// <param name="Ended">The entry to end at was found: <paramref name="EndTime"/> is its time.</param>
+    private sealed record ReadResult(List<Entry> Entries, string? AiTitle, string? CustomTitle, DateTimeOffset? StartedAt, bool Ended = false, DateTimeOffset? EndTime = null);
 
     /// <param name="parentToolUseId">Set for a subagent's own transcript, whose entries are all marked as a sidechain.</param>
-    private static ReadResult ReadEntries(IEnumerable<string> lines, string? parentToolUseId)
+    /// <param name="endAt">The last entry to read items from; titles are still read from the rest.</param>
+    private static ReadResult ReadEntries(IEnumerable<string> lines, string? parentToolUseId, string? endAt = null)
     {
         var items = new List<Entry>();
         string? aiTitle = null;
         string? customTitle = null;
         DateTimeOffset? startedAt = null;
+        var ended = false;
+        DateTimeOffset? endTime = null;
         foreach (var line in lines)
         {
             if (string.IsNullOrWhiteSpace(line))
@@ -155,8 +173,11 @@ public static class TranscriptReader
                 ? parsed
                 : (DateTimeOffset?)null;
             startedAt ??= time;
+            // The point can be an entry that shows nothing, such as an attachment: the items end there all the same.
+            var endsHere = !ended && endAt is not null && entry.GetString("uuid") == endAt;
             if (parentToolUseId is null && entry.GetBool("isSidechain") == true || entry.GetBool("isMeta") == true)
             {
+                (ended, endTime) = endsHere ? (true, time) : (ended, endTime);
                 continue;
             }
 
@@ -168,6 +189,8 @@ public static class TranscriptReader
                     break;
                 case "custom-title":
                     customTitle = entry.GetString("customTitle") ?? customTitle;
+                    break;
+                case not null when ended:
                     break;
                 case "assistant" when entry.GetObject("message") is { } message:
                     if (Parse(new JsonObject { ["type"] = "assistant", ["message"] = message.DeepClone(), ["parent_tool_use_id"] = parentToolUseId, ["uuid"] = entry.GetString("uuid") }) is { } assistant)
@@ -184,8 +207,13 @@ public static class TranscriptReader
                 var item = items[^1];
                 items[^1] = new Entry(item.Time, item.Item with { Uuid = entry.GetString("uuid"), ParentUuid = entry.GetString("parentUuid") });
             }
+            if (endsHere)
+            {
+                ended = true;
+                endTime = time;
+            }
         }
-        return new ReadResult(items, aiTitle, customTitle, startedAt);
+        return new ReadResult(items, aiTitle, customTitle, startedAt, ended, endTime);
     }
 
     private static void ReadUser(JsonObject entry, JsonObject message, string? parentToolUseId, DateTimeOffset? time, List<Entry> items)

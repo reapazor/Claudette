@@ -193,6 +193,33 @@ public class TranscriptReaderTests
     }
 
     [Fact]
+    public async Task Reading_up_to_an_entry_stops_there_with_its_subagents_but_keeps_the_title()
+    {
+        // As a resume with --resume-session-at keeps it (DESIGN.md §5, "Rewind and branch"). The point can be an entry
+        // that shows nothing, such as an attachment.
+        using var folder = new TempFolder();
+        var main = folder.Write("s1.jsonl", string.Join('\n',
+            """{"type":"user","uuid":"u1","parentUuid":null,"timestamp":"2026-09-29T05:00:00.000Z","message":{"role":"user","content":"first"}}""",
+            """{"type":"assistant","uuid":"a1","parentUuid":"u1","timestamp":"2026-09-29T05:00:01.000Z","message":{"content":[{"type":"tool_use","id":"toolu_a","name":"Agent","input":{"description":"Search"}}]}}""",
+            """{"type":"user","uuid":"r1","parentUuid":"a1","timestamp":"2026-09-29T05:00:05.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_a","content":"x"}]}}""",
+            """{"type":"attachment","uuid":"att1","parentUuid":"r1","isMeta":true,"timestamp":"2026-09-29T05:00:05.500Z"}""",
+            """{"type":"user","uuid":"u2","parentUuid":"att1","timestamp":"2026-09-29T05:00:06.000Z","message":{"role":"user","content":"second"}}""",
+            """{"type":"assistant","uuid":"a2","parentUuid":"u2","timestamp":"2026-09-29T05:00:07.000Z","message":{"content":[{"type":"text","text":"two"}]}}""",
+            """{"type":"ai-title","aiTitle":"Searching","sessionId":"s1"}"""));
+        folder.Write("s1/subagents/agent-a1.meta.json", """{"agentType":"Explore","description":"Search","toolUseId":"toolu_a","spawnDepth":1}""");
+        folder.Write("s1/subagents/agent-a1.jsonl", string.Join('\n',
+            """{"isSidechain":true,"type":"assistant","timestamp":"2026-09-29T05:00:02.000Z","message":{"content":[{"type":"text","text":"looking"}]}}""",
+            """{"isSidechain":true,"type":"assistant","timestamp":"2026-09-29T05:00:08.000Z","message":{"content":[{"type":"text","text":"later"}]}}"""));
+
+        var transcript = await TranscriptReader.ReadAsync(main, "att1", TestContext.Current.CancellationToken);
+
+        Assert.Equal(["u1", "a1", null, "r1"], transcript.Items.Select(i => i.Uuid));
+        Assert.Equal("Searching", transcript.Title);
+        // An entry it doesn't have reads it all.
+        Assert.Equal(7, (await TranscriptReader.ReadAsync(main, "gone", TestContext.Current.CancellationToken)).Items.Count);
+    }
+
+    [Fact]
     public void Finds_a_transcript_in_any_project_folder()
     {
         var root = Path.Combine(Path.GetTempPath(), $"claudette-projects-{Guid.NewGuid():N}");

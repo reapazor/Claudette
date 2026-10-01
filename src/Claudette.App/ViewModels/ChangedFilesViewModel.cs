@@ -169,6 +169,21 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// The conversation went back to an earlier point (DESIGN.md §5, "Rewind and branch"): the changes are recorded
+    /// again as it's read back up to there.
+    /// </summary>
+    internal void Reset()
+    {
+        if (_changes is not null)
+        {
+            _changes.Changed -= QueueRefresh;
+            _changes = null;
+        }
+        _inspections.Clear();
+        QueueRefresh();
+    }
+
     private void QueueRefresh()
     {
         if (!_host.IsSelected && !ShowGitChanges)

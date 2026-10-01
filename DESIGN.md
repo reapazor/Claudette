@@ -364,7 +364,7 @@ The conversation is virtualized: only the items in view, and a little either sid
 - **Code blocks.** A code block has a header line with its language, **Wrap lines** and **Copy**.
   - Copy puts the block's code on the clipboard, without the Markdown fences and with the OS's line endings, and the button says *Copied* for 1.5 seconds.
   - The buttons are LiveMarkdown's, in Claudette's own template for the block. The tab does the copying, through the same clipboard as everything else. Code blocks in the agent map's prompts and reports work the same way.
-- **Messages.** Hovering a user message or a reply shows a small chip on its top-right corner: when it was sent, and **Copy message**.
+- **Messages.** Hovering a user message or a reply shows a small chip on its top-right corner: when it was sent, and **Copy message**. A user message's chip also has **⋯**, its menu to go back to it ([below](#rewind-and-branch)).
   - It also shows while the message has keyboard focus, so Tab reaches the button.
   - A reply copies as its Markdown, as Claude wrote it. A user message copies as it was sent, with its quick suffixes after a blank line.
   - The button says *Copied* for a moment, as on code blocks.
@@ -372,6 +372,24 @@ The conversation is virtualized: only the items in view, and a little either sid
   - A live message takes the time it was added: when it was sent, or when the reply started.
   - A restored message takes its transcript entry's `timestamp`. An entry without one shows no time, rather than the time it was restored.
   - Selecting a tab brings "today" up to date, for a tab left open overnight.
+
+### Rewind and branch
+
+A user message's **⋯** menu goes back to it. Claude Code does the work: a resume with `--resume-session-at <entry>` keeps the conversation up to and including that transcript entry, and the `rewind_files` control request puts back files it kept copies of.
+
+- **Where to go back to.** Each prompt knows its transcript id (`uuid`) and the entry just before it, the point to resume at.
+  - A live prompt gets its id when Claude Code echoes it back (`--replay-user-messages`): the echo's `uuid`. Its point is the last entry of the main conversation before the echo, an assistant message or tool results, so a prompt sent while Claude worked follows what it actually came after. A restored prompt has both from its transcript entry (`uuid`, `parentUuid`), which may point at an entry that shows nothing, such as an attachment.
+  - The first prompt of a conversation, and the first after `/clear`, has no point: going back to it starts a new session.
+- **Edit and resend…** The conversation goes back to just before the message, and the message (its text and images) goes in the composer to change and send.
+  - Only while Claude isn't working: going back mid-turn would cut a turn in half. The menu says so in a note instead.
+  - The tab carries on as a copy (`--fork-session`), so the session as it was stays in History. Claudette stops the tab's `claude`, reads the transcript again up to the point, and starts it again there; the copy gets its own id with its first turn, as **Open a copy** does ([§9](#session-library-sync-across-machines)). The point is used once, at that start.
+  - For the last prompt, it also passes `--resume-drops-turn <prompt id>`: Claude Code refuses the resume rather than drop more than that turn.
+  - When Claude Code has copies of files from before the message (a dry run of `rewind_files` says which changed since), the confirmation offers **Go back and restore files** and **Go back, keep files**. Otherwise just **Go back**.
+- **Branch from here.** A new tab in the same folder, a copy of the session up to just before the message, with the message in its composer. The tab it came from is left as it is, and it works while that tab is busy. Branching from the first message opens a new session there.
+- **Restore files to before this…** Claude Code puts the files Claude changed since the message back as they were, after a confirmation listing them with their line counts (*Later changes to them, Claude's or yours, are lost*). The conversation stays as it is. It needs the tab's `claude` running, and Claude Code keeping copies: Settings → Claude Code → **Keep copies of files Claude changes** starts it with `CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true`. Without a copy, a note says why.
+- **Duplicate tab** (the tab's menu) opens a copy of the whole session in a new tab, or a new session in the same folder for a tab that hasn't had a turn yet.
+- A copy keeps the tab's settings, its kept quick suffixes, whether it syncs, and its files' reviewed marks ([§8](#8-file-changes--diff-view)).
+- Fork keeps the copied entries' ids (checked with 2.1.286), so going back again in a copy finds its point in the copy's transcript.
 
 ### Composer
 

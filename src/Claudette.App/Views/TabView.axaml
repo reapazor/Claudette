@@ -32,6 +32,24 @@
         </Button>
       </StackPanel>
     </DataTemplate>
+    <!-- A message the user sent: its time and Copy, and a menu to go back to it (DESIGN.md §5, "Rewind and branch"). -->
+    <DataTemplate x:Key="UserMessageTools" x:DataType="conv:UserMessageItem">
+      <StackPanel Orientation="Horizontal" Spacing="2">
+        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource MessageTools}" />
+        <Button x:Name="MessageMenuButton" Classes="flat" Padding="5,3" VerticalAlignment="Center" ToolTip.Tip="More" AutomationProperties.Name="More for this message">
+          <Path Data="{StaticResource IconMore}" Fill="{DynamicResource MutedTextBrush}" Width="12" Height="12" Stretch="None" />
+          <Button.Flyout>
+            <MenuFlyout Placement="BottomEdgeAlignedRight">
+              <MenuItem Header="Edit and resend…" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).EditAndResendCommand}" CommandParameter="{Binding}" />
+              <MenuItem Header="Branch from here" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).BranchFromHereCommand}" CommandParameter="{Binding}"
+                        ToolTip.Tip="A new tab that carries the conversation on from just before this message, which is in its composer" />
+              <MenuItem Header="Restore files to before this…" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RestoreFilesBeforeCommand}" CommandParameter="{Binding}"
+                        IsVisible="{Binding CanRestoreFiles}" />
+            </MenuFlyout>
+          </Button.Flyout>
+        </Button>
+      </StackPanel>
+    </DataTemplate>
   </UserControl.Resources>
 
   <UserControl.Styles>
@@ -324,7 +342,7 @@
             <SelectableTextBlock Classes="muted small" Text="{Binding SuffixText}" TextWrapping="Wrap" IsVisible="{Binding HasSuffix}" />
           </StackPanel>
         </Border>
-        <ContentControl Classes="messagetools" Content="{Binding}" ContentTemplate="{StaticResource MessageTools}" />
+        <ContentControl Classes="messagetools" Content="{Binding}" ContentTemplate="{StaticResource UserMessageTools}" />
       </Panel>
     </DataTemplate>
 

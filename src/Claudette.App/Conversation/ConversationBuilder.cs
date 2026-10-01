@@ -234,6 +234,9 @@ public sealed class ConversationBuilder
                 if ((waiting.FirstOrDefault(m => sent is not null && m.CopyText.Trim() == sent.Trim()) ?? waiting.FirstOrDefault()) is { } prompt)
                 {
                     prompt.Uuid = uuid;
+                    // One sent while Claude worked joined the conversation later than it was sent: it follows what came
+                    // before it now.
+                    prompt.ResumeAt = _lastEntryUuid ?? prompt.ResumeAt;
                 }
                 _lastEntryUuid = uuid;
                 break;

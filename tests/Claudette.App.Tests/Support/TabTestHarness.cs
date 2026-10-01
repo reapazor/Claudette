@@ -31,6 +31,12 @@ internal sealed class ScriptedTransport : IClaudeTransport
     }
 
     /// <summary>
+    /// A new pretend process for the next session, while the current one carries on with its own: a second tab
+    /// running alongside the first. What's emitted from now on goes to the new one.
+    /// </summary>
+    public void StartNextProcess() => _process = new ScriptedProcess();
+
+    /// <summary>
     /// The current pretend process, as the session starting now sees it. Stopping it ends only that process, so a tab
     /// that finishes closing after the next one started (a test doesn't wait for all of it) can't end the next one's.
     /// </summary>
@@ -196,6 +202,9 @@ internal sealed class ScriptedSessionFactory(ScriptedTransport transport, TimePr
     /// <summary>While set, starts fail with this, as a <c>claude</c> that couldn't start would.</summary>
     public Exception? StartFailure { get; set; }
 
+    /// <summary>Each session started gets a pretend process of its own, for tests with more than one tab running.</summary>
+    public bool ProcessPerSession { get; set; }
+
     public async Task<ClaudeSession> StartAsync(ClaudeLaunchOptions options, CancellationToken cancellationToken = default)
     {
         Launches.Add(options);
@@ -203,7 +212,14 @@ internal sealed class ScriptedSessionFactory(ScriptedTransport transport, TimePr
         {
             throw failure;
         }
-        transport.RestartIfExited();
+        if (ProcessPerSession && Launches.Count > 1)
+        {
+            transport.StartNextProcess();
+        }
+        else
+        {
+            transport.RestartIfExited();
+        }
         var session = new ClaudeSession(transport.ForSession(), time);
         await session.InitializeAsync(options.Hooks, cancellationToken);
         return session;

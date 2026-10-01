@@ -45,7 +45,8 @@ public class ConversationBuilderTests
 
         Assert.Equal(("u-1", (string?)null), (first.Uuid, first.ResumeAt));
         Assert.Equal(("u-2", "a-1"), (second.Uuid, second.ResumeAt));
-        Assert.Equal("u-3", third.Uuid);
+        // Taken after "two", so it follows it, whatever was last when it was sent.
+        Assert.Equal(("u-3", "u-2"), (third.Uuid, third.ResumeAt));
         Assert.True(second.CanRestoreFiles);
     }
 

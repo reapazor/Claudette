@@ -1299,7 +1299,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 State.ForkOnNextStart = false;
                 State.TranscriptPath = null;
                 _forkAwaitingId = true;
-                _conversation.AddNote("Opened as a copy. The original session is left as it was.");
+                _conversation.AddNote(_forkNote ?? "Opened as a copy. The original session is left as it was.");
+                _forkNote = null;
             }
             ProcessMonitor.AttachTree(session);
             Effort = State.Overrides.Effort ?? settings.NewTabs.DefaultEffort;
@@ -1468,7 +1469,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         try
         {
-            var transcript = await TranscriptReader.ReadAsync(path);
+            // Up to the point a rewind or branch goes back to, which the resume keeps (DESIGN.md §5, "Rewind and branch").
+            var transcript = await TranscriptReader.ReadAsync(path, State.ResumeAt);
             State.SessionStartedAt ??= transcript.StartedAt;
             // The agent map shows the finished tree, with no live status (DESIGN.md §18).
             Agents.IsReplaying = true;
@@ -1480,7 +1482,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                         Agents.OnTaskNotification(notification);
                         break;
                     case TranscriptPrompt prompt:
-                        _conversation.ReplayUserMessage(prompt.Text, prompt.Images, prompt.Time);
+                        _conversation.ReplayUserMessage(prompt.Text, prompt.Images, prompt.Time, prompt.Uuid, prompt.ParentUuid);
                         break;
                     case TranscriptNote note:
                         _conversation.AddNote(note.Text);
@@ -1506,7 +1508,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             if (transcript.Items.Count > 0)
             {
                 _titleRequested = true;
-                _conversation.AddNote("Resumed.");
+                if (_forkNote is null)
+                {
+                    _conversation.AddNote("Resumed.");
+                }
             }
         }
         catch (Exception ex)

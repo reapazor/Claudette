@@ -263,6 +263,8 @@
                                                ToolTip.Tip="This tab has its own settings" />
                                     </MenuItem.Icon>
                                   </MenuItem>
+                                  <MenuItem Header="Duplicate tab" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).DuplicateTabCommand}" CommandParameter="{Binding}"
+                                            ToolTip.Tip="A new tab that carries this session on as a copy" />
                                   <Separator />
                                   <MenuItem Header="Move up" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MoveTabUpCommand}" CommandParameter="{Binding}" />
                                   <MenuItem Header="Move down" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MoveTabDownCommand}" CommandParameter="{Binding}" />
@@ -380,6 +382,8 @@
                                              ToolTip.Tip="This tab has its own settings" />
                                   </MenuItem.Icon>
                                 </MenuItem>
+                              <MenuItem Header="Duplicate tab" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).DuplicateTabCommand}" CommandParameter="{Binding}"
+                                        ToolTip.Tip="A new tab that carries this session on as a copy" />
                               <Separator />
                               <MenuItem Header="Close" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CloseTabCommand}" CommandParameter="{Binding}" />
                             </ContextMenu>

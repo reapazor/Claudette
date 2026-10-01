@@ -192,6 +192,7 @@ public partial class TabView : UserControl
             _tab.ChangedFiles.DiffRequested -= OnDiffRequested;
             _tab.ScrollToRequested -= OnScrollToRequested;
             _tab.AgentWindowRequested -= OnAgentWindowRequested;
+            _tab.ComposerFocusRequested -= OnComposerFocusRequested;
             _tab.PropertyChanged -= OnTabPropertyChanged;
             _tab.ProjectTools.PropertyChanged -= OnProjectToolsPropertyChanged;
             // The list belonged to that tab.
@@ -204,6 +205,7 @@ public partial class TabView : UserControl
             _tab.ChangedFiles.DiffRequested += OnDiffRequested;
             _tab.ScrollToRequested += OnScrollToRequested;
             _tab.AgentWindowRequested += OnAgentWindowRequested;
+            _tab.ComposerFocusRequested += OnComposerFocusRequested;
             _tab.PropertyChanged += OnTabPropertyChanged;
             _tab.ProjectTools.PropertyChanged += OnProjectToolsPropertyChanged;
         }
@@ -211,6 +213,13 @@ public partial class TabView : UserControl
     }
 
     private TabViewModel? _tab;
+
+    /// <summary>A message is back in the composer to edit (DESIGN.md §5, "Rewind and branch"): the caret goes after it.</summary>
+    private void OnComposerFocusRequested() => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+    {
+        Composer.Focus();
+        Composer.CaretIndex = Composer.Text?.Length ?? 0;
+    });
 
     /// <summary>The output of the run the Project page shows, which it follows.</summary>
     private System.Collections.ObjectModel.ObservableCollection<string>? _projectOutput;

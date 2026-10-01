@@ -6,6 +6,7 @@ using Claudette.Core.Development;
 using Claudette.Core.Diffs;
 using Claudette.Core.Git;
 using Claudette.Core.Library;
+using Claudette.Core.Protocol;
 using Claudette.Core.Settings;
 using Claudette.Platform.Processes;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -557,6 +558,28 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         return state;
     }
 
+    /// <summary>
+    /// <b>Duplicate tab</b> (DESIGN.md §5, "Rewind and branch"): a new tab in its group carrying its session on as a copy,
+    /// or a new session in the same folder when it hasn't one yet.
+    /// </summary>
+    [RelayCommand]
+    private Task DuplicateTabAsync(TabViewModel? tab) =>
+        tab is null ? Task.CompletedTask : OpenCopyAsync(tab.CopyState(CopyPoint.Whole), text: null, images: []);
+
+    /// <summary>Opens a tab copying another (<see cref="TabViewModel.CopyState"/>), with a message in its composer.</summary>
+    internal Task OpenCopyAsync(TabState state, string? text, IReadOnlyList<MessageImage> images)
+    {
+        var tab = new TabViewModel(_services, this, state, isRestored: state.SessionId is not null);
+        AddTab(tab);
+        SelectedTab = tab;
+        SaveTabs();
+        if (text is not null)
+        {
+            tab.PutInComposer(text, images);
+        }
+        return tab.EnsureStartedAsync();
+    }
+
     private void OpenSession(TabState state)
     {
         FolderHistory.Touch(_services.State, state.Folder, _services.Time.GetUtcNow(), _services.Settings.NewTabs.RecentFolderLimit);
@@ -617,6 +640,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>A plain confirmation over the whole window.</summary>
     internal void Confirm(string title, string message, string confirmText, Func<Task> onConfirm) =>
         Confirmation = new ConfirmationViewModel(title, message, confirmText, onConfirm, () => Confirmation = null);
+
+    /// <summary>A confirmation with a second choice besides the main one.</summary>
+    internal void Confirm(string title, string message, string confirmText, Func<Task> onConfirm, string secondaryText, Func<Task> onSecondary) =>
+        Confirmation = new ConfirmationViewModel(title, message, confirmText, onConfirm, () => Confirmation = null, secondaryText, onSecondary);
 
     /// <summary>
     /// Closes them together: each tab leaves the sidebar at once, then they wait for their claude processes side by
