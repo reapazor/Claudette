@@ -12,8 +12,8 @@ namespace Claudette.Platform.Processes.Unix;
 /// Activity Monitor: 100% is one core.
 /// </summary>
 [SupportedOSPlatform("macos")]
-internal sealed class MacProcessTree(int rootPid, IProcessLauncher launcher, TimeProvider time, ILogger logger)
-    : UnixProcessTree<PsEntry>(rootPid, StartKeyOf(rootPid), time, logger)
+internal sealed class MacProcessTree(int rootPid, IProcessLauncher launcher, TimeProvider time, ILogger logger, ScanCache<PsEntry>? scans = null)
+    : UnixProcessTree<PsEntry>(rootPid, StartKeyOf(rootPid), time, logger, scans)
 {
     private const string PsPath = "/bin/ps";
     private static readonly TimeSpan PsTimeout = TimeSpan.FromSeconds(5);

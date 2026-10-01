@@ -26,17 +26,20 @@ internal abstract class UnixProcessTree<TProcess> : ProcessTree
 {
     private readonly TreeMembership _membership;
     private readonly SampleHistory _history;
+    private readonly ScanCache<TProcess>? _scans;
     private readonly Lock _lock = new();
 
     /// <param name="rootStartKey">
     /// The root's start key, read as the tree is created, right after the root started; null if it couldn't be read.
     /// Taken then rather than at the first scan, by which time the root may have exited and its PID been reused.
     /// </param>
-    protected UnixProcessTree(int rootPid, long? rootStartKey, TimeProvider time, ILogger logger)
+    /// <param name="scans">A scan shared with the other tabs' trees, for sampling; null to scan for each sample.</param>
+    protected UnixProcessTree(int rootPid, long? rootStartKey, TimeProvider time, ILogger logger, ScanCache<TProcess>? scans = null)
         : base(rootPid)
     {
         Time = time;
         Logger = logger;
+        _scans = scans;
         _membership = new TreeMembership(rootPid, rootStartKey);
         _history = new SampleHistory(time, cpuDivisor: 1);
     }
@@ -52,6 +55,23 @@ internal abstract class UnixProcessTree<TProcess> : ProcessTree
     /// <summary>Every live process on the system, zombies excluded. Null if the scan failed.</summary>
     protected abstract Dictionary<int, TProcess>? ScanAll();
 
+    /// <summary>
+    /// A scan for sampling. A summary (no command lines: a tab in the background) may use one another tree made in the
+    /// last few seconds (<see cref="ScanCache{TProcess}"/>); the Processes page scans afresh, and shares that.
+    /// </summary>
+    private IReadOnlyDictionary<int, TProcess>? ScanForSample(bool fresh, out long scannedAt)
+    {
+        if (_scans is { } scans)
+        {
+            return scans.Get(ScanAll, fresh, out scannedAt);
+        }
+        scannedAt = Time.GetTimestamp();
+        return ScanAll();
+    }
+
+    /// <summary>A scan that must be current, for stopping or ending processes. Others' summaries take it up too.</summary>
+    private IReadOnlyDictionary<int, TProcess>? ScanNow() => _scans is { } scans ? scans.Get(ScanAll, fresh: true) : ScanAll();
+
     /// <summary>The details of a process in the tree, or null if it can no longer be read.</summary>
     protected abstract RawProcess? Describe(TProcess process, bool includeCommandLines, bool isRoot, bool isDetached);
 
@@ -62,7 +82,7 @@ internal abstract class UnixProcessTree<TProcess> : ProcessTree
     {
         lock (_lock)
         {
-            if (IsDisposed || ScanAll() is not { } all)
+            if (IsDisposed || ScanForSample(fresh: includeCommandLines, out var scannedAt) is not { } all)
             {
                 return [];
             }
@@ -74,7 +94,7 @@ internal abstract class UnixProcessTree<TProcess> : ProcessTree
                     processes.Add(process);
                 }
             }
-            return _history.Update(processes);
+            return _history.Update(processes, scannedAt);
         }
     }
 
@@ -82,7 +102,7 @@ internal abstract class UnixProcessTree<TProcess> : ProcessTree
     {
         lock (_lock)
         {
-            if (IsDisposed || ScanAll() is not { } all)
+            if (IsDisposed || ScanNow() is not { } all)
             {
                 return [];
             }
@@ -96,6 +116,19 @@ internal abstract class UnixProcessTree<TProcess> : ProcessTree
     /// </summary>
     public override void KillAll()
     {
+        try
+        {
+            KillAllCore();
+        }
+        finally
+        {
+            // What was scanned before is out of date now.
+            _scans?.Invalidate();
+        }
+    }
+
+    private void KillAllCore()
+    {
         lock (_lock)
         {
             if (IsDisposed)
@@ -106,7 +139,7 @@ internal abstract class UnixProcessTree<TProcess> : ProcessTree
             var seen = new HashSet<(int, long)>();
             for (var round = 0; round < 4; round++)
             {
-                if (ScanAll() is not { } all)
+                if (ScanNow() is not { } all)
                 {
                     Logger.LogWarning("Couldn't list processes; ending only the tree of PID {Pid} that is already known.", RootPid);
                     break;
@@ -154,7 +187,7 @@ internal abstract class UnixProcessTree<TProcess> : ProcessTree
         long startKey;
         lock (_lock)
         {
-            if (IsDisposed || ScanAll() is not { } all)
+            if (IsDisposed || ScanNow() is not { } all)
             {
                 return;
             }
@@ -170,15 +203,17 @@ internal abstract class UnixProcessTree<TProcess> : ProcessTree
         {
             return;
         }
+        _scans?.Invalidate();
         var exited = await Polling.UntilAsync(() => !IsAlive(pid, startKey), grace, Time, cancellationToken).ConfigureAwait(false);
         if (!exited && IsAlive(pid, startKey))
         {
             LibC.Kill(pid, LibC.SigKill);
             await Polling.UntilAsync(() => !IsAlive(pid, startKey), EndWait, Time, cancellationToken).ConfigureAwait(false);
         }
+        _scans?.Invalidate();
     }
 
-    private IReadOnlyList<TreeMember> Walk(Dictionary<int, TProcess> all)
+    private IReadOnlyList<TreeMember> Walk(IReadOnlyDictionary<int, TProcess> all)
     {
         var parentOf = new Dictionary<int, int>(all.Count);
         foreach (var (pid, process) in all)

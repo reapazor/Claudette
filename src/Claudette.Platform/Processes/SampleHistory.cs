@@ -36,10 +36,14 @@ internal sealed class SampleHistory(TimeProvider time, int cpuDivisor)
     public static int PlatformCpuDivisor => OperatingSystem.IsWindows() ? Environment.ProcessorCount : 1;
 
     /// <summary>Not thread-safe: callers serialize samples.</summary>
-    public IReadOnlyList<ProcessSnapshot> Update(IReadOnlyList<RawProcess> processes)
+    /// <param name="scannedAt">
+    /// When the processes were read (<see cref="TimeProvider.GetTimestamp"/>), if not just now: a scan shared with other
+    /// trees may be a few seconds old, and CPU use is the CPU time read over the time between two scans.
+    /// </param>
+    public IReadOnlyList<ProcessSnapshot> Update(IReadOnlyList<RawProcess> processes, long? scannedAt = null)
     {
         var now = time.GetUtcNow();
-        var timestamp = time.GetTimestamp();
+        var timestamp = scannedAt ?? time.GetTimestamp();
         var next = new Dictionary<(int, long), Seen>(processes.Count);
         var snapshots = new List<ProcessSnapshot>(processes.Count);
         foreach (var process in processes)

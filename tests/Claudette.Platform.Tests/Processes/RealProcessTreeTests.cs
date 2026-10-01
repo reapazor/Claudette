@@ -250,7 +250,8 @@ public sealed class RealProcessTreeTests
         await SampleUntilAsync(run.Tree, s => s.Any(p => p.Name == "sleep") && s.Any(p => p.Name == "sh" && !p.IsRoot));
 
         await Task.Delay(1000, TestContext.Current.CancellationToken);
-        var sample = run.Tree.Sample(includeCommandLines: false);
+        // As the Processes page samples: a fresh scan. A summary may use a scan another tab made in the last few seconds.
+        var sample = run.Tree.Sample(includeCommandLines: true);
         TestContext.Current.TestOutputHelper?.WriteLine(string.Join("; ", sample.Select(p => $"{p.Name} {p.CpuPercent:0.#}%")));
 
         // 100% is one core, as in top. A loop that never sleeps gets most of one even on a busy machine.
