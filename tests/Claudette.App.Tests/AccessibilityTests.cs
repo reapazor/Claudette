@@ -63,6 +63,28 @@ public class AccessibilityTests
     }
 
     [Fact]
+    public async Task A_read_asked_for_during_another_runs_once_that_ends()
+    {
+        await using var h = new TabTestHarness();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        h.SystemMotion.Gate = gate;
+        var first = h.Services.ReadMotionPreferencesAsync();
+
+        // Sign-in tells Claudette where Claude Code's settings are while the OS is still being asked.
+        var config = Path.Combine(h.Root, "claude-config");
+        Directory.CreateDirectory(config);
+        File.WriteAllText(Path.Combine(config, "settings.json"), """{ "prefersReducedMotion": true }""");
+        h.Services.ClaudeConfigDirectory = config;
+        await h.Services.ReadMotionPreferencesAsync();
+        Assert.False(h.Services.ReduceMotion);
+
+        gate.SetResult();
+        await first;
+        Assert.Equal(2, h.SystemMotion.Reads);
+        Assert.True(h.Services.ReduceMotion);
+    }
+
+    [Fact]
     public async Task Coming_back_to_the_front_reads_the_OS_setting_again_at_most_once_a_minute()
     {
         await using var h = new TabTestHarness();

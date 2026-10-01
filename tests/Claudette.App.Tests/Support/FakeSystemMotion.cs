@@ -9,9 +9,16 @@ internal sealed class FakeSystemMotion : ISystemMotion
 
     public int Reads { get; private set; }
 
-    public Task<bool> PrefersReducedMotionAsync(CancellationToken cancellationToken = default)
+    /// <summary>Set to hold reads until it's completed, as a slow <c>gsettings</c> would.</summary>
+    public TaskCompletionSource? Gate { get; set; }
+
+    public async Task<bool> PrefersReducedMotionAsync(CancellationToken cancellationToken = default)
     {
         Reads++;
-        return Task.FromResult(PrefersReduced);
+        if (Gate is { } gate)
+        {
+            await gate.Task;
+        }
+        return PrefersReduced;
     }
 }

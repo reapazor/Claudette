@@ -45,6 +45,8 @@ public sealed class AppServices : IAsyncDisposable
     private bool _systemReducesMotion;
     private bool _claudeCodeReducesMotion;
     private int _readingMotion;
+    /// <summary>Asked to read while a read was under way: it reads again once that ends, as it may know more now.</summary>
+    private int _readMotionAgain;
     private DateTimeOffset? _motionReadAt;
 
     /// <param name="processTrees">
@@ -174,6 +176,7 @@ public sealed class AppServices : IAsyncDisposable
         }
         if (Interlocked.Exchange(ref _readingMotion, 1) == 1)
         {
+            Volatile.Write(ref _readMotionAgain, 1);
             return;
         }
         try
@@ -194,6 +197,11 @@ public sealed class AppServices : IAsyncDisposable
         finally
         {
             Volatile.Write(ref _readingMotion, 0);
+        }
+        // Claude Code's config folder may have become known meanwhile.
+        if (Interlocked.Exchange(ref _readMotionAgain, 0) == 1)
+        {
+            await ReadMotionPreferencesAsync().ConfigureAwait(false);
         }
     }
 
