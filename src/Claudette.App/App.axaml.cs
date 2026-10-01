@@ -218,6 +218,9 @@ public partial class App : Application
 
     private const string DefaultMonoFonts = "Cascadia Mono, Consolas, Menlo, monospace";
 
+    /// <summary>The appearance settings last applied, so unchanged ones aren't applied again.</summary>
+    private object? _appliedAppearance;
+
     /// <summary>Applies Settings → Appearance: theme, style, fonts and font sizes (DESIGN.md §14).</summary>
     private void ApplyAppearance()
     {
@@ -226,6 +229,14 @@ public partial class App : Application
             return;
         }
         var appearance = _services.Settings.Appearance;
+        // Settings change often (every switch in Settings saves), and setting an application resource walks every
+        // window's whole tree, every tab's conversation included: only when something here changed.
+        var applied = (appearance.Theme, appearance.Style, appearance.ConversationFontSize, appearance.CodeFontSize, appearance.ConversationFont, appearance.CodeFont);
+        if (applied.Equals(_appliedAppearance))
+        {
+            return;
+        }
+        _appliedAppearance = applied;
         RequestedThemeVariant = appearance.Theme switch
         {
             ThemeChoice.Light => ThemeVariant.Light,

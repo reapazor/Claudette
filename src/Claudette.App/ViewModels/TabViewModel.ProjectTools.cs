@@ -302,7 +302,7 @@ public sealed partial class TabViewModel
         }
     }
 
-    private string ProjectSettingsKey() => System.Text.Json.JsonSerializer.Serialize(_services.Settings.ProjectTools, JsonFileStore<AppSettings>.Options);
+    private string ProjectSettingsKey() => _services.ProjectToolsSettingsKey;
 
     private void ProjectToolsChanged()
     {

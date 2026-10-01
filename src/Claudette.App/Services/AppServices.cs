@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Claudette.Core;
 using Claudette.Core.Auth;
 using Claudette.Core.Claude;
@@ -368,8 +369,17 @@ public sealed class AppServices : IAsyncDisposable
     }
 
     /// <summary>Saves settings shortly, so a burst of changes (typing in a field) writes once.</summary>
+    /// <summary>
+    /// Settings → Project tools, as one string to compare: whether they changed since a tab last looked. Worked out
+    /// once per change for every tab, rather than by each.
+    /// </summary>
+    public string ProjectToolsSettingsKey => _projectToolsSettingsKey ??= JsonSerializer.Serialize(Settings.ProjectTools, JsonFileStore<AppSettings>.Options);
+
+    private string? _projectToolsSettingsKey;
+
     public void SaveSettings()
     {
+        _projectToolsSettingsKey = null;
         SettingsChanged?.Invoke(this, EventArgs.Empty);
         if (!SuspendSaving)
         {

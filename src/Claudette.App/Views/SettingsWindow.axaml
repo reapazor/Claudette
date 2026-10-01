@@ -229,7 +229,7 @@
                      Text="Claude and the tools Claudette runs get the PATH and variables your shell profile sets up, as in a terminal. Not needed when Claudette is started from a terminal. Applies to tabs started after the change." />
           <TextBlock Text="Path to claude" />
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-            <TextBox Text="{Binding ClaudePath}" PlaceholderText="Found automatically" />
+            <TextBox Text="{Binding ClaudePath, UpdateSourceTrigger=LostFocus}" PlaceholderText="Found automatically" />
             <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseClaudePathCommand}" />
           </Grid>
           <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Leave empty to find Claude Code automatically. A change takes effect the next time Claudette starts." />
@@ -328,7 +328,7 @@
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0" Text="Pinned tabs are always restored." />
           <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto" RowSpacing="10">
             <TextBlock Classes="label" Text="Name for this machine" />
-            <TextBox Grid.Column="1" Text="{Binding MachineName}" PlaceholderText="{Binding MachineNamePlaceholder}" />
+            <TextBox Grid.Column="1" Text="{Binding MachineName, UpdateSourceTrigger=LostFocus}" PlaceholderText="{Binding MachineNamePlaceholder}" />
             <TextBlock Grid.Row="1" Classes="label" Text="Keep library sessions for" />
             <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding LibraryRetentionChoices}" SelectedItem="{Binding KeepLibrarySessions}" />
           </Grid>
@@ -382,7 +382,7 @@
           <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding DiffToolOptions}" SelectedItem="{Binding SelectedDiffTool}" />
           <StackPanel Spacing="6" IsVisible="{Binding IsCustomDiffTool}">
             <TextBlock Text="Command" />
-            <TextBox Classes="mono" Text="{Binding CustomDiffCommand}" PlaceholderText="&quot;C:\Program Files\Beyond Compare 5\BCompare.exe&quot; &quot;{left}&quot; &quot;{right}&quot; /title1=&quot;{leftTitle}&quot; /title2=&quot;{rightTitle}&quot;" />
+            <TextBox Classes="mono" Text="{Binding CustomDiffCommand, UpdateSourceTrigger=LostFocus}" PlaceholderText="&quot;C:\Program Files\Beyond Compare 5\BCompare.exe&quot; &quot;{left}&quot; &quot;{right}&quot; /title1=&quot;{leftTitle}&quot; /title2=&quot;{rightTitle}&quot;" />
             <TextBlock Classes="small error" Text="{Binding CustomDiffCommandError}" TextWrapping="Wrap" IsVisible="{Binding CustomDiffCommandError, Converter={x:Static ObjectConverters.IsNotNull}}" />
             <TextBlock Classes="muted small" TextWrapping="Wrap"
                        Text="A program and its arguments. {left} is the file before Claude's changes (a read-only copy), {right} is the file now; {leftTitle} and {rightTitle} are their titles." />
@@ -422,7 +422,7 @@
           <TextBlock Text="Godot" FontWeight="SemiBold" Margin="0,8,0,0" />
           <Grid ColumnDefinitions="220,*,Auto,Auto" ColumnSpacing="8">
             <TextBlock Classes="label" Text="Godot executable" />
-            <TextBox Grid.Column="1" Classes="mono" Text="{Binding GodotPath}" PlaceholderText="Found automatically" />
+            <TextBox Grid.Column="1" Classes="mono" Text="{Binding GodotPath, UpdateSourceTrigger=LostFocus}" PlaceholderText="Found automatically" />
             <Button Grid.Column="2" Content="Browse…" Command="{Binding BrowseGodotCommand}" />
             <Button Grid.Column="3" Content="Detect" Command="{Binding DetectGodotCommand}" ToolTip.Tip="Look on the PATH and where Godot's installers put it" />
           </Grid>
@@ -439,7 +439,7 @@
             <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding SolutionOpenerChoices}" SelectedItem="{Binding OpenSolutionsWith}" />
           </Grid>
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding IsCustomIde}">
-            <TextBox Classes="mono" Text="{Binding CustomIdePath}" PlaceholderText="The program's path; it's given the solution's path" />
+            <TextBox Classes="mono" Text="{Binding CustomIdePath, UpdateSourceTrigger=LostFocus}" PlaceholderText="The program's path; it's given the solution's path" />
             <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseCustomIdeCommand}" />
           </Grid>
           <Button Content="Reset to defaults" Command="{Binding ResetProjectToolsCommand}" />
@@ -517,7 +517,7 @@
             <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="600" Increment="1" FormatString="0" Value="{Binding CheckInQuietTime}" />
           </Grid>
           <TextBlock Text="Message" />
-          <TextBox Text="{Binding CheckInMessage}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70" IsEnabled="{Binding CheckInsEnabled}" />
+          <TextBox Text="{Binding CheckInMessage, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70" IsEnabled="{Binding CheckInsEnabled}" />
           <CheckBox Content="Notify me when a check-in is sent" IsChecked="{Binding NotifyOnCheckIn}" IsEnabled="{Binding CheckInsEnabled}" />
           <Button Content="Reset to defaults" Command="{Binding ResetCheckInsCommand}" />
         </StackPanel>
@@ -537,13 +537,13 @@
               <DataTemplate DataType="vm:QuickSuffixEditor">
                 <Border BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
                   <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
-                    <TextBox Text="{Binding Label}" PlaceholderText="Label" />
+                    <TextBox Text="{Binding Label, UpdateSourceTrigger=LostFocus}" PlaceholderText="Label" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
                       <Button Content="↑" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).MoveSuffixUpCommand}" CommandParameter="{Binding}" />
                       <Button Content="↓" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).MoveSuffixDownCommand}" CommandParameter="{Binding}" />
                       <Button Content="Delete" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).RemoveSuffixCommand}" CommandParameter="{Binding}" />
                     </StackPanel>
-                    <TextBox Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Text}" PlaceholderText="Text added to the message" AcceptsReturn="True" TextWrapping="Wrap" />
+                    <TextBox Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Text, UpdateSourceTrigger=LostFocus}" PlaceholderText="Text added to the message" AcceptsReturn="True" TextWrapping="Wrap" />
                     <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
                       <TextBlock Classes="small" Text="Shortcut" VerticalAlignment="Center" />
                       <Button Content="{Binding ShortcutText}" FontFamily="{StaticResource MonoFont}" MinWidth="150" HorizontalContentAlignment="Left"
@@ -672,8 +672,8 @@
               <DataTemplate DataType="vm:PerforceOverrideEditor">
                 <Grid ColumnDefinitions="*,160,120,Auto" ColumnSpacing="6">
                   <TextBlock Classes="small" Text="{Binding Folder}" TextTrimming="PathSegmentEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Folder}" />
-                  <TextBox Grid.Column="1" Text="{Binding Server}" PlaceholderText="Server" />
-                  <TextBox Grid.Column="2" Text="{Binding User}" PlaceholderText="User" />
+                  <TextBox Grid.Column="1" Text="{Binding Server, UpdateSourceTrigger=LostFocus}" PlaceholderText="Server" />
+                  <TextBox Grid.Column="2" Text="{Binding User, UpdateSourceTrigger=LostFocus}" PlaceholderText="User" />
                   <Button Grid.Column="3" Classes="flat" Padding="6" ToolTip.Tip="Remove" AutomationProperties.Name="Remove this folder's override"
                           Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).RemovePerforceOverrideCommand}" CommandParameter="{Binding}">
                     <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
@@ -692,7 +692,7 @@
         <StackPanel Spacing="12" IsVisible="{Binding IsAdvanced}">
           <TextBlock Classes="section" Text="Advanced" />
           <TextBlock Text="Extra arguments for every claude process" />
-          <TextBox Text="{Binding ExtraArguments}" FontFamily="{StaticResource MonoFont}" PlaceholderText="for example --add-dir ../shared" />
+          <TextBox Text="{Binding ExtraArguments, UpdateSourceTrigger=LostFocus}" FontFamily="{StaticResource MonoFont}" PlaceholderText="for example --add-dir ../shared" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Split on spaces and added after Claudette's own arguments. Applies to tabs started after the change." />
 
           <!-- DESIGN.md §13, "Logging" -->
