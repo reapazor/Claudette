@@ -28,7 +28,8 @@ public static class ConversationExport
             md.Append('`').Append(folder.Replace("`", "'", StringComparison.Ordinal)).AppendLine("`").AppendLine();
         }
         WriteMarkdown(md, items, options, depth: 0);
-        return md.ToString().TrimEnd() + "\n";
+        // One kind of line ending on every OS: AppendLine writes \r\n on Windows, and a reply may have either.
+        return md.ToString().TrimEnd().ReplaceLineEndings("\n") + "\n";
     }
 
     public static string ToHtml(string title, IEnumerable<ConversationItem> items, string? folder = null, Options? options = null)
@@ -50,7 +51,7 @@ public static class ConversationExport
         }
         WriteHtml(html, items, options);
         html.AppendLine("</body>").AppendLine("</html>");
-        return html.ToString();
+        return html.ToString().ReplaceLineEndings("\n");
     }
 
     private static void WriteMarkdown(StringBuilder md, IEnumerable<ConversationItem> items, Options options, int depth)

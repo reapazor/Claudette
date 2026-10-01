@@ -35,6 +35,20 @@ public class ConversationExportTests
     }
 
     [Fact]
+    public void Both_forms_use_one_kind_of_line_ending_on_every_OS()
+    {
+        _builder.AddUserMessage("first line\r\nsecond line");
+        Apply("""{"type":"assistant","message":{"content":[{"type":"text","text":"one\r\ntwo"}]}}""");
+
+        var md = ConversationExport.ToMarkdown("Endings", _items);
+        var html = ConversationExport.ToHtml("Endings", _items);
+
+        Assert.DoesNotContain('\r', md);
+        Assert.DoesNotContain('\r', html);
+        Assert.Contains("one\ntwo", md, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Markdown_has_the_prompts_replies_and_one_line_per_tool()
     {
         Conversation();
