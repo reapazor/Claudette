@@ -377,8 +377,63 @@ public class SidePanelTests
         tab.ChangedFiles.ToggleFileReviewedCommand.Execute(tab.ChangedFiles.Files.Single(r => r.FileName == "notes.md"));
         Assert.Equal("2 files changed · 2 reviewed", tab.ChangedFiles.Summary);
         EmitEdit(h, "e2", yours);
-        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files.SingleOrDefault(r => r.FileName == "notes.md") is { LatestChange: "e2", IsReviewed: false }, "Claude's change");
+        // Git is asked once the edits pause.
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(ChangedFilesViewModel.GitRefreshDelay);
+            return tab.ChangedFiles.Files.SingleOrDefault(r => r.FileName == "notes.md") is { LatestChange: "e2", IsReviewed: false };
+        }, "Claude's change");
         Assert.True(tab.ChangedFiles.Files.Single(r => r.FileName == "a.cs").IsReviewed);
+    }
+
+    [Fact]
+    public async Task Git_is_asked_once_edits_pause_and_not_for_a_tab_in_the_background()
+    {
+        var statuses = 0;
+        var git = new FakeLauncher
+        {
+            OnStart = (spec, process) =>
+            {
+                if (spec.Arguments.Contains("--show-toplevel"))
+                {
+                    process.WriteOutput(spec.WorkingDirectory!);
+                    process.WriteOutput("");
+                    process.Exit(0);
+                    return;
+                }
+                if (spec.Arguments.Contains("status"))
+                {
+                    Interlocked.Increment(ref statuses);
+                }
+                process.Exit(0);
+            },
+        };
+        await using var h = new TabTestHarness(launcher: git);
+        var tab = await h.OpenTabAsync();
+        tab.ChangedFiles.ShowGitChanges = true;
+        await TabTestHarness.Eventually(() => Volatile.Read(ref statuses) == 1, "the first listing");
+
+        for (var i = 0; i < 5; i++)
+        {
+            EmitEdit(h, $"e{i}", Path.Combine(h.WorkFolder, $"f{i}.cs"));
+        }
+        await TabTestHarness.Eventually(() => tab.Items.OfType<Conversation.ToolUseItem>().Count() == 5 && tab.IsSettled, "the edits");
+        Assert.Equal(1, Volatile.Read(ref statuses));
+        h.Time.Advance(ChangedFilesViewModel.GitRefreshDelay);
+        await TabTestHarness.Eventually(() => Volatile.Read(ref statuses) == 2, "one listing for the five");
+
+        // In the background (another tab selected), it waits to be shown.
+        tab.IsSelected = false;
+        EmitEdit(h, "e9", Path.Combine(h.WorkFolder, "f9.cs"));
+        await TabTestHarness.Eventually(() => tab.Items.OfType<Conversation.ToolUseItem>().Count() == 6 && tab.IsSettled, "the edit");
+        h.Time.Advance(ChangedFilesViewModel.GitRefreshDelay * 4);
+        Assert.Equal(2, Volatile.Read(ref statuses));
+        tab.IsSelected = true;
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(ChangedFilesViewModel.GitRefreshDelay);
+            return Volatile.Read(ref statuses) == 3;
+        }, "the listing once it's shown");
     }
 
     [Fact]

@@ -110,6 +110,17 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
     /// <summary>Counts refreshes started, so one that finishes after a later one leaves that one's newer rows alone.</summary>
     private int _refreshGeneration;
 
+    /// <summary>
+    /// How long git mode waits after a change before running git: an edit at a time, a turn's dozen edits would each
+    /// start their own <c>git status</c> and <c>git diff</c>.
+    /// </summary>
+    internal static readonly TimeSpan GitRefreshDelay = TimeSpan.FromMilliseconds(500);
+
+    private ITimer? _gitRefreshTimer;
+
+    /// <summary>The git listing under way; a newer refresh stops it.</summary>
+    private CancellationTokenSource? _gitRefresh;
+
     internal ChangedFilesViewModel(AppServices services, IChangedFilesHost host)
     {
         _services = services;
@@ -186,11 +197,21 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
 
     private void QueueRefresh()
     {
-        if (!_host.IsSelected && !ShowGitChanges)
+        if (!_host.IsSelected)
         {
-            // Nobody sees a background tab's rows: keep the count, and inspect the files once it's shown.
+            // Nobody sees a background tab's rows: keep the count, and inspect the files (or ask git) once it's shown.
             _stale = true;
-            Count = Changes.Files.Count;
+            if (!ShowGitChanges)
+            {
+                Count = Changes.Files.Count;
+            }
+            return;
+        }
+        if (ShowGitChanges)
+        {
+            // Once the edits pause.
+            _gitRefreshTimer?.Dispose();
+            _gitRefreshTimer = _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() => _ = RefreshAsync()), null, GitRefreshDelay, Timeout.InfiniteTimeSpan);
             return;
         }
         if (_refreshQueued)
@@ -213,7 +234,20 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
         List<ChangedFileRow> rows;
         if (ShowGitChanges)
         {
-            var changes = await _services.Git.GetChangesAsync(folder);
+            _gitRefreshTimer?.Dispose();
+            _gitRefreshTimer = null;
+            var refresh = new CancellationTokenSource();
+            Interlocked.Exchange(ref _gitRefresh, refresh)?.Cancel();
+            IReadOnlyList<GitChange> changes;
+            try
+            {
+                changes = await _services.Git.GetChangesAsync(folder, refresh.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // A newer refresh took over.
+                return;
+            }
             rows = changes.Select(c => new ChangedFileRow
             {
                 Path = c.Path,
@@ -410,12 +444,18 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
         _reviewSync = timer;
     }
 
-    /// <summary>The tab is closing: a diff view still open can mark files, but nothing more is written to the library.</summary>
+    /// <summary>
+    /// The tab is closing: a diff view still open can mark files, but nothing more is written to the library, and git
+    /// isn't asked again.
+    /// </summary>
     internal void StopReviewSync()
     {
         _reviewSyncStopped = true;
         _reviewSync?.Dispose();
         _reviewSync = null;
+        _gitRefreshTimer?.Dispose();
+        _gitRefreshTimer = null;
+        _gitRefresh?.Cancel();
     }
 
     // ---- Opening diffs (DESIGN.md §8) ------------------------------------------------------------------------------

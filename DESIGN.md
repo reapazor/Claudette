@@ -926,6 +926,7 @@ In a terminal, Claude Code asks before it works in a folder for the first time, 
   - A leading byte order mark isn't counted as a change.
 - Actions: open in external diff tool, open in external editor (the app the OS uses for that file type), reveal in Finder/Explorer, copy path.
 - If the folder is a git repo, a toggle switches to **working tree vs HEAD**. This also shows changes made by Bash commands or by the user.
+  - Git is asked once Claude's edits pause (half a second after the last), not once per edit, and a listing a newer one supersedes is stopped. A tab in the background asks git once it's shown.
   - It covers the whole repository, not only the tab's folder.
   - Untracked files count as added.
   - Git runs with `--no-optional-locks`, so refreshing never takes git's index lock.
