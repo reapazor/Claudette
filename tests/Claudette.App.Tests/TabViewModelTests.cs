@@ -187,11 +187,11 @@ public class TabViewModelTests
         await tab.ChooseEffortCommand.ExecuteAsync("high");
 
         tab.ChooseModelCommand.Execute(haiku);
-        Assert.True(tab.HasPendingModel);
-        Assert.Contains("doesn't support high effort", tab.PendingModelMessage, StringComparison.Ordinal);
+        Assert.True(tab.ModelSwitch.IsOpen);
+        Assert.Contains("doesn't support high effort", tab.ModelSwitchMessage, StringComparison.Ordinal);
         Assert.DoesNotContain("set_model", h.Transport.SentControlSubtypes);
 
-        await tab.ConfirmModelSwitchCommand.ExecuteAsync(null);
+        await tab.ModelSwitch.ConfirmCommand.ExecuteAsync(null);
 
         Assert.Contains("set_model", h.Transport.SentControlSubtypes);
         Assert.Equal("haiku", tab.State.Overrides.Model);

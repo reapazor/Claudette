@@ -1153,29 +1153,29 @@
               IsVisible="False" Click="OnJumpToLatest" />
 
       <!-- Model switch confirmation (DESIGN.md §5) -->
-      <Border Classes="overlay" IsVisible="{Binding HasPendingModel}">
+      <Border Classes="overlay" IsVisible="{Binding ModelSwitch.IsOpen}">
         <Border Classes="dialog" MaxWidth="460" HorizontalAlignment="Center" VerticalAlignment="Center">
           <StackPanel Spacing="14">
             <TextBlock Text="Switch model?" FontWeight="SemiBold" FontSize="16" />
-            <TextBlock Text="{Binding PendingModelMessage}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding ModelSwitchMessage}" TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-              <Button Content="Cancel" Command="{Binding CancelModelSwitchCommand}" />
-              <Button Classes="accent" Content="Switch model" Command="{Binding ConfirmModelSwitchCommand}" />
+              <Button Content="Cancel" Command="{Binding ModelSwitch.CancelCommand}" />
+              <Button Classes="accent" Content="Switch model" Command="{Binding ModelSwitch.ConfirmCommand}" />
             </StackPanel>
           </StackPanel>
         </Border>
       </Border>
 
       <!-- Bypass permissions confirmation (DESIGN.md §7) -->
-      <Border Classes="overlay" IsVisible="{Binding IsConfirmingBypass}">
+      <Border Classes="overlay" IsVisible="{Binding BypassConfirmation.IsOpen}">
         <Border Classes="dialog" MaxWidth="460" HorizontalAlignment="Center" VerticalAlignment="Center">
           <StackPanel Spacing="14">
             <TextBlock Text="Bypass permissions?" FontWeight="SemiBold" FontSize="16" />
             <TextBlock TextWrapping="Wrap"
                        Text="For the rest of this session, Claude will run commands and change files without asking. Claude Code's own deny and ask rules still apply. Only do this in a folder where mistakes are easy to undo." />
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-              <Button Content="Cancel" Command="{Binding CancelBypassCommand}" />
-              <Button Classes="accent" Content="Bypass permissions" Command="{Binding ConfirmBypassCommand}" />
+              <Button Content="Cancel" Command="{Binding BypassConfirmation.CancelCommand}" />
+              <Button Classes="accent" Content="Bypass permissions" Command="{Binding BypassConfirmation.ConfirmCommand}" />
             </StackPanel>
           </StackPanel>
         </Border>

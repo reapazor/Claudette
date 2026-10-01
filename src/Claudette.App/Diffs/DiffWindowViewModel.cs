@@ -162,26 +162,15 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
     /// <summary><b>Revert file</b>'s tip: what the file goes back to.</summary>
     public string RevertFileTip => _source.FromGit ? "Put the whole file back as it is at HEAD" : "Put the whole file back as it was before Claude changed it";
 
-    /// <summary><b>Revert file</b> asks first: the second step shows.</summary>
-    [ObservableProperty]
-    public partial bool IsConfirmingRevert { get; set; }
-
-    [RelayCommand]
-    private void AskToRevertFile() => IsConfirmingRevert = true;
-
-    [RelayCommand]
-    private void CancelRevert() => IsConfirmingRevert = false;
+    /// <summary><b>Revert file</b> asks first: the second step shows in place.</summary>
+    public InlineConfirmation RevertConfirmation => field ??= new(RevertFileAsync);
 
     /// <summary>
     /// Puts the whole file back as it was before Claude's first change; a file Claude created is deleted. From git, it's
     /// the file at HEAD, in the line endings the file has now: git keeps its copy with the ones it was committed in.
     /// </summary>
     [RelayCommand]
-    private Task RevertFileAsync()
-    {
-        IsConfirmingRevert = false;
-        return RevertAsync(_source.FromGit ? Revert.WithLineEndingsOf(_source.Before, _after) : _source.Before);
-    }
+    private Task RevertFileAsync() => RevertAsync(_source.FromGit ? Revert.WithLineEndingsOf(_source.Before, _after) : _source.Before);
 
     /// <summary>Undoes one hunk of the diff, leaving the rest of Claude's changes.</summary>
     [RelayCommand]

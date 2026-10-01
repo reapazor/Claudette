@@ -49,12 +49,12 @@ public sealed class DiffRevertTests : IDisposable
         var view = await OpenAsync(path, before: null);
         Assert.True(view.CanRevert);
 
-        view.AskToRevertFileCommand.Execute(null);
-        Assert.True(view.IsConfirmingRevert);
-        await view.RevertFileCommand.ExecuteAsync(null);
+        view.RevertConfirmation.AskCommand.Execute(null);
+        Assert.True(view.RevertConfirmation.IsOpen);
+        await view.RevertConfirmation.ConfirmCommand.ExecuteAsync(null);
 
         Assert.False(File.Exists(path));
-        Assert.False(view.IsConfirmingRevert);
+        Assert.False(view.RevertConfirmation.IsOpen);
         Assert.False(view.CanRevert);
     }
 

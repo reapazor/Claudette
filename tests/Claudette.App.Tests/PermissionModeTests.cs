@@ -97,7 +97,7 @@ public class PermissionModeTests
         tab.PropertyChanged += (_, e) => switched.Add(e.PropertyName);
 
         tab.ChooseModelCommand.Execute(tab.Models.Single(m => m.Value == "haiku"));
-        await tab.ConfirmModelSwitchCommand.ExecuteAsync(null);
+        await tab.ModelSwitch.ConfirmCommand.ExecuteAsync(null);
 
         Assert.DoesNotContain(tab.PermissionModeChoices, c => c.IsAuto);
         Assert.Contains(nameof(TabViewModel.PermissionModeChoices), switched);

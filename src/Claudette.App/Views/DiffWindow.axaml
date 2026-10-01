@@ -49,18 +49,18 @@
           <Button Content="Open in diff tool" Command="{Binding OpenInDiffToolCommand}" IsVisible="{Binding CanOpenInDiffTool}" />
           <Button Content="Open in editor" Command="{Binding OpenInEditorCommand}" />
           <!-- DESIGN.md §8, "Reverting": asks first, in place -->
-          <Button Content="Revert file" Command="{Binding AskToRevertFileCommand}" ToolTip.Tip="{Binding RevertFileTip}">
+          <Button Content="Revert file" Command="{Binding RevertConfirmation.AskCommand}" ToolTip.Tip="{Binding RevertFileTip}">
             <Button.IsVisible>
               <MultiBinding Converter="{x:Static BoolConverters.And}">
                 <Binding Path="CanRevert" />
-                <Binding Path="!IsConfirmingRevert" />
+                <Binding Path="!RevertConfirmation.IsOpen" />
               </MultiBinding>
             </Button.IsVisible>
           </Button>
-          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsConfirmingRevert}">
+          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding RevertConfirmation.IsOpen}">
             <TextBlock Classes="small" Text="Put the whole file back?" VerticalAlignment="Center" />
-            <Button Classes="accent" Content="Revert" Command="{Binding RevertFileCommand}" />
-            <Button Content="Cancel" Command="{Binding CancelRevertCommand}" />
+            <Button Classes="accent" Content="Revert" Command="{Binding RevertConfirmation.ConfirmCommand}" />
+            <Button Content="Cancel" Command="{Binding RevertConfirmation.CancelCommand}" />
           </StackPanel>
           <Button Content="…" ToolTip.Tip="More" AutomationProperties.Name="More actions">
             <Button.Flyout>

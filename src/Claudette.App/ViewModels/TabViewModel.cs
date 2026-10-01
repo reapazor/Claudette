@@ -486,9 +486,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         ? starting.Expected == PermissionModeInfo.Auto && !IsAutoModeAvailable ? PermissionModeInfo.Manual : starting.Expected
         : null;
 
-    /// <summary>Bypass waiting for confirmation.</summary>
-    [ObservableProperty]
-    public partial bool IsConfirmingBypass { get; set; }
+    /// <summary>Bypass asks first (DESIGN.md §7).</summary>
+    public InlineConfirmation BypassConfirmation => field ??= new(() => SetModeAsync(PermissionModeInfo.Bypass));
 
     /// <summary>
     /// Switches this session's permission mode (DESIGN.md §7). Session-only: the mode a tab starts in is set in Tab
@@ -503,21 +502,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         if (choice.IsBypass)
         {
-            IsConfirmingBypass = true;
+            BypassConfirmation.Ask();
             return;
         }
         await SetModeAsync(choice.Value);
     }
-
-    [RelayCommand]
-    private Task ConfirmBypassAsync()
-    {
-        IsConfirmingBypass = false;
-        return SetModeAsync(PermissionModeInfo.Bypass);
-    }
-
-    [RelayCommand]
-    private void CancelBypass() => IsConfirmingBypass = false;
 
     private async Task SetModeAsync(string mode)
     {
@@ -597,48 +586,35 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         return false;
     }
 
-    /// <summary>A model change waiting for confirmation (DESIGN.md §5: switching drops the prompt cache).</summary>
+    /// <summary>A model change asks first (DESIGN.md §5: switching drops the prompt cache).</summary>
+    public InlineConfirmation<ModelInfo> ModelSwitch => field ??= new(SwitchModelAsync);
+
+    /// <summary>What the model switch's confirmation says.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasPendingModel), nameof(PendingModelMessage))]
-    public partial ModelInfo? PendingModel { get; set; }
-
-    public bool HasPendingModel => PendingModel is not null;
-
-    public string PendingModelMessage
-    {
-        get
-        {
-            if (PendingModel is not { } model)
-            {
-                return "";
-            }
-            var message = $"Switch to {model.DisplayName}? Switching models resets this tab's cached context. The new model has to re-read the whole conversation, so your next message will use more of your limits.";
-            if (Effort is { } effort && !model.SupportedEffortLevels.Contains(effort))
-            {
-                message += $" {model.DisplayName} doesn't support {effort} effort, so effort goes back to the model's default.";
-            }
-            return message;
-        }
-    }
+    public partial string ModelSwitchMessage { get; private set; } = "";
 
     [RelayCommand]
     private void ChooseModel(ModelInfo? model)
     {
-        if (model is not null && model != CurrentModelInfo)
+        if (model is null || model == CurrentModelInfo)
         {
-            PendingModel = model;
-        }
-    }
-
-    [RelayCommand]
-    private async Task ConfirmModelSwitchAsync()
-    {
-        if (PendingModel is not { } model || _session is null)
-        {
-            PendingModel = null;
             return;
         }
-        PendingModel = null;
+        var message = $"Switch to {model.DisplayName}? Switching models resets this tab's cached context. The new model has to re-read the whole conversation, so your next message will use more of your limits.";
+        if (Effort is { } effort && !model.SupportedEffortLevels.Contains(effort))
+        {
+            message += $" {model.DisplayName} doesn't support {effort} effort, so effort goes back to the model's default.";
+        }
+        ModelSwitchMessage = message;
+        ModelSwitch.Ask(model);
+    }
+
+    private async Task SwitchModelAsync(ModelInfo model)
+    {
+        if (_session is null)
+        {
+            return;
+        }
         try
         {
             await _session.SetModelAsync(model.Value);
@@ -659,9 +635,6 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             _conversation.AddNote($"Couldn't switch model: {ex.Message}", NoteKind.Error);
         }
     }
-
-    [RelayCommand]
-    private void CancelModelSwitch() => PendingModel = null;
 
     [RelayCommand]
     private async Task ChooseEffortAsync(string? level)

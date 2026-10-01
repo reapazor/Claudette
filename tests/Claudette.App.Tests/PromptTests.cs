@@ -275,10 +275,10 @@ public class PromptTests
         var bypass = tab.PermissionModeChoices.Single(c => c.IsBypass);
 
         await tab.ChooseModeCommand.ExecuteAsync(bypass);
-        Assert.True(tab.IsConfirmingBypass);
+        Assert.True(tab.BypassConfirmation.IsOpen);
         Assert.DoesNotContain("set_permission_mode", h.Transport.SentControlSubtypes);
 
-        await tab.ConfirmBypassCommand.ExecuteAsync(null);
+        await tab.BypassConfirmation.ConfirmCommand.ExecuteAsync(null);
 
         Assert.Contains("set_permission_mode", h.Transport.SentControlSubtypes);
         Assert.True(tab.IsBypassMode);
@@ -293,7 +293,7 @@ public class PromptTests
         var tab = await h.OpenTabAsync();
 
         await tab.ChooseModeCommand.ExecuteAsync(tab.PermissionModeChoices.Single(c => c.IsBypass));
-        await tab.ConfirmBypassCommand.ExecuteAsync(null);
+        await tab.BypassConfirmation.ConfirmCommand.ExecuteAsync(null);
 
         Assert.False(tab.IsBypassMode);
         Assert.Contains(tab.Items.OfType<NoteItem>(), n => n.IsError && n.Text.Contains("Tab settings", StringComparison.Ordinal));

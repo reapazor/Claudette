@@ -43,7 +43,7 @@ public class ComposerMenuUiTests
         UiText.Settle(window);
 
         Assert.False(flyout.IsOpen);
-        Assert.Equal("haiku", tab.PendingModel?.Value);
+        Assert.Equal("haiku", tab.ModelSwitch.Value?.Value);
         window.Close();
     }
 
