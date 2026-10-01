@@ -167,6 +167,15 @@ public sealed class TabState
     /// <summary>Resume as a copy with a new session id ("Open a copy", DESIGN.md §9). Cleared once started.</summary>
     public bool ForkOnNextStart { get; set; }
 
+    /// <summary>
+    /// Resume only up to this conversation entry, leaving out what came after: a branch from a message, or a rewind
+    /// (DESIGN.md §5, "Rewind and branch"). Cleared once started.
+    /// </summary>
+    public string? ResumeAt { get; set; }
+
+    /// <summary>With <see cref="ResumeAt"/>: the prompt whose turn the resume drops, so Claude Code checks nothing else goes.</summary>
+    public string? ResumeDropsTurn { get; set; }
+
     /// <summary>The Perforce changelists Claude used in this session (DESIGN.md §18), so a restored tab shows them again.</summary>
     public List<Perforce.TrackedChangelist> Changelists { get; set; } = [];
 

@@ -593,6 +593,67 @@
       </Border>
     </DataTemplate>
 
+    <!-- An MCP server asking for input (DESIGN.md §7, "MCP servers asking for input") -->
+    <DataTemplate DataType="conv:McpInputItem">
+      <Border Classes="prompt question" Classes.answered="{Binding !IsPending}">
+        <StackPanel Spacing="10">
+          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+          <SelectableTextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+          <!-- A form, built from the server's schema -->
+          <ItemsControl ItemsSource="{Binding Fields}" IsVisible="{Binding IsForm}" IsEnabled="{Binding IsPending}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="10" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="conv:McpField">
+                <StackPanel Spacing="3">
+                  <TextBlock Classes="small" FontWeight="SemiBold" Text="{Binding Heading}" IsVisible="{Binding !IsBoolean}" />
+                  <TextBox Text="{Binding Text}" IsVisible="{Binding IsText}" AutomationProperties.Name="{Binding Label}" />
+                  <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked}" IsVisible="{Binding IsBoolean}" />
+                  <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding Selected}" IsVisible="{Binding IsChoice}" MinWidth="200"
+                            AutomationProperties.Name="{Binding Label}" />
+                  <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+                  <TextBlock Classes="small error" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <!-- A link to finish in the browser, such as signing in -->
+          <StackPanel Spacing="6" IsVisible="{Binding IsUrl}">
+            <TextBlock Classes="muted small" Text="{Binding Url}" TextWrapping="Wrap" />
+            <TextBlock Classes="muted small" TextWrapping="Wrap" IsVisible="{Binding HasOpenedUrl}"
+                       Text="Finish in the browser, then choose Done if this doesn't close by itself." />
+          </StackPanel>
+          <WrapPanel ItemSpacing="8" LineSpacing="6" IsVisible="{Binding IsPending}">
+            <Button Classes="accent" Content="Send" Command="{Binding SendCommand}" IsVisible="{Binding IsForm}" />
+            <Button Classes="accent" Content="Open in browser" Command="{Binding OpenUrlCommand}" IsVisible="{Binding IsUrl}" />
+            <Button Content="Done" Command="{Binding SendCommand}" IsVisible="{Binding HasOpenedUrl}" />
+            <Button Content="Decline" Command="{Binding DeclineCommand}" />
+            <Button Classes="flat" Content="Dismiss" Command="{Binding DismissCommand}" VerticalAlignment="Center" />
+          </WrapPanel>
+          <TextBlock Classes="muted small" Text="{Binding Outcome}" TextWrapping="Wrap" IsVisible="{Binding HasOutcome}" />
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+
+    <!-- A hook from the user's or project's settings ran (DESIGN.md §5, "Hook runs") -->
+    <DataTemplate DataType="conv:HookRunItem">
+      <StackPanel Spacing="2">
+        <ToggleButton Classes="flat row" IsChecked="{Binding IsExpanded}" IsHitTestVisible="{Binding HasOutput}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="muted" Text="⚙" />
+            <TextBlock Classes="muted small" Text="{Binding Title}" />
+            <TextBlock Classes="muted small" Classes.error="{Binding IsFailed}" Text="{Binding StatusText}" />
+          </StackPanel>
+        </ToggleButton>
+        <Border Classes="codeblock" IsVisible="{Binding IsExpanded}" Margin="20,0,0,0">
+          <SelectableTextBlock Classes="mono" Text="{Binding Output}" TextWrapping="Wrap" />
+        </Border>
+      </StackPanel>
+    </DataTemplate>
+
     <DataTemplate DataType="conv:NoteItem">
       <StackPanel Spacing="2">
         <SelectableTextBlock Classes="muted small" FontStyle="Italic" TextWrapping="Wrap" Text="{Binding Text}"

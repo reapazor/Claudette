@@ -96,6 +96,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _services = services;
         _shell = shell;
         State = state;
+        TodoList.Time = services.Time;
         ProcessMonitor = new ProcessMonitorViewModel(services, this);
         ChangedFiles = new ChangedFilesViewModel(services, this);
         ProjectTools = new ProjectToolsViewModel(services, this);
@@ -108,6 +109,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             ExpandThinking = services.Settings.Appearance.ExpandThinking,
             ShowUnsupportedMessages = services.Settings.Advanced.LogProtocol,
+            ShowAllHookRuns = services.Settings.ClaudeCode.ShowAllHookRuns,
+            OpenUrl = services.Platform.OpenUrlAsync,
             Agents = Agents,
             Tasks = Tasks,
             Time = services.Time,
@@ -543,9 +546,37 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>The oldest prompt still waiting for an answer.</summary>
     public PromptItem? WaitingPrompt => Items.OfType<PromptItem>().FirstOrDefault(p => p.IsPending);
 
-    public bool AcceptWaitingPrompt() => WaitingPrompt?.TryAcceptFromKeyboard() == true;
+    /// <summary>The oldest MCP server's request for input still waiting, when no prompt is (DESIGN.md §7).</summary>
+    private McpInputItem? WaitingInput => Items.OfType<McpInputItem>().FirstOrDefault(i => i.IsPending);
 
-    public bool DeclineWaitingPrompt() => WaitingPrompt?.TryDeclineFromKeyboard() == true;
+    public bool AcceptWaitingPrompt()
+    {
+        if (WaitingPrompt is { } prompt)
+        {
+            return prompt.TryAcceptFromKeyboard();
+        }
+        // A form sends what's filled in; a link has to be opened first, so there's nothing to accept yet.
+        if (WaitingInput is { IsForm: true } input)
+        {
+            input.SendCommand.Execute(null);
+            return true;
+        }
+        return false;
+    }
+
+    public bool DeclineWaitingPrompt()
+    {
+        if (WaitingPrompt is { } prompt)
+        {
+            return prompt.TryDeclineFromKeyboard();
+        }
+        if (WaitingInput is { } input)
+        {
+            input.DeclineCommand.Execute(null);
+            return true;
+        }
+        return false;
+    }
 
     /// <summary>A model change waiting for confirmation (DESIGN.md §5: switching drops the prompt cache).</summary>
     [ObservableProperty]
@@ -901,6 +932,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(AvailableSuffixes));
         OnPropertyChanged(nameof(SuffixMenu));
         _conversation.ExpandThinking = _services.Settings.Appearance.ExpandThinking;
+        _conversation.ShowAllHookRuns = _services.Settings.ClaudeCode.ShowAllHookRuns;
         _conversation.ShowUnsupportedMessages = _services.Settings.Advanced.LogProtocol;
         OnPropertyChanged(nameof(ShowContextRing));
         ProcessMonitor.UpdateSampler();
@@ -1216,20 +1248,36 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             var chosenMode = State.Overrides.PermissionMode ?? settings.NewTabs.DefaultPermissionMode;
             var folder = Folder;
             var starting = _startingMode = await Task.Run(() => _services.ReadStartingPermissionMode(folder));
+            var environment = new Dictionary<string, string?>(_services.RemoteControl.ClaudeVariables);
+            if (settings.ClaudeCode.KeepFileCheckpoints)
+            {
+                // Copies of files before Claude changes them, so a prompt's changes can be put back (DESIGN.md §5).
+                environment["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] = "true";
+            }
+            var resumeAt = resume is null ? null : State.ResumeAt;
             var session = await sessions.StartAsync(await WithPerforceAsync(await ProjectTools.WithNoteAsync(new ClaudeLaunchOptions
             {
                 WorkingDirectory = Folder,
                 Resume = resume,
                 ForkSession = fork,
+                ResumeSessionAt = resumeAt,
+                ResumeDropsTurn = resumeAt is null ? null : State.ResumeDropsTurn,
+                // Each prompt comes back with its id, the point to rewind or branch from; hook runs come as messages.
+                ReplayUserMessages = true,
+                IncludeHookEvents = true,
+                FallbackModel = settings.ClaudeCode.FallbackModel,
                 Model = State.Overrides.Model ?? settings.NewTabs.DefaultModel,
                 Effort = State.Overrides.Effort ?? settings.NewTabs.DefaultEffort,
                 PermissionMode = chosenMode ?? (resume is null ? starting.LaunchMode : null),
                 AdditionalArguments = settings.Advanced.ExtraArguments.Split(' ', StringSplitOptions.RemoveEmptyEntries),
                 ProtocolLogPath = _services.ProtocolLogPath(FolderName),
                 // The presence file, among others: no pushes to the phone while Claudette is in front (DESIGN.md §10).
-                EnvironmentOverrides = _services.RemoteControl.ClaudeVariables,
+                EnvironmentOverrides = environment,
             })));
             _session = session;
+            session.ShowsElicitations = true;
+            State.ResumeAt = null;
+            State.ResumeDropsTurn = null;
             // A new claude has none of the old one's tasks.
             Tasks.Clear();
             _ = LoadSpinnerVerbsAsync();
@@ -1625,6 +1673,20 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             case PermissionCancelled cancelled:
                 PermissionResolved(cancelled.RequestId);
                 break;
+            case ElicitationRequested elicitation:
+                // An MCP server asks for input: the tab waits on the user as it does for a permission (DESIGN.md §7).
+                _waitingOnUser.Add(elicitation.Request.RequestId);
+                _checkIns.SetWaitingOnUser(true);
+                if (Items.OfType<McpInputItem>().LastOrDefault(i => ReferenceEquals(i.Request, elicitation.Request)) is { } input)
+                {
+                    input.Answered += (_, _) => PermissionResolved(elicitation.Request.RequestId);
+                }
+                UpdateStatus();
+                _services.Notifications.Notify(NotificationKind.NeedsInput, DisplayName, $"{elicitation.Request.ServerName} asks: {Shorten(elicitation.Request.Message, 120)}", Id);
+                break;
+            case ElicitationCancelled withdrawn:
+                PermissionResolved(withdrawn.RequestId);
+                break;
             case SystemNotice { Message.Subtype: "status" }:
                 // Claude Code reports mode changes it makes itself, such as leaving plan mode.
                 PermissionMode = session.PermissionMode ?? PermissionMode;
@@ -1642,7 +1704,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 State.SessionId = completed.Result.SessionId ?? State.SessionId;
                 State.Tokens.Add(completed.Result);
                 _callUsage.TurnEnded(completed.Result);
-                _services.Usage?.OnTurnCompleted(Id, DisplayName, completed.Result);
+                _services.Usage?.OnTurnCompleted(Id, DisplayName, completed.Result, Folder);
                 // Only a tab that syncs writes to the library (DESIGN.md §9, "Session library").
                 CopyToLibrary();
                 RefreshTokens();

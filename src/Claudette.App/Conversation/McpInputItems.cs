@@ -89,6 +89,9 @@ public sealed partial class McpField : ObservableObject
 
     public bool Required { get; }
 
+    /// <summary>"Project (required)", over the field.</summary>
+    public string Heading => Required ? $"{Label} (required)" : Label;
+
     public McpFieldKind Kind { get; }
 
     public IReadOnlyList<McpChoice> Choices { get; } = [];
