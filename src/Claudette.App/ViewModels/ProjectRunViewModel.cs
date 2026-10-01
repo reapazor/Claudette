@@ -17,13 +17,13 @@ public sealed partial class ProjectRunViewModel : ObservableObject
     /// <summary>A run keeps at most this many lines of its output.</summary>
     public const int MaxOutputLines = 5000;
 
-    private readonly TabViewModel _tab;
+    private readonly ProjectToolsViewModel _tools;
     private readonly TimeProvider _time;
     private bool _couldntStart;
 
-    internal ProjectRunViewModel(TabViewModel tab, string name, ProjectAction? action, TimeProvider time)
+    internal ProjectRunViewModel(ProjectToolsViewModel tools, string name, ProjectAction? action, TimeProvider time)
     {
-        _tab = tab;
+        _tools = tools;
         _time = time;
         Name = name;
         Action = action;
@@ -152,7 +152,7 @@ public sealed partial class ProjectRunViewModel : ObservableObject
 
     /// <summary>A click on the sidebar entry: selects its tab and shows its log on the Project page.</summary>
     [RelayCommand]
-    private void Open() => _tab.OpenProjectRun(this);
+    private void Open() => _tools.OpenRun(this);
 
     /// <summary>Ends the job's whole process tree, or its work, like the Project page's Stop.</summary>
     [RelayCommand(CanExecute = nameof(IsRunning))]
@@ -162,7 +162,7 @@ public sealed partial class ProjectRunViewModel : ObservableObject
 
     /// <summary>Takes the entry and its log away. A running one has Stop instead, so a stray click never ends a build.</summary>
     [RelayCommand(CanExecute = nameof(CanClose))]
-    private void Close() => _tab.CloseProjectRun(this);
+    private void Close() => _tools.CloseRun(this);
 
     public override string ToString() => $"{Name}: {Status}";
 }

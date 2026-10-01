@@ -91,6 +91,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _services = services;
         _shell = shell;
         State = state;
+        ProcessMonitor = new ProcessMonitorViewModel(services, this);
+        ChangedFiles = new ChangedFilesViewModel(services, this);
+        ProjectTools = new ProjectToolsViewModel(services, this);
+        RemoteControl = new RemoteControlViewModel(services, this);
         Agents = new AgentMap(services.Time, ModelDisplayName);
         Agents.Changed += OnAgentsChanged;
         Tasks = new RunningTasks(services.Time, Agents);
@@ -104,7 +108,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             Time = services.Time,
         };
         // A prompt the phone answered is withdrawn by Claude Code (DESIGN.md §18, "Remote Control").
-        _conversation.WithdrawnOutcome = WithdrawnPromptOutcome;
+        _conversation.WithdrawnOutcome = RemoteControl.WithdrawnPromptOutcome;
         _checkIns = new CheckInMonitor(services.Time, () => CheckInSettings, SendCheckInFromTimer, stuck => _services.Dispatcher.Post(() => IsPossiblyStuck = stuck),
             countdown => _services.Dispatcher.Post(() => CheckInCountdown = countdown));
         _autoContinue = CreateAutoContinue();
@@ -122,7 +126,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         RefreshTokens();
         RestoreLimitWait();
         // Project tools (DESIGN.md §18): the project and the folder's own actions and links, as soon as they're read.
-        _ = RefreshProjectAsync();
+        _ = ProjectTools.RefreshAsync();
     }
 
     /// <summary>What's saved for this tab.</summary>
@@ -137,6 +141,21 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     public ObservableCollection<ConversationItem> Items { get; } = [];
 
     public TodoList TodoList { get; } = new();
+
+    /// <summary>Asks the view to scroll to a conversation item, for example the card that started a process.</summary>
+    public event Action<ConversationItem>? ScrollToRequested;
+
+    /// <summary>The processes the tab started (DESIGN.md §4, "Process monitor").</summary>
+    public ProcessMonitorViewModel ProcessMonitor { get; }
+
+    /// <summary>The files Claude changed in this session, and their diffs (DESIGN.md §8).</summary>
+    public ChangedFilesViewModel ChangedFiles { get; }
+
+    /// <summary>The folder's project, its actions and links, and the runs of its jobs (DESIGN.md §18, "Project tools").</summary>
+    public ProjectToolsViewModel ProjectTools { get; }
+
+    /// <summary>The tab's connection to the Claude app (DESIGN.md §18, "Remote Control").</summary>
+    public RemoteControlViewModel RemoteControl { get; }
 
     // ---- Name (DESIGN.md §4, "Naming") -------------------------------------------------------------------
 
@@ -301,9 +320,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 rows.Add(new InfoRow("Running tasks", tasks));
             }
-            AddProjectRows(rows);
+            ProjectTools.AddInfoRows(rows);
             AddPerforceRows(rows);
-            AddRemoteControlRows(rows);
+            RemoteControl.AddInfoRows(rows);
             AddLimitWaitRows(rows);
             rows.Add(new InfoRow("Status", StatusTip));
             return rows;
@@ -340,9 +359,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             RefreshMessageTimes();
             _ = EnsureStartedAsync();
             // Its claudette.json may have changed while another tab was showing (DESIGN.md §18).
-            _ = RefreshProjectFileAsync();
+            _ = ProjectTools.RefreshFileAsync();
         }
-        UpdateShownProjectRun();
+        ProjectTools.UpdateShownRun();
     }
 
     /// <summary>Two check-ins in a row got no reply (DESIGN.md §5, "Check-ins on long turns"); shown on the tab's row.</summary>
@@ -854,10 +873,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _conversation.ExpandThinking = _services.Settings.Appearance.ExpandThinking;
         _conversation.ShowUnsupportedMessages = _services.Settings.Advanced.LogProtocol;
         OnPropertyChanged(nameof(ShowContextRing));
-        UpdateSampler();
+        ProcessMonitor.UpdateSampler();
         _autoContinue.SettingsChanged();
         OnPerforceSettingsChanged();
-        OnProjectToolSettingsChanged();
+        ProjectTools.OnSettingsChanged();
     }
 
     // ---- Restarting into a new build (DESIGN.md §9, "Working on Claudette") -------------------------------
@@ -947,7 +966,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             return;
         }
-        _stoppedHere = true;
+        RemoteControl.OnStoppedHere();
         try
         {
             await _session.InterruptAsync();
@@ -1167,7 +1186,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             var chosenMode = State.Overrides.PermissionMode ?? settings.NewTabs.DefaultPermissionMode;
             var folder = Folder;
             var starting = _startingMode = await Task.Run(() => _services.ReadStartingPermissionMode(folder));
-            var session = await sessions.StartAsync(await WithPerforceAsync(await WithProjectToolsAsync(new ClaudeLaunchOptions
+            var session = await sessions.StartAsync(await WithPerforceAsync(await ProjectTools.WithNoteAsync(new ClaudeLaunchOptions
             {
                 WorkingDirectory = Folder,
                 Resume = resume,
@@ -1196,7 +1215,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 _forkAwaitingId = true;
                 _conversation.AddNote("Opened as a copy. The original session is left as it was.");
             }
-            AttachProcessTree(session);
+            ProcessMonitor.AttachTree(session);
             Effort = State.Overrides.Effort ?? settings.NewTabs.DefaultEffort;
             PermissionMode = session.PermissionMode;
             _modelId = session.Model ?? State.Overrides.Model;
@@ -1213,7 +1232,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             _pump = PumpAsync(session);
             _contextRefresh = RefreshContextUsageAsync(session);
             // Before any prompt goes out, so the phone sees the whole turn (DESIGN.md §18, "Remote Control").
-            ConnectRemoteOnStart(session);
+            RemoteControl.ConnectOnStart(session);
         }
         catch (Exception ex) when (Core.Auth.SignInErrors.IsSignInFailure(ex))
         {
@@ -1315,8 +1334,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(DisplayName));
         _services.Usage?.OnTabRenamed(Id, DisplayName);
         OnPropertyChanged(nameof(InfoRows));
-        OnPropertyChanged(nameof(IsGitRepository));
-        ReloadCustomActions();
+        ChangedFiles.OnFolderChanged();
+        ProjectTools.ReloadCustomActions();
         _conversation.AddNote($"Now working in {State.Folder}.");
         await EnsureStartedAsync();
     }
@@ -1383,12 +1402,12 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     case TranscriptMessage { Message: AssistantMessage assistant }:
                         var assistantEvent = new AssistantMessageReceived(assistant);
                         _conversation.Replay(assistantEvent, item.Time);
-                        RecordFileChanges(assistantEvent);
+                        ChangedFiles.Record(assistantEvent);
                         break;
                     case TranscriptMessage { Message: UserMessage results }:
                         var resultsEvent = new ToolResultsReceived(results);
                         _conversation.Replay(resultsEvent, item.Time);
-                        RecordFileChanges(resultsEvent);
+                        ChangedFiles.Record(resultsEvent);
                         break;
                 }
             }
@@ -1494,12 +1513,12 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         }
         foreach (var sessionEvent in events)
         {
-            if (InterceptRemoteCommand(sessionEvent))
+            if (RemoteControl.InterceptCommand(sessionEvent))
             {
                 continue;
             }
             _conversation.Apply(sessionEvent);
-            RecordFileChanges(sessionEvent);
+            ChangedFiles.Record(sessionEvent);
             TrackReplies(sessionEvent);
             ObserveForComposer(sessionEvent);
             OnPerforceSessionEvent(sessionEvent);
@@ -1559,7 +1578,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     PermissionMode = session.PermissionMode ?? PermissionMode;
                     break;
                 case SystemNotice { Message.Subtype: "bridge_state" or "worker_shutting_down" } remote:
-                    OnRemoteNotice(remote.Message);
+                    RemoteControl.OnNotice(remote.Message);
                     break;
                 case RateLimitUpdated rateLimit:
                     _services.Usage?.OnRateLimitEvent(rateLimit.Message);
@@ -1586,10 +1605,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                         NotifyTurnFinished(completed.Result);
                     }
                     // Claude may have edited claudette.json or switched branches: the actions and links follow.
-                    _ = RefreshProjectFileAsync();
-                    _stoppedHere = false;
+                    _ = ProjectTools.RefreshFileAsync();
                     // The switch changed while Claude worked (DESIGN.md §18, "Remote Control").
-                    RunWaitingRemoteChange(session);
+                    RemoteControl.OnTurnCompleted(session);
                     break;
                 case ConversationReset:
                     _callUsage.ContextReset();
@@ -1606,7 +1624,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     break;
                 case SessionExited exited:
                     _session = null;
-                    ResetRemote();
+                    RemoteControl.Reset();
                     SetRunningVersion(null);
                     _checkIns.TurnEnded();
                     _pendingPermissions = 0;
@@ -1702,7 +1720,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     {
         OnPropertyChanged(nameof(HasOverrides));
         _services.SaveState();
-        UpdateSampler();
+        ProcessMonitor.UpdateSampler();
         _autoContinue.SettingsChanged();
         if (_session is null)
         {
@@ -1747,14 +1765,14 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     {
         var session = _session;
         _session = null;
-        ResetRemote();
+        RemoteControl.Reset();
         SetRunningVersion(null);
         // Its events are no longer applied, so its exit won't clear them: its tasks end with it. On the UI thread, like
         // the events, since closing can finish elsewhere.
         _services.Dispatcher.Post(Tasks.Clear);
         if (session is null)
         {
-            await EndProcessTreeAsync(killProcesses);
+            await ProcessMonitor.EndTreeAsync(killProcesses);
             return;
         }
         if (session.State == SessionState.Working)
@@ -1772,12 +1790,12 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         if (killProcesses)
         {
             // Note the children while claude is still their parent; on macOS and Linux they can't be found afterwards.
-            RunningChildProcesses();
+            ProcessMonitor.RunningChildProcesses();
         }
         // Let claude exit on its own, so it finishes its transcript; then end what it left running, before disposing
         // the session releases the process tree.
         await session.StopAsync(TimeSpan.FromSeconds(3));
-        await EndProcessTreeAsync(killProcesses);
+        await ProcessMonitor.EndTreeAsync(killProcesses);
         await session.DisposeAsync();
         if (_pump is not null)
         {
@@ -1800,11 +1818,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         StopCheckInTicker();
         _services.Notifications.ClearTab(Id);
         StopPerforce();
-        CloseProjectRuns(killProcesses);
-        StopReviewSync();
+        ProjectTools.CloseRuns(killProcesses);
+        ChangedFiles.StopReviewSync();
         ReleaseLease();
         await StopSessionAsync(killProcesses);
-        CleanUpDiffFiles();
+        ChangedFiles.CleanUpDiffFiles();
     }
 
     public ValueTask DisposeAsync() => CloseAsync(killProcesses: true);

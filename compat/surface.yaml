@@ -1455,7 +1455,7 @@ items:
   - id: "remote_control"
     kind: control
     status: undocumented
-    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     docs: https://code.claude.com/docs/en/remote-control
     test: RemoteControlProtocolTests, RemoteControlTests, RealCliTests, RemoteControlRealCliTests
     fallback: "{subtype: remote_control, enabled: true, name} connects the session as SDK hosts (the VS Code extension) do, and {enabled: false} disconnects it; the wire names are from Claude Code 2.1.284's own handler, not the docs or the Agent SDK types. Claude Code runs its eligibility checks first and answers with the reason as an error (against the mock: \"Remote Control is only available when using Claude via api.anthropic.com…\"), which the tab shows. If it's rejected as unsupported, the tab sends the /remote-control command instead. If enabled: false fails, the tab's claude is restarted on the same session and doesn't connect again. Either way nothing else in the tab breaks."
@@ -1492,20 +1492,20 @@ items:
   - id: "bridge_state"
     kind: message
     status: undocumented
-    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     test: RemoteControlProtocolTests, RemoteControlTests, RealCliTests
     fallback: "system/bridge_state with state (ready, connected, reconnecting, failed, policy_disabled), detail and failure_kind: the connection's progress after remote_control. A state Claudette doesn't know is Unknown and changes nothing. Without the message the tab keeps what the answer to remote_control said until the session ends."
   - id: "worker_shutting_down"
     kind: message
     status: documented
-    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: RemoteControlProtocolTests, RemoteControlTests
     fallback: A connected tab reads Not connected, with the reason. One arriving while the tab isn't connected (replayed from a resumed session) is ignored.
   - id: "/remote-control"
     kind: command
     status: undocumented
-    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     docs: https://code.claude.com/docs/en/remote-control
     test: RemoteControlProtocolTests, RemoteControlTests, RealCliTests
     fallback: "Documented for the terminal, the Desktop app and the VS Code extension's prompt box; sent by an SDK host as a message it's undocumented. Only the fallback for a Claude Code that rejects remote_control, sent while Claude isn't working and hidden from the conversation, with its reply shown as a note. In -p mode 2.1.284 always answers it locally with \"/remote-control isn't available in this environment.\", so the fallback only says why the tab isn't connected; the tab stays unconnected and nothing else breaks."
@@ -1518,13 +1518,13 @@ items:
   - id: "unavailable_headless"
     kind: field
     status: undocumented
-    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     test: RemoteControlProtocolTests, RealCliTests
     fallback: "local_command_outcome.kind on a local command's reply (marked internal in Claude Code's schema): the command can't run in a headless session. unknown, failed and restart_required mean it didn't run either. Without the field the reply's words decide."
   - id: "control_cancel_request for can_use_tool answered in the Claude app"
     kind: behavior
     status: undocumented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     test: RemoteControlTests
     fallback: When a connected device answers a permission prompt, question or plan, 2.1.284 withdraws the host's copy with control_cancel_request (from its injectControlResponse). The card closes and reads "Answered in the Claude app" while the tab is connected and Claudette didn't stop the turn. Without it the card stays open until the turn moves on, as for any withdrawn request.
   - id: "CLAUDE_CLIENT_PRESENCE_FILE"

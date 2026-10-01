@@ -1,9 +1,12 @@
 using System.Collections.ObjectModel;
+using Claudette.App.Conversation;
 using Claudette.App.Diffs;
+using Claudette.App.Services;
 using Claudette.Core.Diffs;
 using Claudette.Core.Git;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
+using Claudette.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -51,9 +54,33 @@ public sealed partial class ChangedFileRow : ObservableObject
     public partial bool IsReviewed { get; set; }
 }
 
-/// <summary>The tab's changed files and diffs (DESIGN.md §8).</summary>
-public sealed partial class TabViewModel
+/// <summary>What the changed files panel needs from its tab.</summary>
+internal interface IChangedFilesHost
 {
+    string Id { get; }
+
+    string Folder { get; }
+
+    /// <summary>What's saved for the tab: the files marked as reviewed, and whether it syncs to the library.</summary>
+    TabState State { get; }
+
+    /// <summary>The tab can copy its session to the library now (DESIGN.md §9, "Writing").</summary>
+    bool CanSyncNow { get; }
+
+    /// <summary>Copies the session to the library in the background, for a tab that syncs.</summary>
+    void CopyToLibrary();
+
+    void AddNote(string text, NoteKind kind);
+}
+
+/// <summary>The tab's changed files and diffs (DESIGN.md §8).</summary>
+public sealed partial class ChangedFilesViewModel : ViewModelBase
+{
+    /// <summary>How long a tab that syncs waits after a tick before writing its record, so ticking several files writes it once.</summary>
+    internal static readonly TimeSpan ReviewSyncDelay = TimeSpan.FromSeconds(2);
+
+    private readonly AppServices _services;
+    private readonly IChangedFilesHost _host;
     private ChangedFiles? _changes;
     private ReviewedFiles? _reviewed;
     /// <summary>Writes the library record once the ticking stops, for a tab that syncs.</summary>
@@ -63,6 +90,12 @@ public sealed partial class TabViewModel
     /// <summary>Counts refreshes started, so one that finishes after a later one leaves that one's newer rows alone.</summary>
     private int _refreshGeneration;
 
+    internal ChangedFilesViewModel(AppServices services, IChangedFilesHost host)
+    {
+        _services = services;
+        _host = host;
+    }
+
     private ChangedFiles Changes
     {
         get
@@ -70,101 +103,39 @@ public sealed partial class TabViewModel
             if (_changes is null)
             {
                 _changes = new ChangedFiles(_services.Time) { Befores = new BeforeContentStore(_services.Paths.BeforeContentDirectory, _services.Time) };
-                _changes.Changed += QueueChangedFilesRefresh;
+                _changes.Changed += QueueRefresh;
             }
             return _changes;
         }
     }
 
     /// <summary>The files marked as reviewed, kept in the tab's state (DESIGN.md §8, "Reviewed").</summary>
-    private ReviewedFiles Reviewed => _reviewed ??= new ReviewedFiles(State.ReviewedFiles);
+    private ReviewedFiles Reviewed => _reviewed ??= new ReviewedFiles(_host.State.ReviewedFiles);
 
-    /// <summary>
-    /// The side panel: Changed files, Agents, Project when the tab has project tools, and Processes when the monitor is
-    /// on (DESIGN.md §3).
-    /// </summary>
+    public ObservableCollection<ChangedFileRow> Files { get; } = [];
+
+    /// <summary>For example "5 files changed · 2 reviewed".</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowProcessSummary))]
-    public partial bool IsSidePanelOpen { get; set; }
-
-    partial void OnIsSidePanelOpenChanged(bool value)
-    {
-        IsProcessPanelVisible = value && IsProcessesPage;
-        if (value)
-        {
-            _ = RefreshChangedFilesAsync();
-        }
-        UpdateShownProjectRun();
-    }
-
-    /// <summary>Which page of the side panel shows.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsFilesPage))]
-    public partial bool IsProcessesPage { get; set; }
-
-    public bool IsFilesPage => !IsProcessesPage && !IsAgentsPage && !IsProjectPage;
-
-    partial void OnIsProcessesPageChanged(bool value)
-    {
-        IsProcessPanelVisible = value && IsSidePanelOpen;
-        if (value)
-        {
-            IsAgentsPage = false;
-            IsProjectPage = false;
-        }
-    }
-
-    [RelayCommand]
-    private void ToggleSidePanel() => IsSidePanelOpen = !IsSidePanelOpen;
-
-    /// <summary>The side panel's width: the same for every tab, set by dragging its edge (DESIGN.md §3).</summary>
-    public double SidePanelWidth => _shell.SidePanelWidth;
-
-    /// <summary>Dragging the side panel's edge. <see cref="SaveSidePanelWidth"/> keeps the result when the drag ends.</summary>
-    public void ResizeSidePanel(double width) => _shell.ResizeSidePanel(width);
-
-    public void SaveSidePanelWidth() => _shell.SaveSidePanelWidth();
-
-    /// <summary>Double-clicking the edge.</summary>
-    public void ResetSidePanelWidth()
-    {
-        _shell.ResizeSidePanel(ShellViewModel.DefaultSidePanelWidth);
-        _shell.SaveSidePanelWidth();
-    }
-
-    internal void OnSidePanelWidthChanged() => OnPropertyChanged(nameof(SidePanelWidth));
-
-    [RelayCommand]
-    private void ShowFilesPage()
-    {
-        IsProcessesPage = false;
-        IsAgentsPage = false;
-        IsProjectPage = false;
-    }
-
-    [RelayCommand]
-    private void ShowProcessesPage() => IsProcessesPage = true;
-
-    public ObservableCollection<ChangedFileRow> ChangedFiles { get; } = [];
-
-    [ObservableProperty]
-    public partial string ChangedFilesSummary { get; set; } = "No changes yet";
+    public partial string Summary { get; set; } = "No changes yet";
 
     /// <summary>"Working tree vs HEAD": all changes in the repository, including ones made by commands or by you.</summary>
     [ObservableProperty]
     public partial bool ShowGitChanges { get; set; }
 
-    partial void OnShowGitChangesChanged(bool value) => _ = RefreshChangedFilesAsync();
+    partial void OnShowGitChangesChanged(bool value) => _ = RefreshAsync();
 
-    public bool IsGitRepository => GitInfo.TryGetBranch(Folder) is not null;
+    public bool IsGitRepository => GitInfo.TryGetBranch(_host.Folder) is not null;
+
+    /// <summary>The tab moved to another folder, which may or may not be a repository.</summary>
+    internal void OnFolderChanged() => OnPropertyChanged(nameof(IsGitRepository));
 
     /// <summary>Follows the session's Edit and Write calls, live and from a restored transcript.</summary>
-    private void RecordFileChanges(SessionEvent sessionEvent)
+    internal void Record(SessionEvent sessionEvent)
     {
         switch (sessionEvent)
         {
             case AssistantMessageReceived { Message: var message }:
-                foreach (var toolUse in message.Content.OfType<ToolUseBlock>().Where(t => Core.Diffs.ChangedFiles.IsFileTool(t.Name)))
+                foreach (var toolUse in message.Content.OfType<ToolUseBlock>().Where(t => ChangedFiles.IsFileTool(t.Name)))
                 {
                     Changes.RecordToolUse(toolUse.Id, toolUse.Name, toolUse.Input);
                 }
@@ -178,7 +149,7 @@ public sealed partial class TabViewModel
         }
     }
 
-    private void QueueChangedFilesRefresh()
+    private void QueueRefresh()
     {
         if (_refreshQueued)
         {
@@ -188,14 +159,14 @@ public sealed partial class TabViewModel
         _services.Dispatcher.Post(() =>
         {
             _refreshQueued = false;
-            _ = RefreshChangedFilesAsync();
+            _ = RefreshAsync();
         });
     }
 
     [RelayCommand]
-    private async Task RefreshChangedFilesAsync()
+    internal async Task RefreshAsync()
     {
-        var folder = Folder;
+        var folder = _host.Folder;
         var generation = ++_refreshGeneration;
         List<ChangedFileRow> rows;
         if (ShowGitChanges)
@@ -255,26 +226,26 @@ public sealed partial class TabViewModel
             row.LatestChange = ReviewedFiles.LatestChange(claudeChanges);
             row.IsReviewed = Reviewed.IsReviewed(row.Path, claudeChanges);
         }
-        ChangedFiles.Clear();
+        Files.Clear();
         foreach (var row in rows)
         {
-            ChangedFiles.Add(row);
+            Files.Add(row);
         }
-        UpdateChangedFilesSummary();
+        UpdateSummary();
         OnPropertyChanged(nameof(IsGitRepository));
     }
 
     /// <summary>For example "5 files changed · 2 reviewed".</summary>
-    private void UpdateChangedFilesSummary()
+    private void UpdateSummary()
     {
-        var summary = ChangedFiles.Count switch
+        var summary = Files.Count switch
         {
             0 => ShowGitChanges ? "No changes in the working tree" : "No changes yet",
             1 => "1 file changed",
             var count => $"{count} files changed",
         };
-        var reviewed = ChangedFiles.Count(r => r.IsReviewed);
-        ChangedFilesSummary = reviewed > 0 ? $"{summary} · {reviewed} reviewed" : summary;
+        var reviewed = Files.Count(r => r.IsReviewed);
+        Summary = reviewed > 0 ? $"{summary} · {reviewed} reviewed" : summary;
     }
 
     private static string Relative(string path, string folder)
@@ -309,17 +280,14 @@ public sealed partial class TabViewModel
         {
             Reviewed.Unmark(path);
         }
-        foreach (var row in ChangedFiles)
+        foreach (var row in Files)
         {
             row.IsReviewed = Reviewed.IsReviewed(row.Path, Changes.Find(row.Path));
         }
-        UpdateChangedFilesSummary();
+        UpdateSummary();
         _services.SaveState();
         QueueReviewSync();
     }
-
-    /// <summary>How long a tab that syncs waits after a tick before writing its record, so ticking several files writes it once.</summary>
-    internal static readonly TimeSpan ReviewSyncDelay = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// Brings the library's record up to date with the marks, for a tab that syncs (DESIGN.md §9, "Writing"). The
@@ -327,7 +295,7 @@ public sealed partial class TabViewModel
     /// </summary>
     private void QueueReviewSync()
     {
-        if (!State.SyncToLibrary || _reviewSyncStopped)
+        if (!_host.State.SyncToLibrary || _reviewSyncStopped)
         {
             return;
         }
@@ -341,16 +309,16 @@ public sealed partial class TabViewModel
             }
             _reviewSync = null;
             timer.Dispose();
-            if (CanSyncNow && !_reviewSyncStopped)
+            if (_host.CanSyncNow && !_reviewSyncStopped)
             {
-                CopyToLibrary();
+                _host.CopyToLibrary();
             }
         }), null, ReviewSyncDelay, Timeout.InfiniteTimeSpan);
         _reviewSync = timer;
     }
 
     /// <summary>The tab is closing: a diff view still open can mark files, but nothing more is written to the library.</summary>
-    private void StopReviewSync()
+    internal void StopReviewSync()
     {
         _reviewSyncStopped = true;
         _reviewSync?.Dispose();
@@ -379,7 +347,7 @@ public sealed partial class TabViewModel
         }
     }
 
-    private string DiffTempDirectory => Path.Combine(_services.Paths.DiffTempDirectory, Id);
+    private string DiffTempDirectory => Path.Combine(_services.Paths.DiffTempDirectory, _host.Id);
 
     /// <summary>Selecting a file opens the built-in diff view.</summary>
     [RelayCommand]
@@ -389,7 +357,7 @@ public sealed partial class TabViewModel
         {
             return;
         }
-        var before = row.FromGit ? await _services.Git.GetHeadContentAsync(Folder, row.Path) : row.Before;
+        var before = row.FromGit ? await _services.Git.GetHeadContentAsync(_host.Folder, row.Path) : row.Before;
         var beforeKnown = row.FromGit || row.BeforeKnown;
         DiffRequested?.Invoke(new DiffSource(
             row.Path,
@@ -415,7 +383,7 @@ public sealed partial class TabViewModel
     /// from before Claude's first change in this session to the file now.
     /// </summary>
     [RelayCommand]
-    private Task OpenToolDiffAsync(Conversation.ToolUseItem? tool)
+    private Task OpenToolDiffAsync(ToolUseItem? tool)
     {
         if (tool is null || Changes.Files.FirstOrDefault(f => f.ToolUseIds.Contains(tool.ToolUseId)) is not { } file)
         {
@@ -424,7 +392,7 @@ public sealed partial class TabViewModel
         return OpenFileDiffAsync(new ChangedFileRow
         {
             Path = file.Path,
-            DisplayPath = Changes.DisplayPath(file, Folder),
+            DisplayPath = Changes.DisplayPath(file, _host.Folder),
             Status = file.IsNew ? "A" : "M",
             StatusText = file.IsNew ? "Added" : "Modified",
             Before = file.Before,
@@ -451,12 +419,12 @@ public sealed partial class TabViewModel
         }
         try
         {
-            var before = row.FromGit ? await _services.Git.GetHeadContentAsync(Folder, row.Path) : row.Before;
+            var before = row.FromGit ? await _services.Git.GetHeadContentAsync(_host.Folder, row.Path) : row.Before;
             await new DiffToolLauncher(_services.Launcher, _services.Time, environment: _services.UserEnvironment).LaunchAsync(DiffTool, before, row.Path, DiffTempDirectory);
         }
         catch (Exception ex)
         {
-            _conversation.AddNote($"Couldn't open the diff tool: {ex.Message}", Conversation.NoteKind.Error);
+            _host.AddNote($"Couldn't open the diff tool: {ex.Message}", NoteKind.Error);
         }
     }
 
@@ -475,7 +443,7 @@ public sealed partial class TabViewModel
         row is null ? Task.CompletedTask : _services.Platform.SetClipboardTextAsync(row.Path);
 
     /// <summary>The "before" files handed to diff tools are deleted when the tab closes (DESIGN.md §8).</summary>
-    private void CleanUpDiffFiles()
+    internal void CleanUpDiffFiles()
     {
         try
         {

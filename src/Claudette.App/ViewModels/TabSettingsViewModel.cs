@@ -142,7 +142,7 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
     public partial bool RemoteControl { get; set; }
 
     /// <summary>The account can use Remote Control, or the tab is on and can be turned off.</summary>
-    public bool CanChangeRemoteControl => _tab.CanToggleRemoteControl;
+    public bool CanChangeRemoteControl => _tab.RemoteControl.CanToggle;
 
     /// <summary>Why the switch is disabled, or null.</summary>
     public string? RemoteControlUnavailableText => CanChangeRemoteControl ? null : _services.RemoteControl.UnavailableReason;
@@ -183,7 +183,7 @@ public sealed partial class TabSettingsViewModel : ViewModelBase
         };
         _close();
         _tab.SetSyncToLibrary(SyncToLibrary);
-        await _tab.SetRemoteControlAsync(RemoteControl);
+        await _tab.RemoteControl.SetAsync(RemoteControl);
         await _tab.ApplyOverridesAsync(previous);
     }
 

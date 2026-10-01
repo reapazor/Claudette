@@ -63,12 +63,12 @@ public class SidePanelTests
             ["tool_use_result"] = new JsonObject { ["type"] = "create", ["filePath"] = path, ["content"] = "one\ntwo\n", ["originalFile"] = null },
         });
 
-        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the changed file");
-        var row = tab.ChangedFiles[0];
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files.Count == 1, "the changed file");
+        var row = tab.ChangedFiles.Files[0];
         Assert.Equal("A", row.Status);
         Assert.Equal("notes.txt", row.DisplayPath);
         Assert.Equal("+2 −0", row.Stats);
-        Assert.Equal("1 file changed", tab.ChangedFilesSummary);
+        Assert.Equal("1 file changed", tab.ChangedFiles.Summary);
     }
 
     [Fact]
@@ -80,9 +80,9 @@ public class SidePanelTests
         await File.WriteAllTextAsync(path, "new\n", TestContext.Current.CancellationToken);
         var row = new ChangedFileRow { Path = path, DisplayPath = "a.cs", Status = "M", StatusText = "Modified", Before = "old\n" };
         Diffs.DiffSource? requested = null;
-        tab.DiffRequested += source => requested = source;
+        tab.ChangedFiles.DiffRequested += source => requested = source;
 
-        await tab.OpenFileCommand.ExecuteAsync(row);
+        await tab.ChangedFiles.OpenFileCommand.ExecuteAsync(row);
 
         Assert.NotNull(requested);
         Assert.Equal("old\n", requested.Before);
@@ -110,8 +110,8 @@ public class SidePanelTests
             ["tool_use_result"] = LargeEditResult(path, LargeFile),
         });
 
-        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the changed file");
-        Assert.Equal(("M", "+1 −1"), (tab.ChangedFiles[0].Status, tab.ChangedFiles[0].Stats));
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files.Count == 1, "the changed file");
+        Assert.Equal(("M", "+1 −1"), (tab.ChangedFiles.Files[0].Status, tab.ChangedFiles.Files[0].Stats));
         Assert.True(File.Exists(Path.Combine(h.Services.Paths.BeforeContentDirectory, "e1.txt.gz")));
     }
 
@@ -131,8 +131,8 @@ public class SidePanelTests
         h.Shell.Restore(null);
         var tab = h.Shell.AllTabs.Single();
 
-        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle && tab.ChangedFiles.Count == 1, "the changed file");
-        var row = tab.ChangedFiles[0];
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle && tab.ChangedFiles.Files.Count == 1, "the changed file");
+        var row = tab.ChangedFiles.Files[0];
         Assert.Equal(("M", "+1 −1", LargeFile), (row.Status, row.Stats, row.Before));
     }
 
@@ -166,9 +166,9 @@ public class SidePanelTests
         await File.WriteAllTextAsync(path, "one\n2\n", TestContext.Current.CancellationToken);
         var row = new ChangedFileRow { Path = path, DisplayPath = "big.cs", Status = "M", StatusText = "Modified", BeforeKnown = false };
         Diffs.DiffSource? requested = null;
-        tab.DiffRequested += source => requested = source;
+        tab.ChangedFiles.DiffRequested += source => requested = source;
 
-        await tab.OpenFileCommand.ExecuteAsync(row);
+        await tab.ChangedFiles.OpenFileCommand.ExecuteAsync(row);
 
         Assert.NotNull(requested);
         Assert.False(requested.BeforeKnown);
@@ -194,24 +194,24 @@ public class SidePanelTests
         var path = Path.Combine(h.WorkFolder, "auth.cs");
         await File.WriteAllTextAsync(path, "b\n", TestContext.Current.CancellationToken);
         EmitEdit(h, "e1", path);
-        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the changed file");
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files.Count == 1, "the changed file");
 
-        tab.ToggleFileReviewedCommand.Execute(tab.ChangedFiles[0]);
+        tab.ChangedFiles.ToggleFileReviewedCommand.Execute(tab.ChangedFiles.Files[0]);
 
-        Assert.True(tab.ChangedFiles[0].IsReviewed);
-        Assert.Equal("1 file changed · 1 reviewed", tab.ChangedFilesSummary);
+        Assert.True(tab.ChangedFiles.Files[0].IsReviewed);
+        Assert.Equal("1 file changed · 1 reviewed", tab.ChangedFiles.Summary);
         Assert.Equal([(path, "e1")], tab.State.ReviewedFiles.Select(m => (m.Path, m.Change)));
 
         // Your own edits don't count.
         await File.WriteAllTextAsync(path, "b\nmine\n", TestContext.Current.CancellationToken);
-        await tab.RefreshChangedFilesCommand.ExecuteAsync(null);
-        Assert.True(tab.ChangedFiles[0].IsReviewed);
+        await tab.ChangedFiles.RefreshCommand.ExecuteAsync(null);
+        Assert.True(tab.ChangedFiles.Files[0].IsReviewed);
 
         EmitEdit(h, "e2", path);
 
-        await TabTestHarness.Eventually(() => tab.ChangedFiles is [{ LatestChange: "e2" }], "Claude's next change");
-        Assert.False(tab.ChangedFiles[0].IsReviewed);
-        Assert.Equal("1 file changed", tab.ChangedFilesSummary);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files is [{ LatestChange: "e2" }], "Claude's next change");
+        Assert.False(tab.ChangedFiles.Files[0].IsReviewed);
+        Assert.Equal("1 file changed", tab.ChangedFiles.Summary);
         Assert.Empty(tab.State.ReviewedFiles);
     }
 
@@ -223,14 +223,14 @@ public class SidePanelTests
         var path = Path.Combine(h.WorkFolder, "auth.cs");
         await File.WriteAllTextAsync(path, "b\n", TestContext.Current.CancellationToken);
         EmitEdit(h, "e1", path);
-        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the changed file");
-        var row = tab.ChangedFiles[0];
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files.Count == 1, "the changed file");
+        var row = tab.ChangedFiles.Files[0];
 
-        tab.ToggleFileReviewedCommand.Execute(row);
-        tab.ToggleFileReviewedCommand.Execute(row);
+        tab.ChangedFiles.ToggleFileReviewedCommand.Execute(row);
+        tab.ChangedFiles.ToggleFileReviewedCommand.Execute(row);
 
         Assert.False(row.IsReviewed);
-        Assert.Equal("1 file changed", tab.ChangedFilesSummary);
+        Assert.Equal("1 file changed", tab.ChangedFiles.Summary);
         Assert.Empty(tab.State.ReviewedFiles);
     }
 
@@ -242,8 +242,8 @@ public class SidePanelTests
         var path = Path.Combine(h.WorkFolder, "auth.cs");
         await File.WriteAllTextAsync(path, "b\n", TestContext.Current.CancellationToken);
         EmitEdit(h, "e1", path);
-        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the changed file");
-        var view = await OpenDiffAsync(tab, tab.ChangedFiles[0]);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files.Count == 1, "the changed file");
+        var view = await OpenDiffAsync(tab, tab.ChangedFiles.Files[0]);
         Assert.True(view.CanMarkReviewed);
         Assert.False(view.IsReviewed);
         var closed = false;
@@ -253,10 +253,10 @@ public class SidePanelTests
 
         Assert.True(closed);
         Assert.True(view.IsReviewed);
-        Assert.True(tab.ChangedFiles[0].IsReviewed);
-        Assert.Equal("1 file changed · 1 reviewed", tab.ChangedFilesSummary);
+        Assert.True(tab.ChangedFiles.Files[0].IsReviewed);
+        Assert.Equal("1 file changed · 1 reviewed", tab.ChangedFiles.Summary);
         // Opened again, it shows the file is reviewed.
-        Assert.True((await OpenDiffAsync(tab, tab.ChangedFiles[0])).IsReviewed);
+        Assert.True((await OpenDiffAsync(tab, tab.ChangedFiles.Files[0])).IsReviewed);
     }
 
     [Fact]
@@ -267,22 +267,22 @@ public class SidePanelTests
         var path = Path.Combine(h.WorkFolder, "auth.cs");
         await File.WriteAllTextAsync(path, "b\n", TestContext.Current.CancellationToken);
         EmitEdit(h, "e1", path);
-        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the changed file");
-        var view = await OpenDiffAsync(tab, tab.ChangedFiles[0]);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files.Count == 1, "the changed file");
+        var view = await OpenDiffAsync(tab, tab.ChangedFiles.Files[0]);
         var closed = false;
         view.CloseRequested += () => closed = true;
 
         EmitEdit(h, "e2", path);
-        await TabTestHarness.Eventually(() => tab.ChangedFiles is [{ LatestChange: "e2" }], "Claude's next change");
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files is [{ LatestChange: "e2" }], "Claude's next change");
         view.MarkReviewedCommand.Execute(null);
 
         Assert.True(closed);
         Assert.False(view.IsReviewed);
-        Assert.False(tab.ChangedFiles[0].IsReviewed);
+        Assert.False(tab.ChangedFiles.Files[0].IsReviewed);
 
         // Opened again, the view shows Claude's latest change, and marks that.
-        (await OpenDiffAsync(tab, tab.ChangedFiles[0])).MarkReviewedCommand.Execute(null);
-        Assert.True(tab.ChangedFiles[0].IsReviewed);
+        (await OpenDiffAsync(tab, tab.ChangedFiles.Files[0])).MarkReviewedCommand.Execute(null);
+        Assert.True(tab.ChangedFiles.Files[0].IsReviewed);
     }
 
     [Fact]
@@ -307,9 +307,9 @@ public class SidePanelTests
         h.Shell.Restore(null);
         var tab = h.Shell.AllTabs.Single();
 
-        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle && tab.ChangedFiles is [_, { LatestChange: "e3" }], "the changed files");
-        Assert.Equal([true, false], tab.ChangedFiles.Select(r => r.IsReviewed));
-        Assert.Equal("2 files changed · 1 reviewed", tab.ChangedFilesSummary);
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle && tab.ChangedFiles.Files is [_, { LatestChange: "e3" }], "the changed files");
+        Assert.Equal([true, false], tab.ChangedFiles.Files.Select(r => r.IsReviewed));
+        Assert.Equal("2 files changed · 1 reviewed", tab.ChangedFiles.Summary);
     }
 
     [Fact]
@@ -325,20 +325,20 @@ public class SidePanelTests
         await File.WriteAllTextAsync(claudes, "b\n", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(yours, "mine\n", TestContext.Current.CancellationToken);
         EmitEdit(h, "e1", claudes);
-        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the changed file");
-        tab.ToggleFileReviewedCommand.Execute(tab.ChangedFiles[0]);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files.Count == 1, "the changed file");
+        tab.ChangedFiles.ToggleFileReviewedCommand.Execute(tab.ChangedFiles.Files[0]);
 
-        tab.ShowGitChanges = true;
+        tab.ChangedFiles.ShowGitChanges = true;
 
-        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 2, "the working tree");
-        Assert.Equal([("a.cs", true), ("notes.md", false)], tab.ChangedFiles.Select(r => (r.FileName, r.IsReviewed)).OrderBy(r => r.FileName));
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files.Count == 2, "the working tree");
+        Assert.Equal([("a.cs", true), ("notes.md", false)], tab.ChangedFiles.Files.Select(r => (r.FileName, r.IsReviewed)).OrderBy(r => r.FileName));
 
         // A file only you changed stays reviewed until Claude changes it.
-        tab.ToggleFileReviewedCommand.Execute(tab.ChangedFiles.Single(r => r.FileName == "notes.md"));
-        Assert.Equal("2 files changed · 2 reviewed", tab.ChangedFilesSummary);
+        tab.ChangedFiles.ToggleFileReviewedCommand.Execute(tab.ChangedFiles.Files.Single(r => r.FileName == "notes.md"));
+        Assert.Equal("2 files changed · 2 reviewed", tab.ChangedFiles.Summary);
         EmitEdit(h, "e2", yours);
-        await TabTestHarness.Eventually(() => tab.ChangedFiles.SingleOrDefault(r => r.FileName == "notes.md") is { LatestChange: "e2", IsReviewed: false }, "Claude's change");
-        Assert.True(tab.ChangedFiles.Single(r => r.FileName == "a.cs").IsReviewed);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files.SingleOrDefault(r => r.FileName == "notes.md") is { LatestChange: "e2", IsReviewed: false }, "Claude's change");
+        Assert.True(tab.ChangedFiles.Files.Single(r => r.FileName == "a.cs").IsReviewed);
     }
 
     [Fact]
@@ -365,11 +365,11 @@ public class SidePanelTests
         };
         await using var h = new TabTestHarness(launcher: git);
         var tab = await h.OpenTabAsync();
-        tab.ShowGitChanges = true;
+        tab.ChangedFiles.ShowGitChanges = true;
         await TabTestHarness.Eventually(() => asked.Count == 1, "the first refresh");
-        var older = tab.RefreshChangedFilesCommand.ExecuteAsync(null);
+        var older = tab.ChangedFiles.RefreshCommand.ExecuteAsync(null);
         await TabTestHarness.Eventually(() => asked.Count == 2, "the older refresh");
-        var newer = tab.RefreshChangedFilesCommand.ExecuteAsync(null);
+        var newer = tab.ChangedFiles.RefreshCommand.ExecuteAsync(null);
         await TabTestHarness.Eventually(() => asked.Count == 3, "the newer refresh");
         var processes = asked.ToArray();
         processes[0].Exit(128);
@@ -377,12 +377,12 @@ public class SidePanelTests
         untracked = "new.txt";
         Found(processes[2]);
         await newer;
-        Assert.Equal(["new.txt"], InlineDispatcher.Read(() => tab.ChangedFiles.Select(r => r.FileName).ToArray()));
+        Assert.Equal(["new.txt"], InlineDispatcher.Read(() => tab.ChangedFiles.Files.Select(r => r.FileName).ToArray()));
 
         untracked = "old.txt";
         Found(processes[1]);
         await older;
-        Assert.Equal(["new.txt"], InlineDispatcher.Read(() => tab.ChangedFiles.Select(r => r.FileName).ToArray()));
+        Assert.Equal(["new.txt"], InlineDispatcher.Read(() => tab.ChangedFiles.Files.Select(r => r.FileName).ToArray()));
 
         void Found(FakeProcess process)
         {
@@ -430,9 +430,9 @@ public class SidePanelTests
     {
         Diffs.DiffSource? requested = null;
         void OnRequested(Diffs.DiffSource source) => requested = source;
-        tab.DiffRequested += OnRequested;
-        await tab.OpenFileDiffCommand.ExecuteAsync(row);
-        tab.DiffRequested -= OnRequested;
+        tab.ChangedFiles.DiffRequested += OnRequested;
+        await tab.ChangedFiles.OpenFileDiffCommand.ExecuteAsync(row);
+        tab.ChangedFiles.DiffRequested -= OnRequested;
         var view = new Diffs.DiffWindowViewModel(requested!, dark: false);
         await TabTestHarness.Eventually(() => !view.IsLoading, "the diff");
         return view;
@@ -448,10 +448,10 @@ public class SidePanelTests
 
         h.Time.Advance(ProcessSampler.SummaryInterval);
 
-        await TabTestHarness.Eventually(() => tab.ProcessSummaryText is not null, "a sample");
-        Assert.StartsWith("1 proc · ", tab.ProcessSummaryText, StringComparison.Ordinal);
-        Assert.True(tab.HasBusyProcesses);
-        Assert.Equal(["claude", "node"], tab.Processes.Select(p => p.Name));
+        await TabTestHarness.Eventually(() => tab.ProcessMonitor.SummaryText is not null, "a sample");
+        Assert.StartsWith("1 proc · ", tab.ProcessMonitor.SummaryText, StringComparison.Ordinal);
+        Assert.True(tab.ProcessMonitor.HasBusyProcesses);
+        Assert.Equal(["claude", "node"], tab.ProcessMonitor.Processes.Select(p => p.Name));
     }
 
     [Fact]
@@ -490,7 +490,7 @@ public class SidePanelTests
         await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = false);
         var tab = await h.OpenTabAsync();
         h.Trees.Trees[4242].Children.Add((5001, "node"));
-        Assert.False(tab.IsProcessMonitorOn);
+        Assert.False(tab.ProcessMonitor.IsOn);
 
         // On for this tab only, from Tab settings….
         var settings = new TabSettingsViewModel(h.Services, tab, () => { });
@@ -498,11 +498,11 @@ public class SidePanelTests
         settings.SelectedMonitor = settings.MonitorChoices.Single(c => c.Label == "On");
         await settings.ApplyCommand.ExecuteAsync(null);
 
-        Assert.True(tab.IsProcessMonitorOn);
+        Assert.True(tab.ProcessMonitor.IsOn);
         Assert.True(tab.State.Overrides.ShowProcessMonitor);
         Assert.True(tab.State.Overrides.HasAny);
         h.Time.Advance(ProcessSampler.SummaryInterval);
-        await TabTestHarness.Eventually(() => tab.ProcessSummaryText is not null, "a sample");
+        await TabTestHarness.Eventually(() => tab.ProcessMonitor.SummaryText is not null, "a sample");
 
         // Off for this tab while Settings has it on everywhere else.
         h.Services.Settings.Processes.ShowMonitor = true;
@@ -511,16 +511,16 @@ public class SidePanelTests
         settings.SelectedMonitor = settings.MonitorChoices.Single(c => c.Label == "Off");
         await settings.ApplyCommand.ExecuteAsync(null);
 
-        Assert.False(tab.IsProcessMonitorOn);
-        Assert.Null(tab.ProcessSummaryText);
-        Assert.Empty(tab.Processes);
+        Assert.False(tab.ProcessMonitor.IsOn);
+        Assert.Null(tab.ProcessMonitor.SummaryText);
+        Assert.Empty(tab.ProcessMonitor.Processes);
 
         // Use defaults follows Settings again.
         settings = new TabSettingsViewModel(h.Services, tab, () => { });
         settings.UseDefaultsCommand.Execute(null);
         await settings.ApplyCommand.ExecuteAsync(null);
         Assert.Null(tab.State.Overrides.ShowProcessMonitor);
-        Assert.True(tab.IsProcessMonitorOn);
+        Assert.True(tab.ProcessMonitor.IsOn);
     }
 
     [Fact]
@@ -534,11 +534,11 @@ public class SidePanelTests
         h.Trees.Trees[4242].Children.Add((6001, "node"));
 
         h.Time.Advance(ProcessSampler.SummaryInterval);
-        await TabTestHarness.Eventually(() => tab.Processes.Any(p => p.Name == "node"), "the process");
-        var row = tab.Processes.Single(p => p.Name == "node");
+        await TabTestHarness.Eventually(() => tab.ProcessMonitor.Processes.Any(p => p.Name == "node"), "the process");
+        var row = tab.ProcessMonitor.Processes.Single(p => p.Name == "node");
         Assert.Equal("Bash: npm run dev", row.ToolText);
 
-        tab.StopProcessCommand.Execute(row);
+        tab.ProcessMonitor.StopProcessCommand.Execute(row);
         await h.Shell.Confirmation!.ConfirmCommand.ExecuteAsync(null);
 
         await TabTestHarness.Eventually(() => h.Transport.SentControlSubtypes.Contains("stop_task"), "stop_task");

@@ -18,18 +18,18 @@ public class ProjectRunsTests
     {
         var (h, launcher, _) = ProjectToolsTests.UnrealHarness();
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Project is not null, "the project");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Project is not null, "the project");
         return (h, launcher, tab);
     }
 
-    private static ProjectAction Action(TabViewModel tab, string id) => InlineDispatcher.Read(() => tab.ProjectActions.Single(a => a.Id == id));
+    private static ProjectAction Action(TabViewModel tab, string id) => InlineDispatcher.Read(() => tab.ProjectTools.Actions.Single(a => a.Id == id));
 
-    private static IReadOnlyList<ProjectRunViewModel> Runs(TabViewModel tab) => InlineDispatcher.Read(() => tab.ProjectRuns.ToArray());
+    private static IReadOnlyList<ProjectRunViewModel> Runs(TabViewModel tab) => InlineDispatcher.Read(() => tab.ProjectTools.Runs.ToArray());
 
     /// <summary>Runs <paramref name="id"/> and ends its process with <paramref name="exitCode"/>.</summary>
     private static async Task<ProjectRunViewModel> RunToEndAsync(TabViewModel tab, FakeLauncher launcher, string id, int exitCode, string? line = null)
     {
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, id));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, id));
         var run = Runs(tab)[^1];
         var process = launcher.Processes.Last();
         if (line is not null)
@@ -46,15 +46,15 @@ public class ProjectRunsTests
     {
         var (h, launcher, tab) = await OpenAsync();
         await using var _h = h;
-        Assert.False(tab.HasProjectRuns);
-        Assert.False(tab.HasSelectedProjectRun);
+        Assert.False(tab.ProjectTools.HasRuns);
+        Assert.False(tab.ProjectTools.HasSelectedRun);
 
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-editor"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "build-editor"));
 
         var build = Assert.Single(Runs(tab));
-        Assert.True(tab.HasProjectRuns);
-        Assert.Same(build, tab.RunningProjectRun);
-        Assert.Same(build, tab.SelectedProjectRun);
+        Assert.True(tab.ProjectTools.HasRuns);
+        Assert.Same(build, tab.ProjectTools.RunningRun);
+        Assert.Same(build, tab.ProjectTools.SelectedRun);
         Assert.Equal("Build editor", build.Name);
         Assert.Equal(h.Time.GetUtcNow(), build.Started);
         Assert.True(build.IsRunning);
@@ -76,7 +76,7 @@ public class ProjectRunsTests
 
         // It stays, with its log, after it ends.
         Assert.Same(build, Assert.Single(Runs(tab)));
-        Assert.Null(tab.RunningProjectRun);
+        Assert.Null(tab.ProjectTools.RunningRun);
         Assert.Equal("✓", build.Glyph);
         Assert.Equal($"Succeeded · {MessageTimes.Short(h.Time.GetUtcNow(), h.Time)}", build.Detail);
         Assert.Equal("Build editor succeeded.", build.Output[^1]);
@@ -88,7 +88,7 @@ public class ProjectRunsTests
         var generate = await RunToEndAsync(tab, launcher, "generate-project-files", 6, "Generating...");
 
         Assert.Equal([build, generate], Runs(tab));
-        Assert.Same(generate, tab.SelectedProjectRun);
+        Assert.Same(generate, tab.ProjectTools.SelectedRun);
         Assert.Contains("Building NightOwlEditor...", build.Output);
         Assert.DoesNotContain("Building NightOwlEditor...", generate.Output);
         Assert.Contains("Generating...", generate.Output);
@@ -110,23 +110,23 @@ public class ProjectRunsTests
 
         // The Project page shows the one clicked in the sidebar.
         first.OpenCommand.Execute(null);
-        Assert.Same(first, tab.SelectedProjectRun);
+        Assert.Same(first, tab.ProjectTools.SelectedRun);
 
         first.CloseCommand.Execute(null);
 
         Assert.Equal([second, third], Runs(tab));
-        Assert.Same(third, tab.SelectedProjectRun);
+        Assert.Same(third, tab.ProjectTools.SelectedRun);
 
         // Closing one the page isn't showing leaves the page alone.
         second.CloseCommand.Execute(null);
         Assert.Equal([third], Runs(tab));
-        Assert.Same(third, tab.SelectedProjectRun);
+        Assert.Same(third, tab.ProjectTools.SelectedRun);
 
         third.CloseCommand.Execute(null);
         Assert.Empty(Runs(tab));
-        Assert.False(tab.HasProjectRuns);
-        Assert.Null(tab.SelectedProjectRun);
-        Assert.False(tab.HasSelectedProjectRun);
+        Assert.False(tab.ProjectTools.HasRuns);
+        Assert.Null(tab.ProjectTools.SelectedRun);
+        Assert.False(tab.ProjectTools.HasSelectedRun);
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public class ProjectRunsTests
     {
         var (h, launcher, tab) = await OpenAsync();
         await using var _h = h;
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-editor"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "build-editor"));
         var run = Runs(tab).Single();
         var process = launcher.Processes.Last();
 
@@ -169,11 +169,11 @@ public class ProjectRunsTests
             }
         };
 
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-editor"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "build-editor"));
 
         var run = Runs(tab).Single();
-        Assert.Same(run, tab.SelectedProjectRun);
-        Assert.False(tab.IsProjectJobRunning);
+        Assert.Same(run, tab.ProjectTools.SelectedRun);
+        Assert.False(tab.ProjectTools.IsJobRunning);
         Assert.True(run.Failed);
         Assert.Null(run.ExitCode);
         Assert.Equal("Build editor couldn't start: No such file or directory", run.Status);
@@ -190,14 +190,14 @@ public class ProjectRunsTests
         var (h, launcher, tab) = await OpenAsync();
         await using var _h = h;
         Directory.CreateDirectory(Path.Combine(h.WorkFolder, "Intermediate"));
-        await tab.RefreshProjectCommand.ExecuteAsync(null);
+        await tab.ProjectTools.RefreshCommand.ExecuteAsync(null);
 
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "launch-editor"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "launch-editor"));
 
         Assert.True(launcher.Started.Last().Detached);
         Assert.Empty(Runs(tab));
 
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "clean"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "clean"));
         await h.Shell.Confirmation!.ConfirmCommand.ExecuteAsync(null);
         await TabTestHarness.Eventually(() => Runs(tab) is [{ Succeeded: true }], "the clean");
 
@@ -228,7 +228,7 @@ public class ProjectRunsTests
         Assert.Same(tab, h.Shell.SelectedTab);
         Assert.True(tab.IsSidePanelOpen);
         Assert.True(tab.IsProjectPage);
-        Assert.Same(build, tab.SelectedProjectRun);
+        Assert.Same(build, tab.ProjectTools.SelectedRun);
         Assert.True(build.IsShowing);
         Assert.False(generate.IsShowing);
 
@@ -241,12 +241,12 @@ public class ProjectRunsTests
         Assert.False(build.IsShowing);
 
         // Copy copies the log the page shows.
-        await tab.CopyProjectOutputCommand.ExecuteAsync(null);
+        await tab.ProjectTools.CopyOutputCommand.ExecuteAsync(null);
         Assert.EndsWith("Build editor succeeded.", h.Platform.Clipboard, StringComparison.Ordinal);
 
         // A new job shows itself.
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-editor"));
-        Assert.Same(Runs(tab)[^1], tab.SelectedProjectRun);
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "build-editor"));
+        Assert.Same(Runs(tab)[^1], tab.ProjectTools.SelectedRun);
         launcher.Processes.Last().Exit(0);
     }
 
@@ -262,15 +262,15 @@ public class ProjectRunsTests
         var shown = h.Notifier.Shown.Count;
         await RunToEndAsync(tab, launcher, "generate-project-files", 0);
         Assert.Equal(shown, h.Notifier.Shown.Count);
-        Assert.NotSame(failed, tab.SelectedProjectRun);
+        Assert.NotSame(failed, tab.ProjectTools.SelectedRun);
 
         InlineDispatcher.Read(() =>
         {
-            tab.OpenNotifiedProjectRun();
+            tab.ProjectTools.OpenNotifiedRun();
             return true;
         });
 
-        Assert.Same(failed, tab.SelectedProjectRun);
+        Assert.Same(failed, tab.ProjectTools.SelectedRun);
         Assert.True(tab.IsSidePanelOpen);
         Assert.True(tab.IsProjectPage);
 
@@ -285,7 +285,7 @@ public class ProjectRunsTests
         var (h, launcher, tab) = await OpenAsync();
         await using var _h = h;
         await RunToEndAsync(tab, launcher, "build-editor", 0);
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "generate-project-files"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "generate-project-files"));
         var running = Runs(tab)[^1];
         var process = launcher.Processes.Last();
         Assert.Equal(2, Runs(tab).Count);
@@ -300,8 +300,8 @@ public class ProjectRunsTests
         await TabTestHarness.Eventually(() => running.IsStopped, "the stop");
 
         Assert.Empty(Runs(tab));
-        Assert.False(tab.HasProjectRuns);
-        Assert.Null(tab.SelectedProjectRun);
+        Assert.False(tab.ProjectTools.HasRuns);
+        Assert.Null(tab.ProjectTools.SelectedRun);
         Assert.True(process.Killed);
         Assert.Equal(notified, h.Notifier.Shown.Count);
     }

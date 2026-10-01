@@ -25,7 +25,7 @@ public class ProjectToolsUiTests
         UnrealFixture.Write(h.Root, h.WorkFolder);
         var tab = await h.OpenTabAsync();
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
-        await UiText.SettleUntilAsync(window, () => tab.Project is not null, "the project");
+        await UiText.SettleUntilAsync(window, () => tab.ProjectTools.Project is not null, "the project");
 
         // The project's row sits at the sidebar's foot, for the selected tab; the composer's bar has no project chip.
         var button = window.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Project tools");
@@ -64,18 +64,18 @@ public class ProjectToolsUiTests
         UnrealFixture.Write(h.Root, h.WorkFolder);
         var tab = await h.OpenTabAsync();
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
-        await UiText.SettleUntilAsync(window, () => tab.Project is not null, "the project");
+        await UiText.SettleUntilAsync(window, () => tab.ProjectTools.Project is not null, "the project");
         var list = window.GetVisualDescendants().OfType<ItemsControl>().Single(c => c.Classes.Contains("runs"));
         Assert.False(list.IsEffectivelyVisible);
 
         // One that failed, then one that's running.
-        await tab.RunProjectActionCommand.ExecuteAsync(tab.ProjectActions.Single(a => a.Id == "generate-project-files"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(tab.ProjectTools.Actions.Single(a => a.Id == "generate-project-files"));
         launcher.Processes.Last().WriteOutput("Generating...");
         launcher.Processes.Last().Exit(6);
-        var failed = tab.ProjectRuns.Single();
+        var failed = tab.ProjectTools.Runs.Single();
         await UiText.SettleUntilAsync(window, () => failed.Failed, "the failure");
-        await tab.RunProjectActionCommand.ExecuteAsync(tab.ProjectActions.Single(a => a.Id == "build-editor"));
-        var running = tab.ProjectRuns[^1];
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(tab.ProjectTools.Actions.Single(a => a.Id == "build-editor"));
+        var running = tab.ProjectTools.Runs[^1];
         UiText.Settle(window);
 
         Assert.True(list.IsEffectivelyVisible);
@@ -105,7 +105,7 @@ public class ProjectToolsUiTests
         Assert.Same(failed.Output, output.ItemsSource);
         // The actions are in the project's menu at the sidebar's foot, not on the page.
         var page = window.GetVisualDescendants().OfType<DockPanel>().Single(p => p.Name == "ProjectPage");
-        Assert.DoesNotContain(page.GetVisualDescendants().OfType<Button>(), b => tab.ProjectActions.Any(a => Equals(b.Content, a.Label)));
+        Assert.DoesNotContain(page.GetVisualDescendants().OfType<Button>(), b => tab.ProjectTools.Actions.Any(a => Equals(b.Content, a.Label)));
 
         // Stop, and the running one becomes a closable entry; closing takes the entry away.
         Visible(rows[1], "Stop").Command!.Execute(null);
@@ -129,10 +129,10 @@ public class ProjectToolsUiTests
             """);
         var tab = await h.OpenTabAsync();
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
-        await UiText.SettleUntilAsync(window, () => tab.HasLinks, "the links");
+        await UiText.SettleUntilAsync(window, () => tab.ProjectTools.HasLinks, "the links");
 
         // No provider recognized a project, and there are no actions: the row is there all the same, named after the folder.
-        Assert.Null(tab.Project);
+        Assert.Null(tab.ProjectTools.Project);
         var button = window.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Project tools");
         Assert.True(button.IsEffectivelyVisible);
         Assert.Equal($"[button] Project tools: {tab.FolderName}", UiText.Describe(button).Trim());

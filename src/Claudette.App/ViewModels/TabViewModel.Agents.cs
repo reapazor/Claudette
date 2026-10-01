@@ -116,7 +116,7 @@ public sealed partial class TabViewModel
                 async () =>
                 {
                     // A prompt of its that Claude Code withdraws now wasn't answered in the Claude app (DESIGN.md §18).
-                    _stoppedHere = true;
+                    RemoteControl.OnStoppedHere();
                     try
                     {
                         await session.StopTaskAsync(taskId);

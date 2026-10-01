@@ -36,12 +36,12 @@ public sealed class RemoteControlRealCliTests
             ["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1",
         }));
         var tab = await h.OpenTabAsync();
-        Assert.False(tab.RemoteControl);
+        Assert.False(tab.RemoteControl.IsOn);
 
-        await tab.SetRemoteControlAsync(true);
+        await tab.RemoteControl.SetAsync(true);
 
-        await TabTestHarness.Eventually(() => tab.Remote.State == RemoteControlState.Unavailable, "Claude Code's answer");
-        Assert.Contains("api.anthropic.com", tab.Remote.Detail, StringComparison.Ordinal);
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.State == RemoteControlState.Unavailable, "Claude Code's answer");
+        Assert.Contains("api.anthropic.com", tab.RemoteControl.Status.Detail, StringComparison.Ordinal);
         Assert.StartsWith("Couldn't connect to the Claude app: Remote Control", InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last().Text), StringComparison.Ordinal);
         Assert.False(h.SleepBlocker.IsBlocking);
         // The request went to Claude Code, not to the model (the context indicator counts tokens, which is free).

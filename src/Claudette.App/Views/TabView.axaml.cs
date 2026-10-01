@@ -187,10 +187,11 @@ public partial class TabView : UserControl
         base.OnDataContextChanged(e);
         if (_tab is not null)
         {
-            _tab.DiffRequested -= OnDiffRequested;
+            _tab.ChangedFiles.DiffRequested -= OnDiffRequested;
             _tab.ScrollToRequested -= OnScrollToRequested;
             _tab.AgentWindowRequested -= OnAgentWindowRequested;
             _tab.PropertyChanged -= OnTabPropertyChanged;
+            _tab.ProjectTools.PropertyChanged -= OnProjectToolsPropertyChanged;
             // The list belonged to that tab.
             TasksChip.Flyout?.Hide();
             _tab.IsTaskListOpen = false;
@@ -198,10 +199,11 @@ public partial class TabView : UserControl
         _tab = ViewModel;
         if (_tab is not null)
         {
-            _tab.DiffRequested += OnDiffRequested;
+            _tab.ChangedFiles.DiffRequested += OnDiffRequested;
             _tab.ScrollToRequested += OnScrollToRequested;
             _tab.AgentWindowRequested += OnAgentWindowRequested;
             _tab.PropertyChanged += OnTabPropertyChanged;
+            _tab.ProjectTools.PropertyChanged += OnProjectToolsPropertyChanged;
         }
         WatchProjectOutput();
     }
@@ -211,19 +213,21 @@ public partial class TabView : UserControl
     /// <summary>The output of the run the Project page shows, which it follows.</summary>
     private System.Collections.ObjectModel.ObservableCollection<string>? _projectOutput;
 
-    /// <summary>
-    /// The Project page shows another run, or the last running task ended while its list was open: the list goes with
-    /// the chip.
-    /// </summary>
+    /// <summary>The last running task ended while its list was open: the list goes with the chip.</summary>
     private void OnTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(TabViewModel.SelectedProjectRun))
-        {
-            WatchProjectOutput();
-        }
-        else if (e.PropertyName == nameof(TabViewModel.HasRunningTasks) && _tab is { HasRunningTasks: false })
+        if (e.PropertyName == nameof(TabViewModel.HasRunningTasks) && _tab is { HasRunningTasks: false })
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(() => TasksChip.Flyout?.Hide());
+        }
+    }
+
+    /// <summary>The Project page shows another run.</summary>
+    private void OnProjectToolsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ProjectToolsViewModel.SelectedRun))
+        {
+            WatchProjectOutput();
         }
     }
 
@@ -251,7 +255,7 @@ public partial class TabView : UserControl
         {
             _projectOutput.CollectionChanged -= OnProjectOutputChanged;
         }
-        _projectOutput = _tab?.SelectedProjectRun?.Output;
+        _projectOutput = _tab?.ProjectTools.SelectedRun?.Output;
         if (_projectOutput is not null)
         {
             _projectOutput.CollectionChanged += OnProjectOutputChanged;
@@ -341,9 +345,9 @@ public partial class TabView : UserControl
     /// <summary>Without a diff tool, selecting a file opens the built-in diff view; with one, double-click opens the tool (DESIGN.md §8).</summary>
     private void OnChangedFileSelected(object? sender, SelectionChangedEventArgs e)
     {
-        if (ChangedFilesList.SelectedItem is ChangedFileRow row && ViewModel is { HasDiffTool: false } tab)
+        if (ChangedFilesList.SelectedItem is ChangedFileRow row && ViewModel?.ChangedFiles is { HasDiffTool: false } files)
         {
-            tab.OpenFileDiffCommand.Execute(row);
+            files.OpenFileDiffCommand.Execute(row);
             // Clear it, so clicking the same file again opens it again.
             ChangedFilesList.SelectedItem = null;
         }
@@ -351,9 +355,9 @@ public partial class TabView : UserControl
 
     private void OnChangedFileDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (ChangedFileAt(e) is { } row && ViewModel is { HasDiffTool: true } tab)
+        if (ChangedFileAt(e) is { } row && ViewModel?.ChangedFiles is { HasDiffTool: true } files)
         {
-            tab.OpenFileInDiffToolCommand.Execute(row);
+            files.OpenFileInDiffToolCommand.Execute(row);
         }
     }
 
@@ -361,7 +365,7 @@ public partial class TabView : UserControl
     {
         if (e.Key == Key.Enter && ChangedFilesList.SelectedItem is ChangedFileRow row && ViewModel is { } tab)
         {
-            tab.OpenFileCommand.Execute(row);
+            tab.ChangedFiles.OpenFileCommand.Execute(row);
             e.Handled = true;
         }
     }

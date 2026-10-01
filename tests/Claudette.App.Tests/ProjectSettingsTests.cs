@@ -79,7 +79,7 @@ public class ProjectSettingsTests
 
         // A provider finds a project: the group is named after it, in this window and the next.
         UnrealFixture.Write(h.Root, h.WorkFolder);
-        await tab.RefreshProjectAsync();
+        await tab.ProjectTools.RefreshAsync();
         await TabTestHarness.Eventually(() => project.Heading == "NightOwl", "the project's name");
         using (var next = await OpenSettingsAsync(h))
         {
@@ -101,7 +101,7 @@ public class ProjectSettingsTests
         var (h, _, _) = ProjectToolsTests.UnrealHarness();
         await using var _h = h;
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Project is not null, "the project");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Project is not null, "the project");
         using var settings = await OpenSettingsAsync(h);
 
         settings.SearchText = "web links";
@@ -145,7 +145,7 @@ public class ProjectSettingsTests
         var shared = Path.Combine(h.WorkFolder, ProjectFile.SharedName);
         Write(shared, """{ "links": [ { "name": "Board", "url": "https://example.com/board" } ] }""");
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Project is not null, "the project");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Project is not null, "the project");
         h.Services.ProjectTools.Remember(uproject, UnrealProvider.ConfigurationKey, "DebugGame");
         h.Services.Settings.ProjectTools.UnrealConfiguration = UnrealConfiguration.DebugGame;
         using var settings = await OpenSettingsAsync(h);
@@ -179,7 +179,7 @@ public class ProjectSettingsTests
             """);
         Write(local, """{ "links": [ { "url": "https://mine.example" } ], "extra": 1 }""");
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Links.Count == 2, "the tab's links");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Links.Count == 2, "the tab's links");
         using var settings = await OpenSettingsAsync(h);
         var project = settings.Project!;
 
@@ -212,8 +212,8 @@ public class ProjectSettingsTests
         Assert.Equal("https://example.com/claudette.schema.json", root["$schema"]!.GetValue<string>());
         Assert.DoesNotContain("The team's links", File.ReadAllText(shared), StringComparison.Ordinal);
         // The project's menu picks it up, as it does after the actions editor saves.
-        await TabTestHarness.Eventually(() => tab.Links.Select(l => l.Name).SequenceEqual(["Board", "Pull request", "https://mine.example"]), "the new link in the menu");
-        Assert.Equal("No git branch", InlineDispatcher.Read(() => tab.Links[1].Problem));
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Links.Select(l => l.Name).SequenceEqual(["Board", "Pull request", "https://mine.example"]), "the new link in the menu");
+        Assert.Equal("No git branch", InlineDispatcher.Read(() => tab.ProjectTools.Links[1].Problem));
 
         // Edit: the entry's other fields are kept, and it stays in its file.
         project.SelectedLink = project.Links[0];
@@ -244,7 +244,7 @@ public class ProjectSettingsTests
         Assert.Empty(root["links"]!.AsArray());
         Assert.Equal(1, root["extra"]!.GetValue<int>());
         Assert.Null(project.LinksError);
-        await TabTestHarness.Eventually(() => tab.Links.Select(l => l.Name).SequenceEqual(["Pull request", "Sprint board"]), "the menu after the changes");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Links.Select(l => l.Name).SequenceEqual(["Pull request", "Sprint board"]), "the menu after the changes");
     }
 
     [Theory]
@@ -399,7 +399,7 @@ public class ProjectSettingsTests
         Assert.Equal("sub", root["actions"]![1]!["folder"]!.GetValue<string>());
         Assert.Equal("https://mine.example", root["links"]![0]!["url"]!.GetValue<string>());
         // Each save reloads the tab; it ends up with the last one.
-        await TabTestHarness.Eventually(() => tab.ProjectActions.Select(a => a.Label).SequenceEqual(["First, renamed", "Second"]), "the tab's actions");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Actions.Select(a => a.Label).SequenceEqual(["First, renamed", "Second"]), "the tab's actions");
         Assert.False(File.Exists(Path.Combine(h.WorkFolder, ProjectFile.SharedName)));
 
         project.SelectedProjectAction = project.ProjectActions.Single(r => r.Name == "Elsewhere");
@@ -423,7 +423,7 @@ public class ProjectSettingsTests
             }
             """);
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.ProjectActions.Select(a => a.Label).SequenceEqual(["Build"]), "the tab's actions");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Actions.Select(a => a.Label).SequenceEqual(["Build"]), "the tab's actions");
         using var settings = await OpenSettingsAsync(h);
         settings.SelectedProjectPage = SettingsViewModel.ActionsPage;
         var project = settings.Project!;
@@ -452,7 +452,7 @@ public class ProjectSettingsTests
         editor.SaveCommand.Execute(null);
         Assert.Equal(["Makefile", "src/"], Read(local)["actions"]![0]!["ifExists"]!.AsArray().Select(p => p!.GetValue<string>()));
         Assert.EndsWith("only when Makefile and src/ exist", project.ProjectActions[0].Detail, StringComparison.Ordinal);
-        await TabTestHarness.Eventually(() => !tab.ProjectActions.Any(), "the tab's actions");
+        await TabTestHarness.Eventually(() => !tab.ProjectTools.Actions.Any(), "the tab's actions");
 
         // Emptied, the field is gone from the file and the action is always shown.
         project.SelectedProjectAction = project.ProjectActions[0];
@@ -462,12 +462,12 @@ public class ProjectSettingsTests
         editor.IfExists = "  ";
         editor.SaveCommand.Execute(null);
         Assert.Null(Read(local)["actions"]![0]!["ifExists"]);
-        await TabTestHarness.Eventually(() => tab.ProjectActions.Select(a => a.Label).SequenceEqual(["Build"]), "the tab's actions");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Actions.Select(a => a.Label).SequenceEqual(["Build"]), "the tab's actions");
 
         // A build makes it; the next read shows the action.
         Write(Path.Combine(h.WorkFolder, "Build", "Game"), "");
-        await tab.RefreshProjectFileAsync();
-        Assert.Equal(["Build", "Play the build"], tab.ProjectActions.Select(a => a.Label));
+        await tab.ProjectTools.RefreshFileAsync();
+        Assert.Equal(["Build", "Play the build"], tab.ProjectTools.Actions.Select(a => a.Label));
     }
 
     [Fact]
@@ -477,7 +477,7 @@ public class ProjectSettingsTests
         Write(Path.Combine(h.WorkFolder, ProjectFile.SharedName), """{ "links": [ { "name": "Board", "url": "https://example.com/board" } ] }""");
         var tab = await h.OpenTabAsync();
         var sibling = new TabViewModel(h.Services, h.Shell, new TabState { Folder = h.WorkFolder }, isRestored: false);
-        await sibling.RefreshProjectAsync();
+        await sibling.ProjectTools.RefreshAsync();
         h.Shell.Groups.Single().Tabs.Add(sibling);
         // From the menu of a tab that isn't selected: Settings follows the selected tab, so it's selected first.
         h.Shell.SelectedTab = AddUnstartedTab(h, "elsewhere");
@@ -488,7 +488,7 @@ public class ProjectSettingsTests
             return Task.CompletedTask;
         };
 
-        await tab.AddProjectActionCommand.ExecuteAsync(null);
+        await tab.ProjectTools.AddActionCommand.ExecuteAsync(null);
 
         Assert.Same(tab, h.Shell.SelectedTab);
         Assert.NotNull(opening);
@@ -514,8 +514,8 @@ public class ProjectSettingsTests
         var written = Read(Path.Combine(h.WorkFolder, ProjectFile.SharedName));
         Assert.Equal("https://example.com/board", written["links"]![0]!["url"]!.GetValue<string>());
         Assert.Equal(("Serve", "npm run dev", "launch"), (written["actions"]![0]!["name"]!.GetValue<string>(), written["actions"]![0]!["command"]!.GetValue<string>(), written["actions"]![0]!["mode"]!.GetValue<string>()));
-        await TabTestHarness.Eventually(() => tab.ProjectActions.Count == 1 && sibling.ProjectActions.Count == 1, "both tabs");
-        Assert.Equal(ProjectActionKind.Launch, sibling.ProjectActions.Single().Kind);
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Actions.Count == 1 && sibling.ProjectTools.Actions.Count == 1, "both tabs");
+        Assert.Equal(ProjectActionKind.Launch, sibling.ProjectTools.Actions.Single().Kind);
     }
 
     [Fact]
@@ -531,8 +531,8 @@ public class ProjectSettingsTests
         };
 
         // A folder with no project has the entry too: the project's row is there for every tab.
-        Assert.Same(tab.AddProjectLinkCommand, InlineDispatcher.Read(() => tab.ProjectMenu.Single(e => e.Label == "Add a link…")).Command);
-        await tab.AddProjectLinkCommand.ExecuteAsync(null);
+        Assert.Same(tab.ProjectTools.AddLinkCommand, InlineDispatcher.Read(() => tab.ProjectTools.Menu.Single(e => e.Label == "Add a link…")).Command);
+        await tab.ProjectTools.AddLinkCommand.ExecuteAsync(null);
 
         Assert.NotNull(opening);
         Assert.Equal((SettingsViewModel.LinksPage, true), (opening.Category, opening.StartNew));
@@ -549,7 +549,7 @@ public class ProjectSettingsTests
         Assert.Null(settings.Project.Editor);
         Assert.Equal("Board", settings.Project.SelectedLink!.Name);
         Assert.Equal(["Board"], Names(Read(Path.Combine(h.WorkFolder, ProjectFile.LocalName)), "links"));
-        await TabTestHarness.Eventually(() => tab.Links.Select(l => l.Name).SequenceEqual(["Board"]), "the new link in the menu");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Links.Select(l => l.Name).SequenceEqual(["Board"]), "the new link in the menu");
     }
 
     [Fact]
@@ -558,7 +558,7 @@ public class ProjectSettingsTests
         var (h, _, _) = ProjectToolsTests.UnrealHarness();
         await using var _h = h;
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Project is not null, "the project");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Project is not null, "the project");
         SettingsOpening? opening = null;
         h.Shell.ShowSettingsWindow = o =>
         {
@@ -586,7 +586,7 @@ public class ProjectSettingsTests
         var (h, _, uproject) = ProjectToolsTests.UnrealHarness();
         await using var _h = h;
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Project is not null, "the project");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Project is not null, "the project");
         using var settings = await OpenSettingsAsync(h);
         var project = settings.Project!;
 
@@ -602,8 +602,8 @@ public class ProjectSettingsTests
 
         Assert.Equal("DebugGame", h.Services.State.ProjectTools.Get(uproject, UnrealProvider.ConfigurationKey));
         await TabTestHarness.Eventually(() => project.SelectedToolsChoice?.Value == "DebugGame", "the configuration");
-        Assert.True(InlineDispatcher.Read(() => tab.ProjectMenu.Single(e => e.Label == "DebugGame").IsChecked));
-        Assert.Equal("Launch editor (DebugGame)", InlineDispatcher.Read(() => tab.ProjectActions[0].Label));
+        Assert.True(InlineDispatcher.Read(() => tab.ProjectTools.Menu.Single(e => e.Label == "DebugGame").IsChecked));
+        Assert.Equal("Launch editor (DebugGame)", InlineDispatcher.Read(() => tab.ProjectTools.Actions[0].Label));
 
         // The engine folder: found in a parent folder until one is chosen.
         Assert.Equal(("Engine folder", h.Root, "Found automatically."), (project.ToolsFixName, project.ToolsFixCurrent, project.ToolsFixSource));
@@ -622,7 +622,7 @@ public class ProjectSettingsTests
         Assert.Equal(engine, h.Services.State.ProjectTools.Get(uproject, UnrealEngineLocator.EngineKey));
         await TabTestHarness.Eventually(() => project.ToolsFixCurrent == engine, "the chosen engine");
         Assert.StartsWith("Chosen by you.", InlineDispatcher.Read(() => project.ToolsFixSource), StringComparison.Ordinal);
-        Assert.Contains("chosen by you", InlineDispatcher.Read(() => tab.ProjectHeaderLines[0]), StringComparison.Ordinal);
+        Assert.Contains("chosen by you", InlineDispatcher.Read(() => tab.ProjectTools.HeaderLines[0]), StringComparison.Ordinal);
         Assert.True(project.ClearToolsFixCommand.CanExecute(null));
 
         await project.ClearToolsFixCommand.ExecuteAsync(null);
@@ -642,7 +642,7 @@ public class ProjectSettingsTests
         File.Move(Path.Combine(h.WorkFolder, "Alpha", "NightOwl.uproject"), alpha);
         File.WriteAllText(Path.Combine(h.WorkFolder, "Beta.uproject"), """{ "EngineAssociation": "" }""");
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Project is not null, "the project");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Project is not null, "the project");
         using var settings = await OpenSettingsAsync(h);
         var project = settings.Project!;
 
@@ -655,7 +655,7 @@ public class ProjectSettingsTests
         Assert.Equal(alpha, h.Services.State.ProjectTools.ChosenProjectFor(h.WorkFolder));
         await TabTestHarness.Eventually(() => project.Heading == "Alpha", "the other project");
         Assert.True(InlineDispatcher.Read(() => project.SelectedProjectChoice?.Label.StartsWith("Alpha", StringComparison.Ordinal) == true));
-        Assert.True(InlineDispatcher.Read(() => tab.ProjectMenu.Single(e => e.Label == "Alpha").IsChecked));
+        Assert.True(InlineDispatcher.Read(() => tab.ProjectTools.Menu.Single(e => e.Label == "Alpha").IsChecked));
     }
 
     [Fact]
@@ -667,14 +667,14 @@ public class ProjectSettingsTests
         Write(Path.Combine(h.WorkFolder, "ProjectSettings", "ProjectVersion.txt"), "m_EditorVersion: 2022.3.20f1\n");
         Directory.CreateDirectory(Path.Combine(h.WorkFolder, "Assets"));
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Project is not null, "the project");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Project is not null, "the project");
         using var settings = await OpenSettingsAsync(h);
         var project = settings.Project!;
-        var root = tab.Project!.ProjectPath;
+        var root = tab.ProjectTools.Project!.ProjectPath;
 
         Assert.Equal(("Code optimization", "Release"), (project.ToolsChoiceLabel, project.SelectedToolsChoice!.Value));
         Assert.Equal("Unity editor", project.ToolsFixName);
-        Assert.Equal(tab.Project.Problem, project.ToolsFixCurrent);
+        Assert.Equal(tab.ProjectTools.Project.Problem, project.ToolsFixCurrent);
         Assert.StartsWith("Not chosen", project.ToolsFixSource, StringComparison.Ordinal);
 
         project.SelectedToolsChoice = project.ToolsChoiceOptions.Single(o => o.Value == "Debug");
@@ -688,11 +688,11 @@ public class ProjectSettingsTests
         Assert.Equal(editor, h.Services.State.ProjectTools.Get(root, UnityEditors.EditorKey));
         await TabTestHarness.Eventually(() => project.ToolsFixCurrent == editor, "the chosen editor");
         await TabTestHarness.Eventually(() => project.SelectedToolsChoice?.Value == "Debug", "the optimization");
-        Assert.Equal("Open in Unity (Debug)", InlineDispatcher.Read(() => tab.ProjectActions[0].Label));
+        Assert.Equal("Open in Unity (Debug)", InlineDispatcher.Read(() => tab.ProjectTools.Actions[0].Label));
 
         await project.ClearToolsFixCommand.ExecuteAsync(null);
         Assert.Null(h.Services.State.ProjectTools.Get(root, UnityEditors.EditorKey));
-        await TabTestHarness.Eventually(() => project.ToolsFixCurrent == tab.Project?.Problem, "the editor forgotten");
+        await TabTestHarness.Eventually(() => project.ToolsFixCurrent == tab.ProjectTools.Project?.Problem, "the editor forgotten");
     }
 
     [Fact]
@@ -707,10 +707,10 @@ public class ProjectSettingsTests
             config/features=PackedStringArray("4.3", "Forward Plus")
             """);
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Project is not null, "the project");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Project is not null, "the project");
         using var settings = await OpenSettingsAsync(h);
         var project = settings.Project!;
-        var file = tab.Project!.ProjectPath;
+        var file = tab.ProjectTools.Project!.ProjectPath;
 
         Assert.Equal("Night Owl", project.Heading);
         Assert.False(project.HasToolsChoice);

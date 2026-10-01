@@ -36,7 +36,7 @@ public class RemoteControlTests
         tab.ComposerText = "hello";
         await tab.SendCommand.ExecuteAsync(null);
 
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
         var request = RemoteRequests(h).Single();
         Assert.True(request["enabled"]!.GetValue<bool>());
         Assert.Equal("work", request["name"]!.GetValue<string>());
@@ -49,14 +49,14 @@ public class RemoteControlTests
         var note = InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Single(n => n.HasLink));
         Assert.Equal("Connected to the Claude app.", note.Text);
         Assert.Equal(SessionUrl, note.Link);
-        Assert.Equal(new RemoteControlStatus(RemoteControlState.Connected, SessionUrl), tab.Remote);
-        Assert.True(tab.ShowRemoteIcon);
-        Assert.False(tab.IsRemoteSettling);
-        Assert.Equal("Connected to the Claude app", tab.RemoteTip);
+        Assert.Equal(new RemoteControlStatus(RemoteControlState.Connected, SessionUrl), tab.RemoteControl.Status);
+        Assert.True(tab.RemoteControl.ShowIcon);
+        Assert.False(tab.RemoteControl.IsSettling);
+        Assert.Equal("Connected to the Claude app", tab.RemoteControl.StatusTip);
         Assert.Contains(tab.InfoRows, r => r is { Label: "Claude app", Value: $"Connected: {SessionUrl}" });
 
-        Assert.True(tab.OpenInClaudeAppCommand.CanExecute(null));
-        await tab.OpenInClaudeAppCommand.ExecuteAsync(null);
+        Assert.True(tab.RemoteControl.OpenInClaudeAppCommand.CanExecute(null));
+        await tab.RemoteControl.OpenInClaudeAppCommand.ExecuteAsync(null);
         Assert.Equal([SessionUrl], h.Platform.OpenedUrls);
     }
 
@@ -68,12 +68,12 @@ public class RemoteControlTests
         h.Transport.EmitTurn();
         await TabTestHarness.Eventually(() => tab.Items.OfType<TurnSummaryItem>().Any(), "a turn");
 
-        Assert.False(tab.RemoteControl);
+        Assert.False(tab.RemoteControl.IsOn);
         Assert.Empty(RemoteRequests(h));
-        Assert.Equal(RemoteControlStatus.NotConnected, tab.Remote);
-        Assert.False(tab.ShowRemoteIcon);
+        Assert.Equal(RemoteControlStatus.NotConnected, tab.RemoteControl.Status);
+        Assert.False(tab.RemoteControl.ShowIcon);
         Assert.DoesNotContain(tab.InfoRows, r => r.Label == "Claude app");
-        Assert.False(tab.OpenInClaudeAppCommand.CanExecute(null));
+        Assert.False(tab.RemoteControl.OpenInClaudeAppCommand.CanExecute(null));
     }
 
     [Fact]
@@ -84,17 +84,17 @@ public class RemoteControlTests
         h.Transport.Answers["remote_control"] = _ => throw new InvalidOperationException(reason);
         var tab = await h.OpenTabAsync();
 
-        await TabTestHarness.Eventually(() => tab.Remote.State == RemoteControlState.Unavailable, "the answer");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.State == RemoteControlState.Unavailable, "the answer");
 
-        Assert.Equal(reason, tab.Remote.Detail);
+        Assert.Equal(reason, tab.RemoteControl.Status.Detail);
         var note = InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last());
         Assert.Equal($"Couldn't connect to the Claude app: {reason}", note.Text);
         Assert.Equal(NoteKind.Warning, note.Kind);
         Assert.Contains(tab.InfoRows, r => r is { Label: "Claude app", Value: $"Not available: {reason}" });
-        Assert.False(tab.ShowRemoteIcon);
+        Assert.False(tab.RemoteControl.ShowIcon);
         Assert.False(h.SleepBlocker.IsBlocking);
         // The switch stays on: the next start tries again.
-        Assert.True(tab.RemoteControl);
+        Assert.True(tab.RemoteControl.IsOn);
     }
 
     [Fact]
@@ -103,36 +103,36 @@ public class RemoteControlTests
         await using var h = new TabTestHarness(s => s.ClaudeCode.ConnectNewTabsToClaudeApp = true);
         AnswerConnected(h);
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
 
         h.Transport.Emit(BridgeState("reconnecting"));
-        await TabTestHarness.Eventually(() => tab.IsRemoteSettling, "reconnecting");
-        Assert.True(tab.Remote.IsConnected);
-        Assert.Equal("Connected to the Claude app, reconnecting…", tab.RemoteTip);
+        await TabTestHarness.Eventually(() => tab.RemoteControl.IsSettling, "reconnecting");
+        Assert.True(tab.RemoteControl.Status.IsConnected);
+        Assert.Equal("Connected to the Claude app, reconnecting…", tab.RemoteControl.StatusTip);
         Assert.True(h.SleepBlocker.IsBlocking);
 
         h.Transport.Emit(BridgeState("connected"));
-        await TabTestHarness.Eventually(() => !tab.IsRemoteSettling, "reconnected");
+        await TabTestHarness.Eventually(() => !tab.RemoteControl.IsSettling, "reconnected");
 
         h.Transport.Emit(BridgeState("exploded", "who knows"));
         h.Transport.EmitTurn();
         await TabTestHarness.Eventually(() => tab.Items.OfType<TurnSummaryItem>().Any(), "a turn");
-        Assert.Equal(new RemoteControlStatus(RemoteControlState.Connected, SessionUrl), tab.Remote);
+        Assert.Equal(new RemoteControlStatus(RemoteControlState.Connected, SessionUrl), tab.RemoteControl.Status);
 
         h.Transport.Emit(BridgeState("failed", "Remote Control could not verify the signed-in account"));
-        await TabTestHarness.Eventually(() => !tab.Remote.IsConnected, "the failure");
-        Assert.Equal("Remote Control could not verify the signed-in account", tab.Remote.Detail);
+        await TabTestHarness.Eventually(() => !tab.RemoteControl.Status.IsConnected, "the failure");
+        Assert.Equal("Remote Control could not verify the signed-in account", tab.RemoteControl.Status.Detail);
         Assert.Equal("Disconnected from the Claude app: Remote Control could not verify the signed-in account",
             InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last().Text));
         Assert.False(h.SleepBlocker.IsBlocking);
 
         // Claude Code gets the link back by itself: the same session, at the same address.
         h.Transport.Emit(BridgeState("ready"));
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the link back");
-        Assert.Equal(SessionUrl, tab.Remote.Url);
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the link back");
+        Assert.Equal(SessionUrl, tab.RemoteControl.Status.Url);
 
         h.Transport.Emit(BridgeState("policy_disabled", "Remote Control is disabled by your organization's policy."));
-        await TabTestHarness.Eventually(() => tab.Remote.State == RemoteControlState.Unavailable, "the policy");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.State == RemoteControlState.Unavailable, "the policy");
         Assert.Equal("Remote Control stopped: Remote Control is disabled by your organization's policy.", InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last().Text));
     }
 
@@ -142,12 +142,12 @@ public class RemoteControlTests
         await using var h = new TabTestHarness(s => s.ClaudeCode.ConnectNewTabsToClaudeApp = true);
         AnswerConnected(h);
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
 
         h.Transport.Emit("""{"type":"system","subtype":"worker_shutting_down","reason":"remote_control_disabled","uuid":"u1","session_id":"s1"}""");
 
-        await TabTestHarness.Eventually(() => !tab.Remote.IsConnected, "the shutdown");
-        Assert.Equal("Remote Control was turned off.", tab.Remote.Detail);
+        await TabTestHarness.Eventually(() => !tab.RemoteControl.Status.IsConnected, "the shutdown");
+        Assert.Equal("Remote Control was turned off.", tab.RemoteControl.Status.Detail);
         Assert.Contains(tab.InfoRows, r => r is { Label: "Claude app", Value: "Not connected: Remote Control was turned off." });
         Assert.False(h.SleepBlocker.IsBlocking);
         var notes = InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Count());
@@ -156,7 +156,7 @@ public class RemoteControlTests
         h.Transport.Emit("""{"type":"system","subtype":"worker_shutting_down","reason":"host_exit","uuid":"u2","session_id":"s1"}""");
         h.Transport.EmitTurn();
         await TabTestHarness.Eventually(() => tab.Items.OfType<TurnSummaryItem>().Any(), "a turn");
-        Assert.Equal("Remote Control was turned off.", tab.Remote.Detail);
+        Assert.Equal("Remote Control was turned off.", tab.RemoteControl.Status.Detail);
         Assert.Equal(notes, InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Count()));
     }
 
@@ -170,17 +170,17 @@ public class RemoteControlTests
         var tab = await h.OpenTabAsync();
         Assert.Empty(RemoteRequests(h));
 
-        await tab.ToggleRemoteControlCommand.ExecuteAsync(null);
+        await tab.RemoteControl.ToggleCommand.ExecuteAsync(null);
 
-        Assert.True(tab.RemoteControl);
+        Assert.True(tab.RemoteControl.IsOn);
         Assert.True(tab.State.RemoteControl);
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
         Assert.True(h.SleepBlocker.IsBlocking);
 
-        await tab.ToggleRemoteControlCommand.ExecuteAsync(null);
+        await tab.RemoteControl.ToggleCommand.ExecuteAsync(null);
 
-        Assert.False(tab.RemoteControl);
-        await TabTestHarness.Eventually(() => tab.Remote == RemoteControlStatus.NotConnected, "the disconnection");
+        Assert.False(tab.RemoteControl.IsOn);
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status == RemoteControlStatus.NotConnected, "the disconnection");
         Assert.Equal([true, false], RemoteRequests(h).Select(r => r["enabled"]!.GetValue<bool>()));
         Assert.Equal("Disconnected from the Claude app.", InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last().Text));
         Assert.False(h.SleepBlocker.IsBlocking);
@@ -199,22 +199,22 @@ public class RemoteControlTests
         tab.ComposerText = "work";
         await tab.SendCommand.ExecuteAsync(null);
 
-        await tab.SetRemoteControlAsync(true);
+        await tab.RemoteControl.SetAsync(true);
 
         Assert.Empty(RemoteRequests(h));
         Assert.Contains(tab.InfoRows, r => r is { Label: "Claude app", Value: "Connects when Claude finishes this turn" });
         h.Transport.EmitTurn();
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection after the turn");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection after the turn");
 
         tab.ComposerText = "more";
         await tab.SendCommand.ExecuteAsync(null);
-        await tab.SetRemoteControlAsync(false);
+        await tab.RemoteControl.SetAsync(false);
 
         Assert.Single(RemoteRequests(h));
-        Assert.True(tab.Remote.IsConnected);
+        Assert.True(tab.RemoteControl.Status.IsConnected);
         Assert.Contains(tab.InfoRows, r => r.Label == "Claude app" && r.Value.EndsWith("Disconnects when Claude finishes this turn.", StringComparison.Ordinal));
         h.Transport.EmitTurn();
-        await TabTestHarness.Eventually(() => !tab.Remote.IsConnected, "the disconnection after the turn");
+        await TabTestHarness.Eventually(() => !tab.RemoteControl.Status.IsConnected, "the disconnection after the turn");
         Assert.Equal([true, false], RemoteRequests(h).Select(r => r["enabled"]!.GetValue<bool>()));
     }
 
@@ -224,40 +224,40 @@ public class RemoteControlTests
         await using var h = new TabTestHarness(s => s.ClaudeCode.ConnectNewTabsToClaudeApp = true);
         AnswerConnected(h);
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
         tab.ComposerText = "work";
         await tab.SendCommand.ExecuteAsync(null);
         // Claude Code answers once it has closed the connection, which takes a moment.
         h.Transport.Answers["remote_control"] = _ => null;
 
-        await tab.SetRemoteControlAsync(false);
+        await tab.RemoteControl.SetAsync(false);
 
         Assert.Equal("Disconnecting from the Claude app when Claude finishes this turn.", InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last().Text));
-        Assert.True(tab.ShowRemoteIcon);
-        Assert.True(tab.IsRemoteLeaving);
-        Assert.Equal("Connected to the Claude app. Disconnects when Claude finishes this turn.", tab.RemoteTip);
+        Assert.True(tab.RemoteControl.ShowIcon);
+        Assert.True(tab.RemoteControl.IsLeaving);
+        Assert.Equal("Connected to the Claude app. Disconnects when Claude finishes this turn.", tab.RemoteControl.StatusTip);
 
         // Turned back on before the turn ends: nothing to do, and the conversation says so.
-        await tab.SetRemoteControlAsync(true);
+        await tab.RemoteControl.SetAsync(true);
 
         Assert.Equal("Staying connected to the Claude app.", InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last().Text));
-        Assert.False(tab.IsRemoteLeaving);
-        Assert.Equal("Connected to the Claude app", tab.RemoteTip);
+        Assert.False(tab.RemoteControl.IsLeaving);
+        Assert.Equal("Connected to the Claude app", tab.RemoteControl.StatusTip);
 
-        await tab.SetRemoteControlAsync(false);
+        await tab.RemoteControl.SetAsync(false);
         h.Transport.EmitTurn();
         await TabTestHarness.Eventually(() => RemoteRequests(h).Count == 2, "the request to disconnect");
 
-        Assert.True(tab.IsRemoteLeaving);
-        Assert.Equal("Disconnecting from the Claude app…", tab.RemoteTip);
+        Assert.True(tab.RemoteControl.IsLeaving);
+        Assert.Equal("Disconnecting from the Claude app…", tab.RemoteControl.StatusTip);
         Assert.Contains(tab.InfoRows, r => r.Label == "Claude app" && r.Value.EndsWith(". Disconnecting…", StringComparison.Ordinal));
 
         var id = h.Transport.Sent.Last(IsRemoteRequest)["request_id"]!.GetValue<string>();
         h.Transport.Emit(Core.Protocol.OutgoingMessages.ControlSuccess(id, null));
-        await TabTestHarness.Eventually(() => !tab.Remote.IsConnected, "the disconnection");
+        await TabTestHarness.Eventually(() => !tab.RemoteControl.Status.IsConnected, "the disconnection");
 
-        Assert.False(tab.ShowRemoteIcon);
-        Assert.False(tab.IsRemoteLeaving);
+        Assert.False(tab.RemoteControl.ShowIcon);
+        Assert.False(tab.RemoteControl.IsLeaving);
         Assert.Equal("Disconnected from the Claude app.", InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last().Text));
     }
 
@@ -267,33 +267,33 @@ public class RemoteControlTests
         await using var h = new TabTestHarness(s => s.ClaudeCode.ConnectNewTabsToClaudeApp = true);
         AnswerConnected(h);
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
         h.Transport.Answers["remote_control"] = _ => null;
 
-        var off = tab.SetRemoteControlAsync(false);
+        var off = tab.RemoteControl.SetAsync(false);
         await TabTestHarness.Eventually(() => RemoteRequests(h).Count == 2, "the request to disconnect");
-        await tab.SetRemoteControlAsync(true);
+        await tab.RemoteControl.SetAsync(true);
 
         // Claude Code is closing the connection all the same.
-        Assert.True(tab.IsRemoteLeaving);
-        Assert.Equal("Disconnecting from the Claude app…", tab.RemoteTip);
+        Assert.True(tab.RemoteControl.IsLeaving);
+        Assert.Equal("Disconnecting from the Claude app…", tab.RemoteControl.StatusTip);
 
         // Off and on again while it does: the request that's out is enough.
-        await tab.SetRemoteControlAsync(false);
-        await tab.SetRemoteControlAsync(true);
+        await tab.RemoteControl.SetAsync(false);
+        await tab.RemoteControl.SetAsync(true);
         Assert.Equal(2, RemoteRequests(h).Count);
 
         AnswerConnected(h);
         var id = h.Transport.Sent.Last(IsRemoteRequest)["request_id"]!.GetValue<string>();
         h.Transport.Emit(Core.Protocol.OutgoingMessages.ControlSuccess(id, null));
         await off;
-        await TabTestHarness.Eventually(() => RemoteRequests(h).Count == 3 && tab.Remote.IsConnected, "the connection again");
+        await TabTestHarness.Eventually(() => RemoteRequests(h).Count == 3 && tab.RemoteControl.Status.IsConnected, "the connection again");
 
         Assert.Equal([true, false, true], RemoteRequests(h).Select(r => r["enabled"]!.GetValue<bool>()));
         Assert.Equal(["Disconnected from the Claude app.", "Connected to the Claude app."],
             InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Select(n => n.Text).TakeLast(2).ToList()));
-        Assert.False(tab.IsRemoteLeaving);
-        Assert.Equal("Connected to the Claude app", tab.RemoteTip);
+        Assert.False(tab.RemoteControl.IsLeaving);
+        Assert.Equal("Connected to the Claude app", tab.RemoteControl.StatusTip);
         Assert.True(h.SleepBlocker.IsBlocking);
     }
 
@@ -306,9 +306,9 @@ public class RemoteControlTests
             : throw new InvalidOperationException("Remote Control teardown failed");
         var tab = await h.OpenTabAsync();
         h.Transport.EmitTurn();
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected && tab.State.SessionId == "s1", "the connection and a turn");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected && tab.State.SessionId == "s1", "the connection and a turn");
 
-        await tab.SetRemoteControlAsync(false);
+        await tab.RemoteControl.SetAsync(false);
 
         await TabTestHarness.Eventually(() => h.Factory.Launches.Count == 2 && tab.Status == TabStatus.Idle && tab.IsSettled, "the restart");
         Assert.Equal("s1", h.Factory.Launches[1].Resume);
@@ -316,7 +316,7 @@ public class RemoteControlTests
             InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Select(n => n.Text).ToList()));
         // The new claude isn't asked to connect.
         Assert.Equal([true, false], RemoteRequests(h).Select(r => r["enabled"]!.GetValue<bool>()));
-        Assert.Equal(RemoteControlStatus.NotConnected, tab.Remote);
+        Assert.Equal(RemoteControlStatus.NotConnected, tab.RemoteControl.Status);
         Assert.False(h.SleepBlocker.IsBlocking);
     }
 
@@ -329,8 +329,8 @@ public class RemoteControlTests
         {
             AnswerConnected(h);
             var tab = await h.OpenTabAsync();
-            await tab.SetRemoteControlAsync(true);
-            await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
+            await tab.RemoteControl.SetAsync(true);
+            await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
             await h.Services.FlushAsync();
             saved.AddRange(new JsonFileStore<AppState>(h.Services.Paths.StateFile).Load().Tabs);
             var captured = h.Shell.CaptureForRestart();
@@ -349,8 +349,8 @@ public class RemoteControlTests
             on.Services.State.Tabs = [.. saved.Select(t => { t.Folder = on.WorkFolder; return t; })];
             on.Shell.Restore(null);
             var restored = on.Shell.SelectedTab!;
-            Assert.True(restored.RemoteControl);
-            await TabTestHarness.Eventually(() => restored.Remote.IsConnected, "the restored tab to reconnect");
+            Assert.True(restored.RemoteControl.IsOn);
+            await TabTestHarness.Eventually(() => restored.RemoteControl.Status.IsConnected, "the restored tab to reconnect");
             Assert.Single(RemoteRequests(on));
         }
 
@@ -359,7 +359,7 @@ public class RemoteControlTests
         off.Shell.Restore(null);
         var other = off.Shell.SelectedTab!;
         await TabTestHarness.Eventually(() => other.Status == TabStatus.Idle && other.IsSettled, "the restored tab to start");
-        Assert.False(other.RemoteControl);
+        Assert.False(other.RemoteControl.IsOn);
         Assert.Empty(RemoteRequests(off));
     }
 
@@ -374,19 +374,19 @@ public class RemoteControlTests
         settings.ConnectNewTabsToClaudeApp = true;
 
         Assert.True(h.Services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp);
-        Assert.False(first.RemoteControl);
+        Assert.False(first.RemoteControl.IsOn);
         Assert.Empty(RemoteRequests(h));
 
         h.Shell.CloseTabCommand.Execute(first);
         await TabTestHarness.Eventually(() => !h.Shell.HasTabs && !first.IsProcessRunning, "the first tab to close");
         var second = await h.OpenTabAsync();
-        Assert.True(second.RemoteControl);
-        await TabTestHarness.Eventually(() => second.Remote.IsConnected, "the new tab to connect");
+        Assert.True(second.RemoteControl.IsOn);
+        await TabTestHarness.Eventually(() => second.RemoteControl.Status.IsConnected, "the new tab to connect");
 
         // Turning it off doesn't change open tabs either.
         settings.ConnectNewTabsToClaudeApp = false;
-        Assert.True(second.RemoteControl);
-        Assert.True(second.Remote.IsConnected);
+        Assert.True(second.RemoteControl.IsOn);
+        Assert.True(second.RemoteControl.Status.IsConnected);
     }
 
     [Fact]
@@ -403,9 +403,9 @@ public class RemoteControlTests
         settings.UseDefaultsCommand.Execute(null);
         await settings.ApplyCommand.ExecuteAsync(null);
 
-        Assert.True(tab.RemoteControl);
+        Assert.True(tab.RemoteControl.IsOn);
         Assert.False(tab.HasOverrides);
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
         Assert.True(new TabSettingsViewModel(h.Services, tab, () => { }).RemoteControl);
     }
 
@@ -421,11 +421,11 @@ public class RemoteControlTests
 
         const string reason = "Claude Code is signed in with an API key. Remote Control needs a claude.ai subscription sign-in.";
         Assert.False(h.Services.RemoteControl.IsAvailable);
-        Assert.False(tab.CanToggleRemoteControl);
-        Assert.False(tab.ToggleRemoteControlCommand.CanExecute(null));
-        Assert.Equal(reason, tab.RemoteControlTip);
-        await tab.SetRemoteControlAsync(true);
-        Assert.False(tab.RemoteControl);
+        Assert.False(tab.RemoteControl.CanToggle);
+        Assert.False(tab.RemoteControl.ToggleCommand.CanExecute(null));
+        Assert.Equal(reason, tab.RemoteControl.ToggleTip);
+        await tab.RemoteControl.SetAsync(true);
+        Assert.False(tab.RemoteControl.IsOn);
         Assert.Empty(RemoteRequests(h));
 
         var tabSettings = new TabSettingsViewModel(h.Services, tab, () => { });
@@ -437,8 +437,8 @@ public class RemoteControlTests
 
         // Signing in with a subscription makes it available again, in the open Settings window too.
         account.Status = new AuthStatus(true, "claude.ai", "firstParty", "me@example.com", null, "max", null, null);
-        Assert.True(tab.CanToggleRemoteControl);
-        Assert.True(tab.ToggleRemoteControlCommand.CanExecute(null));
+        Assert.True(tab.RemoteControl.CanToggle);
+        Assert.True(tab.RemoteControl.ToggleCommand.CanExecute(null));
         Assert.True(settings.CanUseRemoteControl);
         Assert.False(settings.HasRemoteControlUnavailableText);
     }
@@ -465,12 +465,12 @@ public class RemoteControlTests
         h.Services.RemoteControl.EnvironmentVariable = name => name == "ANTHROPIC_BASE_URL" ? "http://127.0.0.1:8787" : null;
         var tab = await h.OpenTabAsync();
 
-        Assert.Equal(RemoteControlState.Unavailable, tab.Remote.State);
-        Assert.Equal("ANTHROPIC_BASE_URL points Claude Code at 127.0.0.1. Remote Control only works through api.anthropic.com.", tab.Remote.Detail);
+        Assert.Equal(RemoteControlState.Unavailable, tab.RemoteControl.Status.State);
+        Assert.Equal("ANTHROPIC_BASE_URL points Claude Code at 127.0.0.1. Remote Control only works through api.anthropic.com.", tab.RemoteControl.Status.Detail);
         Assert.Empty(RemoteRequests(h));
         Assert.StartsWith("Not connecting to the Claude app: ANTHROPIC_BASE_URL", InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last().Text), StringComparison.Ordinal);
         // It can still be turned off.
-        Assert.True(tab.CanToggleRemoteControl);
+        Assert.True(tab.RemoteControl.CanToggle);
     }
 
     [Fact]
@@ -483,7 +483,7 @@ public class RemoteControlTests
         });
         AnswerConnected(h);
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
 
         tab.StartRenameCommand.Execute(null);
         tab.RenameText = "Fix the login bug";
@@ -491,7 +491,7 @@ public class RemoteControlTests
 
         var rename = h.Transport.Sent.Last(m => m["request"]?["subtype"]?.GetValue<string>() == "rename_session");
         Assert.Equal("Fix the login bug", rename["request"]!["title"]!.GetValue<string>());
-        Assert.True(tab.Remote.IsConnected);
+        Assert.True(tab.RemoteControl.Status.IsConnected);
     }
 
     // ---- The /remote-control fallback ------------------------------------------------------------------------------
@@ -503,7 +503,7 @@ public class RemoteControlTests
         var tab = await OpenRejectingTheRequestAsync(h);
 
         Assert.Equal([$"/remote-control {tab.DisplayName}"], h.Transport.SentUserTexts);
-        Assert.Equal(RemoteControlState.Connecting, tab.Remote.State);
+        Assert.Equal(RemoteControlState.Connecting, tab.RemoteControl.Status.State);
         // Claude Code 2.1.284 in -p mode: a local command's reply, then a result with no turns.
         h.Transport.Emit("""{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-5-5","permissionMode":"default"}""");
         h.Transport.Emit("""
@@ -513,8 +513,8 @@ public class RemoteControlTests
             """.ReplaceLineEndings(""));
         h.Transport.Emit("""{"type":"result","subtype":"success","is_error":false,"num_turns":0,"result":"/remote-control isn't available in this environment.","session_id":"s1","usage":{"input_tokens":0,"output_tokens":0},"modelUsage":{}}""");
 
-        await TabTestHarness.Eventually(() => tab.Remote.State == RemoteControlState.Unavailable && tab.Status == TabStatus.Idle, "the reply");
-        Assert.Equal("/remote-control isn't available in this environment.", tab.Remote.Detail);
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.State == RemoteControlState.Unavailable && tab.Status == TabStatus.Idle, "the reply");
+        Assert.Equal("/remote-control isn't available in this environment.", tab.RemoteControl.Status.Detail);
         InlineDispatcher.Read(() =>
         {
             // Neither the command nor its reply shows as a message, and it isn't a turn.
@@ -542,8 +542,8 @@ public class RemoteControlTests
 
         h.Transport.EmitTurn($"Remote Control connected. Continue at {SessionUrl}.");
 
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
-        Assert.Equal(SessionUrl, tab.Remote.Url);
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
+        Assert.Equal(SessionUrl, tab.RemoteControl.Status.Url);
         var note = InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last());
         Assert.Equal("Connected to the Claude app.", note.Text);
         Assert.Equal(SessionUrl, note.Link);
@@ -558,14 +558,14 @@ public class RemoteControlTests
         await using var h = new TabTestHarness(s => s.ClaudeCode.ConnectNewTabsToClaudeApp = true);
         AnswerConnected(h);
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
         var prompt = await PromptAsync(h, tab, BashRequest);
 
         // The phone answered it: Claude Code withdraws Claudette's copy.
         h.Transport.Emit("""{"type":"control_cancel_request","request_id":"p1"}""");
 
         await TabTestHarness.Eventually(() => !prompt.IsPending, "the withdrawal");
-        Assert.Equal(TabViewModel.AnsweredInClaudeApp, prompt.Outcome);
+        Assert.Equal(RemoteControlViewModel.AnsweredInClaudeApp, prompt.Outcome);
         Assert.Equal(PermissionState.Cancelled, prompt.State);
         await TabTestHarness.Eventually(() => tab.Status != TabStatus.NeedsInput, "the status to clear");
         // Not an error, and nothing is answered from here.
@@ -578,7 +578,7 @@ public class RemoteControlTests
         await using var h = new TabTestHarness(s => s.ClaudeCode.ConnectNewTabsToClaudeApp = true);
         AnswerConnected(h);
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
         var prompt = await PromptAsync(h, tab, BashRequest);
 
         await tab.StopCommand.ExecuteAsync(null);
@@ -620,7 +620,7 @@ public class RemoteControlTests
         await using var h = new TabTestHarness(s => s.ClaudeCode.ConnectNewTabsToClaudeApp = true);
         AnswerConnected(h);
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Remote.IsConnected, "the connection");
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
         Assert.True(h.SleepBlocker.IsBlocking);
         Assert.StartsWith("1 tab is connected to the Claude app.", h.Services.RemoteControl.DescribeKeepAwake(), StringComparison.Ordinal);
 

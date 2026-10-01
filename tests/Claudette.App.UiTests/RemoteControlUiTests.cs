@@ -39,9 +39,9 @@ public class RemoteControlUiTests
         Assert.False(open.IsVisible);
 
         ClickMenuItem(window, item);
-        await UiText.SettleUntilAsync(window, () => tab.Remote.IsConnected, "the connection");
+        await UiText.SettleUntilAsync(window, () => tab.RemoteControl.Status.IsConnected, "the connection");
 
-        Assert.True(tab.RemoteControl);
+        Assert.True(tab.RemoteControl.IsOn);
         Assert.True(item.IsChecked);
         Assert.True(icon.IsEffectivelyVisible);
         Assert.Equal("Connected to the Claude app", ToolTip.GetTip(icon));
@@ -54,7 +54,7 @@ public class RemoteControlUiTests
         // Claude Code answers once it has closed the connection; until then the row's icon is fainter.
         h.Transport.Answers["remote_control"] = _ => null;
         ClickMenuItem(window, item);
-        await UiText.SettleUntilAsync(window, () => tab.IsRemoteLeaving, "switching off");
+        await UiText.SettleUntilAsync(window, () => tab.RemoteControl.IsLeaving, "switching off");
 
         Assert.False(item.IsChecked);
         Assert.True(icon.IsEffectivelyVisible);
@@ -63,9 +63,9 @@ public class RemoteControlUiTests
 
         var id = h.Transport.Sent.Last(m => m["request"]?["subtype"]?.GetValue<string>() == "remote_control")["request_id"]!.GetValue<string>();
         h.Transport.Emit(Core.Protocol.OutgoingMessages.ControlSuccess(id, null));
-        await UiText.SettleUntilAsync(window, () => !tab.Remote.IsConnected, "the disconnection");
+        await UiText.SettleUntilAsync(window, () => !tab.RemoteControl.Status.IsConnected, "the disconnection");
 
-        Assert.False(tab.RemoteControl);
+        Assert.False(tab.RemoteControl.IsOn);
         Assert.False(item.IsChecked);
         Assert.False(icon.IsEffectivelyVisible);
         Assert.False(open.IsVisible);
@@ -87,7 +87,7 @@ public class RemoteControlUiTests
         // The command can't run, so the item is disabled.
         Assert.False(item.IsEffectivelyEnabled);
         Assert.Equal("Claude Code is signed in with an API key. Remote Control needs a claude.ai subscription sign-in.", ToolTip.GetTip(item));
-        Assert.False(tab.RemoteControl);
+        Assert.False(tab.RemoteControl.IsOn);
     }
 
     [AvaloniaFact]
@@ -103,7 +103,7 @@ public class RemoteControlUiTests
         Assert.True(box.IsEnabled);
 
         // An account that can't use it: a tab that's off can't be turned on, and the reason shows.
-        await tab.SetRemoteControlAsync(false);
+        await tab.RemoteControl.SetAsync(false);
         h.Services.RemoteControl.UseAccount(new AuthStatus(true, "api_key", null, null, null, null, null, null));
         view.DataContext = new TabSettingsViewModel(h.Services, tab, () => { });
         UiText.Settle(window);
