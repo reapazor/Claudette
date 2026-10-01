@@ -1227,7 +1227,7 @@
 
               <!-- Changed files (DESIGN.md §8) -->
               <Button Classes="flat" ToolTip.Tip="Changed files" Command="{Binding ToggleSidePanelCommand}">
-                <TextBlock Classes="muted small" Text="{Binding ChangedFiles.Count, StringFormat='Files ({0})'}" />
+                <TextBlock Classes="muted small" Text="{Binding ChangedFilesCount, StringFormat='Files ({0})'}" />
               </Button>
 
               <!-- Context window (DESIGN.md §6, "Per-tab context"): what fills it, as the tab's context ring shows it -->

@@ -72,6 +72,46 @@ public class SidePanelTests
     }
 
     [Fact]
+    public async Task An_edit_keeps_the_rows_of_the_other_files_as_they_were()
+    {
+        // Each edit used to clear the list and inspect every file again; now only what changed is redone.
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        var (first, second) = (Path.Combine(h.WorkFolder, "a.cs"), Path.Combine(h.WorkFolder, "b.cs"));
+        await File.WriteAllTextAsync(first, "b\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(second, "b\n", TestContext.Current.CancellationToken);
+        EmitEdit(h, "e1", first);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the first file");
+        var kept = tab.ChangedFiles[0];
+
+        await File.WriteAllTextAsync(second, "b\nc\n", TestContext.Current.CancellationToken);
+        EmitEdit(h, "e2", second);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 2, "the second file");
+
+        Assert.Same(kept, tab.ChangedFiles[0]);
+        Assert.Equal("+2 −1", tab.ChangedFiles[1].Stats);
+        Assert.Equal(2, tab.ChangedFilesCount);
+    }
+
+    [Fact]
+    public async Task A_tab_in_the_background_counts_its_changed_files_and_lists_them_once_shown()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        var path = Path.Combine(h.WorkFolder, "a.cs");
+        await File.WriteAllTextAsync(path, "b\n", TestContext.Current.CancellationToken);
+        tab.IsSelected = false;
+
+        EmitEdit(h, "e1", path);
+        await TabTestHarness.Eventually(() => tab.ChangedFilesCount == 1, "the count");
+        Assert.Empty(tab.ChangedFiles);
+
+        tab.IsSelected = true;
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Count == 1, "the rows");
+        Assert.Equal("+1 −1", tab.ChangedFiles[0].Stats);
+    }
+
+    [Fact]
     public async Task Opening_a_changed_file_asks_for_the_diff_view()
     {
         await using var h = new TabTestHarness();

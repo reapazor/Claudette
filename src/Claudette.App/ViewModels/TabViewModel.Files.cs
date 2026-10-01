@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using Claudette.App.Diffs;
 using Claudette.Core.Diffs;
@@ -49,6 +50,12 @@ public sealed partial class ChangedFileRow : ObservableObject
     /// <summary>The user marked the file as reviewed, and Claude hasn't changed it since (DESIGN.md §8, "Reviewed").</summary>
     [ObservableProperty]
     public partial bool IsReviewed { get; set; }
+
+    /// <summary>Shows the same as <paramref name="other"/>, so the list can keep this row.</summary>
+    public bool SameAs(ChangedFileRow other) =>
+        Path == other.Path && DisplayPath == other.DisplayPath && Status == other.Status && StatusText == other.StatusText
+        && Stats == other.Stats && ReferenceEquals(Before, other.Before) && BeforeKnown == other.BeforeKnown && FromGit == other.FromGit
+        && LatestChange == other.LatestChange && IsReviewed == other.IsReviewed;
 }
 
 /// <summary>The tab's changed files and diffs (DESIGN.md §8).</summary>
@@ -60,6 +67,16 @@ public sealed partial class TabViewModel
     private ITimer? _reviewSync;
     private bool _reviewSyncStopped;
     private bool _refreshQueued;
+    /// <summary>Changes came while the tab was in the background; the rows catch up when it's selected.</summary>
+    private bool _changedFilesStale;
+
+    /// <summary>
+    /// Each changed file's inspection (reading it and diffing it against its "before"), kept until the file on disk or
+    /// what's known of its "before" changes, so a refresh after one edit doesn't read and diff every file again.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, (InspectionKey Key, ChangedFileState State)> _inspections = new(StringComparer.Ordinal);
+
+    private readonly record struct InspectionKey(bool Exists, long Length, DateTime LastWriteUtc, string? Before, bool BeforeKnown, bool IsNew);
     /// <summary>Counts refreshes started, so one that finishes after a later one leaves that one's newer rows alone.</summary>
     private int _refreshGeneration;
 
@@ -180,6 +197,13 @@ public sealed partial class TabViewModel
 
     private void QueueChangedFilesRefresh()
     {
+        if (!IsSelected && !ShowGitChanges)
+        {
+            // Nobody sees a background tab's rows: keep the count, and inspect the files once it's shown.
+            _changedFilesStale = true;
+            ChangedFilesCount = Changes.Files.Count;
+            return;
+        }
         if (_refreshQueued)
         {
             return;
@@ -222,7 +246,7 @@ public sealed partial class TabViewModel
             var changes = Changes;
             rows = await Task.Run(() => files.Select(file =>
             {
-                var state = changes.Inspect(file);
+                var state = Inspect(changes, file);
                 return new ChangedFileRow
                 {
                     Path = file.Path,
@@ -255,13 +279,64 @@ public sealed partial class TabViewModel
             row.LatestChange = ReviewedFiles.LatestChange(claudeChanges);
             row.IsReviewed = Reviewed.IsReviewed(row.Path, claudeChanges);
         }
-        ChangedFiles.Clear();
-        foreach (var row in rows)
-        {
-            ChangedFiles.Add(row);
-        }
+        _changedFilesStale = false;
+        SyncRows(rows);
+        ChangedFilesCount = ChangedFiles.Count;
         UpdateChangedFilesSummary();
         OnPropertyChanged(nameof(IsGitRepository));
+    }
+
+    /// <summary>"Files (n)" in the composer bar, kept up to date even while the rows wait for the tab to be shown.</summary>
+    [ObservableProperty]
+    public partial int ChangedFilesCount { get; private set; }
+
+    /// <summary>The tab was selected: rows that waited while it was in the background catch up.</summary>
+    private void RefreshChangedFilesIfStale()
+    {
+        if (_changedFilesStale)
+        {
+            QueueChangedFilesRefresh();
+        }
+    }
+
+    /// <summary>A file's inspection, from the cache while neither the file nor what's known of it has changed.</summary>
+    private ChangedFileState Inspect(ChangedFiles changes, ChangedFile file)
+    {
+        var info = new FileInfo(file.Path);
+        var key = info.Exists
+            ? new InspectionKey(true, info.Length, info.LastWriteTimeUtc, file.Before, file.BeforeKnown, file.IsNew)
+            : new InspectionKey(false, 0, default, file.Before, file.BeforeKnown, file.IsNew);
+        if (_inspections.TryGetValue(file.Path, out var cached) && cached.Key == key)
+        {
+            return cached.State;
+        }
+        // The rows don't need the file's text, so the cache doesn't keep it.
+        var state = changes.Inspect(file) with { Current = null };
+        _inspections[file.Path] = (key, state);
+        return state;
+    }
+
+    /// <summary>
+    /// Brings the list in line with <paramref name="rows"/>, replacing only the rows that changed, rather than clearing
+    /// and refilling it (which rebuilt every row's controls after each edit).
+    /// </summary>
+    private void SyncRows(List<ChangedFileRow> rows)
+    {
+        for (var i = 0; i < rows.Count; i++)
+        {
+            if (i >= ChangedFiles.Count)
+            {
+                ChangedFiles.Add(rows[i]);
+            }
+            else if (!ChangedFiles[i].SameAs(rows[i]))
+            {
+                ChangedFiles[i] = rows[i];
+            }
+        }
+        while (ChangedFiles.Count > rows.Count)
+        {
+            ChangedFiles.RemoveAt(ChangedFiles.Count - 1);
+        }
     }
 
     /// <summary>For example "5 files changed · 2 reviewed".</summary>

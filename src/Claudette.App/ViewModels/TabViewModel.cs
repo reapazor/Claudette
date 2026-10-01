@@ -339,6 +339,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         Working.SetShown(value);
         if (value)
         {
+            RefreshChangedFilesIfStale();
             if (Status == TabStatus.Unread)
             {
                 Status = TabStatus.Idle;

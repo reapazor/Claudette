@@ -800,7 +800,7 @@ A tab starts in auto mode, like a Claude Code session in a terminal or VS Code, 
 
 - A collapsible side panel lists the files changed in the selected tab's session: added, modified or deleted, with `+/−` line counts. It is built from the session's Edit/Write tool calls, live and when a transcript is replayed.
   - The **Files (n)** button in the composer bar opens it.
-  - The counts compare Claude's "before" with the file on disk now, so later edits by you show up too.
+  - The counts compare Claude's "before" with the file on disk now, so later edits by you show up too. A file is read and diffed again only when it, or what's known of its "before", has changed since it was last counted, and a tab in the background only keeps its count, listing the files once it's selected.
   - A file that's back to how it was shows as unchanged.
 - Clicking a file, or Enter on the selected one, opens a diff view (side-by-side or inline) with syntax highlighting. The arrow keys move through the list without opening anything.
   - The view is a window of its own, so it can stay open beside the conversation.
