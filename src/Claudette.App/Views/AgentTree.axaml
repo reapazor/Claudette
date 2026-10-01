@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Claudette.App.ViewModels"
              xmlns:conv="using:Claudette.App.Conversation"
+             xmlns:controls="using:Claudette.App.Controls"
              x:Class="Claudette.App.Views.AgentTree"
              x:DataType="vm:TabViewModel">
 
@@ -37,7 +38,7 @@
     <TextBlock Classes="muted small" Margin="12,4" TextWrapping="Wrap" IsVisible="{Binding !HasAgents}"
                Text="When Claude hands work to subagents, they show here as a tree under the agent that started them." />
     <TreeView x:Name="Tree" Classes="agents" Background="Transparent" Margin="4,0" IsVisible="{Binding HasAgents}"
-              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+              ScrollViewer.HorizontalScrollBarVisibility="Auto"
               ItemsSource="{Binding Agents.Roots}" SelectedItem="{Binding SelectedAgent, Mode=TwoWay}"
               KeyDown="OnTreeKeyDown" AutomationProperties.Name="Agents">
       <!-- Only the rows in view are built; finished agents' subtrees fold away (DESIGN.md §18). -->
@@ -48,30 +49,33 @@
       </TreeView.ItemsPanel>
       <TreeView.ItemTemplate>
         <TreeDataTemplate DataType="conv:AgentNode" ItemsSource="{Binding Children}">
-          <Border Classes="agentrow" Classes.waiting="{Binding IsWaiting}" ToolTip.Tip="{Binding Tooltip}">
-            <Grid ColumnDefinitions="16,*,Auto">
-              <TextBlock Classes="status" Classes.busy="{Binding IsRunning}" Classes.alert="{Binding IsWaiting}"
-                         Classes.ok="{Binding IsDone}" Classes.failed="{Binding IsFailed}"
-                         Text="{Binding StatusGlyph}" Margin="0,1,0,0" />
-              <StackPanel Grid.Column="1">
-                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                <TextBlock Classes="muted small" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" />
-              </StackPanel>
-              <TextBlock Grid.Column="2" Classes="mono small muted" Text="{Binding RunningText}" Margin="6,2,0,0" />
-            </Grid>
-            <Border.ContextMenu>
-              <ContextMenu>
-                <MenuItem Header="{Binding ShowText}" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ShowAgentCommand}" CommandParameter="{Binding}"
-                          IsVisible="{Binding !IsRoot}" />
-                <MenuItem Header="Copy prompt" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyAgentPromptCommand}" CommandParameter="{Binding}"
-                          IsVisible="{Binding HasPrompt}" />
-                <MenuItem Header="Copy result" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyAgentResultCommand}" CommandParameter="{Binding}"
-                          IsVisible="{Binding HasResult}" />
-                <MenuItem Header="{Binding StopText, StringFormat='{}{0}…'}" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).StopAgentCommand}" CommandParameter="{Binding}"
-                          IsVisible="{Binding CanStop}" />
-              </ContextMenu>
-            </Border.ContextMenu>
-          </Border>
+          <!-- A row stays within the width shown, however deep: only rows nested past that scroll sideways (DESIGN.md §3) -->
+          <controls:ShownWidth>
+            <Border Classes="agentrow" Classes.waiting="{Binding IsWaiting}" ToolTip.Tip="{Binding Tooltip}">
+              <Grid ColumnDefinitions="16,*,Auto">
+                <TextBlock Classes="status" Classes.busy="{Binding IsRunning}" Classes.alert="{Binding IsWaiting}"
+                           Classes.ok="{Binding IsDone}" Classes.failed="{Binding IsFailed}"
+                           Text="{Binding StatusGlyph}" Margin="0,1,0,0" />
+                <StackPanel Grid.Column="1">
+                  <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Classes="muted small" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <TextBlock Grid.Column="2" Classes="mono small muted" Text="{Binding RunningText}" Margin="6,2,0,0" />
+              </Grid>
+              <Border.ContextMenu>
+                <ContextMenu>
+                  <MenuItem Header="{Binding ShowText}" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ShowAgentCommand}" CommandParameter="{Binding}"
+                            IsVisible="{Binding !IsRoot}" />
+                  <MenuItem Header="Copy prompt" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyAgentPromptCommand}" CommandParameter="{Binding}"
+                            IsVisible="{Binding HasPrompt}" />
+                  <MenuItem Header="Copy result" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyAgentResultCommand}" CommandParameter="{Binding}"
+                            IsVisible="{Binding HasResult}" />
+                  <MenuItem Header="{Binding StopText, StringFormat='{}{0}…'}" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).StopAgentCommand}" CommandParameter="{Binding}"
+                            IsVisible="{Binding CanStop}" />
+                </ContextMenu>
+              </Border.ContextMenu>
+            </Border>
+          </controls:ShownWidth>
         </TreeDataTemplate>
       </TreeView.ItemTemplate>
     </TreeView>
