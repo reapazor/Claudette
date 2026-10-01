@@ -32,6 +32,16 @@
         </Button>
       </StackPanel>
     </DataTemplate>
+    <!-- Where a waiting prompt stands among the tab's, with the way to the others (DESIGN.md §7, "Several prompts waiting"). -->
+    <DataTemplate x:Key="PromptPosition" x:DataType="conv:PromptItem">
+      <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding HasPosition}">
+        <Button Classes="flat" Padding="5,1" Content="‹" AutomationProperties.Name="Previous waiting prompt" ToolTip.Tip="The waiting prompt before this one"
+                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ShowPreviousWaitingPromptCommand}" CommandParameter="{Binding}" />
+        <TextBlock Classes="muted small" Text="{Binding PositionText}" VerticalAlignment="Center" />
+        <Button Classes="flat" Padding="5,1" Content="›" AutomationProperties.Name="Next waiting prompt" ToolTip.Tip="The waiting prompt after this one"
+                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ShowNextWaitingPromptCommand}" CommandParameter="{Binding}" />
+      </StackPanel>
+    </DataTemplate>
     <!-- A message the user sent: its time and Copy, and a menu to go back to it (DESIGN.md §5, "Rewind and branch"). -->
     <DataTemplate x:Key="UserMessageTools" x:DataType="conv:UserMessageItem">
       <StackPanel Orientation="Horizontal" Spacing="2">
@@ -500,7 +510,10 @@
     <DataTemplate DataType="conv:PermissionItem">
       <Border Classes="prompt" Classes.answered="{Binding !IsPending}">
         <StackPanel Spacing="8">
-          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+            <ContentControl Grid.Column="1" Content="{Binding}" ContentTemplate="{StaticResource PromptPosition}" VerticalAlignment="Top" />
+          </Grid>
           <TextBlock Classes="muted small" Text="{Binding Asker, StringFormat='Asked by the {0}'}" TextWrapping="Wrap" IsVisible="{Binding HasAsker}" />
           <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
           <Border Classes="codeblock" IsVisible="{Binding HasCommand}">
@@ -568,7 +581,10 @@
     <DataTemplate DataType="conv:QuestionItem">
       <Border Classes="prompt question" Classes.answered="{Binding !IsPending}">
         <StackPanel Spacing="10">
-          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+            <ContentControl Grid.Column="1" Content="{Binding}" ContentTemplate="{StaticResource PromptPosition}" VerticalAlignment="Top" />
+          </Grid>
           <ItemsControl ItemsSource="{Binding Questions}" IsEnabled="{Binding IsPending}">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
@@ -621,7 +637,10 @@
     <DataTemplate DataType="conv:PlanItem">
       <Border Classes="prompt question" Classes.answered="{Binding !IsPending}">
         <StackPanel Spacing="10">
-          <TextBlock Text="Claude's plan" FontWeight="SemiBold" />
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="Claude's plan" FontWeight="SemiBold" />
+            <ContentControl Grid.Column="1" Content="{Binding}" ContentTemplate="{StaticResource PromptPosition}" VerticalAlignment="Top" />
+          </Grid>
           <md:MarkdownRenderer MarkdownBuilder="{Binding Plan}" IsVisible="{Binding HasPlan}"
                                LinkCommand="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenLinkCommand}" />
           <TextBlock Classes="muted" Text="Claude has finished planning and is ready to start making changes." TextWrapping="Wrap" IsVisible="{Binding !HasPlan}" />

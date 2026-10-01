@@ -861,6 +861,7 @@ The plan's limits are the account's, so every machine signed in to it sees the s
 - A prompt answered in the Claude app, on a tab connected with Remote Control, is withdrawn by Claude Code; its card closes and reads *"Answered in the Claude app"* ([§18](#remote-control-the-claude-app)).
 - A tab with a waiting prompt gets the "Needs input" status. If Claudette isn't focused or the tab isn't selected, it also sends an OS notification ([§10](#10-notifications)).
 - Keyboard: `Ctrl/Cmd+Enter` allows, `Ctrl/Cmd+Backspace` denies the oldest waiting prompt in the tab.
+- **Several prompts waiting.** Subagents working side by side can leave prompts all through a long conversation. While more than one waits in a tab, each says where it stands, oldest first, as the terminal does since 2.1.286: *"Prompt 2 of 5"*, with **‹** and **›** to go to the one before or after (wrapping round). Prompt 1 is the one the keyboard answers. Answering or withdrawing one numbers the rest again, and the last one alone has no number.
   - Not while typing in one of the prompt's own fields, and `Ctrl/Cmd+Backspace` still deletes a word in a field with text.
   - A request Claude Code marks `defaultToNo` can't be allowed from the keyboard.
 - **Permission mode picker** per tab: Manual, Accept edits, Plan, Auto, Bypass permissions. Manual is Claude Code's `default` mode, named as its terminal and VS Code extension name it now.

@@ -26,10 +26,28 @@ public abstract partial class PromptItem(PermissionRequest request) : Conversati
     public PermissionRequest Request { get; } = request;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsPending), nameof(HasOutcome))]
+    [NotifyPropertyChangedFor(nameof(IsPending), nameof(HasOutcome), nameof(PositionText), nameof(HasPosition))]
     public partial PermissionState State { get; set; } = PermissionState.Pending;
 
     public bool IsPending => State == PermissionState.Pending;
+
+    /// <summary>
+    /// Where it stands among the prompts waiting in its tab, oldest first: the first is the one Ctrl/Cmd+Enter answers
+    /// (DESIGN.md §7, "Several prompts waiting").
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PositionText), nameof(HasPosition))]
+    public partial int Position { get; internal set; }
+
+    /// <summary>How many prompts wait in its tab.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PositionText), nameof(HasPosition))]
+    public partial int WaitingCount { get; internal set; }
+
+    /// <summary>"Prompt 2 of 5" while several wait; null for one alone, or once answered.</summary>
+    public string? PositionText => IsPending && WaitingCount > 1 && Position > 0 ? $"Prompt {Position} of {WaitingCount}" : null;
+
+    public bool HasPosition => PositionText is not null;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasOutcome))]

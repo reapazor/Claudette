@@ -38,6 +38,41 @@ public class PromptTests
     }
 
     [Fact]
+    public async Task Several_waiting_prompts_say_where_each_stands_and_lead_to_one_another()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        string Request(int i) => new JsonObject
+        {
+            ["type"] = "control_request", ["request_id"] = $"p{i}",
+            ["request"] = new JsonObject { ["subtype"] = "can_use_tool", ["tool_name"] = "Bash", ["tool_use_id"] = $"t{i}", ["input"] = new JsonObject { ["command"] = $"step {i}" } },
+        }.ToJsonString();
+        var first = await PromptAsync<PermissionItem>(h, tab, Request(1));
+        Assert.Null(first.PositionText);
+        h.Transport.Emit(Request(2));
+        h.Transport.Emit(Request(3));
+        await TabTestHarness.Eventually(() => tab.Items.OfType<PermissionItem>().Count() == 3, "the other prompts");
+        var prompts = tab.Items.OfType<PermissionItem>().ToList();
+
+        // DESIGN.md §7, "Several prompts waiting": oldest first, the one Ctrl/Cmd+Enter answers.
+        Assert.Equal(["Prompt 1 of 3", "Prompt 2 of 3", "Prompt 3 of 3"], prompts.Select(p => p.PositionText));
+        var shown = new List<ConversationItem>();
+        tab.ScrollToRequested += shown.Add;
+        tab.ShowNextWaitingPromptCommand.Execute(prompts[1]);
+        tab.ShowNextWaitingPromptCommand.Execute(prompts[2]);
+        tab.ShowPreviousWaitingPromptCommand.Execute(prompts[0]);
+        Assert.Equal([prompts[2], prompts[0], prompts[2]], shown);
+
+        // Answering the oldest numbers the rest again; the last one alone has no number.
+        Assert.True(tab.AcceptWaitingPrompt());
+        await TabTestHarness.Eventually(() => prompts[1].PositionText == "Prompt 1 of 2", "the renumbering");
+        Assert.Null(prompts[0].PositionText);
+        Assert.Equal("Prompt 2 of 2", prompts[2].PositionText);
+        prompts[1].DenyCommand.Execute(null);
+        await TabTestHarness.Eventually(() => prompts[2].PositionText is null, "the last one");
+    }
+
+    [Fact]
     public async Task Allow_for_this_session_only_saves_nothing()
     {
         await using var h = new TabTestHarness();

@@ -1968,7 +1968,48 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         if (item is not null)
         {
             item.Answered += (_, _) => PermissionResolved(request.RequestId);
+            // Answered, withdrawn or cancelled with the session: the others are numbered again.
+            item.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(PromptItem.State))
+                {
+                    NumberWaitingPrompts();
+                }
+            };
         }
+        NumberWaitingPrompts();
+    }
+
+    /// <summary>The prompts waiting in the tab, oldest first (DESIGN.md §7, "Several prompts waiting").</summary>
+    private List<PromptItem> WaitingPrompts() => [.. Items.OfType<PromptItem>().Where(p => p.IsPending)];
+
+    /// <summary>Numbers the waiting prompts, so each card says where it stands: "Prompt 2 of 5".</summary>
+    private void NumberWaitingPrompts()
+    {
+        var waiting = WaitingPrompts();
+        for (var i = 0; i < waiting.Count; i++)
+        {
+            waiting[i].Position = i + 1;
+            waiting[i].WaitingCount = waiting.Count;
+        }
+    }
+
+    /// <summary>Goes to the waiting prompt before this one, or the newest from the oldest.</summary>
+    [RelayCommand]
+    private void ShowPreviousWaitingPrompt(PromptItem? prompt) => ShowWaitingPrompt(prompt, -1);
+
+    /// <summary>Goes to the waiting prompt after this one, or the oldest from the newest.</summary>
+    [RelayCommand]
+    private void ShowNextWaitingPrompt(PromptItem? prompt) => ShowWaitingPrompt(prompt, 1);
+
+    private void ShowWaitingPrompt(PromptItem? from, int step)
+    {
+        var waiting = WaitingPrompts();
+        if (from is null || waiting.IndexOf(from) is not (>= 0 and var index) || waiting.Count < 2)
+        {
+            return;
+        }
+        ScrollToRequested?.Invoke(waiting[(index + step + waiting.Count) % waiting.Count]);
     }
 
     private void PermissionResolved(object key)
