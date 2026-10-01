@@ -21,7 +21,7 @@ public sealed partial class TabViewModel
             _services.Dispatcher,
             () => _spinnerVerbs,
             () => _services.Settings.Appearance.FunWorkingWords,
-            () => _callUsage.TurnTokens,
+            () => Context.TurnTokens,
             () => _services.Tips.Text(Core.Settings.KeyboardShortcuts.Stop),
             _services.Random,
             () => _services.Settings.Appearance.ShowToolInWorkingLine,

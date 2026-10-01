@@ -126,7 +126,7 @@ public class TabViewModelTests
 
         await TabTestHarness.Eventually(() => tab.Status == TabStatus.Unread, "the unread status");
         Assert.Equal(120, tab.State.Tokens.Total);
-        Assert.Equal("120 tok", tab.TokensShort);
+        Assert.Equal("120 tok", tab.Context.TokensShort);
         Assert.Equal("s1", tab.State.SessionId);
         tab.IsSelected = true;
         Assert.Equal(TabStatus.Idle, tab.Status);
@@ -143,24 +143,24 @@ public class TabViewModelTests
 
         h.Transport.Emit("""{"type":"assistant","message":{"id":"m1","model":"claude-opus-5-5","content":[{"type":"text","text":"a"}],"usage":{"input_tokens":3000,"output_tokens":100,"cache_read_input_tokens":46900}}}""");
         h.Transport.Emit("""{"type":"assistant","message":{"id":"m1","model":"claude-opus-5-5","content":[{"type":"text","text":"b"}],"usage":{"input_tokens":3000,"output_tokens":100,"cache_read_input_tokens":46900}}}""");
-        await TabTestHarness.Eventually(() => tab.TokensShort == "50k tok", "the live token count");
+        await TabTestHarness.Eventually(() => tab.Context.TokensShort == "50k tok", "the live token count");
         // No context window known yet: nothing to estimate from.
-        Assert.Null(tab.ContextText);
+        Assert.Null(tab.Context.Text);
 
         h.Transport.Emit("""{"type":"result","subtype":"success","is_error":false,"session_id":"s1","modelUsage":{"claude-opus-5-5":{"inputTokens":49900,"outputTokens":100,"contextWindow":200000}}}""");
 
-        await TabTestHarness.Eventually(() => tab.ContextText == "Context 25%", "the estimated context");
-        Assert.Equal("50k tok", tab.TokensShort);
-        Assert.Equal("about 50,000 of 200,000 tokens, estimated from the last call", tab.ContextDetail);
-        Assert.False(tab.IsContextHigh);
+        await TabTestHarness.Eventually(() => tab.Context.Text == "Context 25%", "the estimated context");
+        Assert.Equal("50k tok", tab.Context.TokensShort);
+        Assert.Equal("about 50,000 of 200,000 tokens, estimated from the last call", tab.Context.Detail);
+        Assert.False(tab.Context.IsHigh);
 
         // Claude Code says when it compacts by itself: near that, the indicator warns.
         tab.ComposerText = "more";
         await tab.SendCommand.ExecuteAsync(null);
         h.Transport.Emit("""{"type":"autocompact_state","value":{"enabled":true,"effective_window":180000,"threshold":52000,"enforced":true,"source":"auto"},"session_id":"s1"}""");
         h.Transport.Emit("""{"type":"assistant","message":{"id":"m2","model":"claude-opus-5-5","content":[{"type":"text","text":"b"}],"usage":{"input_tokens":1000,"output_tokens":100,"cache_read_input_tokens":48900}}}""");
-        await TabTestHarness.Eventually(() => tab.IsContextHigh, "the warning");
-        Assert.EndsWith("auto-compacts at 52,000", tab.ContextDetail, StringComparison.Ordinal);
+        await TabTestHarness.Eventually(() => tab.Context.IsHigh, "the warning");
+        Assert.EndsWith("auto-compacts at 52,000", tab.Context.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -160,9 +160,9 @@ public class ContextBreakdownTests
 
         var tab = await h.OpenTabAsync();
 
-        await TabTestHarness.Eventually(() => tab.ContextBreakdown is not null, "the breakdown");
-        Assert.Equal("Context 62%", tab.ContextText);
-        Assert.Equal("Messages", tab.ContextBreakdown!.Rows[5].Name);
+        await TabTestHarness.Eventually(() => tab.Context.Breakdown is not null, "the breakdown");
+        Assert.Equal("Context 62%", tab.Context.Text);
+        Assert.Equal("Messages", tab.Context.Breakdown!.Rows[5].Name);
     }
 
     [Fact]
@@ -177,9 +177,9 @@ public class ContextBreakdownTests
         h.Transport.Emit("""{"type":"assistant","message":{"id":"m1","model":"claude-opus-5-5","content":[{"type":"text","text":"a"}],"usage":{"input_tokens":3000,"output_tokens":100,"cache_read_input_tokens":46900}}}""");
         h.Transport.Emit("""{"type":"result","subtype":"success","is_error":false,"session_id":"s1","modelUsage":{"claude-opus-5-5":{"inputTokens":49900,"outputTokens":100,"contextWindow":200000}}}""");
 
-        await TabTestHarness.Eventually(() => tab.ContextBreakdown is not null, "the estimate");
-        Assert.Equal("In the context", tab.ContextBreakdown!.Rows[0].Name);
-        Assert.NotNull(tab.ContextBreakdown.Note);
+        await TabTestHarness.Eventually(() => tab.Context.Breakdown is not null, "the estimate");
+        Assert.Equal("In the context", tab.Context.Breakdown!.Rows[0].Name);
+        Assert.NotNull(tab.Context.Breakdown.Note);
     }
 
     [Fact]

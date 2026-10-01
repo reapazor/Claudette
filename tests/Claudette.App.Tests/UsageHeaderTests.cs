@@ -291,13 +291,13 @@ public class UsageHeaderTests
         h.Transport.EmitTurn();
         await TabTestHarness.Eventually(() => tab.State.Tokens.Total == 120 && tab.IsSettled, "the turn");
         await TabTestHarness.Eventually(() => tracker.Store.GetTurns(DateTimeOffset.MinValue, DateTimeOffset.MaxValue).Count == 2, "the turn's record");
-        Assert.Null(tab.TokenWindowText);
+        Assert.Null(tab.Context.TokenWindowText);
 
-        tab.IsTokenDetailsOpen = true;
-        await tab.TokenWindowRefresh;
+        tab.Context.IsTokenDetailsOpen = true;
+        await tab.Context.TokenWindowRefresh;
 
-        Assert.Equal("This session window: 120 tok", tab.TokenWindowText);
-        Assert.Equal(2, tab.TurnPoints.Count);
+        Assert.Equal("This session window: 120 tok", tab.Context.TokenWindowText);
+        Assert.Equal(2, tab.Context.TurnPoints.Count);
     }
 
     [Fact]

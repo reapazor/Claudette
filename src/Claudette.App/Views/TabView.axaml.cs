@@ -141,7 +141,7 @@ public partial class TabView : UserControl
     {
         if (ViewModel is { } tab)
         {
-            tab.IsTokenDetailsOpen = true;
+            tab.Context.IsTokenDetailsOpen = true;
         }
     }
 
@@ -149,7 +149,7 @@ public partial class TabView : UserControl
     {
         if (ViewModel is { } tab)
         {
-            tab.IsTokenDetailsOpen = false;
+            tab.Context.IsTokenDetailsOpen = false;
         }
     }
 

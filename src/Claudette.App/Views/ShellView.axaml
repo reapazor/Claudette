@@ -236,11 +236,11 @@
                                        nearly full. Under the close button, level with the second line. Clicking it shows what
                                        fills the context, as the composer's indicator does, without selecting the tab. -->
                                   <Button x:Name="ContextRing" Classes="flat" Width="16" Height="16" Padding="0" VerticalAlignment="Bottom"
-                                          IsVisible="{Binding ShowContextRing}" ToolTip.Tip="{Binding ContextTip}" AutomationProperties.Name="{Binding ContextText}">
+                                          IsVisible="{Binding Context.ShowRing}" ToolTip.Tip="{Binding Context.Tip}" AutomationProperties.Name="{Binding Context.Text}">
                                     <Panel Width="13" Height="13">
                                       <Ellipse Classes="contexttrack" />
-                                      <Arc Classes="contextarc" Classes.high="{Binding IsContextHigh}" Classes.critical="{Binding IsContextCritical}"
-                                           StartAngle="-90" SweepAngle="{Binding ContextSweep}" />
+                                      <Arc Classes="contextarc" Classes.high="{Binding Context.IsHigh}" Classes.critical="{Binding Context.IsCritical}"
+                                           StartAngle="-90" SweepAngle="{Binding Context.Sweep}" />
                                     </Panel>
                                     <Button.Flyout>
                                       <Flyout Placement="RightEdgeAlignedBottom">

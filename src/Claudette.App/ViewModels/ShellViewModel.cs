@@ -74,7 +74,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             {
                 foreach (var tab in AllTabs)
                 {
-                    tab.ResetTokenTotals();
+                    tab.Context.ResetTokenTotals();
                 }
             }
         };
@@ -655,7 +655,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     }
 
     /// <summary>A tab's turn reached the usage history: that tab's "this session window" tokens follow.</summary>
-    internal void OnTurnRecorded(string tabId) => AllTabs.FirstOrDefault(t => t.Id == tabId)?.RefreshTokenWindow();
+    internal void OnTurnRecorded(string tabId) => AllTabs.FirstOrDefault(t => t.Id == tabId)?.Context.RefreshTokenWindow();
 
     /// <summary>A plain confirmation over the whole window.</summary>
     internal void Confirm(string title, string message, string confirmText, Func<Task> onConfirm) =>

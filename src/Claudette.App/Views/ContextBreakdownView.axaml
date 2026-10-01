@@ -22,17 +22,17 @@
   </UserControl.Styles>
   <StackPanel Spacing="8" Width="340">
     <StackPanel Spacing="2">
-      <TextBlock FontWeight="SemiBold" Text="{Binding ContextText}" />
-      <TextBlock Classes="muted small" Text="{Binding ContextDetail}" TextWrapping="Wrap" />
+      <TextBlock FontWeight="SemiBold" Text="{Binding Context.Text}" />
+      <TextBlock Classes="muted small" Text="{Binding Context.Detail}" TextWrapping="Wrap" />
     </StackPanel>
 
-    <StackPanel Spacing="8" IsVisible="{Binding ContextBreakdown, Converter={x:Static ObjectConverters.IsNotNull}}">
+    <StackPanel Spacing="8" IsVisible="{Binding Context.Breakdown, Converter={x:Static ObjectConverters.IsNotNull}}">
       <!-- The window, left to right: what's in it, the free space and the auto-compact buffer -->
-      <controls:ContextBar x:Name="Bar" Height="12" Segments="{Binding ContextBreakdown.Segments}"
-                           AutomationProperties.Name="{Binding ContextBreakdown.Summary}" />
+      <controls:ContextBar x:Name="Bar" Height="12" Segments="{Binding Context.Breakdown.Segments}"
+                           AutomationProperties.Name="{Binding Context.Breakdown.Summary}" />
 
       <!-- A row for each part, in the bar's order; tools held out of the window last, without a color -->
-      <ItemsControl ItemsSource="{Binding ContextBreakdown.Rows}">
+      <ItemsControl ItemsSource="{Binding Context.Breakdown.Rows}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:ContextRow">
             <Grid Classes="contextrow" ColumnDefinitions="18,*,72,40" ToolTip.Tip="{Binding Tip}">
@@ -48,7 +48,7 @@
       </ItemsControl>
 
       <!-- What's inside the larger parts, each collapsed until it's clicked -->
-      <ItemsControl ItemsSource="{Binding ContextBreakdown.Sections}" IsVisible="{Binding ContextBreakdown.HasSections, FallbackValue=False}">
+      <ItemsControl ItemsSource="{Binding Context.Breakdown.Sections}" IsVisible="{Binding Context.Breakdown.HasSections, FallbackValue=False}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:ContextSection">
             <StackPanel>
@@ -84,11 +84,11 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
 
-      <TextBlock Classes="muted small" TextWrapping="Wrap" Text="{Binding ContextBreakdown.Note, FallbackValue={x:Null}}"
-                 IsVisible="{Binding ContextBreakdown.HasNote, FallbackValue=False}" />
+      <TextBlock Classes="muted small" TextWrapping="Wrap" Text="{Binding Context.Breakdown.Note, FallbackValue={x:Null}}"
+                 IsVisible="{Binding Context.Breakdown.HasNote, FallbackValue=False}" />
     </StackPanel>
 
-    <TextBlock Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding IsContextHigh}"
+    <TextBlock Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding Context.IsHigh}"
                Text="Nearly full. Claude Code will compact the conversation soon on its own." />
     <Button Content="Compact now" Click="OnCompactClick" Command="{Binding CompactCommand}" HorizontalAlignment="Left"
             ToolTip.Tip="Summarize the conversation so far to free up context, like /compact" />

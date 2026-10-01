@@ -1595,9 +1595,9 @@
               </Button>
 
               <!-- Context window (DESIGN.md §6, "Per-tab context"): what fills it, as the tab's context ring shows it -->
-              <Button x:Name="ContextButton" Classes="flat" ToolTip.Tip="{Binding ContextDetail}"
-                      IsVisible="{Binding ContextText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                <TextBlock Classes="muted small" Classes.warning="{Binding IsContextHigh}" Text="{Binding ContextText}" />
+              <Button x:Name="ContextButton" Classes="flat" ToolTip.Tip="{Binding Context.Detail}"
+                      IsVisible="{Binding Context.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                <TextBlock Classes="muted small" Classes.warning="{Binding Context.IsHigh}" Text="{Binding Context.Text}" />
                 <Button.Flyout>
                   <Flyout Placement="TopEdgeAlignedRight">
                     <views:ContextBreakdownView />
@@ -1606,7 +1606,7 @@
               </Button>
 
               <Button Classes="flat" ToolTip.Tip="Tokens used by this tab">
-                <TextBlock Classes="muted small" Text="{Binding TokensShort}" />
+                <TextBlock Classes="muted small" Text="{Binding Context.TokensShort}" />
                 <Button.Flyout>
                   <Flyout Placement="TopEdgeAlignedRight" Opened="OnTokenDetailsOpened" Closed="OnTokenDetailsClosed">
                     <StackPanel Spacing="8" MinWidth="420">
@@ -1619,7 +1619,7 @@
                         <TextBlock Grid.Column="4" Classes="muted small" Text="Cache read" HorizontalAlignment="Right" />
                         <TextBlock Grid.Column="5" Classes="muted small" Text="Cost" HorizontalAlignment="Right" />
                       </Grid>
-                      <ItemsControl ItemsSource="{Binding TokenRows}">
+                      <ItemsControl ItemsSource="{Binding Context.TokenRows}">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate DataType="vm:TokenRow">
                             <Grid ColumnDefinitions="*,70,70,80,80,60">
@@ -1633,11 +1633,11 @@
                           </DataTemplate>
                         </ItemsControl.ItemTemplate>
                       </ItemsControl>
-                      <TextBlock Classes="muted small" Text="{Binding TokenSummary}" TextWrapping="Wrap" MaxWidth="420" />
-                      <TextBlock Classes="small" Text="{Binding TokenWindowText}" IsVisible="{Binding TokenWindowText, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                      <StackPanel Spacing="2" IsVisible="{Binding TurnPoints.Count}">
+                      <TextBlock Classes="muted small" Text="{Binding Context.TokenSummary}" TextWrapping="Wrap" MaxWidth="420" />
+                      <TextBlock Classes="small" Text="{Binding Context.TokenWindowText}" IsVisible="{Binding Context.TokenWindowText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                      <StackPanel Spacing="2" IsVisible="{Binding Context.TurnPoints.Count}">
                         <TextBlock Classes="muted small" Text="Tokens per turn" />
-                        <controls:UsageChart Height="48" Points="{Binding TurnPoints}" Maximum="{Binding TurnChartMaximum}"
+                        <controls:UsageChart Height="48" Points="{Binding Context.TurnPoints}" Maximum="{Binding Context.TurnChartMaximum}"
                                              LineBrush="{DynamicResource MeterBrush}" />
                       </StackPanel>
                     </StackPanel>

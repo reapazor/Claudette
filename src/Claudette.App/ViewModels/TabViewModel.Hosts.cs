@@ -9,7 +9,7 @@ namespace Claudette.App.ViewModels;
 /// Perforce. Each sees only its own host interface, over the <see cref="ITabAreaHost"/> they share; where one area needs
 /// another, it goes through the tab.
 /// </summary>
-public sealed partial class TabViewModel : IProcessMonitorHost, IChangedFilesHost, IProjectToolsHost, IRemoteControlHost, IPerforceHost
+public sealed partial class TabViewModel : IProcessMonitorHost, IChangedFilesHost, IProjectToolsHost, IRemoteControlHost, IPerforceHost, IContextHost
 {
     // ---- Every area ------------------------------------------------------------------------------------------------
 
@@ -83,4 +83,10 @@ public sealed partial class TabViewModel : IProcessMonitorHost, IChangedFilesHos
     void IPerforceHost.Resolved(object key) => PermissionResolved(key);
 
     void IPerforceHost.LinkValuesChanged() => ProjectTools.OnLinkValuesChanged();
+
+    // ---- Context and tokens ----------------------------------------------------------------------------------------
+
+    string? IContextHost.ModelDisplayName(string? id) => ModelDisplayName(id);
+
+    void IContextHost.TurnTokensChanged() => Working.Refresh();
 }
