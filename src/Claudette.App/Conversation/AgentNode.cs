@@ -474,8 +474,16 @@ public sealed partial class AgentNode : ObservableObject
         }
         Item?.ShowEnded(outcome, ResultText);
         RetryText = null;
+        // Its subtree folds away once nothing in it is still going: a long session's tree stays short. A prompt that
+        // comes from inside it later opens it again (AddPrompt).
+        if (Children.Count > 0 && !Descendants().Any(d => d.IsActive))
+        {
+            IsExpanded = false;
+        }
         Refresh();
     }
+
+    private IEnumerable<AgentNode> Descendants() => Children.SelectMany(c => c.Descendants().Prepend(c));
 
     /// <summary>Running time changed (every second while it runs).</summary>
     internal void Tick()

@@ -1375,7 +1375,7 @@ claude -p --input-format stream-json --output-format stream-json --verbose
 
 - `--permission-prompt-tool stdio` sends permission prompts to Claudette as control requests. The TypeScript SDK passes this flag when a `canUseTool` callback is set.
 - `--thinking-display summarized` makes newer models return thinking text; by default they send empty thinking blocks. The flag isn't in `claude --help`, but the Agent SDKs pass it.
-- `--forward-subagent-text` includes subagents' text and thinking in the stream, so subagent groups can show them.
+- `--forward-subagent-text` includes subagents' text and thinking in the stream, so subagent groups can show them. A group's items are virtualized like the conversation's: a collapsed group builds none of them.
 - **Clean environment.** Claude Code sets session variables for the processes it starts, such as `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_ENTRYPOINT` and `CLAUDE_CODE_MESSAGING_SOCKET`. If Claudette was started from a terminal inside Claude Code, those variables make `claude` behave as a child session; in the spike it ignored the API key and reported "Not logged in".
   - Claudette removes exactly those variables. The full list is `ClaudeEnvironment.SessionVariables`, tracked in `compat/surface.yaml`.
   - It doesn't strip by prefix, because variables like `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_USE_BEDROCK` are user configuration.
@@ -2068,7 +2068,7 @@ When Claude is working in a specific Perforce changelist, Claudette shows its nu
 
 A live view of what a tab's subagents are doing. When Claude fans work out to several subagents, possibly nested, the conversation shows each one as a collapsed group ([§5](#5-conversation-view)). That's fine for one agent at a time, but hard to follow when several run in parallel.
 
-- **What it shows.** A tree list of the tab's agents: the main agent at the root, and each subagent as a node under the agent that started it, with nesting kept. Nodes start expanded and can be collapsed.
+- **What it shows.** A tree list of the tab's agents: the main agent at the root, and each subagent as a node under the agent that started it, with nesting kept. Nodes start expanded and can be collapsed. An agent that finishes with nothing under it still going folds its subtree away, so a long session's tree stays short; a prompt from inside it opens it again. Only the rows in view are built.
 - **Each row** has two compact lines, following the VS Code extension's compact rows ([§3](#visual-style)):
   - A status mark, the task description, and the running time at the right.
   - The agent type (for example `Explore` or `general-purpose`), then what it's doing right now: its latest tool call, summarized the way the conversation's tool rows are (for example `Grep auth in src/`), or the first line of its latest text. Once it has finished: the first line of its report, or how it ended.

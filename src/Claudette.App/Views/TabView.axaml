@@ -86,6 +86,13 @@
     <Style Selector=".compact ItemsControl#ConversationItems > ContentPresenter">
       <Setter Property="Margin" Value="0,0,0,3" />
     </Style>
+    <!-- A subagent group's items, the same: the panel has no spacing of its own. -->
+    <Style Selector="ItemsControl.subagentitems > ContentPresenter">
+      <Setter Property="Margin" Value="0,0,0,6" />
+    </Style>
+    <Style Selector=".compact ItemsControl.subagentitems > ContentPresenter">
+      <Setter Property="Margin" Value="0,0,0,3" />
+    </Style>
     <!-- Find in the conversation (DESIGN.md §5, "Find"): a bar over the conversation, and the match it shows marked. -->
     <Style Selector="Border.findbar">
       <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
@@ -398,10 +405,11 @@
                 IsVisible="{Binding IsExpanded}">
           <StackPanel Spacing="6">
             <SelectableTextBlock Classes="muted small" Text="{Binding Detail}" TextWrapping="Wrap" MaxHeight="120" IsVisible="{Binding HasDetail}" />
-            <ItemsControl ItemsSource="{Binding Items}" ClipToBounds="False">
+            <!-- Virtualized like the conversation: a collapsed group builds nothing, an open one only what's in view. -->
+            <ItemsControl Classes="subagentitems" ItemsSource="{Binding Items}" ClipToBounds="False">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
-                  <StackPanel Spacing="6" />
+                  <VirtualizingStackPanel />
                 </ItemsPanelTemplate>
               </ItemsControl.ItemsPanel>
             </ItemsControl>

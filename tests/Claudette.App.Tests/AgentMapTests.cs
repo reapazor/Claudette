@@ -381,6 +381,30 @@ public class AgentMapTests
     }
 
     [Fact]
+    public async Task A_finished_agents_subtree_folds_away_once_nothing_in_it_is_going()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        h.Transport.Emit(Wire.Init());
+        h.Transport.Emit(Wire.Agent("a1", "Outer", "p"));
+        h.Transport.Emit(Wire.Agent("a2", "Inner", "p", parent: "a1"));
+        h.Transport.Emit(Wire.Agent("b1", "Other outer", "p"));
+        h.Transport.Emit(Wire.Agent("b2", "Still going", "p", parent: "b1"));
+        await TabTestHarness.Eventually(() => tab.Agents.Find("b2") is not null, "the subagents");
+        var (outer, other) = (tab.Agents.Find("a1")!, tab.Agents.Find("b1")!);
+        Assert.True(outer.IsExpanded);
+
+        h.Transport.Emit(Wire.Result("a2", "inner done", parent: "a1"));
+        h.Transport.Emit(Wire.Result("a1", "outer done"));
+        // Finished while one of its own is still going: it stays open.
+        h.Transport.Emit(Wire.Result("b1", "other done"));
+        await TabTestHarness.Eventually(() => outer.IsDone && other.IsDone, "the results");
+
+        Assert.False(outer.IsExpanded);
+        Assert.True(other.IsExpanded);
+    }
+
+    [Fact]
     public async Task Clicking_a_node_expands_its_group_and_the_groups_around_it()
     {
         await using var h = new TabTestHarness();
