@@ -39,7 +39,8 @@ public sealed class ClaudeSession : IAsyncDisposable
     private readonly Task _readLoop;
     private int _unknownMessageCount;
     private int _protocolErrorCount;
-    private SessionState _state = SessionState.Starting;
+    private readonly Lock _stateLock = new();
+    private volatile SessionState _state = SessionState.Starting;
 
     /// <param name="diagnostics">Counts what Claude Code sends that Claudette doesn't know yet (DESIGN.md §16).</param>
     public ClaudeSession(IClaudeTransport transport, TimeProvider timeProvider, ILogger<ClaudeSession>? logger = null, ProtocolDiagnostics? diagnostics = null)
@@ -56,6 +57,9 @@ public sealed class ClaudeSession : IAsyncDisposable
     public ChannelReader<SessionEvent> Events => _events.Reader;
 
     public SessionState State => _state;
+
+    /// <summary>The clock the session times its requests and its stop by.</summary>
+    public TimeProvider Time => _time;
 
     public InitializeResult? Initialization { get; private set; }
 
@@ -94,10 +98,7 @@ public sealed class ClaudeSession : IAsyncDisposable
             .ConfigureAwait(false);
         Initialization = InitializeResult.Parse(response);
         PermissionMode ??= Initialization.CurrentPermissionMode;
-        if (_state == SessionState.Starting)
-        {
-            SetState(SessionState.Idle);
-        }
+        TrySetState(SessionState.Starting, SessionState.Idle);
         return Initialization;
     }
 
@@ -111,10 +112,20 @@ public sealed class ClaudeSession : IAsyncDisposable
     /// <summary>Sends a message with attached images and quick suffixes (DESIGN.md §5, "Quick suffixes").</summary>
     public async ValueTask SendUserMessageAsync(string text, IReadOnlyList<MessageImage> images, string? suffix, CancellationToken cancellationToken = default)
     {
-        await _transport.SendAsync(OutgoingMessages.UserMessage(text, images, suffix).ToJsonString(), cancellationToken).ConfigureAwait(false);
-        if (_state == SessionState.Idle)
+        // Working before the message goes, not after: a local command can be answered before the write's continuation
+        // runs, and a Working set then would never be cleared.
+        var started = TrySetState(SessionState.Idle, SessionState.Working);
+        try
         {
-            SetState(SessionState.Working);
+            await _transport.SendAsync(OutgoingMessages.UserMessage(text, images, suffix).ToJsonString(), cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            if (started)
+            {
+                TrySetState(SessionState.Working, SessionState.Idle);
+            }
+            throw;
         }
     }
 
@@ -312,10 +323,7 @@ public sealed class ClaudeSession : IAsyncDisposable
                 ClaudeCodeVersion = init.ClaudeCodeVersion ?? ClaudeCodeVersion;
                 Capabilities = init.Capabilities;
                 Publish(new TurnStarted(init));
-                if (_state == SessionState.Idle)
-                {
-                    SetState(SessionState.Working);
-                }
+                TrySetState(SessionState.Idle, SessionState.Working);
                 break;
 
             case SystemMessage system:
@@ -513,14 +521,33 @@ public sealed class ClaudeSession : IAsyncDisposable
         }
     }
 
+    /// <summary>Changes the state and says so. The read loop and senders run on different threads, hence the lock.</summary>
     private void SetState(SessionState state)
     {
-        if (_state == state || _state == SessionState.Exited)
+        lock (_stateLock)
         {
-            return;
+            if (_state == state || _state == SessionState.Exited)
+            {
+                return;
+            }
+            _state = state;
+            Publish(new StateChanged(state));
         }
-        _state = state;
-        Publish(new StateChanged(state));
+    }
+
+    /// <summary>Changes the state only from <paramref name="from"/>, as one step. Returns whether it changed.</summary>
+    private bool TrySetState(SessionState from, SessionState to)
+    {
+        lock (_stateLock)
+        {
+            if (_state != from)
+            {
+                return false;
+            }
+            _state = to;
+            Publish(new StateChanged(to));
+            return true;
+        }
     }
 
     private void Publish(SessionEvent sessionEvent) => _events.Writer.TryWrite(sessionEvent);

@@ -2,6 +2,7 @@ using System.Runtime.Versioning;
 using System.Text;
 using Claudette.Core.LoginItems;
 using Claudette.Core.Processes;
+using Claudette.Core.ProjectTools;
 using Claudette.Core.Updates;
 using Claudette.Platform.Notifications.Windows;
 using Claudette.Platform.Updates.Windows;
@@ -89,27 +90,7 @@ public sealed class WindowsLoginItems(IProcessLauncher launcher, TimeProvider ti
         string.Join(' ', [$"\"{command.Program}\"", .. command.Arguments.Select(Quote)]);
 
     /// <summary>Quotes an argument so <c>CommandLineToArgvW</c> reads it back as it was.</summary>
-    internal static string Quote(string argument)
-    {
-        if (argument.Length > 0 && !argument.Any(c => char.IsWhiteSpace(c) || c == '"'))
-        {
-            return argument;
-        }
-        var quoted = new StringBuilder("\"");
-        var backslashes = 0;
-        foreach (var c in argument)
-        {
-            if (c == '\\')
-            {
-                backslashes++;
-                continue;
-            }
-            // Backslashes before a quote are escaped along with it; elsewhere they're literal.
-            quoted.Append('\\', c == '"' ? backslashes * 2 + 1 : backslashes).Append(c);
-            backslashes = 0;
-        }
-        return quoted.Append('\\', backslashes * 2).Append('"').ToString();
-    }
+    internal static string Quote(string argument) => CommandLines.QuoteForWindows(argument);
 
     private static LoginCommand Command(ClaudetteCopy copy) =>
         LoginCommand.For(copy, windows: true, LoginCommand.DotnetHost(Environment.ProcessPath))

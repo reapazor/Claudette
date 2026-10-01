@@ -385,7 +385,7 @@ public sealed partial class TabViewModel
             PerforcePrompt?.Abandon();
             PerforcePrompt = prompt;
             // It waits on the user like a permission prompt: "Needs input", the badge, and a notification.
-            _pendingPermissions++;
+            _waitingOnUser.Add(prompt);
             _checkIns.SetWaitingOnUser(true);
             UpdateStatus();
             _services.Notifications.Notify(NotificationKind.NeedsInput, DisplayName, $"Perforce needs your password to log in as {request.User} @ {request.Server}.", Id);
@@ -405,7 +405,7 @@ public sealed partial class TabViewModel
                 {
                     PerforcePrompt = null;
                 }
-                PermissionResolved();
+                PermissionResolved(prompt);
             });
         }
     }

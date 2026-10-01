@@ -41,6 +41,37 @@ public class ClaudeSessionTests
     }
 
     [Fact]
+    public async Task A_reply_that_arrives_before_the_write_finishes_still_ends_the_turn()
+    {
+        // A local command such as /cost can be answered before the send's continuation runs.
+        await using var session = new ClaudeSession(_transport, _time);
+        await session.InitializeAsync(TestContext.Current.CancellationToken);
+        _transport.HoldSends = new TaskCompletionSource();
+
+        var send = session.SendUserMessageAsync("/cost", TestContext.Current.CancellationToken).AsTask();
+        Assert.Equal(SessionState.Working, session.State);
+        _transport.Emit("""{"type":"result","subtype":"success","is_error":false,"result":"Total cost: $0.00"}""");
+        await session.ReadUntilAsync<TurnCompleted>();
+        _transport.HoldSends.SetResult();
+        await send;
+
+        Assert.Equal(SessionState.Idle, session.State);
+    }
+
+    [Fact]
+    public async Task A_send_that_fails_leaves_the_session_idle()
+    {
+        await using var session = new ClaudeSession(_transport, _time);
+        await session.InitializeAsync(TestContext.Current.CancellationToken);
+        _transport.HoldSends = new TaskCompletionSource();
+        _transport.HoldSends.SetException(new IOException("The pipe is broken."));
+
+        await Assert.ThrowsAsync<IOException>(() => session.SendUserMessageAsync("hello", TestContext.Current.CancellationToken).AsTask());
+
+        Assert.Equal(SessionState.Idle, session.State);
+    }
+
+    [Fact]
     public async Task Sending_a_message_writes_a_user_line_and_starts_working()
     {
         await using var session = await StartAsync();

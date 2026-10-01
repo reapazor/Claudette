@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
 using System.Runtime.Versioning;
+using Claudette.Core.ProjectTools;
 using Claudette.Platform.Notifications.Windows;
 using Microsoft.Extensions.Logging;
 
@@ -67,7 +68,7 @@ public sealed class WindowsJumpList(string executablePath, ILogger logger) : IJu
     {
         var link = WinRt.CreateComInstance<IShellLinkW>(ShellLinkClsid);
         link.SetPath(executablePath);
-        link.SetArguments($"--folder \"{folder.Path}\"");
+        link.SetArguments($"--folder {CommandLines.QuoteForWindows(folder.Path)}");
         link.SetDescription(folder.Path);
         link.SetIconLocation(Path.Combine(Environment.SystemDirectory, "shell32.dll"), 3);
         var properties = (IPropertyStore)link;

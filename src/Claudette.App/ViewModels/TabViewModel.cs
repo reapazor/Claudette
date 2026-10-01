@@ -83,7 +83,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     private Task? _starting;
     private bool _restoredTranscript;
     private bool _restartAfterSignIn;
-    private int _pendingPermissions;
+    /// <summary>
+    /// What's waiting on the user: permission prompts by request id, and the Perforce password prompt. A set, so a
+    /// prompt that's resolved twice (answered here as the Claude app answers it, say) is only counted off once.
+    /// </summary>
+    private readonly HashSet<object> _waitingOnUser = [];
     private string? _firstPrompt;
     private bool _titleRequested;
 
@@ -1569,14 +1573,14 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 _autocompact = autocompact.State;
                 break;
             case PermissionRequested requested:
-                _pendingPermissions++;
+                _waitingOnUser.Add(requested.Request.RequestId);
                 _checkIns.SetWaitingOnUser(true);
                 WatchPermission(requested.Request);
                 UpdateStatus();
                 NotifyNeedsInput(requested.Request);
                 break;
-            case PermissionCancelled:
-                PermissionResolved();
+            case PermissionCancelled cancelled:
+                PermissionResolved(cancelled.RequestId);
                 break;
             case SystemNotice { Message.Subtype: "status" }:
                 // Claude Code reports mode changes it makes itself, such as leaving plan mode.
@@ -1633,7 +1637,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 ResetRemote();
                 SetRunningVersion(null);
                 _checkIns.TurnEnded();
-                _pendingPermissions = 0;
+                _waitingOnUser.Clear();
                 ErrorMessage = exited.Exit.ExitCode == 0 ? null : ExitErrorMessage(exited.Exit);
                 Status = exited.Exit.ExitCode == 0 ? TabStatus.Exited : TabStatus.Error;
                 OnPropertyChanged(nameof(CanRestart));
@@ -1651,14 +1655,17 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         var item = Items.OfType<PromptItem>().LastOrDefault(p => ReferenceEquals(p.Request, request));
         if (item is not null)
         {
-            item.Answered += (_, _) => PermissionResolved();
+            item.Answered += (_, _) => PermissionResolved(request.RequestId);
         }
     }
 
-    private void PermissionResolved()
+    private void PermissionResolved(object key)
     {
-        _pendingPermissions = Math.Max(0, _pendingPermissions - 1);
-        if (_pendingPermissions == 0)
+        if (!_waitingOnUser.Remove(key))
+        {
+            return;
+        }
+        if (_waitingOnUser.Count == 0)
         {
             _checkIns.SetWaitingOnUser(false);
             _services.Notifications.ClearTab(Id, NotificationKind.NeedsInput);
@@ -1672,7 +1679,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             return;
         }
-        Status = _pendingPermissions > 0 ? TabStatus.NeedsInput
+        Status = _waitingOnUser.Count > 0 ? TabStatus.NeedsInput
             : _session.State == SessionState.Working ? TabStatus.Working
             : Status == TabStatus.Unread ? TabStatus.Unread
             : TabStatus.Idle;

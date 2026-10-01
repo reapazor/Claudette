@@ -32,10 +32,21 @@ public sealed class ClaudeSessionFactory(
             Environment = ClaudeEnvironment.From(userEnvironment, options.EnvironmentOverrides),
             TrackProcessTree = true,
         };
-        IClaudeTransport transport = new ProcessClaudeTransport(launcher.Start(spec), _loggerFactory.CreateLogger<ProcessClaudeTransport>());
-        if (options.ProtocolLogPath is { } logPath)
+        // The log first: if it can't be opened, no claude has been started to leave running.
+        var log = options.ProtocolLogPath is { } logPath ? new ProtocolLog(logPath, timeProvider) : null;
+        IClaudeTransport transport;
+        try
         {
-            transport = new LoggingTransport(transport, new ProtocolLog(logPath, timeProvider));
+            transport = new ProcessClaudeTransport(launcher.Start(spec), _loggerFactory.CreateLogger<ProcessClaudeTransport>());
+        }
+        catch
+        {
+            log?.Dispose();
+            throw;
+        }
+        if (log is not null)
+        {
+            transport = new LoggingTransport(transport, log);
         }
         var session = new ClaudeSession(transport, timeProvider, _loggerFactory.CreateLogger<ClaudeSession>(), diagnostics);
         try
