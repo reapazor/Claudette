@@ -167,7 +167,7 @@ public sealed partial class TabViewModel
         OnPropertyChanged(nameof(HasChangelists));
         OnPropertyChanged(nameof(InfoRows));
         // A link can have {changelist} in it (DESIGN.md §18, "Links").
-        OnPropertyChanged(nameof(Links));
+        ProjectTools.OnLinkValuesChanged();
     }
 
     /// <summary>The Perforce rows of the tab info card (DESIGN.md §4).</summary>

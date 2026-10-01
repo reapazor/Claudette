@@ -16,13 +16,13 @@ public sealed partial class ProjectSettingsViewModel
     private IReadOnlyList<SettingChoice<string>> _projectChoices = [];
     private IReadOnlyList<SettingChoice<string>> _choiceOptions = [];
 
-    private ProjectInfo? ToolsProject => _tab.Project;
+    private ProjectInfo? ToolsProject => _tab.ProjectTools.Project;
 
     /// <summary>A provider found a project for the tab's folder.</summary>
     public bool HasToolsProject => ToolsProject is not null;
 
     /// <summary>"NightOwl · Unreal Engine".</summary>
-    public string ToolsTitle => _tab.ProjectHeaderTitle;
+    public string ToolsTitle => _tab.ProjectTools.HeaderTitle;
 
     /// <summary>What the choices are kept by: the project's file (a <c>.uproject</c>, <c>project.godot</c>) or folder.</summary>
     public string ToolsKeyText => ToolsProject is { } project ? $"Remembered on this machine for {project.ProjectPath}." : "";
@@ -46,7 +46,7 @@ public sealed partial class ProjectSettingsViewModel
             }
             _services.ProjectTools.State.ChooseProject(Folder, value.Value);
             _services.SaveState();
-            _ = _tab.RefreshProjectAsync();
+            _ = _tab.ProjectTools.RefreshAsync();
         }
     }
 
@@ -70,7 +70,7 @@ public sealed partial class ProjectSettingsViewModel
                 return;
             }
             _services.ProjectTools.Remember(project.ProjectPath, choice.Key, value.Value);
-            _ = _tab.RefreshProjectAsync();
+            _ = _tab.ProjectTools.RefreshAsync();
         }
     }
 
@@ -130,7 +130,7 @@ public sealed partial class ProjectSettingsViewModel
         ToolsFixError = null;
         _services.ProjectTools.Remember(project.ProjectPath, fix.Key, path);
         ToolsChanged();
-        await _tab.RefreshProjectAsync();
+        await _tab.ProjectTools.RefreshAsync();
     }
 
     /// <summary><b>Clear</b>: forgets the pick, so Claudette finds the engine, editor or Godot by itself again.</summary>
@@ -144,7 +144,7 @@ public sealed partial class ProjectSettingsViewModel
         ToolsFixError = null;
         _services.ProjectTools.Remember(project.ProjectPath, fix.Key, null);
         ToolsChanged();
-        await _tab.RefreshProjectAsync();
+        await _tab.ProjectTools.RefreshAsync();
     }
 
     private bool CanClearToolsFix() => ChosenFix is not null;
@@ -155,7 +155,7 @@ public sealed partial class ProjectSettingsViewModel
 
     private void BuildToolChoices()
     {
-        _projectChoices = [.. _tab.ProjectCandidates.Select(c => new SettingChoice<string>(c.Path, $"{c.Name} ({RelativeToFolder(c.Path)})"))];
+        _projectChoices = [.. _tab.ProjectTools.Candidates.Select(c => new SettingChoice<string>(c.Path, $"{c.Name} ({RelativeToFolder(c.Path)})"))];
         _choiceOptions = ToolsProject?.Choice is { } choice ? [.. choice.Options.Select(o => new SettingChoice<string>(o.Value, o.Label))] : [];
     }
 

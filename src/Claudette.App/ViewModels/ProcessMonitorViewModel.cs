@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using Claudette.App.Conversation;
+using Claudette.App.Services;
 using Claudette.Core.Sessions;
+using Claudette.Core.Settings;
 using Claudette.Platform.Processes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -43,37 +45,83 @@ public sealed class ProcessRow
     public string Tooltip => $"{Name} (PID {Pid}){(IsDetached ? ", detached" : "")}\n{CommandLine ?? Snapshot.ExecutablePath ?? ""}";
 }
 
+/// <summary>What the process monitor needs from its tab.</summary>
+internal interface IProcessMonitorHost
+{
+    /// <summary>What's saved for the tab: its own process monitor setting, from Tab settings….</summary>
+    TabState State { get; }
+
+    /// <summary>The side panel is open, so the composer bar leaves the summary to it.</summary>
+    bool IsSidePanelOpen { get; }
+
+    /// <summary>The tab's session while it runs, for stopping a background task through Claude Code.</summary>
+    ClaudeSession? Session { get; }
+
+    /// <summary>The conversation's tool calls, for the call that started a process.</summary>
+    IEnumerable<ToolUseItem> ToolItems { get; }
+
+    /// <summary>The background task Claude Code started for a tool call, if any.</summary>
+    string? TaskIdFor(string toolUseId);
+
+    /// <summary>The running project job's processes, which show under the tab's (DESIGN.md §18, "Project tools").</summary>
+    IReadOnlyList<ProcessSnapshot> ProjectJobProcesses(bool includeCommandLines);
+
+    /// <summary>The project job's tree, when <paramref name="pid"/> belongs to it, so Stop goes to that tree.</summary>
+    ProcessTree? ProjectJobTreeHolding(int pid);
+
+    /// <summary>Asks the view to scroll to a conversation item.</summary>
+    void ScrollTo(ConversationItem item);
+
+    void Confirm(string title, string message, string confirmText, Func<Task> onConfirm);
+
+    void AddNote(string text, NoteKind kind);
+
+    /// <summary>A new sample: the header's total across the tabs changes.</summary>
+    void ProcessesSampled();
+}
+
 /// <summary>The tab's processes (DESIGN.md §4, "Process monitor").</summary>
-public sealed partial class TabViewModel
+public sealed partial class ProcessMonitorViewModel : ViewModelBase
 {
     /// <summary>A child process using more than this much CPU gives the tab an activity icon.</summary>
     private const double ActiveCpuPercent = 5;
 
+    private readonly AppServices _services;
+    private readonly IProcessMonitorHost _host;
     private ProcessTree? _tree;
     private ProcessSampler? _sampler;
     private readonly Dictionary<int, string> _processTools = [];
 
+    internal ProcessMonitorViewModel(AppServices services, IProcessMonitorHost host)
+    {
+        _services = services;
+        _host = host;
+    }
+
     /// <summary>The monitor is on for this tab: its own setting in Tab settings…, or Settings → Processes.</summary>
-    public bool IsProcessMonitorOn => (State.Overrides.ShowProcessMonitor ?? _services.Settings.Processes.ShowMonitor) && _tree is not null;
+    public bool IsOn => (_host.State.Overrides.ShowProcessMonitor ?? _services.Settings.Processes.ShowMonitor) && _tree is not null;
 
     /// <summary>For example <c>3 procs · 42% CPU · 1.1 GB</c>, in the composer bar.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowProcessSummary))]
-    public partial string? ProcessSummaryText { get; set; }
+    [NotifyPropertyChangedFor(nameof(ShowSummary))]
+    public partial string? SummaryText { get; set; }
 
     /// <summary>In the composer bar, unless the side panel is open and already shows it.</summary>
-    public bool ShowProcessSummary => ProcessSummaryText is not null && !IsSidePanelOpen;
+    public bool ShowSummary => SummaryText is not null && !_host.IsSidePanelOpen;
+
+    /// <summary>The side panel opened or closed, which shows the summary instead of the composer bar.</summary>
+    internal void OnSidePanelOpenChanged() => OnPropertyChanged(nameof(ShowSummary));
 
     /// <summary>
     /// The latest sample's totals, <c>claude</c> included, for the header's total across the tabs; null while the monitor
     /// is off or before the first sample.
     /// </summary>
-    public ProcessSummary? LatestProcessSummary { get; private set; }
+    public ProcessSummary? LatestSummary { get; private set; }
 
-    private void SetLatestProcessSummary(ProcessSummary? summary)
+    private void SetLatestSummary(ProcessSummary? summary)
     {
-        LatestProcessSummary = summary;
-        _shell.OnTabProcessesSampled();
+        LatestSummary = summary;
+        _host.ProcessesSampled();
     }
 
     /// <summary>A child process is using noticeable CPU: the tab shows an activity icon.</summary>
@@ -84,37 +132,12 @@ public sealed partial class TabViewModel
 
     /// <summary>The Processes page is showing, so sample faster and include command lines.</summary>
     [ObservableProperty]
-    public partial bool IsProcessPanelVisible { get; set; }
+    public partial bool IsPanelVisible { get; set; }
 
-    partial void OnIsProcessPanelVisibleChanged(bool value) => UpdateSampler();
+    partial void OnIsPanelVisibleChanged(bool value) => UpdateSampler();
 
-    /// <summary>Asks the view to scroll to a conversation item, for example the card that started a process.</summary>
-    public event Action<ConversationItem>? ScrollToRequested;
-
-    /// <summary>Asks the view to scroll to <paramref name="item"/>, wherever it is in the conversation.</summary>
-    public void ScrollTo(ConversationItem item) => ScrollToRequested?.Invoke(item);
-
-    /// <summary>
-    /// The conversation's top-level item that holds <paramref name="item"/>: itself, or the subagent group it's inside,
-    /// however deep. Null when it isn't in the conversation. The view brings that into view first, since the
-    /// conversation is virtualized and only items in view have controls.
-    /// </summary>
-    public ConversationItem? TopLevelItemOf(ConversationItem item)
-    {
-        foreach (var top in Items)
-        {
-            if (ReferenceEquals(top, item) || top is SubagentItem group && Contains(group, item))
-            {
-                return top;
-            }
-        }
-        return null;
-
-        static bool Contains(SubagentItem group, ConversationItem item) =>
-            group.Items.Any(child => ReferenceEquals(child, item) || child is SubagentItem inner && Contains(inner, item));
-    }
-
-    private void AttachProcessTree(ClaudeSession session)
+    /// <summary>The session started: follow its <c>claude</c> and what it starts.</summary>
+    internal void AttachTree(ClaudeSession session)
     {
         if (_services.ProcessTrees is not { } trees || session.ProcessId is not { } pid)
         {
@@ -132,19 +155,19 @@ public sealed partial class TabViewModel
     }
 
     /// <summary>Settings or visibility changed: every 2 s while the panel shows, every 10 s for the summary, off when the monitor is off.</summary>
-    private void UpdateSampler()
+    internal void UpdateSampler()
     {
-        OnPropertyChanged(nameof(IsProcessMonitorOn));
-        if (!IsProcessMonitorOn)
+        OnPropertyChanged(nameof(IsOn));
+        if (!IsOn)
         {
             _sampler?.Dispose();
             _sampler = null;
-            ProcessSummaryText = null;
+            SummaryText = null;
             HasBusyProcesses = false;
             Processes.Clear();
-            if (LatestProcessSummary is not null)
+            if (LatestSummary is not null)
             {
-                SetLatestProcessSummary(null);
+                SetLatestSummary(null);
             }
             return;
         }
@@ -154,13 +177,13 @@ public sealed partial class TabViewModel
             // A project action's job shows too (DESIGN.md §18, "Project tools"), under the tab's claude.
             _sampler.Sampled += snapshots =>
             {
-                var job = ProjectJobProcesses(_services.Settings.Processes.ShowCommandLines);
+                var job = _host.ProjectJobProcesses(_services.Settings.Processes.ShowCommandLines);
                 IReadOnlyList<ProcessSnapshot> all = job.Count == 0 ? snapshots : [.. snapshots, .. job];
                 _services.Dispatcher.Post(() => OnProcessesSampled(all));
             };
         }
         var settings = _services.Settings.Processes;
-        _sampler.Interval = IsProcessPanelVisible ? TimeSpan.FromSeconds(Math.Max(1, settings.RefreshSeconds)) : ProcessSampler.SummaryInterval;
+        _sampler.Interval = IsPanelVisible ? TimeSpan.FromSeconds(Math.Max(1, settings.RefreshSeconds)) : ProcessSampler.SummaryInterval;
         _sampler.IncludeCommandLines = settings.ShowCommandLines;
         if (!_sampler.IsRunning)
         {
@@ -175,12 +198,12 @@ public sealed partial class TabViewModel
             return;
         }
         var summary = ProcessSummary.From(snapshots);
-        ProcessSummaryText = summary.Count > 0 ? summary.ToString() : null;
+        SummaryText = summary.Count > 0 ? summary.ToString() : null;
         HasBusyProcesses = snapshots.Any(s => !s.IsRoot && s.CpuPercent >= ActiveCpuPercent);
-        SetLatestProcessSummary(summary);
+        SetLatestSummary(summary);
 
         // Link a new process to the Bash call that was running when it appeared.
-        var running = Items.OfType<ToolUseItem>().LastOrDefault(t => t is { Name: "Bash", IsComplete: false });
+        var running = _host.ToolItems.LastOrDefault(t => t is { Name: "Bash", IsComplete: false });
         foreach (var snapshot in snapshots.Where(s => !s.IsRoot && !_processTools.ContainsKey(s.Pid)))
         {
             if (running is not null)
@@ -205,7 +228,7 @@ public sealed partial class TabViewModel
             return depth[s.Pid] = parent is null ? 1 : Depth(parent) + 1;
         }
         var now = _services.Time.GetUtcNow();
-        var toolsById = Items.OfType<ToolUseItem>().ToDictionary(t => t.ToolUseId);
+        var toolsById = _host.ToolItems.ToDictionary(t => t.ToolUseId);
         Processes.Clear();
         foreach (var snapshot in Ordered(snapshots))
         {
@@ -260,7 +283,7 @@ public sealed partial class TabViewModel
     {
         if (row?.Tool is { } tool)
         {
-            ScrollToRequested?.Invoke(tool);
+            _host.ScrollTo(tool);
         }
     }
 
@@ -273,8 +296,8 @@ public sealed partial class TabViewModel
             return;
         }
         // A task Claude Code started for the call, so Stop can go through it (DESIGN.md §4, "Actions").
-        var taskId = row.Tool is { } tool ? Tasks.TaskIdFor(tool.ToolUseId) : null;
-        _shell.Confirm(
+        var taskId = row.Tool is { } tool ? _host.TaskIdFor(tool.ToolUseId) : null;
+        _host.Confirm(
             $"Stop {row.Name} (PID {row.Pid})?",
             taskId is not null
                 ? "It's a background task Claude started. Claude Code stops it and tells Claude it ended."
@@ -284,18 +307,18 @@ public sealed partial class TabViewModel
             {
                 try
                 {
-                    if (taskId is not null && _session is not null)
+                    if (taskId is not null && _host.Session is { } session)
                     {
-                        await _session.StopTaskAsync(taskId);
+                        await session.StopTaskAsync(taskId);
                     }
-                    else if ((ProjectJobTreeHolding(row.Pid) ?? _tree) is { } tree)
+                    else if ((_host.ProjectJobTreeHolding(row.Pid) ?? _tree) is { } tree)
                     {
                         await tree.StopAsync(row.Pid, TimeSpan.FromSeconds(3));
                     }
                 }
                 catch (Exception ex)
                 {
-                    _conversation.AddNote($"Couldn't stop {row.Name}: {ex.Message}", NoteKind.Error);
+                    _host.AddNote($"Couldn't stop {row.Name}: {ex.Message}", NoteKind.Error);
                 }
             });
     }
@@ -315,7 +338,7 @@ public sealed partial class TabViewModel
     {
         try
         {
-            return [.. _tree?.Sample(includeCommandLines: false).Where(s => !s.IsRoot) ?? [], .. ProjectJobProcesses(includeCommandLines: false)];
+            return [.. _tree?.Sample(includeCommandLines: false).Where(s => !s.IsRoot) ?? [], .. _host.ProjectJobProcesses(includeCommandLines: false)];
         }
         catch (Exception)
         {
@@ -324,12 +347,12 @@ public sealed partial class TabViewModel
     }
 
     /// <summary>Stops the sampler, and optionally every process the tab started (DESIGN.md §4, "Cleanup").</summary>
-    private async Task EndProcessTreeAsync(bool killProcesses)
+    internal async Task EndTreeAsync(bool killProcesses)
     {
         _sampler?.Dispose();
         _sampler = null;
         // Its processes leave the header's total; on the UI thread, like the samples, since closing can finish elsewhere.
-        _services.Dispatcher.Post(() => SetLatestProcessSummary(null));
+        _services.Dispatcher.Post(() => SetLatestSummary(null));
         if (_tree is { } tree)
         {
             if (killProcesses)

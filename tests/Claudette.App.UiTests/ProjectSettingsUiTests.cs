@@ -34,9 +34,9 @@ public class ProjectSettingsUiTests
         var tab = await h.OpenTabAsync();
         if (project)
         {
-            await Waiting.UntilAsync(() => tab.Project is not null, "the project", poll: () => Avalonia.Threading.Dispatcher.UIThread.RunJobs());
+            await Waiting.UntilAsync(() => tab.ProjectTools.Project is not null, "the project", poll: () => Avalonia.Threading.Dispatcher.UIThread.RunJobs());
         }
-        Assert.Equal(project, tab.Project is not null);
+        Assert.Equal(project, tab.ProjectTools.Project is not null);
         return tab;
     }
 

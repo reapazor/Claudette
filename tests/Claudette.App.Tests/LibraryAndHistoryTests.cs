@@ -370,7 +370,7 @@ public class LibraryAndHistoryTests
         Assert.Empty(Record().ReviewedFiles ?? []);
         var path = Path.Combine(h.WorkFolder, "src", "auth.cs");
 
-        tab.ToggleFileReviewedCommand.Execute(new ChangedFileRow { Path = path, DisplayPath = "src/auth.cs", Status = "M", StatusText = "Modified", FromGit = true });
+        tab.ChangedFiles.ToggleFileReviewedCommand.Execute(new ChangedFileRow { Path = path, DisplayPath = "src/auth.cs", Status = "M", StatusText = "Modified", FromGit = true });
 
         // Relative to the folder, which has another path on another machine.
         await TabTestHarness.Eventually(() =>

@@ -393,7 +393,7 @@
           <!-- Edit / Write: the file in the diff view (DESIGN.md §5, §8) -->
           <Button Grid.Column="1" Classes="flat" Padding="6,2" Margin="4,0,0,0" VerticalAlignment="Center" IsVisible="{Binding CanOpenDiff}"
                   ToolTip.Tip="Open in the diff view" AutomationProperties.Name="Open in the diff view"
-                  Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenToolDiffCommand}" CommandParameter="{Binding}">
+                  Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.OpenToolDiffCommand}" CommandParameter="{Binding}">
             <TextBlock Classes="muted small" Text="Open diff" />
           </Button>
         </Grid>
@@ -637,13 +637,13 @@
               </StackPanel>
             </Button>
             <!-- Project tools (DESIGN.md §18); a busy dot while a job runs -->
-            <Button Grid.Column="2" Classes="pagetab" Classes.selected="{Binding IsProjectPage}" Command="{Binding ShowProjectPageCommand}" IsVisible="{Binding HasProjectTools}" ToolTip.Tip="{Binding ProjectHeaderTitle}">
+            <Button Grid.Column="2" Classes="pagetab" Classes.selected="{Binding IsProjectPage}" Command="{Binding ShowProjectPageCommand}" IsVisible="{Binding ProjectTools.HasTools}" ToolTip.Tip="{Binding ProjectTools.HeaderTitle}">
               <StackPanel Orientation="Horizontal" Spacing="4">
                 <TextBlock Text="Project" Classes.muted="{Binding !IsProjectPage}" />
-                <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding IsProjectJobRunning}" />
+                <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding ProjectTools.IsJobRunning}" />
               </StackPanel>
             </Button>
-            <Button Grid.Column="3" Classes="pagetab" Classes.selected="{Binding IsProcessesPage}" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding IsProcessMonitorOn}">
+            <Button Grid.Column="3" Classes="pagetab" Classes.selected="{Binding IsProcessesPage}" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding ProcessMonitor.IsOn}">
               <TextBlock Text="Processes" Classes.muted="{Binding !IsProcessesPage}" />
             </Button>
             <Button Grid.Column="5" Classes="flat" Padding="6" VerticalAlignment="Center" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
@@ -657,24 +657,24 @@
           <DockPanel IsVisible="{Binding IsFilesPage}">
             <StackPanel DockPanel.Dock="Top" Margin="12,0,12,6" Spacing="4">
               <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Classes="muted small" Text="{Binding ChangedFilesSummary}" VerticalAlignment="Center" />
-                <Button Grid.Column="1" Classes="flat" Command="{Binding RefreshChangedFilesCommand}">
+                <TextBlock Classes="muted small" Text="{Binding ChangedFiles.Summary}" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Classes="flat" Command="{Binding ChangedFiles.RefreshCommand}">
                   <TextBlock Classes="small" Text="Refresh" />
                 </Button>
               </Grid>
-              <CheckBox IsChecked="{Binding ShowGitChanges}" IsVisible="{Binding IsGitRepository}"
+              <CheckBox IsChecked="{Binding ChangedFiles.ShowGitChanges}" IsVisible="{Binding ChangedFiles.IsGitRepository}"
                         ToolTip.Tip="All changes in the repository, including ones made by commands or by you">
                 <TextBlock Classes="small" Text="Working tree vs HEAD" />
               </CheckBox>
             </StackPanel>
-            <ListBox x:Name="ChangedFilesList" ItemsSource="{Binding ChangedFiles}" Background="Transparent"
+            <ListBox x:Name="ChangedFilesList" ItemsSource="{Binding ChangedFiles.Files}" Background="Transparent"
                      Tapped="OnChangedFileTapped" DoubleTapped="OnChangedFileDoubleTapped">
               <ListBox.ItemTemplate>
                 <DataTemplate DataType="vm:ChangedFileRow">
                   <Grid Classes="changedfile" Classes.reviewed="{Binding IsReviewed}" ColumnDefinitions="Auto,18,*,Auto" ToolTip.Tip="{Binding StatusText}" Background="Transparent">
                     <!-- DESIGN.md §8, "Reviewed": unticks when Claude changes the file again -->
                     <CheckBox Classes="reviewed" IsChecked="{Binding IsReviewed, Mode=OneWay}"
-                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ToggleFileReviewedCommand}" CommandParameter="{Binding}"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.ToggleFileReviewedCommand}" CommandParameter="{Binding}"
                               AutomationProperties.Name="Reviewed" ToolTip.Tip="Reviewed. Unticks when Claude changes the file again." />
                     <TextBlock Grid.Column="1" Classes="mono" FontWeight="SemiBold" Text="{Binding Status}" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsDeleted}" />
                     <StackPanel Grid.Column="2">
@@ -684,12 +684,12 @@
                     <TextBlock Grid.Column="3" Classes="mono small muted" Text="{Binding Stats}" VerticalAlignment="Top" Margin="6,2,0,0" />
                     <Grid.ContextMenu>
                       <ContextMenu>
-                        <MenuItem Header="Open diff" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenFileDiffCommand}" CommandParameter="{Binding}" />
-                        <MenuItem Header="Open in diff tool" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenFileInDiffToolCommand}" CommandParameter="{Binding}"
-                                  IsVisible="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).HasDiffTool}" />
-                        <MenuItem Header="Open in editor" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenFileInEditorCommand}" CommandParameter="{Binding}" />
-                        <MenuItem Header="Reveal in folder" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RevealFileCommand}" CommandParameter="{Binding}" />
-                        <MenuItem Header="Copy path" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyFilePathCommand}" CommandParameter="{Binding}" />
+                        <MenuItem Header="Open diff" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.OpenFileDiffCommand}" CommandParameter="{Binding}" />
+                        <MenuItem Header="Open in diff tool" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.OpenFileInDiffToolCommand}" CommandParameter="{Binding}"
+                                  IsVisible="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.HasDiffTool}" />
+                        <MenuItem Header="Open in editor" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.OpenFileInEditorCommand}" CommandParameter="{Binding}" />
+                        <MenuItem Header="Reveal in folder" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.RevealFileCommand}" CommandParameter="{Binding}" />
+                        <MenuItem Header="Copy path" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.CopyFilePathCommand}" CommandParameter="{Binding}" />
                       </ContextMenu>
                     </Grid.ContextMenu>
                   </Grid>
@@ -717,15 +717,15 @@
                one clicked in the sidebar. The actions are in the project's menu at the sidebar's foot. -->
           <DockPanel x:Name="ProjectPage" IsVisible="{Binding IsProjectPage}">
             <StackPanel DockPanel.Dock="Top" Margin="12,0,12,6" Spacing="8">
-              <TextBlock Text="{Binding ProjectHeaderTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
-              <ItemsControl ItemsSource="{Binding ProjectFileProblems}" IsVisible="{Binding HasProjectFileProblems}">
+              <TextBlock Text="{Binding ProjectTools.HeaderTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <ItemsControl ItemsSource="{Binding ProjectTools.FileProblems}" IsVisible="{Binding ProjectTools.HasFileProblems}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="x:String">
                     <TextBlock Classes="small warning" Text="{Binding}" TextWrapping="Wrap" />
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-              <ItemsControl ItemsSource="{Binding ProjectDetails}">
+              <ItemsControl ItemsSource="{Binding ProjectTools.Details}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="tools:ProjectDetail">
                     <Grid ColumnDefinitions="84,*" Margin="0,1">
@@ -735,18 +735,18 @@
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" IsVisible="{Binding HasSelectedProjectRun}">
-                <TextBlock Classes="small" Classes.error="{Binding SelectedProjectRun.Failed, FallbackValue=False}" Text="{Binding SelectedProjectRun.Status, FallbackValue={x:Null}}"
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" IsVisible="{Binding ProjectTools.HasSelectedRun}">
+                <TextBlock Classes="small" Classes.error="{Binding ProjectTools.SelectedRun.Failed, FallbackValue=False}" Text="{Binding ProjectTools.SelectedRun.Status, FallbackValue={x:Null}}"
                            TextWrapping="Wrap" VerticalAlignment="Center" />
-                <Button Grid.Column="1" Content="Stop" Command="{Binding SelectedProjectRun.StopCommand, FallbackValue={x:Null}}"
-                        IsVisible="{Binding SelectedProjectRun.IsRunning, FallbackValue=False}" ToolTip.Tip="Ends the job and every process it started" />
-                <Button Grid.Column="2" Content="Copy" Command="{Binding CopyProjectOutputCommand}" ToolTip.Tip="Copy the output" />
+                <Button Grid.Column="1" Content="Stop" Command="{Binding ProjectTools.SelectedRun.StopCommand, FallbackValue={x:Null}}"
+                        IsVisible="{Binding ProjectTools.SelectedRun.IsRunning, FallbackValue=False}" ToolTip.Tip="Ends the job and every process it started" />
+                <Button Grid.Column="2" Content="Copy" Command="{Binding ProjectTools.CopyOutputCommand}" ToolTip.Tip="Copy the output" />
               </Grid>
-              <TextBlock Classes="muted small" Text="{Binding SelectedProjectRun.OutputNote, FallbackValue={x:Null}}" TextWrapping="Wrap"
-                         IsVisible="{Binding SelectedProjectRun.OutputNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}, FallbackValue=False}" />
+              <TextBlock Classes="muted small" Text="{Binding ProjectTools.SelectedRun.OutputNote, FallbackValue={x:Null}}" TextWrapping="Wrap"
+                         IsVisible="{Binding ProjectTools.SelectedRun.OutputNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}, FallbackValue=False}" />
             </StackPanel>
-            <ListBox x:Name="ProjectOutputList" ItemsSource="{Binding SelectedProjectRun.Output, FallbackValue={x:Null}}" Background="Transparent" Margin="8,0,8,8"
-                     IsVisible="{Binding HasSelectedProjectRun}" AutomationProperties.Name="Output">
+            <ListBox x:Name="ProjectOutputList" ItemsSource="{Binding ProjectTools.SelectedRun.Output, FallbackValue={x:Null}}" Background="Transparent" Margin="8,0,8,8"
+                     IsVisible="{Binding ProjectTools.HasSelectedRun}" AutomationProperties.Name="Output">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="x:String">
                   <TextBlock Classes="mono small" Text="{Binding}" />
@@ -757,9 +757,9 @@
 
           <!-- Processes (DESIGN.md §4, "Process monitor") -->
           <DockPanel IsVisible="{Binding IsProcessesPage}">
-            <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="12,0,12,6" Text="{Binding ProcessSummaryText, TargetNullValue='Only Claude Code is running.'}" />
+            <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="12,0,12,6" Text="{Binding ProcessMonitor.SummaryText, TargetNullValue='Only Claude Code is running.'}" />
             <ScrollViewer>
-              <ItemsControl ItemsSource="{Binding Processes}" Margin="8,0,8,8">
+              <ItemsControl ItemsSource="{Binding ProcessMonitor.Processes}" Margin="8,0,8,8">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="vm:ProcessRow">
                     <Border Padding="4,3" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
@@ -778,16 +778,16 @@
                         </TextBlock>
                         <TextBlock Classes="mono muted small" Text="{Binding CommandLine}" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasCommandLine}" />
                         <Button Classes="flat" Padding="0" IsVisible="{Binding HasTool}" HorizontalAlignment="Left"
-                                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ShowProcessToolCommand}" CommandParameter="{Binding}">
+                                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.ShowProcessToolCommand}" CommandParameter="{Binding}">
                           <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding ToolText}" TextTrimming="CharacterEllipsis" />
                         </Button>
                       </StackPanel>
                       <Border.ContextMenu>
                         <ContextMenu>
-                          <MenuItem Header="Stop…" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).StopProcessCommand}" CommandParameter="{Binding}" IsEnabled="{Binding !IsRoot}" />
-                          <MenuItem Header="Copy command line" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyCommandLineCommand}" CommandParameter="{Binding}" />
-                          <MenuItem Header="Reveal executable" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RevealExecutableCommand}" CommandParameter="{Binding}" />
-                          <MenuItem Header="Show in conversation" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ShowProcessToolCommand}" CommandParameter="{Binding}" IsEnabled="{Binding HasTool}" />
+                          <MenuItem Header="Stop…" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.StopProcessCommand}" CommandParameter="{Binding}" IsEnabled="{Binding !IsRoot}" />
+                          <MenuItem Header="Copy command line" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.CopyCommandLineCommand}" CommandParameter="{Binding}" />
+                          <MenuItem Header="Reveal executable" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.RevealExecutableCommand}" CommandParameter="{Binding}" />
+                          <MenuItem Header="Show in conversation" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.ShowProcessToolCommand}" CommandParameter="{Binding}" IsEnabled="{Binding HasTool}" />
                         </ContextMenu>
                       </Border.ContextMenu>
                     </Border>
@@ -1178,9 +1178,9 @@
 
             <StackPanel Orientation="Horizontal" Spacing="2">
               <!-- Processes summary (DESIGN.md §4) -->
-              <Button Classes="flat" IsVisible="{Binding ShowProcessSummary}"
+              <Button Classes="flat" IsVisible="{Binding ProcessMonitor.ShowSummary}"
                       ToolTip.Tip="Processes this tab started" Click="OnShowProcesses">
-                <TextBlock Classes="muted small" Text="{Binding ProcessSummaryText}" />
+                <TextBlock Classes="muted small" Text="{Binding ProcessMonitor.SummaryText}" />
               </Button>
 
               <!-- Agents (DESIGN.md §18, "Agent map"), while the tab has subagents -->
@@ -1231,7 +1231,7 @@
 
               <!-- Changed files (DESIGN.md §8) -->
               <Button Classes="flat" ToolTip.Tip="Changed files" Command="{Binding ToggleSidePanelCommand}">
-                <TextBlock Classes="muted small" Text="{Binding ChangedFilesCount, StringFormat='Files ({0})'}" />
+                <TextBlock Classes="muted small" Text="{Binding ChangedFiles.Count, StringFormat='Files ({0})'}" />
               </Button>
 
               <!-- Context window (DESIGN.md §6, "Per-tab context"): what fills it, as the tab's context ring shows it -->

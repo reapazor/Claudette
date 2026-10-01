@@ -70,19 +70,56 @@ public sealed class ProjectMenuEntry
     public override string ToString() => Label;
 }
 
+/// <summary>What project tools need from their tab.</summary>
+internal interface IProjectToolsHost
+{
+    string Id { get; }
+
+    string Folder { get; }
+
+    string FolderName { get; }
+
+    /// <summary>The tab's name, for the "project action finished" notification.</summary>
+    string DisplayName { get; }
+
+    /// <summary>The Project page of the side panel shows, on the selected tab.</summary>
+    bool IsProjectPageShowing { get; }
+
+    /// <summary>The tab's Perforce changelist, for <c>{changelist}</c> in links (DESIGN.md §18, "Links").</summary>
+    long? CurrentChangelist { get; }
+
+    void AddNote(string text, NoteKind kind = NoteKind.Info);
+
+    void Confirm(string title, string message, string confirmText, Func<Task> onConfirm);
+
+    /// <summary>The tab info card's Project row changed.</summary>
+    void InfoRowsChanged();
+
+    /// <summary>Opens the side panel on the Project page.</summary>
+    void OpenProjectPage();
+
+    /// <summary>Makes the tab the selected one.</summary>
+    void SelectTab();
+
+    /// <summary>Settings, on one of this tab's project pages (DESIGN.md §14).</summary>
+    Task OpenProjectSettingsAsync(string page, bool startNew);
+}
+
 /// <summary>
 /// Project tools (DESIGN.md §18): the project detected for the tab's folder, its actions and the folder's custom ones,
 /// the project's row at the sidebar's foot, the Project page of the side panel, and the runs of its jobs, each with its log.
 /// </summary>
-public sealed partial class TabViewModel
+public sealed partial class ProjectToolsViewModel : ViewModelBase
 {
+    private readonly AppServices _services;
+    private readonly IProjectToolsHost _host;
     private ProjectDetection _projectDetection = ProjectDetection.None;
     private ProjectFileContents _projectFile = ProjectFileContents.Empty;
     private IReadOnlyList<(CustomProjectAction Custom, ProjectAction Action)> _customActions = [];
     /// <summary>The running job's process tree, for the process monitor and Stop.</summary>
-    private ProcessTree? _projectJobTree;
-    private string? _projectNoteSent;
-    private string _projectSettingsSeen = "";
+    private ProcessTree? _jobTree;
+    private string? _noteSent;
+    private string _settingsSeen = "";
 
     // Reads of the project files and detections, numbered as they start. One that finishes after a later one was shown
     // is dropped, so saves in quick succession (Settings' Links and Actions pages) never leave the tab showing an
@@ -92,34 +129,40 @@ public sealed partial class TabViewModel
     private long _projectDetections;
     private long _projectDetectionShown;
 
+    internal ProjectToolsViewModel(AppServices services, IProjectToolsHost host)
+    {
+        _services = services;
+        _host = host;
+    }
+
     /// <summary>The project detected for the tab's folder, or null.</summary>
     [ObservableProperty]
     public partial ProjectInfo? Project { get; private set; }
 
-    partial void OnProjectChanged(ProjectInfo? value) => ProjectToolsChanged();
+    partial void OnProjectChanged(ProjectInfo? value) => ToolsChanged();
 
     /// <summary>
     /// The side panel has a Project page, and the project's menu <b>Show output…</b>: a detected project, custom
     /// actions, or a claudette.json whose entries were skipped (the menu says why). The sidebar's project row shows
     /// either way.
     /// </summary>
-    public bool HasProjectTools => Project is not null || _customActions.Count > 0 || _projectFile.Problems.Count > 0;
+    public bool HasTools => Project is not null || _customActions.Count > 0 || _projectFile.Problems.Count > 0;
 
     /// <summary>
     /// "NightOwl · UE 5.4", the folder's name when no project was recognized, or while a job runs, its name:
     /// "Build editor…".
     /// </summary>
-    public string ProjectButtonText =>
-        RunningProjectRun is { } running ? $"{running.Name}…"
+    public string ButtonText =>
+        RunningRun is { } running ? $"{running.Name}…"
         : Project is { } project ? project.ShortVersion is { } version ? $"{project.Name} · {version}" : project.Name
-        : FolderName;
+        : _host.FolderName;
 
-    public string ProjectButtonTip
+    public string ButtonTip
     {
         get
         {
-            var name = Project is { } project ? $"{project.Name} ({project.KindName})" : Folder;
-            var main = MainProjectAction is { } action && _services.Tips.Text(KeyboardShortcuts.RunProjectAction) is { } shortcut
+            var name = Project is { } project ? $"{project.Name} ({project.KindName})" : _host.Folder;
+            var main = MainAction is { } action && _services.Tips.Text(KeyboardShortcuts.RunProjectAction) is { } shortcut
                 ? $". {shortcut}: {action.Label}"
                 : "";
             return name + main;
@@ -127,19 +170,19 @@ public sealed partial class TabViewModel
     }
 
     /// <summary>The project menu's header: the project and its kind, or the folder's name.</summary>
-    public string ProjectHeaderTitle => Project is { } project ? $"{project.Name} · {project.KindName}" : FolderName;
+    public string HeaderTitle => Project is { } project ? $"{project.Name} · {project.KindName}" : _host.FolderName;
 
     /// <summary>The engine's version, folder and kind, or what's wrong; without a project, the folder.</summary>
-    public IReadOnlyList<string> ProjectHeaderLines => Project?.HeaderLines ?? [Folder];
+    public IReadOnlyList<string> HeaderLines => Project?.HeaderLines ?? [_host.Folder];
 
-    public string? ProjectProblem => Project?.Problem;
+    public string? Problem => Project?.Problem;
 
-    public bool HasProjectProblem => ProjectProblem is not null;
+    public bool HasProblem => Problem is not null;
 
     /// <summary>Entries of <c>claudette.json</c> or <c>claudette.local.json</c> that were skipped, and why.</summary>
-    public IReadOnlyList<string> ProjectFileProblems => _projectFile.Problems;
+    public IReadOnlyList<string> FileProblems => _projectFile.Problems;
 
-    public bool HasProjectFileProblems => _projectFile.Problems.Count > 0;
+    public bool HasFileProblems => _projectFile.Problems.Count > 0;
 
     /// <summary>The links of the folder's project files, filled in for this tab (DESIGN.md §18, "Links").</summary>
     public IReadOnlyList<ResolvedLink> Links => _projectFile.Links.Select(l => ProjectLinks.Resolve(l, LinkValues())).ToArray();
@@ -148,24 +191,27 @@ public sealed partial class TabViewModel
 
     /// <summary>What <c>{branch}</c>, <c>{changelist}</c> and <c>{folderName}</c> are, now.</summary>
     private LinkValues LinkValues() => new(
-        Core.Git.GitInfo.TryGetBranch(Folder),
-        Changelists.Current?.Number.ToString(CultureInfo.InvariantCulture),
-        FolderName);
+        Core.Git.GitInfo.TryGetBranch(_host.Folder),
+        _host.CurrentChangelist?.ToString(CultureInfo.InvariantCulture),
+        _host.FolderName);
+
+    /// <summary>The tab's changelist changed, which a link can have in it (DESIGN.md §18, "Links").</summary>
+    internal void OnLinkValuesChanged() => OnPropertyChanged(nameof(Links));
 
     /// <summary>A link from the project's menu: opened in the browser, when it's allowed to open.</summary>
     [RelayCommand]
-    private Task OpenProjectLinkAsync(ResolvedLink? link) =>
+    private Task OpenLinkAsync(ResolvedLink? link) =>
         link is { Url: { } url } ? _services.Platform.OpenUrlAsync(url) : Task.CompletedTask;
 
-    public IReadOnlyList<ProjectDetail> ProjectDetails => Project?.Details ?? [];
+    public IReadOnlyList<ProjectDetail> Details => Project?.Details ?? [];
 
     /// <summary>The project's actions and the folder's own, for the Project page's buttons.</summary>
-    public IReadOnlyList<ProjectAction> ProjectActions => [.. Project?.Actions.Select(ForJob) ?? [], .. _customActions.Select(c => ForJob(c.Action))];
+    public IReadOnlyList<ProjectAction> Actions => [.. Project?.Actions.Select(ForJob) ?? [], .. _customActions.Select(c => ForJob(c.Action))];
 
     /// <summary>The project row's menu.</summary>
-    public IReadOnlyList<ProjectMenuEntry> ProjectMenu => BuildProjectMenu();
+    public IReadOnlyList<ProjectMenuEntry> Menu => BuildMenu();
 
-    public ProjectAction? MainProjectAction => Project?.MainAction ?? _customActions.Select(c => c.Action).FirstOrDefault();
+    public ProjectAction? MainAction => Project?.MainAction ?? _customActions.Select(c => c.Action).FirstOrDefault();
 
     // ---- Detection ----------------------------------------------------------------------------------------------
 
@@ -173,9 +219,9 @@ public sealed partial class TabViewModel
     /// Finds the tab folder's project again, and reads its <c>claudette.json</c> and <c>claudette.local.json</c>, off
     /// the UI thread.
     /// </summary>
-    public async Task RefreshProjectAsync()
+    public async Task RefreshAsync()
     {
-        _projectSettingsSeen = ProjectSettingsKey();
+        _settingsSeen = SettingsKey();
         var detectionNumber = Interlocked.Increment(ref _projectDetections);
         var fileNumber = Interlocked.Increment(ref _projectFileReads);
         var tools = _services.ProjectTools;
@@ -183,8 +229,8 @@ public sealed partial class TabViewModel
         ProjectFileContents file;
         try
         {
-            var detecting = tools.DetectAsync(Folder);
-            var reading = tools.ReadProjectFileAsync(Folder);
+            var detecting = tools.DetectAsync(_host.Folder);
+            var reading = tools.ReadProjectFileAsync(_host.Folder);
             detection = await detecting.ConfigureAwait(false);
             file = await reading.ConfigureAwait(false);
         }
@@ -206,24 +252,24 @@ public sealed partial class TabViewModel
                 _projectDetection = detection;
                 Project = detection.Project;
             }
-            ProjectToolsChanged();
+            ToolsChanged();
         }).ConfigureAwait(false);
     }
 
     [RelayCommand]
-    private Task RefreshProject() => RefreshProjectAsync();
+    private Task Refresh() => RefreshAsync();
 
     /// <summary>
     /// Reads the folder's project files again: when the tab is selected, Claudette comes to the front, a turn ends
     /// (Claude may have edited them, or switched branches), and after the in-app editor saves.
     /// </summary>
-    public async Task RefreshProjectFileAsync()
+    public async Task RefreshFileAsync()
     {
         var fileNumber = Interlocked.Increment(ref _projectFileReads);
         ProjectFileContents file;
         try
         {
-            file = await _services.ProjectTools.ReadProjectFileAsync(Folder).ConfigureAwait(false);
+            file = await _services.ProjectTools.ReadProjectFileAsync(_host.Folder).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -235,7 +281,7 @@ public sealed partial class TabViewModel
             {
                 _projectFileShown = fileNumber;
                 UseProjectFile(file);
-                ProjectToolsChanged();
+                ToolsChanged();
             }
         }).ConfigureAwait(false);
     }
@@ -243,7 +289,7 @@ public sealed partial class TabViewModel
     private void UseProjectFile(ProjectFileContents file)
     {
         _projectFile = file;
-        _customActions = _services.ProjectTools.CustomActions(file, Folder);
+        _customActions = _services.ProjectTools.CustomActions(file, _host.Folder);
     }
 
     private Task OnUiThreadAsync(Action action)
@@ -267,25 +313,25 @@ public sealed partial class TabViewModel
     /// Before the tab's <c>claude</c> starts: detects the project again, and adds its note to the system prompt when
     /// Settings → Project tools says so (DESIGN.md §18, "Telling Claude"). Perforce's note is added after it.
     /// </summary>
-    private async Task<ClaudeLaunchOptions> WithProjectToolsAsync(ClaudeLaunchOptions options)
+    internal async Task<ClaudeLaunchOptions> WithNoteAsync(ClaudeLaunchOptions options)
     {
-        await RefreshProjectAsync();
-        _projectNoteSent = Project?.SystemPromptNote;
-        OnPropertyChanged(nameof(InfoRows));
-        return _projectNoteSent is { Length: > 0 } note
+        await RefreshAsync();
+        _noteSent = Project?.SystemPromptNote;
+        _host.InfoRowsChanged();
+        return _noteSent is { Length: > 0 } note
             ? options with { AppendSystemPrompt = options.AppendSystemPrompt is { Length: > 0 } existing ? $"{existing}\n\n{note}" : note }
             : options;
     }
 
     /// <summary>The Project row of the tab info card (DESIGN.md §4).</summary>
-    private void AddProjectRows(List<InfoRow> rows)
+    internal void AddInfoRows(List<InfoRow> rows)
     {
         if (Project is not { } project)
         {
             return;
         }
         var text = project.HeaderLines.Count > 0 ? $"{project.Name}: {project.HeaderLines[0]}" : $"{project.Name} ({project.KindName})";
-        if (_projectNoteSent is not null)
+        if (_noteSent is not null)
         {
             text += ". Claude was told how to build it.";
         }
@@ -293,38 +339,38 @@ public sealed partial class TabViewModel
     }
 
     /// <summary>Settings → Project tools changed: the actions (and the note, from the next session) may be different.</summary>
-    private void OnProjectToolSettingsChanged()
+    internal void OnSettingsChanged()
     {
-        OnPropertyChanged(nameof(ProjectButtonTip));
-        if (ProjectSettingsKey() != _projectSettingsSeen)
+        OnPropertyChanged(nameof(ButtonTip));
+        if (SettingsKey() != _settingsSeen)
         {
-            _ = RefreshProjectAsync();
+            _ = RefreshAsync();
         }
     }
 
-    private string ProjectSettingsKey() => _services.ProjectToolsSettingsKey;
+    private string SettingsKey() => _services.ProjectToolsSettingsKey;
 
-    private void ProjectToolsChanged()
+    private void ToolsChanged()
     {
-        OnPropertyChanged(nameof(HasProjectTools));
-        OnPropertyChanged(nameof(ProjectButtonText));
-        OnPropertyChanged(nameof(ProjectButtonTip));
-        OnPropertyChanged(nameof(ProjectHeaderTitle));
-        OnPropertyChanged(nameof(ProjectHeaderLines));
-        OnPropertyChanged(nameof(ProjectProblem));
-        OnPropertyChanged(nameof(HasProjectProblem));
-        OnPropertyChanged(nameof(ProjectFileProblems));
-        OnPropertyChanged(nameof(HasProjectFileProblems));
+        OnPropertyChanged(nameof(HasTools));
+        OnPropertyChanged(nameof(ButtonText));
+        OnPropertyChanged(nameof(ButtonTip));
+        OnPropertyChanged(nameof(HeaderTitle));
+        OnPropertyChanged(nameof(HeaderLines));
+        OnPropertyChanged(nameof(Problem));
+        OnPropertyChanged(nameof(HasProblem));
+        OnPropertyChanged(nameof(FileProblems));
+        OnPropertyChanged(nameof(HasFileProblems));
         OnPropertyChanged(nameof(Links));
         OnPropertyChanged(nameof(HasLinks));
-        OnPropertyChanged(nameof(ProjectDetails));
-        OnPropertyChanged(nameof(ProjectActions));
-        OnPropertyChanged(nameof(ProjectMenu));
-        OnPropertyChanged(nameof(MainProjectAction));
-        OnPropertyChanged(nameof(InfoRows));
+        OnPropertyChanged(nameof(Details));
+        OnPropertyChanged(nameof(Actions));
+        OnPropertyChanged(nameof(Menu));
+        OnPropertyChanged(nameof(MainAction));
+        _host.InfoRowsChanged();
     }
 
-    private IReadOnlyList<ProjectMenuEntry> BuildProjectMenu()
+    private IReadOnlyList<ProjectMenuEntry> BuildMenu()
     {
         var entries = new List<ProjectMenuEntry>();
         void Separator()
@@ -340,7 +386,7 @@ public sealed partial class TabViewModel
             Label = action.Label,
             Tip = action.Tip,
             IsEnabled = action.IsEnabled,
-            Command = RunProjectActionCommand,
+            Command = RunActionCommand,
             Parameter = action,
         };
 
@@ -375,7 +421,7 @@ public sealed partial class TabViewModel
                         Kind = ProjectMenuKind.Option,
                         Label = option.Label,
                         IsChecked = option.Value == choice.Selected,
-                        Command = ChooseProjectOptionCommand,
+                        Command = ChooseOptionCommand,
                         Parameter = option,
                     });
                 }
@@ -383,7 +429,7 @@ public sealed partial class TabViewModel
             if (project.Fix is { } fix)
             {
                 Separator();
-                entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = fix.Label, Tip = fix.Title, Command = FixProjectCommand });
+                entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = fix.Label, Tip = fix.Title, Command = FixCommand });
             }
         }
         if (_customActions.Count > 0)
@@ -401,25 +447,25 @@ public sealed partial class TabViewModel
                 Label = link.Name,
                 Tip = link.Tip,
                 IsEnabled = link.IsEnabled,
-                Command = OpenProjectLinkCommand,
+                Command = OpenLinkCommand,
                 Parameter = link,
             }));
         }
         Separator();
         // Without project tools there's no Project page to show, and no job to have output.
-        if (HasProjectTools)
+        if (HasTools)
         {
-            entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = "Show output…", Tip = "The Project page of the side panel", Command = OpenProjectPageCommand });
+            entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = "Show output…", Tip = "The Project page of the side panel", Command = ShowOutputCommand });
         }
-        entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = "Add an action…", Tip = "A command of your own for this folder", Command = AddProjectActionCommand });
-        entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = "Add a link…", Tip = "A web page of your own for this folder", Command = AddProjectLinkCommand });
-        entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = "Refresh", Tip = "Look for the project and its files again", Command = RefreshProjectCommand });
+        entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = "Add an action…", Tip = "A command of your own for this folder", Command = AddActionCommand });
+        entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = "Add a link…", Tip = "A web page of your own for this folder", Command = AddLinkCommand });
+        entries.Add(new ProjectMenuEntry { Kind = ProjectMenuKind.Command, Label = "Refresh", Tip = "Look for the project and its files again", Command = RefreshCommand });
         return entries;
     }
 
     /// <summary>While a job runs, other jobs wait: one at a time per tab.</summary>
     private ProjectAction ForJob(ProjectAction action) =>
-        RunningProjectRun is { } running && action.IsEnabled && action.Kind is ProjectActionKind.Run or ProjectActionKind.Destructive
+        RunningRun is { } running && action.IsEnabled && action.Kind is ProjectActionKind.Run or ProjectActionKind.Destructive
             ? action with { DisabledReason = $"{running.Name} is still running. Stop it first, in the sidebar or on the Project page." }
             : action;
 
@@ -433,26 +479,26 @@ public sealed partial class TabViewModel
         {
             return Task.CompletedTask;
         }
-        _services.ProjectTools.State.ChooseProject(Folder, candidate.Path);
+        _services.ProjectTools.State.ChooseProject(_host.Folder, candidate.Path);
         _services.SaveState();
-        return RefreshProjectAsync();
+        return RefreshAsync();
     }
 
     /// <summary>Picks a per-project choice, such as DebugGame. Remembered for the project on this machine.</summary>
     [RelayCommand]
-    private Task ChooseProjectOption(ProjectChoiceOption? option)
+    private Task ChooseOption(ProjectChoiceOption? option)
     {
         if (option is null || Project is not { Choice: { } choice } project)
         {
             return Task.CompletedTask;
         }
         _services.ProjectTools.Remember(project.ProjectPath, choice.Key, option.Value);
-        return RefreshProjectAsync();
+        return RefreshAsync();
     }
 
     /// <summary><b>Choose engine folder…</b> and the like: pick, check, remember for the project, look again.</summary>
     [RelayCommand]
-    private async Task FixProjectAsync()
+    private async Task FixAsync()
     {
         if (Project is not { Fix: { } fix } project)
         {
@@ -466,11 +512,11 @@ public sealed partial class TabViewModel
         var (path, error) = fix.Validate(picked);
         if (path is null)
         {
-            _conversation.AddNote(error ?? $"{picked} can't be used.", NoteKind.Warning);
+            _host.AddNote(error ?? $"{picked} can't be used.", NoteKind.Warning);
             return;
         }
         _services.ProjectTools.Remember(project.ProjectPath, fix.Key, path);
-        await RefreshProjectAsync();
+        await RefreshAsync();
     }
 
     // ---- Custom actions (DESIGN.md §18, "Custom actions") --------------------------------------------------------
@@ -480,29 +526,29 @@ public sealed partial class TabViewModel
     /// dialog asks which file the action goes in, then it joins the end of that file's <c>actions</c>.
     /// </summary>
     [RelayCommand]
-    private Task AddProjectAction() => _shell.OpenProjectSettingsAsync(this, SettingsViewModel.ActionsPage, startNew: true);
+    private Task AddAction() => _host.OpenProjectSettingsAsync(SettingsViewModel.ActionsPage, startNew: true);
 
     /// <summary>
     /// <b>Add a link…</b>: Settings opens on this tab's Links page (DESIGN.md §14) with a new link started. Its dialog
     /// asks which file the link goes in.
     /// </summary>
     [RelayCommand]
-    private Task AddProjectLink() => _shell.OpenProjectSettingsAsync(this, SettingsViewModel.LinksPage, startNew: true);
+    private Task AddLink() => _host.OpenProjectSettingsAsync(SettingsViewModel.LinksPage, startNew: true);
 
     /// <summary>A folder's project files changed through the in-app editor, here or in another tab in the same folder.</summary>
-    internal void ReloadCustomActions() => _ = RefreshProjectFileAsync();
+    internal void ReloadCustomActions() => _ = RefreshFileAsync();
 
     /// <summary>Every project detection found for the folder, nearest first, for Settings' Tools page.</summary>
-    internal IReadOnlyList<ProjectCandidate> ProjectCandidates => _projectDetection.Candidates;
+    internal IReadOnlyList<ProjectCandidate> Candidates => _projectDetection.Candidates;
 
     // ---- Running actions -------------------------------------------------------------------------------------------
 
     /// <summary>"Run the project's main action" (Ctrl/Cmd+Shift+E): Launch editor, for Unreal.</summary>
     [RelayCommand]
-    private Task RunMainProjectAction() => MainProjectAction is { } action ? RunProjectActionAsync(action) : Task.CompletedTask;
+    private Task RunMainAction() => MainAction is { } action ? RunActionAsync(action) : Task.CompletedTask;
 
     [RelayCommand]
-    private async Task RunProjectActionAsync(ProjectAction? action)
+    private async Task RunActionAsync(ProjectAction? action)
     {
         if (action is null)
         {
@@ -511,7 +557,7 @@ public sealed partial class TabViewModel
         action = ForJob(action);
         if (!action.IsEnabled)
         {
-            _conversation.AddNote($"{action.Label}: {action.DisabledReason}", NoteKind.Warning);
+            _host.AddNote($"{action.Label}: {action.DisabledReason}", NoteKind.Warning);
             return;
         }
         // Shared actions from claudette.json run on a click like any other, without asking first: the user's choice
@@ -525,14 +571,14 @@ public sealed partial class TabViewModel
                 }
                 catch (Exception ex) when (IsStartFailure(ex))
                 {
-                    _conversation.AddNote($"Couldn't start {action.Label}: {ex.Message}", NoteKind.Error);
+                    _host.AddNote($"Couldn't start {action.Label}: {ex.Message}", NoteKind.Error);
                 }
                 break;
             case ProjectActionKind.Run when action.Process is { } spec:
-                StartProjectJob(action, spec);
+                StartJob(action, spec);
                 break;
             case ProjectActionKind.Open when action.OpenPath is { } path:
-                await OpenProjectPathAsync(path, action.OpenWithIde, action.WithoutIde);
+                await OpenPathAsync(path, action.OpenWithIde, action.WithoutIde);
                 break;
             case ProjectActionKind.Destructive when action.Destructive is DeleteFolders delete:
                 await ConfirmDeleteAsync(action, delete);
@@ -550,7 +596,7 @@ public sealed partial class TabViewModel
     /// Opens a project's file or folder: with the chosen IDE when <paramref name="withIde"/>, falling back to the OS's
     /// app, or when <paramref name="withoutIde"/> says why not, to that note instead (a <c>.uproject</c> for Rider).
     /// </summary>
-    private async Task OpenProjectPathAsync(string path, bool withIde, string? withoutIde = null)
+    private async Task OpenPathAsync(string path, bool withIde, string? withoutIde = null)
     {
         if (withIde)
         {
@@ -566,20 +612,20 @@ public sealed partial class TabViewModel
                 {
                     if (withoutIde is not null)
                     {
-                        _conversation.AddNote($"Couldn't start {Path.GetFileName(spec.FileName)}: {ex.Message}", NoteKind.Error);
+                        _host.AddNote($"Couldn't start {Path.GetFileName(spec.FileName)}: {ex.Message}", NoteKind.Error);
                         return;
                     }
-                    _conversation.AddNote($"Couldn't start {Path.GetFileName(spec.FileName)}: {ex.Message}. Opened it with the OS's app instead.", NoteKind.Warning);
+                    _host.AddNote($"Couldn't start {Path.GetFileName(spec.FileName)}: {ex.Message}. Opened it with the OS's app instead.", NoteKind.Warning);
                 }
             }
             else if (withoutIde is not null)
             {
-                _conversation.AddNote(withoutIde, NoteKind.Warning);
+                _host.AddNote(withoutIde, NoteKind.Warning);
                 return;
             }
             else if (opening.Note is { } note)
             {
-                _conversation.AddNote(note, NoteKind.Warning);
+                _host.AddNote(note, NoteKind.Warning);
             }
         }
         await _services.Platform.OpenPathAsync(path);
@@ -598,8 +644,8 @@ public sealed partial class TabViewModel
         });
         if (folders.Count == 0)
         {
-            _conversation.AddNote($"{action.Label.TrimEnd('…')}: there's nothing to delete.");
-            await RefreshProjectAsync();
+            _host.AddNote($"{action.Label.TrimEnd('…')}: there's nothing to delete.");
+            await RefreshAsync();
             return;
         }
         var list = string.Join("\n", folders.Select(f => "• " + Path.GetRelativePath(delete.Root, f)));
@@ -612,10 +658,10 @@ public sealed partial class TabViewModel
         {
             message += "\n\nThe editor seems to have this project open. Close it first, or files it has loaded can't be deleted.";
         }
-        _shell.Confirm($"{action.Label.TrimEnd('…')}?", message, "Delete", () =>
+        _host.Confirm($"{action.Label.TrimEnd('…')}?", message, "Delete", () =>
         {
             var root = delete.Root;
-            BeginProjectJob(ProjectJob.Run(action.Label.TrimEnd('…'), (log, token) =>
+            BeginJob(ProjectJob.Run(action.Label.TrimEnd('…'), (log, token) =>
             {
                 var ok = true;
                 foreach (var folder in folders)
@@ -648,20 +694,20 @@ public sealed partial class TabViewModel
     {
         if (_services.ProjectTools.Processes is not { } processes)
         {
-            _conversation.AddNote($"Claudette can't list the processes on this machine, so it can't end the {kill.What}s.", NoteKind.Warning);
+            _host.AddNote($"Claudette can't list the processes on this machine, so it can't end the {kill.What}s.", NoteKind.Warning);
             return;
         }
         var running = await Task.Run(() => processes.Find(kill.Names));
         if (running.Count == 0)
         {
-            _conversation.AddNote($"No {kill.What} is running.");
-            await RefreshProjectAsync();
+            _host.AddNote($"No {kill.What} is running.");
+            await RefreshAsync();
             return;
         }
         var list = string.Join("\n", running.Select(p => $"• {p.Name} (PID {p.Pid.ToString(CultureInfo.InvariantCulture)})"
             + (kill.ProjectOf?.Invoke(p) is { } project ? $": {project}" : "")));
         var count = running.Count == 1 ? $"1 {kill.What}" : $"{running.Count} {kill.What}s";
-        _shell.Confirm(
+        _host.Confirm(
             $"End {count}?",
             $"{list}\n\nEach one ends at once, with the processes it started, such as shader compilers. Unsaved work in them is lost.",
             running.Count == 1 ? "End it" : "End them",
@@ -674,97 +720,75 @@ public sealed partial class TabViewModel
                         processes.KillTree(process);
                     }
                 });
-                _conversation.AddNote($"Ended {count}.");
-                await RefreshProjectAsync();
+                _host.AddNote($"Ended {count}.");
+                await RefreshAsync();
             });
     }
 
     // ---- Runs and the Project page ---------------------------------------------------------------------------------
 
-    private ITimer? _projectRunTicker;
+    private ITimer? _runTicker;
     private ProjectRunViewModel? _notifiedRun;
 
     /// <summary>
     /// Each job this tab has run, newest last (DESIGN.md §18): listed under the tab's row in the sidebar, each with its
     /// own log, until the user closes it. They aren't saved.
     /// </summary>
-    public ObservableCollection<ProjectRunViewModel> ProjectRuns { get; } = [];
+    public ObservableCollection<ProjectRunViewModel> Runs { get; } = [];
 
-    public bool HasProjectRuns => ProjectRuns.Count > 0;
+    public bool HasRuns => Runs.Count > 0;
 
     /// <summary>The run whose job is running. One job runs at a time per tab.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsProjectJobRunning), nameof(ProjectButtonText))]
-    public partial ProjectRunViewModel? RunningProjectRun { get; private set; }
+    [NotifyPropertyChangedFor(nameof(IsJobRunning), nameof(ButtonText))]
+    public partial ProjectRunViewModel? RunningRun { get; private set; }
 
-    partial void OnRunningProjectRunChanged(ProjectRunViewModel? value) => UpdateProjectRunTicker();
+    partial void OnRunningRunChanged(ProjectRunViewModel? value) => UpdateRunTicker();
 
-    public bool IsProjectJobRunning => RunningProjectRun is not null;
+    public bool IsJobRunning => RunningRun is not null;
 
     /// <summary>The run the Project page shows: the newest, or the one last clicked in the sidebar.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSelectedProjectRun))]
-    public partial ProjectRunViewModel? SelectedProjectRun { get; private set; }
+    [NotifyPropertyChangedFor(nameof(HasSelectedRun))]
+    public partial ProjectRunViewModel? SelectedRun { get; private set; }
 
-    partial void OnSelectedProjectRunChanged(ProjectRunViewModel? value) => UpdateShownProjectRun();
+    partial void OnSelectedRunChanged(ProjectRunViewModel? value) => UpdateShownRun();
 
-    public bool HasSelectedProjectRun => SelectedProjectRun is not null;
-
-    /// <summary>The Project page of the side panel is showing.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsFilesPage))]
-    public partial bool IsProjectPage { get; set; }
-
-    partial void OnIsProjectPageChanged(bool value)
-    {
-        if (value)
-        {
-            IsProcessesPage = false;
-            IsAgentsPage = false;
-        }
-        UpdateShownProjectRun();
-    }
-
-    [RelayCommand]
-    private void ShowProjectPage() => IsProjectPage = true;
+    public bool HasSelectedRun => SelectedRun is not null;
 
     /// <summary><b>Show output…</b>: opens the side panel on the Project page.</summary>
     [RelayCommand]
-    private void OpenProjectPage()
-    {
-        IsSidePanelOpen = true;
-        IsProjectPage = true;
-    }
+    private void ShowOutput() => _host.OpenProjectPage();
 
     /// <summary>A click on a run's entry in the sidebar: selects the tab and shows the run's log on the Project page.</summary>
-    internal void OpenProjectRun(ProjectRunViewModel run)
+    internal void OpenRun(ProjectRunViewModel run)
     {
-        if (!ProjectRuns.Contains(run))
+        if (!Runs.Contains(run))
         {
             return;
         }
-        SelectedProjectRun = run;
-        _shell.SelectTab(Id);
-        OpenProjectPage();
+        SelectedRun = run;
+        _host.SelectTab();
+        _host.OpenProjectPage();
     }
 
     /// <summary>A clicked "project action finished" notification: the Project page, on the run it was about.</summary>
-    internal void OpenNotifiedProjectRun()
+    internal void OpenNotifiedRun()
     {
-        if (_notifiedRun is { } run && ProjectRuns.Contains(run))
+        if (_notifiedRun is { } run && Runs.Contains(run))
         {
-            SelectedProjectRun = run;
+            SelectedRun = run;
         }
-        OpenProjectPage();
+        _host.OpenProjectPage();
     }
 
     /// <summary>
     /// The × on a finished run's entry: the entry and its log go. A running one can't be closed, only stopped. When it
     /// was the one the Project page showed, the page shows the newest one left.
     /// </summary>
-    internal void CloseProjectRun(ProjectRunViewModel run)
+    internal void CloseRun(ProjectRunViewModel run)
     {
-        if (run.IsRunning || !ProjectRuns.Remove(run))
+        if (run.IsRunning || !Runs.Remove(run))
         {
             return;
         }
@@ -772,36 +796,36 @@ public sealed partial class TabViewModel
         {
             // Its notification is about a log that's gone.
             _notifiedRun = null;
-            _services.Notifications.ClearTab(Id, NotificationKind.ProjectAction);
+            _services.Notifications.ClearTab(_host.Id, NotificationKind.ProjectAction);
         }
-        if (ReferenceEquals(SelectedProjectRun, run))
+        if (ReferenceEquals(SelectedRun, run))
         {
-            SelectedProjectRun = ProjectRuns.LastOrDefault();
+            SelectedRun = Runs.LastOrDefault();
         }
-        OnPropertyChanged(nameof(HasProjectRuns));
+        OnPropertyChanged(nameof(HasRuns));
     }
 
     /// <summary>Highlights the sidebar entry whose log is on the Project page, while the page shows on the selected tab.</summary>
-    private void UpdateShownProjectRun()
+    internal void UpdateShownRun()
     {
-        var shown = IsSelected && IsSidePanelOpen && IsProjectPage ? SelectedProjectRun : null;
-        foreach (var run in ProjectRuns)
+        var shown = _host.IsProjectPageShowing ? SelectedRun : null;
+        foreach (var run in Runs)
         {
             run.IsShowing = ReferenceEquals(run, shown);
         }
     }
 
     /// <summary>A new run, which the Project page shows.</summary>
-    private ProjectRunViewModel AddProjectRun(string name, ProjectAction action)
+    private ProjectRunViewModel AddRun(string name, ProjectAction action)
     {
         var run = new ProjectRunViewModel(this, name, action, _services.Time);
-        ProjectRuns.Add(run);
-        OnPropertyChanged(nameof(HasProjectRuns));
-        SelectedProjectRun = run;
+        Runs.Add(run);
+        OnPropertyChanged(nameof(HasRuns));
+        SelectedRun = run;
         return run;
     }
 
-    private void StartProjectJob(ProjectAction action, Core.Processes.ProcessStartSpec spec)
+    private void StartJob(ProjectAction action, Core.Processes.ProcessStartSpec spec)
     {
         ProjectJob job;
         try
@@ -817,27 +841,27 @@ public sealed partial class TabViewModel
         catch (Exception ex) when (IsStartFailure(ex))
         {
             // A run all the same, so its entry and log say why.
-            var failed = AddProjectRun(action.Label, action);
+            var failed = AddRun(action.Label, action);
             failed.Append([$"$ {action.CommandText}", $"Couldn't start it: {ex.Message}"]);
             failed.EndCouldntStart($"{action.Label} couldn't start: {ex.Message}");
-            _conversation.AddNote($"Couldn't start {action.Label}: {ex.Message}", NoteKind.Error);
+            _host.AddNote($"Couldn't start {action.Label}: {ex.Message}", NoteKind.Error);
             return;
         }
-        BeginProjectJob(job, action, $"$ {action.CommandText}");
+        BeginJob(job, action, $"$ {action.CommandText}");
     }
 
-    private void BeginProjectJob(ProjectJob job, ProjectAction action, string firstLine)
+    private void BeginJob(ProjectJob job, ProjectAction action, string firstLine)
     {
-        var run = AddProjectRun(job.Name, action);
+        var run = AddRun(job.Name, action);
         run.Job = job;
         run.Append([firstLine]);
-        RunningProjectRun = run;
+        RunningRun = run;
         if (job.ProcessId is { } pid && _services.ProcessTrees is { } trees)
         {
             try
             {
                 var tree = trees.Find(pid) ?? trees.Track(pid);
-                Volatile.Write(ref _projectJobTree, tree);
+                Volatile.Write(ref _jobTree, tree);
                 job.UseTreeKiller(tree.KillAll);
             }
             catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or Win32Exception or ArgumentException)
@@ -847,89 +871,89 @@ public sealed partial class TabViewModel
         }
         // Each run keeps its own lines, whichever run the Project page shows.
         job.Output += lines => _services.Dispatcher.Post(() => run.Append(lines));
-        _ = WatchProjectJobAsync(run, job);
+        _ = WatchJobAsync(run, job);
         job.Begin();
-        ProjectToolsChanged();
+        ToolsChanged();
     }
 
-    private async Task WatchProjectJobAsync(ProjectRunViewModel run, ProjectJob job)
+    private async Task WatchJobAsync(ProjectRunViewModel run, ProjectJob job)
     {
         var result = await job.Completion.ConfigureAwait(false);
-        _services.Dispatcher.Post(() => OnProjectJobEnded(run, job, result));
+        _services.Dispatcher.Post(() => OnJobEnded(run, job, result));
     }
 
-    private void OnProjectJobEnded(ProjectRunViewModel run, ProjectJob job, ProjectJobResult result)
+    private void OnJobEnded(ProjectRunViewModel run, ProjectJob job, ProjectJobResult result)
     {
-        if (ReferenceEquals(RunningProjectRun, run))
+        if (ReferenceEquals(RunningRun, run))
         {
-            if (Interlocked.Exchange(ref _projectJobTree, null) is { } tree)
+            if (Interlocked.Exchange(ref _jobTree, null) is { } tree)
             {
                 tree.Dispose();
             }
-            RunningProjectRun = null;
+            RunningRun = null;
         }
         var action = run.Action;
-        var summary = result.State == Core.ProjectTools.ProjectJobState.Succeeded || result.ExitCode is not null
+        var summary = result.State == ProjectJobState.Succeeded || result.ExitCode is not null
             ? action?.Summarize?.Invoke(result.ExitCode ?? 0)
             : null;
         var exit = result.ExitCode is { } code ? $" (exit code {code.ToString(CultureInfo.InvariantCulture)})" : "";
         var status = result.State switch
         {
-            Core.ProjectTools.ProjectJobState.Succeeded => $"{job.Name} succeeded.",
-            Core.ProjectTools.ProjectJobState.Stopped => $"{job.Name} was stopped.",
+            ProjectJobState.Succeeded => $"{job.Name} succeeded.",
+            ProjectJobState.Stopped => $"{job.Name} was stopped.",
             _ => $"{job.Name} failed{exit}.{(result.Message is { } why ? $" {why}" : "")}",
         } + (summary is null ? "" : $" {summary}");
         // The entry stays, whatever the result, until the user closes it.
         run.End(result.State, result.ExitCode, status);
-        if (!ProjectRuns.Contains(run))
+        if (!Runs.Contains(run))
         {
             // The tab closed and left it running.
             return;
         }
-        if (result.State != Core.ProjectTools.ProjectJobState.Stopped
-            && _services.Notifications.Notify(NotificationKind.ProjectAction, DisplayName, status, Id))
+        if (result.State != ProjectJobState.Stopped
+            && _services.Notifications.Notify(NotificationKind.ProjectAction, _host.DisplayName, status, _host.Id))
         {
             // Only when Claudette isn't in front (DESIGN.md §10); a click opens this run on the Project page.
             _notifiedRun = run;
         }
-        ProjectToolsChanged();
-        if (result.State == Core.ProjectTools.ProjectJobState.Succeeded && action?.ThenOnSuccess is { } next)
+        ToolsChanged();
+        if (result.State == ProjectJobState.Succeeded && action?.ThenOnSuccess is { } next)
         {
             // Build and launch: the editor only starts after a build that worked.
-            _ = RunProjectActionAsync(next);
+            _ = RunActionAsync(next);
         }
         // A build or project file generation changes what can be opened or launched.
-        _ = RefreshProjectAsync();
+        _ = RefreshAsync();
     }
 
     /// <summary>A running entry's time ticks every second, from the injected clock.</summary>
-    private void UpdateProjectRunTicker()
+    private void UpdateRunTicker()
     {
-        if (RunningProjectRun is not null)
+        if (RunningRun is not null)
         {
-            _projectRunTicker ??= _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() => RunningProjectRun?.Tick()), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+            _runTicker ??= _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() => RunningRun?.Tick()), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
         }
         else
         {
-            StopProjectRunTicker();
+            StopRunTicker();
         }
     }
 
-    private void StopProjectRunTicker()
+    private void StopRunTicker()
     {
-        _projectRunTicker?.Dispose();
-        _projectRunTicker = null;
+        _runTicker?.Dispose();
+        _runTicker = null;
     }
 
     /// <summary><b>Copy</b> on the Project page: the log it shows.</summary>
     [RelayCommand]
-    private Task CopyProjectOutputAsync() =>
-        SelectedProjectRun is { } run ? _services.Platform.SetClipboardTextAsync(string.Join(Environment.NewLine, run.Output)) : Task.CompletedTask;
+    private Task CopyOutputAsync() =>
+        SelectedRun is { } run ? _services.Platform.SetClipboardTextAsync(string.Join(Environment.NewLine, run.Output)) : Task.CompletedTask;
 
     /// <summary>The job's processes, for the process monitor: the job's own process isn't the tab's <c>claude</c>.</summary>
-    private IReadOnlyList<ProcessSnapshot> ProjectJobProcesses(bool includeCommandLines)
+    internal IReadOnlyList<ProcessSnapshot> JobProcesses(bool includeCommandLines)
     {
-        if (Volatile.Read(ref _projectJobTree) is not { IsDisposed: false } tree)
+        if (Volatile.Read(ref _jobTree) is not { IsDisposed: false } tree)
         {
             return [];
         }
@@ -944,23 +968,23 @@ public sealed partial class TabViewModel
     }
 
     /// <summary>Whether <paramref name="pid"/> belongs to the running job, so the process monitor's Stop goes to its tree.</summary>
-    private ProcessTree? ProjectJobTreeHolding(int pid) =>
-        Volatile.Read(ref _projectJobTree) is { IsDisposed: false } tree && ProjectJobProcesses(false).Any(p => p.Pid == pid) ? tree : null;
+    internal ProcessTree? JobTreeHolding(int pid) =>
+        Volatile.Read(ref _jobTree) is { IsDisposed: false } tree && JobProcesses(false).Any(p => p.Pid == pid) ? tree : null;
 
     /// <summary>
     /// Closing the tab: a running job is stopped with the tab's other processes, unless they're kept, and the runs go
     /// with the tab.
     /// </summary>
-    private void CloseProjectRuns(bool killProcesses)
+    internal void CloseRuns(bool killProcesses)
     {
         if (killProcesses)
         {
-            RunningProjectRun?.Job?.Stop();
+            RunningRun?.Job?.Stop();
         }
-        StopProjectRunTicker();
+        StopRunTicker();
         _notifiedRun = null;
-        SelectedProjectRun = null;
-        ProjectRuns.Clear();
-        OnPropertyChanged(nameof(HasProjectRuns));
+        SelectedRun = null;
+        Runs.Clear();
+        OnPropertyChanged(nameof(HasRuns));
     }
 }
