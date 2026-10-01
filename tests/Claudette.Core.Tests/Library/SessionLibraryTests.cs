@@ -109,6 +109,55 @@ public sealed class SessionLibraryTests : IDisposable
     }
 
     [Fact]
+    public async Task A_transcript_that_grew_has_only_its_new_lines_added_to_the_library_copy()
+    {
+        var (transcript, subagents) = LocalSession();
+        await _library.SaveAsync(Record(), transcript, subagents, Ct);
+        var copy = Path.Combine(_library.GetSessionFolder(Id), $"{Id}.jsonl");
+        var agentCopy = Path.Combine(_library.GetSessionFolder(Id), "subagents", "agent-a1.jsonl");
+        File.AppendAllText(transcript, "{\"type\":\"assistant\"}\n");
+        File.AppendAllText(Path.Combine(subagents, "agent-a1.jsonl"), "{\"type\":\"user\"}\n");
+
+        // Held open as a reader would: a file renamed over this one wouldn't show through it, an appended one does.
+        using (var held = new FileStream(copy, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        {
+            await _library.SaveAsync(Record(), transcript, subagents, Ct);
+
+            Assert.Equal(File.ReadAllText(transcript), new StreamReader(held).ReadToEnd());
+        }
+        Assert.Equal(File.GetLastWriteTimeUtc(transcript), File.GetLastWriteTimeUtc(copy));
+        Assert.Equal(File.ReadAllText(Path.Combine(subagents, "agent-a1.jsonl")), File.ReadAllText(agentCopy));
+        Assert.DoesNotContain(FilesInLibrary(), f => f.EndsWith(".tmp", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_library_copy_that_is_not_the_start_of_the_transcript_is_written_whole()
+    {
+        var (transcript, _) = LocalSession();
+        await _library.SaveAsync(Record(), transcript, null, Ct);
+        var copy = Path.Combine(_library.GetSessionFolder(Id), $"{Id}.jsonl");
+        File.WriteAllText(copy, "{\"type\":\"xxxx\"}\n");
+        File.AppendAllText(transcript, "{\"type\":\"assistant\"}\n");
+
+        using (var held = new FileStream(copy, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        {
+            await _library.SaveAsync(Record(), transcript, null, Ct);
+
+            Assert.Equal("{\"type\":\"xxxx\"}\n", new StreamReader(held).ReadToEnd());
+        }
+        Assert.Equal(File.ReadAllText(transcript), File.ReadAllText(copy));
+
+        // A long one too, where only the end differs.
+        var lines = string.Concat(Enumerable.Range(0, 5000).Select(i => $"{{\"line\":{i}}}\n"));
+        File.WriteAllText(transcript, lines);
+        await _library.SaveAsync(Record(), transcript, null, Ct);
+        File.WriteAllText(copy, lines[..^3] + "8}\n");
+        File.AppendAllText(transcript, "{\"type\":\"assistant\"}\n");
+        await _library.SaveAsync(Record(), transcript, null, Ct);
+        Assert.Equal(File.ReadAllText(transcript), File.ReadAllText(copy));
+    }
+
+    [Fact]
     public async Task A_forced_save_copies_every_file_again_even_ones_that_look_unchanged()
     {
         var (transcript, subagents) = LocalSession();
@@ -262,6 +311,26 @@ public sealed class SessionLibraryTests : IDisposable
         File.SetLastWriteTimeUtc(libraryCopy, File.GetLastWriteTimeUtc(path).AddMinutes(5));
         await _library.CopyToLocalAsync(Id, local, Ct);
         Assert.Equal("{\"elsewhere\":1}\n", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public async Task Copy_to_local_leaves_out_a_line_still_being_added()
+    {
+        var (transcript, subagents) = LocalSession();
+        await _library.SaveAsync(Record(), transcript, subagents, Ct);
+        var libraryCopy = Path.Combine(_library.GetSessionFolder(Id), $"{Id}.jsonl");
+        var local = _root.Combine("app-data", "sessions");
+
+        // A sync client brought the library's copy over while a line was being appended to it.
+        File.AppendAllText(libraryCopy, "{\"type\":\"assis");
+        var path = await _library.CopyToLocalAsync(Id, local, Ct);
+        Assert.Equal("{\"type\":\"user\"}\n", File.ReadAllText(path));
+
+        // The rest of the line arrives: the next copy has it.
+        File.AppendAllText(libraryCopy, "tant\"}\n");
+        File.SetLastWriteTimeUtc(libraryCopy, File.GetLastWriteTimeUtc(path).AddSeconds(5));
+        await _library.CopyToLocalAsync(Id, local, Ct);
+        Assert.Equal("{\"type\":\"user\"}\n{\"type\":\"assistant\"}\n", File.ReadAllText(path));
     }
 
     [Fact]

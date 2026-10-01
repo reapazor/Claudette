@@ -88,7 +88,8 @@ public sealed class SessionLibrary(string libraryFolder, TimeProvider time)
     /// <summary>
     /// Copies a session into the library after a turn finishes: the transcript, then the subagent transcripts, then
     /// <c>record.json</c> last, so a record in the library means its transcript is there too. Files that haven't
-    /// changed (same length and last-write time) aren't copied again. The source files are never modified.
+    /// changed (same length and last-write time) aren't copied again, and a transcript that has grown since the last copy
+    /// only has its new lines appended to it. The source files are never modified.
     /// </summary>
     /// <param name="transcriptPath">Claude Code's <c>&lt;session-id&gt;.jsonl</c>.</param>
     /// <param name="subagentsDirectory">Claude Code's <c>&lt;session-id&gt;/subagents</c> folder, if there is one.</param>
@@ -103,7 +104,7 @@ public sealed class SessionLibrary(string libraryFolder, TimeProvider time)
         // Serialized first: the caller may change the record while the files copy.
         var json = JsonSerializer.Serialize(record, Json);
 
-        await LibraryFiles.CopyAsync(transcriptPath, Path.Combine(folder, TranscriptName(record.SessionId)), force, cancellationToken).ConfigureAwait(false);
+        await LibraryFiles.CopyTranscriptAsync(transcriptPath, Path.Combine(folder, TranscriptName(record.SessionId)), force, cancellationToken).ConfigureAwait(false);
         if (subagentsDirectory is not null && Directory.Exists(subagentsDirectory))
         {
             await CopyTranscriptsAsync(subagentsDirectory, Path.Combine(folder, SubagentsFolderName), force, cancellationToken).ConfigureAwait(false);
@@ -384,7 +385,7 @@ public sealed class SessionLibrary(string libraryFolder, TimeProvider time)
     {
         foreach (var file in Directory.GetFiles(fromFolder, "*" + TranscriptExtension).Where(IsTranscript))
         {
-            await LibraryFiles.CopyAsync(file, Path.Combine(toFolder, Path.GetFileName(file)), force, cancellationToken).ConfigureAwait(false);
+            await LibraryFiles.CopyTranscriptAsync(file, Path.Combine(toFolder, Path.GetFileName(file)), force, cancellationToken).ConfigureAwait(false);
         }
     }
 
