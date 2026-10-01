@@ -855,7 +855,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     /// <summary><b>Edit suffixes…</b> in the suffix menu opens Settings → Quick suffixes.</summary>
     [RelayCommand]
-    private Task EditSuffixesAsync() => _shell.OpenSettingsAtAsync("Quick suffixes");
+    private Task EditSuffixesAsync() => _shell.OpenSettingsAtAsync(SettingsCategory.QuickSuffixes);
 
     /// <summary>Settings → Keyboard, for the tab's own shortcuts (Stop, the suffix menu, answering prompts).</summary>
     public KeyboardSettings Keyboard => _services.Settings.Keyboard;

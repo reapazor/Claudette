@@ -958,7 +958,7 @@
             <Border Classes="chip" Classes.kept="{Binding IsKept}" ToolTip.Tip="{Binding Suffix.Text}">
               <StackPanel Orientation="Horizontal" Spacing="4">
                 <TextBlock Classes="small" Text="{Binding Label}" VerticalAlignment="Center" />
-                <Button Classes="flat" Padding="3" ToolTip.Tip="Remove"
+                <Button Classes="flat" Padding="3" ToolTip.Tip="Remove" AutomationProperties.Name="{Binding Label, StringFormat='Remove {0}'}"
                         Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RemoveChipCommand}" CommandParameter="{Binding}">
                   <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="7" Height="7" Stretch="Uniform" />
                 </Button>
