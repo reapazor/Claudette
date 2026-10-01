@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.NewTabsPageView"
+             x:DataType="settings:NewTabsPage">
+  <!-- New tabs -->
+  <StackPanel Spacing="12">
+    <TextBlock Classes="section" Text="New tabs" />
+    <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10">
+      <TextBlock Classes="label" Text="Default model" />
+      <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ModelChoices}" SelectedItem="{Binding DefaultModel}" />
+      <TextBlock Grid.Row="1" Classes="label" Text="Default effort" />
+      <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding EffortChoices}" SelectedItem="{Binding DefaultEffort}" />
+      <TextBlock Grid.Row="2" Classes="label" Text="Default permission mode" />
+      <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ModeChoices}" SelectedItem="{Binding DefaultMode}" />
+      <TextBlock Grid.Row="3" Classes="label" Text="Recent folders to keep" />
+      <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="1" Maximum="100" Increment="1" FormatString="0" Value="{Binding RecentFolderLimit}" />
+    </Grid>
+    <Button Content="Clear recent folders" Command="{Binding ClearRecentFoldersCommand}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,-6,0,0" Text="Favorites are kept." />
+
+    <!-- Favorite folders: always at the top of the new tab picker (DESIGN.md §4) -->
+    <TextBlock Text="Favorite folders" FontWeight="SemiBold" Margin="0,8,0,0" />
+    <TextBlock Classes="muted small" Text="None yet. Add one here, or right-click a folder in the new tab picker." IsVisible="{Binding !HasFavorites}" TextWrapping="Wrap" />
+    <ItemsControl ItemsSource="{Binding Favorites}" IsVisible="{Binding HasFavorites}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate DataType="settings:FavoriteFolderRow">
+          <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4" Margin="0,2">
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock Text="{Binding Name}" />
+              <TextBlock Classes="muted small" Text="{Binding Path}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
+            </StackPanel>
+            <Button Grid.Column="1" Classes="flat" Content="↑" ToolTip.Tip="Move up" AutomationProperties.Name="Move up"
+                    Command="{Binding $parent[UserControl].((settings:NewTabsPage)DataContext).MoveFavoriteUpCommand}" CommandParameter="{Binding}" />
+            <Button Grid.Column="2" Classes="flat" Content="↓" ToolTip.Tip="Move down" AutomationProperties.Name="Move down"
+                    Command="{Binding $parent[UserControl].((settings:NewTabsPage)DataContext).MoveFavoriteDownCommand}" CommandParameter="{Binding}" />
+            <Button Grid.Column="3" Classes="flat" Content="Remove"
+                    Command="{Binding $parent[UserControl].((settings:NewTabsPage)DataContext).RemoveFavoriteCommand}" CommandParameter="{Binding}" />
+          </Grid>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+    <Button Content="Add folder…" Command="{Binding AddFavoriteCommand}" />
+    <Button Content="Reset to defaults" Command="{Binding ResetCommand}" Margin="0,8,0,0" />
+  </StackPanel>
+</UserControl>

@@ -332,7 +332,8 @@ public class ServiceStatusTests
         await s.CheckedAsync(1);
         Assert.True(s.Status.ShowBanner);
 
-        using var settings = new SettingsViewModel(s.H.Services, null) { ShowServiceStatus = false };
+        using var settings = new SettingsViewModel(s.H.Services, null);
+        settings.General.ShowServiceStatus = false;
         Assert.False(s.H.Services.Settings.General.ShowServiceStatus);
         Assert.False(s.Status.IsVisible);
         Assert.False(s.Status.ShowBanner);
@@ -343,7 +344,7 @@ public class ServiceStatusTests
         Assert.Equal(1, s.Requests);
 
         // On again: a check straight away.
-        settings.ShowServiceStatus = true;
+        settings.General.ShowServiceStatus = true;
         await s.CheckedAsync(2);
         Assert.True(s.Status.IsVisible);
         Assert.True(s.Status.ShowBanner);
@@ -367,12 +368,12 @@ public class ServiceStatusTests
     {
         await using var s = Create();
         using var settings = new SettingsViewModel(s.H.Services, null);
-        Assert.True(settings.ShowServiceStatus);
-        settings.ShowServiceStatus = false;
+        Assert.True(settings.General.ShowServiceStatus);
+        settings.General.ShowServiceStatus = false;
 
-        settings.ResetGeneralCommand.Execute(null);
+        settings.General.ResetCommand.Execute(null);
 
-        Assert.True(settings.ShowServiceStatus);
+        Assert.True(settings.General.ShowServiceStatus);
         Assert.True(s.H.Services.Settings.General.ShowServiceStatus);
         settings.SearchText = "service status";
         Assert.Equal([new SettingsSearchResult("General", "Show Claude's service status")], settings.SearchResults);

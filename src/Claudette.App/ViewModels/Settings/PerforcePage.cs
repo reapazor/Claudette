@@ -6,7 +6,7 @@ using Claudette.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
-namespace Claudette.App.ViewModels;
+namespace Claudette.App.ViewModels.Settings;
 
 /// <summary>A password source in Settings → Perforce.</summary>
 public sealed record PerforcePasswordSourceChoice(PerforcePasswordSource Source, string Label)
@@ -44,24 +44,27 @@ public sealed class PerforceOverrideEditor(PerforceFolderOverride entry, Action 
     }
 }
 
-/// <summary>Settings → Perforce (DESIGN.md §18). Off by default.</summary>
-public sealed partial class SettingsViewModel
+/// <summary>
+/// Settings → Perforce (DESIGN.md §18, "Perforce ticket handling"). Off by default. The stored password goes only to
+/// the OS credential store, never to settings.json.
+/// </summary>
+public sealed partial class PerforcePage : SettingsPage
 {
-    private static IEnumerable<SettingsSearchResult> PerforceSearchEntries() =>
+    public PerforcePage(SettingsContext context) : base(context, SettingsCategory.Perforce) => FillPerforceLogin();
+
+    public override IEnumerable<SettingsSearchResult> SearchEntries =>
     [
-        new(SettingsCategory.Perforce, "Keep Perforce logins fresh"),
-        new(SettingsCategory.Perforce, "Password source"),
-        new(SettingsCategory.Perforce, "Renew the ticket when less than this is left (minutes)"),
-        new(SettingsCategory.Perforce, "Request tickets valid on all hosts"),
-        new(SettingsCategory.Perforce, "Show changelist on tabs"),
-        new(SettingsCategory.Perforce, "Save a Perforce password"),
-        new(SettingsCategory.Perforce, "Forget the Perforce password"),
-        new(SettingsCategory.Perforce, "Per-folder server and user"),
+        Entry("Keep Perforce logins fresh"),
+        Entry("Password source"),
+        Entry("Renew the ticket when less than this is left (minutes)"),
+        Entry("Request tickets valid on all hosts"),
+        Entry("Show changelist on tabs"),
+        Entry("Save a Perforce password", pageText: "Save password"),
+        Entry("Forget the Perforce password", pageText: "Forget password"),
+        Entry("Per-folder server and user"),
     ];
 
-    private PerforceSettings Perforce => _settings.Perforce;
-
-    public bool IsPerforce => SelectedCategory == SettingsCategory.Perforce;
+    private PerforceSettings Perforce => Settings.Perforce;
 
     public bool PerforceEnabled
     {
@@ -110,19 +113,11 @@ public sealed partial class SettingsViewModel
         set => Set(value, v => Perforce.ShowChangelistOnTabs = v);
     }
 
-    [RelayCommand]
-    private void ResetPerforce()
+    /// <summary>The per-folder overrides are the user's data, like favorite folders; stored passwords are untouched too.</summary>
+    protected override void ResetSettings()
     {
-        // The per-folder overrides are the user's data, like favorite folders; stored passwords are untouched too.
-        _settings.Perforce = new PerforceSettings { FolderOverrides = Perforce.FolderOverrides };
+        Settings.Perforce = new PerforceSettings { FolderOverrides = Perforce.FolderOverrides };
         Save();
-        OnPropertyChanged(nameof(PerforceEnabled));
-        OnPropertyChanged(nameof(SelectedPasswordSource));
-        OnPropertyChanged(nameof(IsPerforceConfigSource));
-        OnPropertyChanged(nameof(IsStoredPasswordSource));
-        OnPropertyChanged(nameof(PerforceRenewBeforeMinutes));
-        OnPropertyChanged(nameof(PerforceAllHostsTickets));
-        OnPropertyChanged(nameof(ShowChangelistOnTabs));
     }
 
     // ---- Per-folder overrides ---------------------------------------------------------------------------------------
@@ -132,7 +127,7 @@ public sealed partial class SettingsViewModel
     [RelayCommand]
     private async Task AddPerforceOverrideAsync()
     {
-        if (await _services.Platform.PickFolderAsync("Choose a folder to set a Perforce server or user for") is not { } folder)
+        if (await Services.Platform.PickFolderAsync("Choose a folder to set a Perforce server or user for") is not { } folder)
         {
             return;
         }
@@ -159,7 +154,7 @@ public sealed partial class SettingsViewModel
 
     // ---- The stored password ("Stored by Claudette") ---------------------------------------------------------------
 
-    private ICredentialStore Credentials => _services.Perforce.Credentials;
+    private ICredentialStore Credentials => Services.Perforce.Credentials;
 
     public string CredentialStoreName => Credentials.Name;
 
@@ -232,7 +227,7 @@ public sealed partial class SettingsViewModel
 
     private void FillPerforceLogin()
     {
-        if (_services.Perforce.KnownLogins.FirstOrDefault() is { } login)
+        if (Services.Perforce.KnownLogins.FirstOrDefault() is { } login)
         {
             PerforcePasswordServer = login.Server;
             PerforcePasswordUser = login.User;

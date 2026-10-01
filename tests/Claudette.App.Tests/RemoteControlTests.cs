@@ -433,7 +433,7 @@ public class RemoteControlTests
         var first = await h.OpenTabAsync();
         var settings = new SettingsViewModel(h.Services, null);
 
-        settings.ConnectNewTabsToClaudeApp = true;
+        settings.ClaudeCode.ConnectNewTabsToClaudeApp = true;
 
         Assert.True(h.Services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp);
         Assert.False(first.RemoteControl.IsOn);
@@ -446,7 +446,7 @@ public class RemoteControlTests
         await TabTestHarness.Eventually(() => second.RemoteControl.Status.IsConnected, "the new tab to connect");
 
         // Turning it off doesn't change open tabs either.
-        settings.ConnectNewTabsToClaudeApp = false;
+        settings.ClaudeCode.ConnectNewTabsToClaudeApp = false;
         Assert.True(second.RemoteControl.IsOn);
         Assert.True(second.RemoteControl.Status.IsConnected);
     }
@@ -494,15 +494,15 @@ public class RemoteControlTests
         Assert.False(tabSettings.CanChangeRemoteControl);
         Assert.Equal(reason, tabSettings.RemoteControlUnavailableText);
         using var settings = new SettingsViewModel(h.Services, null) { SelectedCategory = "Claude Code" };
-        Assert.False(settings.CanUseRemoteControl);
-        Assert.Equal($"Not available: {reason}", settings.RemoteControlUnavailableText);
+        Assert.False(settings.ClaudeCode.CanUseRemoteControl);
+        Assert.Equal($"Not available: {reason}", settings.ClaudeCode.RemoteControlUnavailableText);
 
         // Signing in with a subscription makes it available again, in the open Settings window too.
         account.Status = new AuthStatus(true, "claude.ai", "firstParty", "me@example.com", null, "max", null, null);
         Assert.True(tab.RemoteControl.CanToggle);
         Assert.True(tab.RemoteControl.ToggleCommand.CanExecute(null));
-        Assert.True(settings.CanUseRemoteControl);
-        Assert.False(settings.HasRemoteControlUnavailableText);
+        Assert.True(settings.ClaudeCode.CanUseRemoteControl);
+        Assert.False(settings.ClaudeCode.HasRemoteControlUnavailableText);
     }
 
     [Theory]
@@ -686,12 +686,13 @@ public class RemoteControlTests
         Assert.True(h.SleepBlocker.IsBlocking);
         Assert.StartsWith("1 tab is connected to the Claude app.", h.Services.RemoteControl.DescribeKeepAwake(), StringComparison.Ordinal);
 
-        using var settings = new SettingsViewModel(h.Services, null) { KeepAwakeWhileConnected = false };
+        using var settings = new SettingsViewModel(h.Services, null);
+        settings.ClaudeCode.KeepAwakeWhileConnected = false;
         Assert.False(h.SleepBlocker.IsBlocking);
-        Assert.Contains("turned off in Settings", settings.KeepAwakeText, StringComparison.Ordinal);
-        Assert.Contains("Keeping the computer awake:", settings.DiagnosticsReport(includeHeader: true), StringComparison.Ordinal);
+        Assert.Contains("turned off in Settings", settings.Advanced.KeepAwakeText, StringComparison.Ordinal);
+        Assert.Contains("Keeping the computer awake:", settings.Advanced.DiagnosticsReport(includeHeader: true), StringComparison.Ordinal);
 
-        settings.KeepAwakeWhileConnected = true;
+        settings.ClaudeCode.KeepAwakeWhileConnected = true;
         Assert.True(h.SleepBlocker.IsBlocking);
 
         // Closing the tab disconnects it.
@@ -713,19 +714,19 @@ public class RemoteControlTests
             s.ClaudeCode.KeepAwakeWhileConnected = false;
         });
         using var settings = new SettingsViewModel(h.Services, null);
-        Assert.True(settings.CanUseRemoteControl);
+        Assert.True(settings.ClaudeCode.CanUseRemoteControl);
 
-        settings.ResetClaudeCodeCommand.Execute(null);
+        settings.ClaudeCode.ResetCommand.Execute(null);
 
         Assert.False(h.Services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp);
         Assert.True(h.Services.Settings.ClaudeCode.KeepAwakeWhileConnected);
-        Assert.False(settings.ConnectNewTabsToClaudeApp);
-        Assert.True(settings.KeepAwakeWhileConnected);
+        Assert.False(settings.ClaudeCode.ConnectNewTabsToClaudeApp);
+        Assert.True(settings.ClaudeCode.KeepAwakeWhileConnected);
         Assert.Contains(settings.SearchResultsFor("claude app"), r => r is { Category: "Claude Code", Label: "Connect new tabs to the Claude app (Remote Control)" });
         Assert.Single(settings.SearchResultsFor("keep awake"));
         Assert.Single(settings.SearchResultsFor("push notifications"));
 
-        await settings.OpenPushNotificationsDocsCommand.ExecuteAsync(null);
+        await settings.ClaudeCode.OpenPushNotificationsDocsCommand.ExecuteAsync(null);
         Assert.Equal(["https://code.claude.com/docs/en/remote-control#mobile-push-notifications"], h.Platform.OpenedUrls);
     }
 

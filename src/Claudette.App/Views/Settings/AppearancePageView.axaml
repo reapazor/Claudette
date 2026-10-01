@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.AppearancePageView"
+             x:DataType="settings:AppearancePage">
+  <!-- Appearance -->
+  <StackPanel Spacing="12">
+    <TextBlock Classes="section" Text="Appearance" />
+    <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
+      <TextBlock Classes="label" Text="Theme" />
+      <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" AutomationProperties.Name="Theme" />
+      <!-- Claudette's own look or the Claude apps', in light and dark alike (DESIGN.md §3) -->
+      <TextBlock Grid.Row="1" Classes="label" Text="Style" />
+      <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding StyleOptions}" SelectedItem="{Binding Style}"
+                AutomationProperties.Name="Style"
+                ToolTip.Tip="Claude looks like the Claude apps: ivory and warm greys, Claude's orange, message bubbles and serif replies. Standard uses neutral greys and your OS's accent color." />
+      <!-- Compact tightens the conversation, the sidebar's rows and the composer (DESIGN.md §14) -->
+      <TextBlock Grid.Row="2" Classes="label" Text="Density" />
+      <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Densities}" SelectedItem="{Binding Density}"
+                AutomationProperties.Name="Density" ToolTip.Tip="Compact tightens the conversation, the sidebar's rows and the message box" />
+      <TextBlock Grid.Row="3" Classes="label" Text="Conversation font" />
+      <AutoCompleteBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding InstalledFonts}" Text="{Binding ConversationFont}" FilterMode="ContainsOrdinal"
+                       PlaceholderText="Claudette's default" MinimumPrefixLength="0" AutomationProperties.Name="Conversation font" />
+      <TextBlock Grid.Row="4" Classes="label" Text="Conversation font size" />
+      <NumericUpDown Grid.Row="4" Grid.Column="1" Minimum="9" Maximum="28" Increment="1" FormatString="0" Value="{Binding ConversationFontSize}" />
+      <TextBlock Grid.Row="5" Classes="label" Text="Code font" />
+      <AutoCompleteBox Grid.Row="5" Grid.Column="1" ItemsSource="{Binding InstalledFonts}" Text="{Binding CodeFont}" FilterMode="ContainsOrdinal"
+                       PlaceholderText="Cascadia Mono, Consolas or Menlo" MinimumPrefixLength="0" AutomationProperties.Name="Code font" />
+      <TextBlock Grid.Row="6" Classes="label" Text="Code font size" />
+      <NumericUpDown Grid.Row="6" Grid.Column="1" Minimum="8" Maximum="28" Increment="1" FormatString="0" Value="{Binding CodeFontSize}" />
+      <!-- Accessibility (DESIGN.md §3): the main window's scale, and whether anything moves -->
+      <TextBlock Grid.Row="7" Classes="label" Text="Zoom" />
+      <ComboBox Grid.Row="7" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ZoomChoices}" SelectedItem="{Binding Zoom}"
+                AutomationProperties.Name="Zoom"
+                ToolTip.Tip="Makes everything in the main window bigger or smaller. Ctrl and + or −, or Ctrl+0, change it too (Cmd on a Mac). Each computer keeps its own." />
+      <TextBlock Grid.Row="8" Classes="label" Text="Motion" />
+      <ComboBox Grid.Row="8" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding MotionChoices}" SelectedItem="{Binding Motion}"
+                AutomationProperties.Name="Motion"
+                ToolTip.Tip="Reducing motion stops the pulsing dots, the twinkling glyph while Claude works and the moving taskbar or Dock icon. Following the system, it's reduced when your computer's settings, or Claude Code's prefersReducedMotion, ask for it." />
+    </Grid>
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,-4,0,0"
+               Text="Leave a font empty for the default. A font that isn't installed on this machine falls back to the default." />
+    <CheckBox Content="Show thinking expanded" IsChecked="{Binding ExpandThinking}" />
+    <CheckBox Content="Show fun words while Claude works" IsChecked="{Binding FunWorkingWords}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="A twinkling line above the message box, such as “Noodling… 42s · 3.1k tokens”. Off, it says “Working…”. Verbs added to spinnerVerbs in Claude Code's settings show here too." />
+    <CheckBox Content="Show what Claude is doing while it works" IsChecked="{Binding ShowToolInWorkingLine}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="While a tool runs, the line says what it's doing instead, such as “Running dotnet test…” or “Reading TabView.axaml…”." />
+    <CheckBox Content="Detailed usage header" IsChecked="{Binding DetailedUsageHeader}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="Draws the usage header taller, with charts of the session and the week, the burn rate and the busiest tabs. The chevron at the header's right does the same. Kept on this machine, not synced." />
+    <CheckBox Content="Show context on tab rows" IsChecked="{Binding ShowContextOnTabs}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="A small ring on each tab in the sidebar fills up with the tab's context window. It turns amber when Claude Code is about to compact the conversation, and red when it's nearly full." />
+    <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
+  </StackPanel>
+</UserControl>

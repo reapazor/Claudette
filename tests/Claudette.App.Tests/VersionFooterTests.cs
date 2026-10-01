@@ -106,7 +106,7 @@ public class VersionFooterTests
         h.Services.IsSourceBuild = true;
         var settings = new SettingsViewModel(h.Services, null);
 
-        await settings.CopyDiagnosticsCommand.ExecuteAsync(null);
+        await settings.Advanced.CopyDiagnosticsCommand.ExecuteAsync(null);
 
         Assert.StartsWith("Claudette 0.1.0 (source build 842169b)", h.Platform.Clipboard, StringComparison.Ordinal);
     }

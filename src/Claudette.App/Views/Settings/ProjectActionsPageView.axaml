@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.ProjectActionsPageView"
+             x:DataType="settings:ProjectActionsPage">
+  <!-- The tab's project: Actions, the editor that was in Tab settings… (DESIGN.md §18, "Custom actions") -->
+  <StackPanel x:Name="ActionsPage" Spacing="12" DataContext="{Binding Project}" x:DataType="vm:ProjectSettingsViewModel">
+    <TextBlock Classes="section" Text="Actions" />
+    <TextBlock Classes="muted small" Text="{Binding ForTabText, FallbackValue=''}" TextWrapping="Wrap" Margin="0,-10,0,0" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="Commands of your own for this folder, in the project's menu in the sidebar and on the Project page. Changes are saved as you make them." />
+    <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectActionFiles}" SelectedItem="{Binding SelectedProjectActionFile}"
+              AutomationProperties.Name="Project actions file" />
+    <TextBlock Classes="muted small" Text="{Binding ProjectActionsNote}" TextWrapping="Wrap" Margin="0,-4,0,0" />
+    <TextBlock Classes="small error" Text="{Binding ProjectActionFileError}" TextWrapping="Wrap" IsVisible="{Binding !CanEditProjectActionFile}" />
+    <ListBox ItemsSource="{Binding ProjectActions}" SelectedItem="{Binding SelectedProjectAction}" MaxHeight="300"
+             IsVisible="{Binding ProjectActions.Count}" AutomationProperties.Name="Project actions">
+      <ListBox.ItemTemplate>
+        <DataTemplate DataType="vm:CustomActionRow">
+          <StackPanel>
+            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Classes="muted small mono" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <WrapPanel ItemSpacing="6" LineSpacing="6">
+      <Button Content="Add…" Command="{Binding AddProjectActionCommand}" />
+      <Button Content="Edit…" Command="{Binding EditProjectActionCommand}" />
+      <Button Content="Remove" Command="{Binding RemoveProjectActionCommand}" />
+      <Button Content="Move up" Command="{Binding MoveProjectActionUpCommand}" />
+      <Button Content="Move down" Command="{Binding MoveProjectActionDownCommand}" />
+      <Button Content="Open file" Command="{Binding OpenProjectActionFileCommand}" ToolTip.Tip="Open the file in your editor, for anything this page doesn't cover" />
+    </WrapPanel>
+    <TextBlock Classes="small error" Text="{Binding ActionsError}" TextWrapping="Wrap" IsVisible="{Binding HasActionsError}" />
+  </StackPanel>
+</UserControl>

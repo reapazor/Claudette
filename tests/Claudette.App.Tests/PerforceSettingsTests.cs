@@ -19,7 +19,7 @@ public class PerforceSettingsTests
 
         Assert.Equal([("Perforce", "Show changelist on tabs")], settings.SearchResults.Select(r => (r.Category, r.Label)));
         Assert.Equal("Perforce", settings.SelectedCategory);
-        Assert.True(settings.IsPerforce);
+        Assert.Same(settings.Perforce, settings.CurrentPage);
     }
 
     [Fact]
@@ -29,21 +29,21 @@ public class PerforceSettingsTests
         h.Platform.FolderToPick = h.WorkFolder;
         var settings = new SettingsViewModel(h.Services, null);
         var perforce = h.Services.Settings.Perforce;
-        Assert.False(settings.PerforceEnabled);
-        Assert.Equal(30, settings.PerforceRenewBeforeMinutes);
-        Assert.Equal(PerforcePasswordSource.Stored, settings.SelectedPasswordSource.Source);
+        Assert.False(settings.Perforce.PerforceEnabled);
+        Assert.Equal(30, settings.Perforce.PerforceRenewBeforeMinutes);
+        Assert.Equal(PerforcePasswordSource.Stored, settings.Perforce.SelectedPasswordSource.Source);
 
-        settings.PerforceEnabled = true;
-        settings.SelectedPasswordSource = settings.PerforcePasswordSources.Single(c => c.Source == PerforcePasswordSource.PerforceConfig);
-        settings.PerforceRenewBeforeMinutes = 45;
-        settings.PerforceAllHostsTickets = true;
-        settings.ShowChangelistOnTabs = true;
-        await settings.AddPerforceOverrideCommand.ExecuteAsync(null);
-        settings.PerforceOverrides.Single().Server = "other:1666";
-        settings.PerforceOverrides.Single().User = " build ";
+        settings.Perforce.PerforceEnabled = true;
+        settings.Perforce.SelectedPasswordSource = settings.Perforce.PerforcePasswordSources.Single(c => c.Source == PerforcePasswordSource.PerforceConfig);
+        settings.Perforce.PerforceRenewBeforeMinutes = 45;
+        settings.Perforce.PerforceAllHostsTickets = true;
+        settings.Perforce.ShowChangelistOnTabs = true;
+        await settings.Perforce.AddPerforceOverrideCommand.ExecuteAsync(null);
+        settings.Perforce.PerforceOverrides.Single().Server = "other:1666";
+        settings.Perforce.PerforceOverrides.Single().User = " build ";
 
         Assert.True(perforce.Enabled);
-        Assert.True(settings.IsPerforceConfigSource);
+        Assert.True(settings.Perforce.IsPerforceConfigSource);
         Assert.Equal(PerforcePasswordSource.PerforceConfig, perforce.PasswordSource);
         Assert.Equal(45, perforce.RenewBeforeMinutes);
         Assert.True(perforce.AllHostsTickets && perforce.ShowChangelistOnTabs);
@@ -51,7 +51,7 @@ public class PerforceSettingsTests
         Assert.Same(perforce.FolderOverrides.Single(), perforce.OverrideFor(Path.Combine(h.WorkFolder, "sub")));
         Assert.Equal(new PerforceTarget(h.WorkFolder, "other:1666", "build"), h.Services.Perforce.TargetFor(h.WorkFolder));
 
-        settings.ResetPerforceCommand.Execute(null);
+        settings.Perforce.ResetCommand.Execute(null);
 
         perforce = h.Services.Settings.Perforce;
         Assert.False(perforce.Enabled);
@@ -60,7 +60,7 @@ public class PerforceSettingsTests
         Assert.False(perforce.ShowChangelistOnTabs);
         Assert.Single(perforce.FolderOverrides);
 
-        settings.RemovePerforceOverrideCommand.Execute(settings.PerforceOverrides.Single());
+        settings.Perforce.RemovePerforceOverrideCommand.Execute(settings.Perforce.PerforceOverrides.Single());
         Assert.Empty(perforce.FolderOverrides);
         Assert.Null(perforce.OverrideFor(h.WorkFolder));
     }
@@ -73,21 +73,21 @@ public class PerforceSettingsTests
         h.Services.Perforce.Credentials = store;
         h.Services.Perforce.AddKnownLogin("ssl:perforce:1666", "matt");
         var settings = new SettingsViewModel(h.Services, null);
-        Assert.Equal(("ssl:perforce:1666", "matt"), (settings.PerforcePasswordServer, settings.PerforcePasswordUser));
-        Assert.Equal("Test Keychain", settings.CredentialStoreName);
+        Assert.Equal(("ssl:perforce:1666", "matt"), (settings.Perforce.PerforcePasswordServer, settings.Perforce.PerforcePasswordUser));
+        Assert.Equal("Test Keychain", settings.Perforce.CredentialStoreName);
 
-        settings.PerforcePassword = "s3cret";
-        await settings.SavePerforcePasswordCommand.ExecuteAsync(null);
+        settings.Perforce.PerforcePassword = "s3cret";
+        await settings.Perforce.SavePerforcePasswordCommand.ExecuteAsync(null);
 
         Assert.Equal("s3cret", store.Secrets["perforce/ssl:perforce:1666/matt"]);
-        Assert.Equal("", settings.PerforcePassword);
-        Assert.Equal("Saved the password for matt @ ssl:perforce:1666 in Test Keychain.", settings.PerforcePasswordStatus);
+        Assert.Equal("", settings.Perforce.PerforcePassword);
+        Assert.Equal("Saved the password for matt @ ssl:perforce:1666 in Test Keychain.", settings.Perforce.PerforcePasswordStatus);
         Assert.DoesNotContain("s3cret", JsonFileStore<AppSettings>.Serialize(h.Services.Settings), StringComparison.Ordinal);
 
-        await settings.ForgetPerforcePasswordCommand.ExecuteAsync(null);
+        await settings.Perforce.ForgetPerforcePasswordCommand.ExecuteAsync(null);
         Assert.Empty(store.Secrets);
-        await settings.ForgetPerforcePasswordCommand.ExecuteAsync(null);
-        Assert.Equal("No password was saved for matt @ ssl:perforce:1666.", settings.PerforcePasswordStatus);
+        await settings.Perforce.ForgetPerforcePasswordCommand.ExecuteAsync(null);
+        Assert.Equal("No password was saved for matt @ ssl:perforce:1666.", settings.Perforce.PerforcePasswordStatus);
     }
 
     [Fact]
@@ -97,8 +97,8 @@ public class PerforceSettingsTests
         h.Services.Perforce.Credentials = new FakeCredentialStore { IsAvailable = false };
         var settings = new SettingsViewModel(h.Services, null);
 
-        Assert.False(settings.IsCredentialStoreAvailable);
-        Assert.Equal("Not available in this test.", settings.CredentialStoreUnavailableText);
+        Assert.False(settings.Perforce.IsCredentialStoreAvailable);
+        Assert.Equal("Not available in this test.", settings.Perforce.CredentialStoreUnavailableText);
     }
 
     [Fact]

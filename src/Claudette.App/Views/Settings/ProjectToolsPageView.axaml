@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.ProjectToolsPageView"
+             x:DataType="settings:ProjectToolsPage">
+  <!-- Project tools (DESIGN.md §18) -->
+  <StackPanel Spacing="12">
+    <TextBlock Classes="section" Text="Project tools" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="When a tab's folder holds a project Claudette knows, such as an Unreal Engine project, the sidebar gets a row for the project, above Links, with its actions: launch the editor, generate project files, build. These settings stay on this machine." />
+    <TextBlock Text="Unreal Engine" FontWeight="SemiBold" />
+    <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto" RowSpacing="10">
+      <TextBlock Classes="label" Text="Default editor configuration" />
+      <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding UnrealConfigurationChoices}" SelectedItem="{Binding SelectedUnrealConfiguration}" />
+      <TextBlock Grid.Row="1" Classes="label" Text="Project files for" />
+      <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ProjectFileFormatChoices}" SelectedItem="{Binding SelectedProjectFileFormat}" />
+    </Grid>
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="The configuration is the default for projects that haven't been given their own in the project's menu. Rider opens the .uproject itself, so it needs no project files (Unreal Engine 4.25.4 or later on Windows, 4.26 on macOS and Linux)." />
+    <CheckBox Content="Tell Claude about Unreal projects" IsChecked="{Binding TellClaudeAboutUnreal}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="Adds a short note to the session: the engine version and folder, and the exact commands to build the editor and regenerate project files. Applies to tabs started after the change." />
+    <TextBlock Text="Unity" FontWeight="SemiBold" Margin="0,8,0,0" />
+    <Grid ColumnDefinitions="220,*" RowDefinitions="Auto">
+      <TextBlock Classes="label" Text="Default code optimization" />
+      <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding UnityOptimizationChoices}" SelectedItem="{Binding SelectedUnityOptimization}" />
+    </Grid>
+    <CheckBox Content="Tell Claude about Unity projects" IsChecked="{Binding TellClaudeAboutUnity}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="The Unity version and editor, how to run the EditMode tests in batch mode, which folders are generated, and that .meta files move with their assets." />
+    <TextBlock Text="Godot" FontWeight="SemiBold" Margin="0,8,0,0" />
+    <Grid ColumnDefinitions="220,*,Auto,Auto" ColumnSpacing="8">
+      <TextBlock Classes="label" Text="Godot executable" />
+      <TextBox Grid.Column="1" Classes="mono" Text="{Binding GodotPath, UpdateSourceTrigger=LostFocus}" PlaceholderText="Found automatically" />
+      <Button Grid.Column="2" Content="Browse…" Command="{Binding BrowseGodotCommand}" />
+      <Button Grid.Column="3" Content="Detect" Command="{Binding DetectGodotCommand}" ToolTip.Tip="Look on the PATH and where Godot's installers put it" />
+    </Grid>
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Text="{Binding GodotDetectResult}"
+               IsVisible="{Binding GodotDetectResult, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="Empty looks for godot, godot4, Godot or godot-mono on the PATH, then Godot.app on macOS, or WinGet's and Scoop's places on Windows. C# projects need the .NET build of Godot." />
+    <CheckBox Content="Tell Claude about Godot projects" IsChecked="{Binding TellClaudeAboutGodot}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="The Godot version, GDScript or C#, and how to check the project and build its C# without the editor." />
+    <TextBlock Text="Solutions" FontWeight="SemiBold" Margin="0,8,0,0" />
+    <Grid ColumnDefinitions="220,*" RowDefinitions="Auto">
+      <TextBlock Classes="label" Text="Open solutions with" />
+      <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding SolutionOpenerChoices}" SelectedItem="{Binding OpenSolutionsWith}" />
+    </Grid>
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding IsCustomIde}">
+      <TextBox Classes="mono" Text="{Binding CustomIdePath, UpdateSourceTrigger=LostFocus}" PlaceholderText="The program's path; it's given the solution's path" />
+      <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseCustomIdeCommand}" />
+    </Grid>
+    <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
+  </StackPanel>
+</UserControl>

@@ -92,12 +92,12 @@ public class ContextRingTests
         await using var h = new TabTestHarness();
         var tab = await h.OpenTabAsync();
         var settings = new SettingsViewModel(h.Services, null);
-        Assert.True(settings.ShowContextOnTabs);
+        Assert.True(settings.Appearance.ShowContextOnTabs);
         Assert.True(tab.Context.ShowRing);
         var changed = new List<string?>();
         tab.Context.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
 
-        settings.ShowContextOnTabs = false;
+        settings.Appearance.ShowContextOnTabs = false;
 
         Assert.False(h.Services.Settings.Appearance.ShowContextOnTabs);
         Assert.False(tab.Context.ShowRing);

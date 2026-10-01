@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.KeyboardPageView"
+             x:DataType="settings:KeyboardPage">
+  <!-- Keyboard (DESIGN.md §14) -->
+  <StackPanel Spacing="12">
+    <TextBlock Classes="section" Text="Keyboard" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="Click a shortcut, then press the keys you want. Esc cancels. Quick suffix shortcuts are set in Quick suffixes." />
+    <ItemsControl ItemsSource="{Binding ShortcutRows}">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <StackPanel Spacing="6" />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate DataType="settings:ShortcutRow">
+          <StackPanel Spacing="2">
+            <Grid ColumnDefinitions="220,190,Auto,Auto" ColumnSpacing="8">
+              <TextBlock Classes="label" Text="{Binding Label}" VerticalAlignment="Center" />
+              <Button Grid.Column="1" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Content="{Binding ShortcutText}"
+                      FontFamily="{DynamicResource MonoFont}" Classes.accent="{Binding IsRecording}"
+                      Command="{Binding $parent[UserControl].((settings:KeyboardPage)DataContext).StartRecordingCommand}" CommandParameter="{Binding}"
+                      ToolTip.Tip="Click, then press the new shortcut" />
+              <Button Grid.Column="2" Classes="flat" Content="Reset" IsVisible="{Binding IsCustomized}"
+                      Command="{Binding $parent[UserControl].((settings:KeyboardPage)DataContext).ResetShortcutCommand}" CommandParameter="{Binding}" />
+              <Button Grid.Column="3" Classes="flat" Content="Remove" IsVisible="{Binding Shortcut, Converter={x:Static ObjectConverters.IsNotNull}}"
+                      Command="{Binding $parent[UserControl].((settings:KeyboardPage)DataContext).ClearShortcutCommand}" CommandParameter="{Binding}" />
+            </Grid>
+            <TextBlock Classes="small error" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" Margin="228,0,0,0" />
+          </StackPanel>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="In the message box, Enter sends and Shift+Enter starts a new line. In the new tab picker, 1–9 pick a folder; in the quick suffixes menu, 1–9 pick a suffix." />
+    <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
+  </StackPanel>
+</UserControl>

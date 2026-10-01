@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.AdvancedPageView"
+             x:DataType="settings:AdvancedPage">
+  <!-- Advanced -->
+  <StackPanel Spacing="12">
+    <TextBlock Classes="section" Text="Advanced" />
+    <TextBlock Text="Extra arguments for every claude process" />
+    <TextBox Text="{Binding ExtraArguments, UpdateSourceTrigger=LostFocus}" FontFamily="{DynamicResource MonoFont}" PlaceholderText="for example --add-dir ../shared" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Split on spaces and added after Claudette's own arguments. Applies to tabs started after the change." />
+
+    <!-- DESIGN.md §13, "Logging" -->
+    <CheckBox Content="Log protocol traffic" IsChecked="{Binding LogProtocol}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="Writes everything each session sends and receives to the log folder, to help with bug reports when Claude Code changes. Logs hold your prompts and file contents, and are deleted after 7 days. Messages Claudette skips also show in the conversation. Applies to tabs started after the change." />
+    <StackPanel Orientation="Horizontal" Spacing="8">
+      <Button Content="Open log folder" Command="{Binding OpenLogFolderCommand}" />
+      <Button Content="Open data folder" Command="{Binding OpenDataFolderCommand}" />
+    </StackPanel>
+    <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
+
+    <!-- DESIGN.md §16, "Staying tolerant at runtime" -->
+    <TextBlock Classes="section" Text="Diagnostics" Margin="0,8,0,0" />
+    <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
+      <TextBlock Text="Claude Code" />
+      <TextBlock Grid.Column="1" Text="{Binding InstalledVersionText}" />
+      <TextBlock Grid.Row="1" Text="Minimum supported Claude Code version" TextWrapping="Wrap" />
+      <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MinimumVersionText}" />
+      <TextBlock Grid.Row="2" Text="Login shell environment" TextWrapping="Wrap" />
+      <SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding LoginShellText}" TextWrapping="Wrap" />
+      <TextBlock Grid.Row="3" Text="Keeping the computer awake" TextWrapping="Wrap" />
+      <SelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding KeepAwakeText}" TextWrapping="Wrap" />
+    </Grid>
+    <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6">
+      <SelectableTextBlock Text="{Binding DiagnosticsText}" FontFamily="{DynamicResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
+    </Border>
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="Things Claude Code sent this run that Claudette doesn't know yet. They're skipped safely; a count here after a Claude Code update is worth a bug report." />
+    <StackPanel Orientation="Horizontal" Spacing="8">
+      <Button Content="Copy diagnostics" Command="{Binding CopyDiagnosticsCommand}" />
+      <Button Content="Refresh" Command="{Binding RefreshDiagnosticsCommand}" />
+    </StackPanel>
+  </StackPanel>
+</UserControl>

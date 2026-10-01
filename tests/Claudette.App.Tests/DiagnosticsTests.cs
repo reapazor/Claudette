@@ -49,11 +49,11 @@ public class DiagnosticsTests
         h.Services.Diagnostics.RecordParseError();
         var settings = new SettingsViewModel(h.Services, null, null) { SelectedCategory = "Advanced" };
 
-        Assert.Equal(ClaudeLocator.MinimumVersion.ToString(), settings.MinimumVersionText);
-        Assert.Contains("hologram ×1", settings.DiagnosticsText, StringComparison.Ordinal);
-        Assert.Contains("Lines that couldn't be read: 1", settings.DiagnosticsText, StringComparison.Ordinal);
+        Assert.Equal(ClaudeLocator.MinimumVersion.ToString(), settings.Advanced.MinimumVersionText);
+        Assert.Contains("hologram ×1", settings.Advanced.DiagnosticsText, StringComparison.Ordinal);
+        Assert.Contains("Lines that couldn't be read: 1", settings.Advanced.DiagnosticsText, StringComparison.Ordinal);
 
-        await settings.CopyDiagnosticsCommand.ExecuteAsync(null);
+        await settings.Advanced.CopyDiagnosticsCommand.ExecuteAsync(null);
 
         Assert.StartsWith("Claudette ", h.Platform.Clipboard, StringComparison.Ordinal);
         Assert.Contains($"Minimum supported Claude Code: {ClaudeLocator.MinimumVersion}", h.Platform.Clipboard, StringComparison.Ordinal);

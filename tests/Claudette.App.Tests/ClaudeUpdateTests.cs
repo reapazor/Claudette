@@ -96,13 +96,13 @@ public class ClaudeUpdateTests
 
         h.Services.UseInstall(new ClaudeInstall("claude", Old));
         Assert.EndsWith($"Last tested with {ClaudeLocator.LastTestedVersion} (this version is older; updating is recommended).",
-            new SettingsViewModel(h.Services, null).InstalledText);
+            new SettingsViewModel(h.Services, null).ClaudeCode.InstalledText);
 
         h.Services.UseInstall(new ClaudeInstall("claude", ClaudeLocator.LastTestedVersion));
-        Assert.EndsWith($"Last tested with {ClaudeLocator.LastTestedVersion}.", new SettingsViewModel(h.Services, null).InstalledText);
+        Assert.EndsWith($"Last tested with {ClaudeLocator.LastTestedVersion}.", new SettingsViewModel(h.Services, null).ClaudeCode.InstalledText);
 
         h.Services.UseInstall(new ClaudeInstall("claude", new Version(ClaudeLocator.LastTestedVersion.Major, ClaudeLocator.LastTestedVersion.Minor + 1, 0)));
-        Assert.EndsWith("(this version is newer).", new SettingsViewModel(h.Services, null).InstalledText);
+        Assert.EndsWith("(this version is newer).", new SettingsViewModel(h.Services, null).ClaudeCode.InstalledText);
     }
 
     [Fact]
@@ -195,7 +195,7 @@ public class ClaudeUpdateTests
         await h.Services.ClaudeUpdates!.CheckNowAsync();
         var settings = new SettingsViewModel(h.Services, "me@example.com", updates);
 
-        Assert.True(settings.HasUpdates);
+        Assert.True(settings.ClaudeCode.HasUpdates);
         Assert.Equal("Auto-updates: enabled · channel: latest", updates.AutoUpdateText);
         Assert.Equal([new DoctorWarning("Something is off", "Run claude install")], updates.Warnings);
     }

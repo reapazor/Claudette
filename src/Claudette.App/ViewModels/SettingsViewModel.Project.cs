@@ -12,7 +12,8 @@ public sealed record SettingsOpening(string? Category = null, ProjectSettingsVie
 
 /// <summary>
 /// The group below the categories in Settings' sidebar (DESIGN.md §14, "The project's pages"): the selected tab's
-/// project, with its Links, Actions and Tools pages. The window follows the tab that was selected when it opened.
+/// project, with its Links, Actions and Tools pages (<see cref="Settings.ProjectPage"/>). The window follows the tab
+/// that was selected when it opened.
 /// </summary>
 public sealed partial class SettingsViewModel
 {
@@ -57,45 +58,7 @@ public sealed partial class SettingsViewModel
         }
     }
 
-    public bool IsLinksPage => HasProject && SelectedCategory == LinksPage;
-
-    public bool IsActionsPage => HasProject && SelectedCategory == ActionsPage;
-
-    public bool IsToolsPage => HasProject && SelectedCategory == ToolsPage;
-
-    partial void OnSelectedCategoryChanged(string value)
-    {
-        OnPropertyChanged(nameof(IsPerforce));
-        OnPropertyChanged(nameof(IsLinksPage));
-        OnPropertyChanged(nameof(IsActionsPage));
-        OnPropertyChanged(nameof(IsToolsPage));
-        OnPropertyChanged(nameof(SelectedMainCategory));
-        OnPropertyChanged(nameof(SelectedProjectPage));
-    }
-
     /// <summary>From the Tools page: the app-wide defaults are in Settings → Project tools.</summary>
     [RelayCommand]
     private void ShowProjectToolsDefaults() => SelectedCategory = SettingsCategory.ProjectTools;
-
-    /// <summary>
-    /// The project pages' entries for the search box, named with the project's group ("NightOwl → Links"). The Tools
-    /// page's depend on the project's kind, so they're worked out as the search runs.
-    /// </summary>
-    private IEnumerable<SettingsSearchResult> ProjectSearchEntries()
-    {
-        if (Project is not { } project)
-        {
-            return [];
-        }
-        var group = project.Heading;
-        return
-        [
-            new(LinksPage, "Web links for this project") { Group = group },
-            new(LinksPage, "Add a link") { Group = group },
-            new(ActionsPage, "Project actions: commands of your own") { Group = group },
-            new(ActionsPage, "Add an action") { Group = group },
-            new(ToolsPage, "This project's engine, editor or Godot executable") { Group = group },
-            .. project.ToolsSearchLabels.Select(label => new SettingsSearchResult(ToolsPage, label) { Group = group }),
-        ];
-    }
 }

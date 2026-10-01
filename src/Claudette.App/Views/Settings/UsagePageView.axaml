@@ -1,0 +1,48 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.UsagePageView"
+             x:DataType="settings:UsagePage">
+  <!-- Usage (DESIGN.md §6) -->
+  <StackPanel Spacing="12">
+    <TextBlock Classes="section" Text="Usage" />
+    <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+      <TextBlock Classes="label" Text="Warn at (% of session used)" />
+      <NumericUpDown Grid.Column="1" Minimum="1" Maximum="100" Increment="5" FormatString="0" Value="{Binding WarnPercent}" />
+      <TextBlock Grid.Row="1" Classes="label" Text="Alert at (% of session used)" />
+      <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="1" Maximum="100" Increment="5" FormatString="0" Value="{Binding CriticalPercent}" />
+      <TextBlock Grid.Row="2" Classes="label" Text="Burn rate window (minutes)" />
+      <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="5" Maximum="300" Increment="5" FormatString="0" Value="{Binding BurnRateWindowMinutes}" />
+    </Grid>
+    <CheckBox Content="Show model-specific weekly limits" IsChecked="{Binding ShowModelMeters}" />
+    <CheckBox Content="If Claude Code stops reporting them, read model limits from /usage" IsChecked="{Binding UseUsageCommandFallback}" IsEnabled="{Binding ShowModelMeters}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="A fallback that reads the text /usage prints. It's free, but can break when Claude Code changes its wording." />
+    <CheckBox Content="Continue tasks when a usage limit resets" IsChecked="{Binding ContinueAfterLimitReset}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="When a usage limit stops Claude mid-task, the tab waits for the limit to reset, then asks Claude to continue from where it left off. Each tab can change this in its Tab settings." />
+    <Grid ColumnDefinitions="220,*,Auto" ColumnSpacing="8">
+      <TextBlock Classes="label" Text="Keep usage history" />
+      <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding HistoryRetentionChoices}" SelectedItem="{Binding KeepUsageHistory}" />
+      <Button Grid.Column="2" Content="Clear usage history…" Command="{Binding ClearUsageHistoryCommand}" />
+    </Grid>
+    <Border Classes="codeblock" IsVisible="{Binding IsConfirmingClearUsage}">
+      <StackPanel Spacing="8">
+        <TextBlock FontWeight="SemiBold" Text="Clear all usage history?" />
+        <TextBlock TextWrapping="Wrap" Text="This deletes every stored usage sample and per-turn token record. The header fills in again at the next update from Claude Code." />
+        <CheckBox Content="Also reset per-tab token totals" IsChecked="{Binding AlsoResetTabTotals}" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Classes="accent" Content="Clear" Command="{Binding ConfirmClearUsageCommand}" />
+          <Button Content="Cancel" Command="{Binding CancelClearUsageCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+    <TextBlock Classes="muted small" Text="{Binding UsageClearedText}" IsVisible="{Binding UsageClearedText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    <CheckBox Content="Share usage with my other machines" IsChecked="{Binding ShareUsageThroughLibrary}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="Each machine that shares keeps its last week of session and weekly readings in the session library (Settings → Sessions), and the charts here take in the readings of the others signed in to the same account. Token counts and tab names stay on each machine." />
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="Usage history is kept on this machine. It holds usage percentages and token counts, never your prompts, replies or code." />
+    <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
+  </StackPanel>
+</UserControl>

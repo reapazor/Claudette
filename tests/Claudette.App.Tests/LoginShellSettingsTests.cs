@@ -1,5 +1,6 @@
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
+using Claudette.App.ViewModels.Settings;
 using Claudette.Core.Processes;
 
 namespace Claudette.App.Tests;
@@ -18,9 +19,9 @@ public class LoginShellSettingsTests
         await h.Services.UserEnvironment.GetAsync(TestContext.Current.CancellationToken);
         var settings = new SettingsViewModel(h.Services, null) { SelectedCategory = "Advanced" };
 
-        Assert.StartsWith("Used: /bin/zsh, read in 0.25 s.", settings.LoginShellText, StringComparison.Ordinal);
-        Assert.Contains("GITHUB_TOKEN", settings.LoginShellText, StringComparison.Ordinal);
-        await settings.CopyDiagnosticsCommand.ExecuteAsync(null);
+        Assert.StartsWith("Used: /bin/zsh, read in 0.25 s.", settings.Advanced.LoginShellText, StringComparison.Ordinal);
+        Assert.Contains("GITHUB_TOKEN", settings.Advanced.LoginShellText, StringComparison.Ordinal);
+        await settings.Advanced.CopyDiagnosticsCommand.ExecuteAsync(null);
 
         Assert.Contains("Login shell environment: Used: /bin/zsh", h.Platform.Clipboard, StringComparison.Ordinal);
         Assert.DoesNotContain(Secret, h.Platform.Clipboard, StringComparison.Ordinal);
@@ -35,11 +36,11 @@ public class LoginShellSettingsTests
         h.Services.UserEnvironment.Start();
         var settings = new SettingsViewModel(h.Services, null);
 
-        Assert.False(settings.UseLoginShellEnvironment);
+        Assert.False(settings.ClaudeCode.UseLoginShellEnvironment);
         Assert.Equal(0, shell.Reads);
-        Assert.Equal("Not used: turned off in Settings → Claude Code.", settings.LoginShellText);
+        Assert.Equal("Not used: turned off in Settings → Claude Code.", settings.Advanced.LoginShellText);
 
-        settings.UseLoginShellEnvironment = true;
+        settings.ClaudeCode.UseLoginShellEnvironment = true;
         var environment = await h.Services.UserEnvironment.GetAsync(TestContext.Current.CancellationToken);
 
         Assert.True(h.Services.Settings.ClaudeCode.UseLoginShellEnvironment);
@@ -53,10 +54,10 @@ public class LoginShellSettingsTests
         await using var h = new TabTestHarness(s => s.ClaudeCode.UseLoginShellEnvironment = false);
         var settings = new SettingsViewModel(h.Services, null);
 
-        settings.ResetClaudeCodeCommand.Execute(null);
+        settings.ClaudeCode.ResetCommand.Execute(null);
 
         Assert.True(h.Services.Settings.ClaudeCode.UseLoginShellEnvironment);
-        Assert.True(settings.UseLoginShellEnvironment);
+        Assert.True(settings.ClaudeCode.UseLoginShellEnvironment);
     }
 
     [Fact]
@@ -65,7 +66,7 @@ public class LoginShellSettingsTests
         await using var h = new TabTestHarness();
         var settings = new SettingsViewModel(h.Services, null);
 
-        Assert.Equal(!OperatingSystem.IsWindows(), SettingsViewModel.ShowLoginShellSetting);
+        Assert.Equal(!OperatingSystem.IsWindows(), ClaudeCodePage.ShowLoginShellSetting);
         var found = settings.SearchResultsFor("login shell");
         if (OperatingSystem.IsWindows())
         {

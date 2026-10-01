@@ -125,7 +125,7 @@ public class PermissionModeTests
         using var settings = new SettingsViewModel(h.Services, null);
 
         Assert.Equal("Default (Auto)", TabSettings(h, tab).ModeChoices[0].Label);
-        Assert.Equal("Claude Code's default (Auto)", settings.ModeChoices[0].Label);
+        Assert.Equal("Claude Code's default (Auto)", settings.NewTabs.ModeChoices[0].Label);
 
         h.Services.Settings.NewTabs.DefaultPermissionMode = "acceptEdits";
         Assert.Equal("Default (Accept edits)", TabSettings(h, tab).ModeChoices[0].Label);

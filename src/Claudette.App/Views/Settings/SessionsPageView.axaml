@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:Claudette.App.ViewModels.Settings"
+             x:Class="Claudette.App.Views.Settings.SessionsPageView"
+             x:DataType="settings:SessionsPage">
+  <!-- Sessions -->
+  <StackPanel Spacing="12">
+    <TextBlock Classes="section" Text="Sessions" />
+    <CheckBox Content="Also restore unpinned tabs when Claudette starts" IsChecked="{Binding RestoreUnpinnedTabs}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0" Text="Pinned tabs are always restored." />
+    <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto" RowSpacing="10">
+      <TextBlock Classes="label" Text="Name for this machine" />
+      <TextBox Grid.Column="1" Text="{Binding MachineName, UpdateSourceTrigger=LostFocus}" PlaceholderText="{Binding MachineNamePlaceholder}" />
+      <TextBlock Grid.Row="1" Classes="label" Text="Keep library sessions for" />
+      <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding LibraryRetentionChoices}" SelectedItem="{Binding KeepLibrarySessions}" />
+    </Grid>
+
+    <!-- Session library (DESIGN.md §9) -->
+    <TextBlock Text="Session library folder" FontWeight="SemiBold" Margin="0,8,0,0" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="Tabs that sync copy their session's transcript here after every turn. Point it at a folder Google Drive, Dropbox or OneDrive keeps in sync, and your other machines can find and continue those sessions in History." />
+    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+      <TextBox Text="{Binding LibraryFolder, Mode=OneWay}" IsReadOnly="True" />
+      <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseLibraryFolderCommand}" ToolTip.Tip="Use another folder from now on" />
+      <Button Grid.Column="2" Content="Move library…" Command="{Binding MoveLibraryCommand}" ToolTip.Tip="Copy the existing sessions to another folder and use it" />
+    </Grid>
+    <Button Classes="flat" Content="Use the default folder" Command="{Binding UseDefaultLibraryFolderCommand}" IsVisible="{Binding !IsDefaultLibraryFolder}" HorizontalAlignment="Left" />
+    <Border Classes="codeblock" IsVisible="{Binding IsConfirmingLibraryFolder}">
+      <StackPanel Spacing="8">
+        <TextBlock TextWrapping="Wrap" Text="{Binding LibraryConfirmText}" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Classes="accent" Content="Use this folder" Command="{Binding ConfirmLibraryFolderCommand}" />
+          <Button Content="Cancel" Command="{Binding CancelLibraryFolderCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+    <TextBlock Classes="muted small" Text="{Binding LibraryStatus}" TextWrapping="Wrap" IsVisible="{Binding LibraryStatus, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    <CheckBox Content="Sync new tabs to the session library" IsChecked="{Binding SyncNewTabs}" Margin="0,8,0,0" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="Any tab can be switched on or off with Sync to other machines in its menu. Sessions opened from the library keep syncing." />
+
+    <!-- Settings sync (DESIGN.md §14) -->
+    <CheckBox Content="Sync Claudette's settings through the library" IsChecked="{Binding SyncSettings}" Margin="0,8,0,0" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="Appearance, new-tab defaults, usage thresholds, check-ins, quick suffixes, notifications and process monitor options. The path to claude, this machine's name, the library folder, the diff tool and your folders stay on each machine." />
+    <Border Classes="codeblock" IsVisible="{Binding IsChoosingSyncSource}">
+      <StackPanel Spacing="8">
+        <TextBlock TextWrapping="Wrap" Text="The library already has settings from another machine. Which should this machine use?" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Classes="accent" Content="Use synced settings" Command="{Binding UseSyncedSettingsCommand}" />
+          <Button Content="Replace them with this machine's" Command="{Binding ReplaceSyncedSettingsCommand}" />
+          <Button Classes="flat" Content="Cancel" Command="{Binding CancelSyncChoiceCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+    <Button Content="Reset to defaults" Command="{Binding ResetCommand}" ToolTip.Tip="The library folder and settings sync stay as they are" />
+  </StackPanel>
+</UserControl>
