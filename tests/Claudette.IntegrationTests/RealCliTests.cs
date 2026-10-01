@@ -59,6 +59,26 @@ public sealed class RealCliTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Without_nonessential_traffic_no_title_is_generated_and_a_rename_reaches_the_transcript()
+    {
+        await using var session = await StartAsync();
+        await session.SendUserMessageAsync("hello", TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>();
+
+        // generate_session_title: with nonessential traffic off, as every RealCli test runs, Claude Code answers with no
+        // title and makes no model call; the tab then names itself from the prompt (DESIGN.md §13, "Session naming").
+        var requests = _api.Requests.Count;
+        var title = await session.GenerateSessionTitleAsync("hello", persist: false, TestContext.Current.CancellationToken);
+        Assert.Null(title);
+        Assert.Equal(requests, _api.Requests.Count);
+
+        // rename_session: saved in the transcript, where claude --resume and History find it.
+        await session.RenameSessionAsync("Renamed by Claudette", TestContext.Current.CancellationToken);
+        var transcript = Directory.EnumerateFiles(Path.Combine(Config, "projects"), $"{done.Result.SessionId}.jsonl", SearchOption.AllDirectories).Single();
+        await Waiting.UntilAsync(() => File.ReadAllText(transcript).Contains("\"customTitle\":\"Renamed by Claudette\"", StringComparison.Ordinal), "the name in the transcript");
+    }
+
+    [Fact]
     public async Task An_allowed_write_creates_the_file()
     {
         await using var session = await StartAsync();

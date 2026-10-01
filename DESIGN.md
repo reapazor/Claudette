@@ -1342,6 +1342,7 @@ The conversation view and diff view use these instead of parsing the tool result
 - A rename in Claudette is stored by Claudette. Optionally (a setting), Claudette also sends `rename_session` with `title` and `source: "host"`, so `claude --resume <name>` in a terminal sees the same name.
 - Both are saved in the transcript, as `{"type":"ai-title","aiTitle":…}` and `{"type":"custom-title","customTitle":…}` entries. History reads them from there, and the last entry of each type wins.
 - **Fallback** if these requests stop working: name the tab from the first line of the first prompt.
+  - It's also what happens when the user sets `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`: Claude Code then answers `generate_session_title` with `{"title": null}` and makes no model call (seen in 2.1.286; `RealCliTests`, which run that way). `rename_session` still works.
 - A `conversation_reset` message (from `/clear`) clears the view and drops the cached title.
 
 **Utility session.** Claudette keeps one hidden `claude` process with `--no-session-persistence` that never sends a prompt. It serves the requests that don't belong to a tab: `initialize` (model list and account), `get_usage`, and sign-in. It's started on launch and restarted if it exits.

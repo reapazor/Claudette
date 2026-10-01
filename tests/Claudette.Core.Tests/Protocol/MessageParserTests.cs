@@ -47,6 +47,16 @@ public class MessageParserTests
     }
 
     [Fact]
+    public void A_conversation_reset_carries_its_trigger_and_new_id()
+    {
+        Assert.True(MessageParser.TryParse("""{"type":"conversation_reset","trigger":"clear","new_conversation_id":"c2","session_id":"s1"}""", out var message, out _));
+
+        var reset = Assert.IsType<ConversationResetMessage>(message);
+        Assert.Equal("clear", reset.Trigger);
+        Assert.Equal("c2", reset.NewConversationId);
+    }
+
+    [Fact]
     public void Reads_system_init()
     {
         var init = ParseFirst<SystemInitMessage>("01-mock-basic");

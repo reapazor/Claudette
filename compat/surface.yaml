@@ -273,7 +273,7 @@ items:
     status: documented
     usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: none yet
+    test: MessageParserTests, AgentMapTests
   - id: "api_retry"
     kind: message
     status: documented
@@ -602,13 +602,13 @@ items:
     kind: control
     status: undocumented
     usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.cs
-    test: none yet (one small model call; covered by spikes/scenarios/03)
+    test: RealCliTests (with nonessential traffic off it answers {"title": null} and makes no model call; a generated title is covered by spikes/scenarios/03)
     fallback: Name the tab from the first line of the first prompt (DESIGN.md §13, "Session naming").
   - id: "rename_session"
     kind: control
     status: undocumented
     usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
-    test: none yet (covered by spikes/scenarios/03)
+    test: RealCliTests
     fallback: Only used when "rename in Claude Code" is on; the name is kept in Claudette either way.
 
   # --- Composer: slash commands, @ mentions and attachments (DESIGN.md §5) --------------------------------
