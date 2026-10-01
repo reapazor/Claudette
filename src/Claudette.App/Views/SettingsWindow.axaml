@@ -302,7 +302,7 @@
         <!-- Appearance -->
         <StackPanel Spacing="12" IsVisible="{Binding IsAppearance}">
           <TextBlock Classes="section" Text="Appearance" />
-          <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
+          <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
             <TextBlock Classes="label" Text="Theme" />
             <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" AutomationProperties.Name="Theme" />
             <!-- Claudette's own look or the Claude apps', in light and dark alike (DESIGN.md §3) -->
@@ -324,6 +324,15 @@
                              PlaceholderText="Cascadia Mono, Consolas or Menlo" MinimumPrefixLength="0" AutomationProperties.Name="Code font" />
             <TextBlock Grid.Row="6" Classes="label" Text="Code font size" />
             <NumericUpDown Grid.Row="6" Grid.Column="1" Minimum="8" Maximum="28" Increment="1" FormatString="0" Value="{Binding CodeFontSize}" />
+            <!-- Accessibility (DESIGN.md §3): the main window's scale, and whether anything moves -->
+            <TextBlock Grid.Row="7" Classes="label" Text="Zoom" />
+            <ComboBox Grid.Row="7" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ZoomChoices}" SelectedItem="{Binding Zoom}"
+                      AutomationProperties.Name="Zoom"
+                      ToolTip.Tip="Makes everything in the main window bigger or smaller. Ctrl and + or −, or Ctrl+0, change it too (Cmd on a Mac). Each computer keeps its own." />
+            <TextBlock Grid.Row="8" Classes="label" Text="Motion" />
+            <ComboBox Grid.Row="8" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding MotionChoices}" SelectedItem="{Binding Motion}"
+                      AutomationProperties.Name="Motion"
+                      ToolTip.Tip="Reducing motion stops the pulsing dots, the twinkling glyph while Claude works and the moving taskbar or Dock icon. Following the system, it's reduced when your computer's settings, or Claude Code's prefersReducedMotion, ask for it." />
           </Grid>
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,-4,0,0"
                      Text="Leave a font empty for the default. A font that isn't installed on this machine falls back to the default." />

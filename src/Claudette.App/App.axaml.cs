@@ -10,10 +10,12 @@ using Claudette.App.Themes;
 using Claudette.App.ViewModels;
 using Claudette.App.Views;
 using Claudette.Core;
+using Claudette.Core.Accessibility;
 using Claudette.Core.Development;
 using Claudette.Core.Logging;
 using Claudette.Core.Processes;
 using Claudette.Core.Settings;
+using Claudette.Platform.Accessibility;
 using Claudette.Platform.Credentials;
 using Claudette.Platform.LoginShell;
 using Claudette.Platform.Notifications;
@@ -72,6 +74,7 @@ public partial class App : Application
                 unrealRegistry: UnrealEngineRegistries.CreateForCurrentOS(),
                 sleepBlocker: SleepBlockers.CreateForCurrentOS(launcher),
                 loginItems: LoginLaunch.CreateItems(launcher, TimeProvider.System),
+                systemMotion: SystemMotion.CreateForCurrentOS(launcher, TimeProvider.System),
                 loggerFactory: loggers);
             // In the background, so the window isn't held up; the first claude start waits for it (DESIGN.md §13).
             _services.UserEnvironment.Start();
@@ -81,6 +84,7 @@ public partial class App : Application
                 Notifier.CreateBadgeForCurrentOS(() => window.TryGetPlatformHandle()?.Handle ?? 0, BadgeIcon.Render));
             ApplyAppearance();
             _services.SettingsChanged += (_, _) => ApplyAppearance();
+            UseReducedMotion(desktop, _services);
             var args = desktop.Args ?? [];
             _mainViewModel = new MainWindowViewModel(_services, LaunchArguments.Folder(args));
             UseRestarts(window, args);
@@ -222,6 +226,23 @@ public partial class App : Application
     private object? _appliedAppearance;
 
     /// <summary>Applies Settings → Appearance: theme, style, fonts and font sizes (DESIGN.md §14).</summary>
+    /// <summary>
+    /// Every window takes the "reducemotion" class while motion is reduced, which stops the busy dots' pulse (DESIGN.md
+    /// §3, "Accessibility"); the OS's setting and Claude Code's are read in the background.
+    /// </summary>
+    private static void UseReducedMotion(IClassicDesktopStyleApplicationLifetime desktop, AppServices services)
+    {
+        Window.WindowOpenedEvent.AddClassHandler<Window>((window, _) => window.Classes.Set("reducemotion", services.ReduceMotion));
+        services.MotionChanged += (_, _) =>
+        {
+            foreach (var window in desktop.Windows)
+            {
+                window.Classes.Set("reducemotion", services.ReduceMotion);
+            }
+        };
+        _ = services.ReadMotionPreferencesAsync();
+    }
+
     private void ApplyAppearance()
     {
         if (_services is null)
@@ -231,6 +252,7 @@ public partial class App : Application
         var appearance = _services.Settings.Appearance;
         // Settings change often (every switch in Settings saves), and setting an application resource walks every
         // window's whole tree, every tab's conversation included: only when something here changed.
+        _mainWindow?.UseZoom(Zoom.Clamp(appearance.Zoom));
         var applied = (appearance.Theme, appearance.Style, appearance.ConversationFontSize, appearance.CodeFontSize, appearance.ConversationFont, appearance.CodeFont);
         if (applied.Equals(_appliedAppearance))
         {

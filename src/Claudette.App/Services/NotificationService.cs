@@ -42,6 +42,7 @@ public sealed class NotificationService : IDisposable
     private int _badgeShown = -1;
     private bool _flashing;
     private AppIconAnimation? _animation;
+    private bool _still;
     private int _frame;
     private ITimer? _frameTimer;
 
@@ -50,6 +51,7 @@ public sealed class NotificationService : IDisposable
         _services = services;
         _notifier = notifier;
         _notifier.Activated += OnNotifierActivated;
+        _services.MotionChanged += (_, _) => UpdateBadge();
     }
 
     /// <summary>False when this machine can't show OS notifications (for example an unbundled macOS build).</summary>
@@ -204,19 +206,30 @@ public sealed class NotificationService : IDisposable
 
     // ---- The icon's animation -----------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Shows <paramref name="animation"/> on the icon. With motion reduced (DESIGN.md §3, "Accessibility"), its first
+    /// frame stays: still, but still saying what the tabs are doing.
+    /// </summary>
     private void Animate(AppIconAnimation? animation)
     {
-        if (ReferenceEquals(animation, _animation))
+        var still = _services.ReduceMotion;
+        if (ReferenceEquals(animation, _animation) && still == _still)
         {
             return;
         }
         _frameTimer?.Dispose();
         _frameTimer = null;
         _animation = animation;
+        _still = still;
         _frame = 0;
         if (animation is null)
         {
             _badge.ShowFrame(null, null);
+            return;
+        }
+        if (still)
+        {
+            ShowFrame();
             return;
         }
         // One timer per animation, so a tick queued before it changed does nothing.

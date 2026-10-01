@@ -32,6 +32,12 @@ public class KeyboardAndSettingsTests
         Assert.False(Shortcuts.Matches(keyboard, KeyboardShortcuts.GoToTab, Key.D0, Primary));
         Assert.True(Shortcuts.Matches(keyboard, KeyboardShortcuts.AllowPrompt, Key.Enter, Primary));
         Assert.True(Shortcuts.Matches(keyboard, KeyboardShortcuts.Stop, Key.Escape, KeyModifiers.None));
+        // The number pad's keys work like the main keyboard's.
+        Assert.True(Shortcuts.Matches(keyboard, KeyboardShortcuts.ZoomIn, Key.OemPlus, Primary));
+        Assert.True(Shortcuts.Matches(keyboard, KeyboardShortcuts.ZoomIn, Key.Add, Primary));
+        Assert.True(Shortcuts.Matches(keyboard, KeyboardShortcuts.ZoomOut, Key.Subtract, Primary));
+        Assert.True(Shortcuts.Matches(keyboard, KeyboardShortcuts.ResetZoom, Key.NumPad0, Primary));
+        Assert.Equal(Chord("Primary+OemPlus"), Shortcuts.FromKeyPress(Key.Add, Primary));
 
         keyboard.Bindings[KeyboardShortcuts.NewTab] = "Primary+Shift+N";
         Assert.False(Shortcuts.Matches(keyboard, KeyboardShortcuts.NewTab, Key.T, Primary));
@@ -297,13 +303,15 @@ public class KeyboardAndSettingsTests
     }
 
     [Fact]
-    public async Task Density_and_the_context_ring_sync_with_the_other_appearance_settings()
+    public async Task Density_and_the_context_ring_sync_with_the_other_appearance_settings_but_zoom_does_not()
     {
         await using var first = new TabTestHarness();
         await using var second = new TabTestHarness();
         var library = Path.Combine(first.Root, "shared-library");
         first.Services.Settings.Appearance.Density = Density.Compact;
         first.Services.Settings.Appearance.ShowContextOnTabs = false;
+        // The zoom suits each machine's screen (DESIGN.md §3, "Accessibility").
+        first.Services.Settings.Appearance.Zoom = 150;
         first.Services.Settings.Sessions.LibraryFolder = library;
         first.Services.Settings.Sessions.SyncSettings = true;
         first.Services.Library.OnSettingsChanged();
@@ -319,5 +327,8 @@ public class KeyboardAndSettingsTests
 
         Assert.Equal(Density.Compact, second.Services.Settings.Appearance.Density);
         Assert.False(second.Services.Settings.Appearance.ShowContextOnTabs);
+        Assert.Equal(100, second.Services.Settings.Appearance.Zoom);
+        Assert.DoesNotContain("appearance.zoom", File.ReadAllText(syncFile), StringComparison.Ordinal);
+        Assert.Equal(150, first.Services.Settings.Appearance.Zoom);
     }
 }

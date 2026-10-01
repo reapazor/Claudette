@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Text.Json;
 using Avalonia.Media;
 using Claudette.App.Services;
+using Claudette.Core.Accessibility;
 using Claudette.Core.Development;
 using Claudette.Core.Diffs;
 using Claudette.Core.Git;
@@ -891,6 +892,27 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     public void Announce(string text) =>
         // A live region is read when it changes: the same words again need a change no one hears.
         Announcement = Announcement == text ? text + "\u200B" : text;
+
+    /// <summary>Ctrl/Cmd + (DESIGN.md §3, "Accessibility"): the main window's content one step bigger.</summary>
+    [RelayCommand]
+    private void ZoomIn() => SetZoom(Zoom.In(_services.Settings.Appearance.Zoom));
+
+    [RelayCommand]
+    private void ZoomOut() => SetZoom(Zoom.Out(_services.Settings.Appearance.Zoom));
+
+    [RelayCommand]
+    private void ResetZoom() => SetZoom(Zoom.Default);
+
+    private void SetZoom(int percent)
+    {
+        if (percent == _services.Settings.Appearance.Zoom)
+        {
+            return;
+        }
+        _services.Settings.Appearance.Zoom = percent;
+        _services.SaveSettings();
+        Announce($"Zoom {percent}%");
+    }
 
     /// <summary>Whether a tab is starting, in a turn, or waiting on the user.</summary>
     public bool AnyTabWorking => AllTabs.Any(t => t.IsWorking || t.Status == TabStatus.Starting);

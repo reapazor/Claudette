@@ -434,7 +434,7 @@ internal sealed class TabTestHarness : IAsyncDisposable
             Path.Combine(_root, "programdata"), Path.Combine(_root, "programfiles"), Path.Combine(_root, "applications"));
         Services = new AppServices(AppPaths.Under(_root), launcher ?? new ProcessLauncher(), Time, Platform, dispatcher ?? new InlineDispatcher(), processTrees: Trees, notifier: Notifier,
             appInstaller: appInstaller, httpHandler: http ?? new OfflineHandler(), appVersion: appVersion ?? TestVersion, loginShell: loginShell,
-            projectToolPaths: otherPrograms, sleepBlocker: SleepBlocker, loginItems: LoginItems);
+            projectToolPaths: otherPrograms, sleepBlocker: SleepBlocker, loginItems: LoginItems, systemMotion: SystemMotion);
         Services.Notifications.UseBadge(Notifier);
         // The machine running the tests doesn't decide whether the Claude app is available (its ANTHROPIC_BASE_URL, say).
         Services.RemoteControl.EnvironmentVariable = _ => null;
@@ -463,6 +463,9 @@ internal sealed class TabTestHarness : IAsyncDisposable
 
     /// <summary>Stands in for keeping the computer awake while tabs are connected to the Claude app (DESIGN.md §18).</summary>
     public FakeSleepBlocker SleepBlocker { get; } = new();
+
+    /// <summary>Stands in for the OS's reduce-motion setting (DESIGN.md §3, "Accessibility").</summary>
+    public FakeSystemMotion SystemMotion { get; } = new();
 
     /// <summary>Stands in for the OS's login entry (DESIGN.md §9, "Starting at login"): never the real Run key or LaunchAgents.</summary>
     public Core.Tests.Support.FakeLoginItems LoginItems { get; } = new();

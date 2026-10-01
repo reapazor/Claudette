@@ -297,6 +297,27 @@ public sealed class AppearanceSettings
 
     /// <summary>How much room the conversation, the sidebar's rows and the composer take (DESIGN.md §14).</summary>
     public Density Density { get; set; } = Density.Comfortable;
+
+    /// <summary>Settings → Appearance → Motion (DESIGN.md §3, "Accessibility").</summary>
+    public MotionSetting Motion { get; set; } = MotionSetting.System;
+
+    /// <summary>
+    /// Settings → Appearance → Zoom: the main window's content, in percent (DESIGN.md §3, "Accessibility"). It suits
+    /// this machine's screen, so it doesn't sync.
+    /// </summary>
+    public int Zoom { get; set; } = Accessibility.Zoom.Default;
+}
+
+/// <summary>Settings → Appearance → Motion: whether Claudette's animations run.</summary>
+public enum MotionSetting
+{
+    /// <summary>Reduced when the OS, or Claude Code's <c>prefersReducedMotion</c>, asks for it.</summary>
+    System,
+
+    Reduce,
+
+    /// <summary>Always animate.</summary>
+    Full,
 }
 
 /// <summary>Settings → Appearance → Density: Compact tightens spacing and padding (DESIGN.md §14).</summary>

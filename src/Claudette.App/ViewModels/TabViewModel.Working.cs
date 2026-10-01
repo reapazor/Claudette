@@ -24,7 +24,8 @@ public sealed partial class TabViewModel
             () => _callUsage.TurnTokens,
             () => _services.Tips.Text(Core.Settings.KeyboardShortcuts.Stop),
             _services.Random,
-            () => _services.Settings.Appearance.ShowToolInWorkingLine);
+            () => _services.Settings.Appearance.ShowToolInWorkingLine,
+            () => _services.ReduceMotion);
         line.SetShown(IsSelected);
         return line;
     }

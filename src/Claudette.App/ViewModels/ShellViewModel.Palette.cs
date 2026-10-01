@@ -1,4 +1,5 @@
 using Claudette.App.Services;
+using Claudette.Core.Accessibility;
 using Claudette.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -68,6 +69,13 @@ public sealed partial class ShellViewModel
         Command("Open from History", OpenHistory, KeyboardShortcuts.History);
         AsyncCommand("Settings", OpenSettingsAsync, KeyboardShortcuts.Settings);
         Command(IsSidebarCollapsed ? "Expand the sidebar" : "Collapse the sidebar", ToggleSidebar, KeyboardShortcuts.ToggleSidebar);
+        var zoom = _services.Settings.Appearance.Zoom;
+        Command("Zoom in", ZoomIn, KeyboardShortcuts.ZoomIn, $"{zoom}%");
+        Command("Zoom out", ZoomOut, KeyboardShortcuts.ZoomOut, $"{zoom}%");
+        if (zoom != Zoom.Default)
+        {
+            Command("Reset zoom", ResetZoom, KeyboardShortcuts.ResetZoom, $"{zoom}%");
+        }
         if (AllTabs.Any(t => t.NeedsInput && !ReferenceEquals(t, SelectedTab)))
         {
             Command("Go to the next tab waiting for you", SelectNextNeedingInput, KeyboardShortcuts.NextTabNeedingInput);

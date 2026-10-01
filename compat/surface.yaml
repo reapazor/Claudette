@@ -1088,6 +1088,14 @@ items:
     usedIn: src/Claudette.Core/Claude/SpinnerVerbs.cs
     docs: https://code.claude.com/docs/en/settings-reference
     test: SpinnerVerbsTests
+  - id: "prefersReducedMotion"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Accessibility/Motion.cs
+    docs: https://code.claude.com/docs/en/settings-reference
+    test: MotionAndZoomTests
+    # Read from the user's settings.json in Claude Code's config folder, for Settings → Appearance → Motion's "Follow
+    # the system" (DESIGN.md §3, "Accessibility"). Without it, only the OS's setting counts.
   - id: "resume from a transcript path writes <session-id>.jsonl next to it"
     kind: behavior
     status: undocumented

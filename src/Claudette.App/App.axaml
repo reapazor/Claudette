@@ -260,6 +260,9 @@
     </Style>
     <Style Selector="TextBlock.status.busy">
       <Setter Property="Foreground" Value="{DynamicResource AccentStatusBrush}" />
+    </Style>
+    <!-- The pulse stops when motion is reduced (DESIGN.md §3, "Accessibility"): the window takes "reducemotion". -->
+    <Style Selector=":is(Window):not(.reducemotion) TextBlock.status.busy">
       <Style.Animations>
         <Animation Duration="0:0:1.2" IterationCount="INFINITE" PlaybackDirection="Alternate">
           <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1" /></KeyFrame>

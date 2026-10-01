@@ -80,6 +80,8 @@ public sealed partial class SettingsViewModel
         OnPropertyChanged(nameof(ShowToolInWorkingLine));
         OnPropertyChanged(nameof(ShowContextOnTabs));
         OnPropertyChanged(nameof(Density));
+        OnPropertyChanged(nameof(Zoom));
+        OnPropertyChanged(nameof(Motion));
     }
 
     [RelayCommand]

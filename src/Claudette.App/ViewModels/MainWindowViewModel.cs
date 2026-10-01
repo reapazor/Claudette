@@ -193,6 +193,8 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
             ?? (status.ConfigDirectory is { } config ? Path.Combine(config, "projects") : null);
         services.ClaudeConfigDirectory = status.ConfigDirectory
             ?? (status.ProjectsDirectory is { } projects ? Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(projects)) : null);
+        // Claude Code's prefersReducedMotion is in its config folder, now known (DESIGN.md §3, "Accessibility").
+        _ = services.ReadMotionPreferencesAsync();
         if (_shell is null)
         {
             _shell = new ShellViewModel(services, ShowSignIn);

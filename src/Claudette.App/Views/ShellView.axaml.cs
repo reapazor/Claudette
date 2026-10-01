@@ -378,6 +378,18 @@ public partial class ShellView : UserControl
         {
             findTab.OpenFindCommand.Execute(null);
         }
+        else if (Is(KeyboardShortcuts.ZoomIn))
+        {
+            shell.ZoomInCommand.Execute(null);
+        }
+        else if (Is(KeyboardShortcuts.ZoomOut))
+        {
+            shell.ZoomOutCommand.Execute(null);
+        }
+        else if (Is(KeyboardShortcuts.ResetZoom))
+        {
+            shell.ResetZoomCommand.Execute(null);
+        }
         else if (Is(KeyboardShortcuts.RunProjectAction) && shell.SelectedTab is { } projectTab)
         {
             // Launch the editor, for Unreal (DESIGN.md §18, "Project tools").

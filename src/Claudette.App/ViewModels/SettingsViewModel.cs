@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Claudette.App.Services;
+using Claudette.Core.Accessibility;
 using Claudette.Core.Diffs;
 using Claudette.Core.Installation;
 using Claudette.Core.Library;
@@ -37,6 +38,23 @@ public sealed record StyleOption(AppStyle Style, string Label)
 public sealed record RetentionChoice(RetentionPeriod Period)
 {
     public override string ToString() => Period.Label();
+}
+
+/// <summary>Settings → Appearance → Motion's choices (DESIGN.md §3, "Accessibility").</summary>
+public sealed record MotionChoice(MotionSetting Setting)
+{
+    public override string ToString() => Setting switch
+    {
+        MotionSetting.Reduce => "Reduce motion",
+        MotionSetting.Full => "Don't reduce",
+        _ => "Follow the system",
+    };
+}
+
+/// <summary>Settings → Appearance → Zoom's steps (DESIGN.md §3, "Accessibility").</summary>
+public sealed record ZoomChoice(int Percent)
+{
+    public override string ToString() => $"{Percent}%";
 }
 
 /// <summary>Something whose keyboard shortcut is being set in Settings: a command, or a quick suffix.</summary>
@@ -252,6 +270,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         new(SettingsCategory.Appearance, "Detailed usage header"),
         new(SettingsCategory.Appearance, "Show context on tab rows"),
         new(SettingsCategory.Appearance, "Density"),
+        new(SettingsCategory.Appearance, "Zoom"),
+        new(SettingsCategory.Appearance, "Motion"),
+        new(SettingsCategory.Appearance, "Reduce motion"),
         new(SettingsCategory.Usage, "Warn at (% of session used)"),
         new(SettingsCategory.Usage, "Alert at (% of session used)"),
         new(SettingsCategory.Usage, "Burn rate window (minutes)"),
@@ -770,6 +791,25 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     {
         get => _settings.Appearance.Density;
         set => Set(value, v => _settings.Appearance.Density = v);
+    }
+
+    public IReadOnlyList<ZoomChoice> ZoomChoices { get; } = [.. Core.Accessibility.Zoom.Steps.Select(percent => new ZoomChoice(percent))];
+
+    /// <summary>The main window's content, scaled (DESIGN.md §3, "Accessibility"); Ctrl/Cmd +, − and 0 change it too.</summary>
+    public ZoomChoice Zoom
+    {
+        get => ZoomChoices.FirstOrDefault(c => c.Percent == _settings.Appearance.Zoom) ?? new ZoomChoice(_settings.Appearance.Zoom);
+        set => Set(value?.Percent ?? Core.Accessibility.Zoom.Default, v => _settings.Appearance.Zoom = v);
+    }
+
+    public IReadOnlyList<MotionChoice> MotionChoices { get; } =
+        [new(MotionSetting.System), new(MotionSetting.Reduce), new(MotionSetting.Full)];
+
+    /// <summary>Whether the busy dots pulse, the working glyph twinkles and the taskbar or Dock icon moves.</summary>
+    public MotionChoice Motion
+    {
+        get => MotionChoices.FirstOrDefault(c => c.Setting == _settings.Appearance.Motion) ?? MotionChoices[0];
+        set => Set(value?.Setting ?? MotionSetting.System, v => _settings.Appearance.Motion = v);
     }
 
     // ---- Sessions ------------------------------------------------------------------------------------------------

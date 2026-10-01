@@ -45,9 +45,14 @@ public sealed class LibraryService : IDisposable
     /// <summary>Claude Code finishes writing the transcript around the result message; give it a moment.</summary>
     private static readonly TimeSpan SettleDelay = TimeSpan.FromSeconds(1);
 
-    /// <summary>What syncs (DESIGN.md §14). The path to claude, the machine name, the library folder, the diff tool, folders and tabs stay per machine.</summary>
-    /// <summary>Synced sections; <see cref="ApplySettings"/> copies each of them back.</summary>
+    /// <summary>
+    /// What syncs (DESIGN.md §14), by section; <see cref="ApplySettings"/> copies each of them back. The path to claude,
+    /// the machine name, the library folder, the diff tool, folders and tabs stay per machine.
+    /// </summary>
     private static readonly string[] SyncedSettings = ["appearance", "newTabs", "usage", "checkIns", "quickSuffixes", "processes", "notifications", "keyboard"];
+
+    /// <summary>Within the synced sections, what stays per machine: the zoom suits this machine's screen.</summary>
+    private static readonly string[] PerMachine = ["appearance.zoom"];
 
     /// <summary>Synced as one value each: the shortcut overrides come and go by command id.</summary>
     private static readonly string[] SyncedLeaves = ["keyboard.bindings"];
@@ -252,8 +257,15 @@ public sealed class LibraryService : IDisposable
         }
     }
 
-    private Dictionary<string, JsonNode?> FlattenSettings() =>
-        SettingsSync.Flatten(SettingsJson(_services.Settings), SyncedSettings, SyncedLeaves);
+    private Dictionary<string, JsonNode?> FlattenSettings()
+    {
+        var values = SettingsSync.Flatten(SettingsJson(_services.Settings), SyncedSettings, SyncedLeaves);
+        foreach (var path in PerMachine)
+        {
+            values.Remove(path);
+        }
+        return values;
+    }
 
     private static JsonObject SettingsJson(AppSettings settings) =>
         JsonSerializer.SerializeToNode(settings, JsonFileStore<AppSettings>.Options)!.AsObject();
@@ -263,7 +275,10 @@ public sealed class LibraryService : IDisposable
         var json = SettingsJson(_services.Settings);
         foreach (var (path, value) in values)
         {
-            SettingsSync.Apply(json, path, value);
+            if (!PerMachine.Contains(path, StringComparer.Ordinal))
+            {
+                SettingsSync.Apply(json, path, value);
+            }
         }
         var updated = json.Deserialize<AppSettings>(JsonFileStore<AppSettings>.Options);
         if (updated is null)
