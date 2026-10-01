@@ -7,8 +7,20 @@
   ],
   "actions": [
     {
+      "name": "Get Latest",
+      "command": "git pull --rebase=true origin --prune",
+      "mode": "output",
+      "ifExists": "src/Claudette.App/Claudette.App.csproj"
+    },
+    {
       "name": "Rebuild Self (Debug)",
       "command": "dotnet build src\\Claudette.App\\Claudette.App.csproj -c Debug",
+      "mode": "output",
+      "ifExists": "src/Claudette.App/Claudette.App.csproj"
+    },
+    {
+      "name": "Rebuild Self (Release)",
+      "command": "dotnet build src\\Claudette.App\\Claudette.App.csproj -c Release",
       "mode": "output",
       "ifExists": "src/Claudette.App/Claudette.App.csproj"
     }
