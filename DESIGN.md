@@ -1636,6 +1636,10 @@ A scheduled GitHub Action (`.github/workflows/compat.yml`) runs once a day. It u
    - The issue shows test results first, then matched changes, then the full diffs in collapsed sections.
    - If nothing matched and every test passed, the issue is closed automatically and kept as a record.
 
+A tracked docs page that's gone (404 or 410) counts as a change: its diff shows the page replaced by a note saying so.
+
+The same workflow runs the real-CLI tests against the **minimum** supported version (`minimum` in the surface file), on days when `main` changed in the last 25 hours (or when run by hand with *minimum* ticked). Claudette's own changes are what could stop it working with an older Claude Code, and checking once a day, rather than on every pull request, keeps CI minutes flat. Inputs reach its scripts through the environment, never pasted into them, and `GH_TOKEN` is given only to the steps that call `gh`.
+
 A dry run against the two versions before 2.1.284 (`node compat/check.mjs report --from 2.1.281 --version 2.1.284`) flagged eight changes. One was a changelog line about `claude -p` startup; another was an Agent SDK doc comment change on `apply_flag_settings`.
 
 The first real report, for 2.1.285 (#27), matched 47 changes, mostly docs rewrites and pages new to the snapshots. What it changed:
