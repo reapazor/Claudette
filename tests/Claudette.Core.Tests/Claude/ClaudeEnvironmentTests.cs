@@ -87,12 +87,13 @@ public class ClaudeEnvironmentTests
             ReplayUserMessages = true,
             IncludeHookEvents = true,
             FallbackModel = "sonnet",
+            SettingSources = "user",
         });
         // Without a session to resume, there's nothing to resume at.
         var fresh = ClaudeArguments.ForStreamingSession(new ClaudeLaunchOptions { WorkingDirectory = ".", ResumeSessionAt = "a-9", ResumeDropsTurn = "u-9" });
 
         Assert.Equal(
-            ["--fallback-model", "sonnet", "--resume", "abc", "--fork-session", "--resume-session-at", "a-9", "--resume-drops-turn", "u-9", "--replay-user-messages", "--include-hook-events"],
+            ["--fallback-model", "sonnet", "--setting-sources", "user", "--resume", "abc", "--fork-session", "--resume-session-at", "a-9", "--resume-drops-turn", "u-9", "--replay-user-messages", "--include-hook-events"],
             args.SkipWhile(a => a != "--fallback-model"));
         Assert.DoesNotContain("--resume-session-at", fresh);
         Assert.DoesNotContain("--resume-drops-turn", fresh);

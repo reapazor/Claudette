@@ -224,6 +224,12 @@ public sealed class ClaudeCodeSettings
 
     /// <summary>A row in the conversation for every hook run, not only those that fail or print (DESIGN.md §5, "Hook runs").</summary>
     public bool ShowAllHookRuns { get; set; }
+
+    /// <summary>
+    /// Before Claude Code first starts in a folder that isn't trusted, ask about what the folder's own configuration
+    /// would run (DESIGN.md §7, "Folder trust"). On by default.
+    /// </summary>
+    public bool AskBeforeUsingFolderSettings { get; set; } = true;
 }
 
 public sealed class NewTabSettings

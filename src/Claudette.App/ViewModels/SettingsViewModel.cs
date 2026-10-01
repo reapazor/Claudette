@@ -228,6 +228,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         new(SettingsCategory.ClaudeCode, "Fallback model"),
         new(SettingsCategory.ClaudeCode, "Keep copies of files Claude changes, so prompts can be rewound"),
         new(SettingsCategory.ClaudeCode, "Show every hook run in the conversation"),
+        new(SettingsCategory.ClaudeCode, "Ask before using a new folder's own configuration (folder trust)"),
         .. LoginShellSearchEntries(),
         new(SettingsCategory.ClaudeCode, "Connect new tabs to the Claude app (Remote Control)"),
         new(SettingsCategory.ClaudeCode, "Push notifications on your phone"),
@@ -586,6 +587,13 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     {
         get => _settings.ClaudeCode.ShowAllHookRuns;
         set => Set(value, v => _settings.ClaudeCode.ShowAllHookRuns = v);
+    }
+
+    /// <summary>Settings → Claude Code → <b>Ask before using a new folder's own configuration</b> (DESIGN.md §7, "Folder trust").</summary>
+    public bool AskBeforeUsingFolderSettings
+    {
+        get => _settings.ClaudeCode.AskBeforeUsingFolderSettings;
+        set => Set(value, v => _settings.ClaudeCode.AskBeforeUsingFolderSettings = v);
     }
 
     /// <summary>The account can use Remote Control. When it can't, the setting and the tabs' switches are disabled.</summary>

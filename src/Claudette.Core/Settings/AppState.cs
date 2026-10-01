@@ -62,6 +62,18 @@ public sealed class AppState
     /// </summary>
     public Dictionary<string, string> FolderMappings { get; set; } = [];
 
+    /// <summary>
+    /// Folders the user said to trust, so Claude Code starts in them, and in what's inside them, without asking about
+    /// what their own configuration runs (DESIGN.md §7, "Folder trust"). Null until the first launch that knows about
+    /// trust, which trusts the folders already used here: their tabs, and the recent and favorite folders.
+    /// </summary>
+    public List<string>? TrustedFolders { get; set; }
+
+    /// <summary>Sets <see cref="TrustedFolders"/>, the first time, to the folders already used here.</summary>
+    public void TrustFoldersAlreadyUsed() =>
+        TrustedFolders ??= [.. Tabs.Select(t => t.Folder).Concat(RecentFolders.Select(r => r.Path)).Concat(FavoriteFolders)
+            .Where(f => f.Length > 0).Distinct(StringComparer.Ordinal)];
+
     /// <summary>What settings sync last saw or published, per setting path (DESIGN.md §14).</summary>
     public SettingsSyncState? SettingsSync { get; set; }
 
@@ -175,6 +187,12 @@ public sealed class TabState
 
     /// <summary>With <see cref="ResumeAt"/>: the prompt whose turn the resume drops, so Claude Code checks nothing else goes.</summary>
     public string? ResumeDropsTurn { get; set; }
+
+    /// <summary>
+    /// The tab starts Claude Code without the folder's own settings, MCP servers and CLAUDE.md (<c>--setting-sources
+    /// user</c>), as chosen when asked whether to trust the folder (DESIGN.md §7, "Folder trust").
+    /// </summary>
+    public bool WithoutProjectSettings { get; set; }
 
     /// <summary>The Perforce changelists Claude used in this session (DESIGN.md §18), so a restored tab shows them again.</summary>
     public List<Perforce.TrackedChangelist> Changelists { get; set; } = [];

@@ -47,6 +47,7 @@ public sealed partial class SettingsViewModel
         OnPropertyChanged(nameof(FallbackModel));
         OnPropertyChanged(nameof(KeepFileCheckpoints));
         OnPropertyChanged(nameof(ShowAllHookRuns));
+        OnPropertyChanged(nameof(AskBeforeUsingFolderSettings));
     }
 
     /// <summary>New tabs → <b>Reset to defaults</b>. Favorites and recent folders are this machine's data, not settings.</summary>

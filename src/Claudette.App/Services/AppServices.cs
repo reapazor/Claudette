@@ -105,6 +105,8 @@ public sealed class AppServices : IAsyncDisposable
         _stateStore = new JsonFileStore<AppState>(paths.StateFile, Loggers.CreateLogger("State"));
         Settings = _settingsStore.Load();
         State = _stateStore.Load();
+        // The first launch that knows about folder trust trusts the folders already used here (DESIGN.md §7).
+        State.TrustFoldersAlreadyUsed();
         UserEnvironment = new UserEnvironment(loginShell, () => Settings.ClaudeCode.UseLoginShellEnvironment, Loggers.CreateLogger("LoginShell"));
         RemoteControl = new RemoteControlService(this, sleepBlocker ?? new NoSleepBlocker());
         Locator = new ClaudeLocator(launcher, timeProvider, UserEnvironment, RemoteControl.ClaudeVariables);
@@ -309,6 +311,24 @@ public sealed class AppServices : IAsyncDisposable
     /// </summary>
     public StartingPermissionMode ReadStartingPermissionMode(string? folder) =>
         StartingPermissionMode.Read(StartingPermissionMode.SettingsFiles(ClaudeManagedSettingsDirectory, ClaudeConfigDirectory, folder));
+
+    /// <summary>
+    /// Claude Code may start in <paramref name="folder"/> without asking about what the folder's own configuration runs
+    /// (DESIGN.md §7, "Folder trust"): the user trusted it or a folder it's in, or turned the question off.
+    /// </summary>
+    public bool IsFolderTrusted(string folder) =>
+        !Settings.ClaudeCode.AskBeforeUsingFolderSettings || FolderTrust.IsTrusted(State.TrustedFolders ?? [], folder);
+
+    /// <summary>Remembers that the user trusts <paramref name="folder"/>.</summary>
+    public void TrustFolder(string folder)
+    {
+        var trusted = State.TrustedFolders ??= [];
+        if (!FolderTrust.IsTrusted(trusted, folder))
+        {
+            trusted.Add(folder);
+            SaveState();
+        }
+    }
 
     /// <summary>For the working line's verbs (DESIGN.md §5). Tests give it a seed.</summary>
     public Random Random { get; set; } = Random.Shared;

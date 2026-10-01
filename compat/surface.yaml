@@ -610,6 +610,14 @@ items:
     usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: none yet (needs an MCP server that asks through a URL)
+  - id: "--setting-sources"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.Trust.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: ClaudeEnvironmentTests, FolderTrustTests
+    # "user" leaves out the folder's settings, its .mcp.json servers and its CLAUDE.md (checked with 2.1.286): a tab
+    # started without the folder's own configuration (DESIGN.md §7, "Folder trust").
   - id: "--fallback-model"
     kind: flag
     status: documented
@@ -859,6 +867,30 @@ items:
     usedIn: src/Claudette.Core/Claude/SpinnerVerbs.cs, src/Claudette.Core/Claude/StartingPermissionMode.cs
     docs: https://code.claude.com/docs/en/settings
     test: SpinnerVerbsTests, StartingPermissionModeTests
+  - id: ".mcp.json"
+    kind: file
+    status: documented
+    usedIn: src/Claudette.Core/Claude/FolderTrust.cs
+    docs: https://code.claude.com/docs/en/mcp
+    test: FolderTrustTests
+    # Listed before a folder is trusted. Claude Code finds one in any folder above the session's too, past the
+    # repository's root (checked with 2.1.286); FolderTrust looks up to the file system's root.
+  - id: "-p runs a never-trusted folder's hooks, env, helpers and .mcp.json servers"
+    kind: behavior
+    status: documented
+    usedIn: src/Claudette.Core/Claude/FolderTrust.cs, src/Claudette.App/ViewModels/TabViewModel.Trust.cs
+    docs: https://code.claude.com/docs/en/permissions
+    test: FolderTrustTests
+    fallback: If -p starts asking or holding them back itself, the card is redundant but harmless; the question can be turned off in Settings.
+  - id: "hooks"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Claude/FolderTrust.cs
+    docs: https://code.claude.com/docs/en/settings-reference
+    test: FolderTrustTests
+    # Also apiKeyHelper, awsAuthRefresh, awsCredentialExport, gcpAuthRefresh, otelHeadersHelper, env, enabledPlugins and
+    # permissions.allow, read from the folder's .claude/settings.json and settings.local.json; and hooks in a project
+    # skill's SKILL.md frontmatter.
   - id: "managed-settings.json"
     kind: file
     status: documented

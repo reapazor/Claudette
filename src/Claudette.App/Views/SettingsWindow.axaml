@@ -236,6 +236,10 @@
           <CheckBox Content="Show every hook run in the conversation" IsChecked="{Binding ShowAllHookRuns}" />
           <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                      Text="Off, only hooks that fail, or print something while they run, get a row." />
+          <!-- DESIGN.md §7, "Folder trust" -->
+          <CheckBox Content="Ask before using a new folder's own configuration" IsChecked="{Binding AskBeforeUsingFolderSettings}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="Before Claude Code first starts in a folder you haven't trusted, list the hooks, commands and MCP servers its configuration would run. Started by Claudette, Claude Code doesn't ask itself." />
           <!-- macOS and Linux only (DESIGN.md §13, "Login shell environment") -->
           <CheckBox Content="Use my login shell's environment" IsChecked="{Binding UseLoginShellEnvironment}"
                     IsVisible="{x:Static vm:SettingsViewModel.ShowLoginShellSetting}" />

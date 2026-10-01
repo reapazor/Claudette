@@ -1024,6 +1024,12 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             await EnsureStartedAsync();
             if (_session is null)
             {
+                if (IsAskingTrust)
+                {
+                    // It waits for the answer about the folder (DESIGN.md §7, "Folder trust").
+                    _heldForTrust.Add(pending);
+                    return;
+                }
                 // It couldn't start because Claude Code needs a sign-in: the message waits for it.
                 HoldForSignIn(pending);
                 return;
@@ -1248,7 +1254,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             resume = localCopy;
         }
-        if (_closing.IsCancellationRequested)
+        // Claude Code runs a folder's own configuration without asking in a session like this one: Claudette asks first.
+        if (_closing.IsCancellationRequested || await AskTrustAsync())
         {
             return;
         }
@@ -1267,7 +1274,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             // can come back in plan mode (DESIGN.md §7, "Starting mode").
             var chosenMode = State.Overrides.PermissionMode ?? settings.NewTabs.DefaultPermissionMode;
             var folder = Folder;
-            var starting = _startingMode = await Task.Run(() => _services.ReadStartingPermissionMode(folder));
+            var settingsFolder = State.WithoutProjectSettings ? null : folder;
+            var starting = _startingMode = await Task.Run(() => _services.ReadStartingPermissionMode(settingsFolder));
             var environment = new Dictionary<string, string?>(_services.RemoteControl.ClaudeVariables);
             if (settings.ClaudeCode.KeepFileCheckpoints)
             {
@@ -1287,6 +1295,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 IncludeHookEvents = true,
                 // MCP servers' requests for input are cards in the conversation, including ones as the servers connect.
                 ShowsElicitations = true,
+                // Chosen when asked about the folder's own configuration (DESIGN.md §7, "Folder trust").
+                SettingSources = State.WithoutProjectSettings ? "user" : null,
                 FallbackModel = settings.ClaudeCode.FallbackModel,
                 Model = State.Overrides.Model ?? settings.NewTabs.DefaultModel,
                 Effort = State.Overrides.Effort ?? settings.NewTabs.DefaultEffort,

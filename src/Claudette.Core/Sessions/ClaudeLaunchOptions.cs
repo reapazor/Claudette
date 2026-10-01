@@ -67,6 +67,12 @@ public sealed record ClaudeLaunchOptions
     public IReadOnlyList<HookRegistration> Hooks { get; init; } = [];
 
     /// <summary>
+    /// <c>--setting-sources</c>: the settings Claude Code loads, such as <c>user</c> to leave out the folder's own
+    /// (DESIGN.md §7, "Folder trust"). Null: all of them.
+    /// </summary>
+    public string? SettingSources { get; init; }
+
+    /// <summary>
     /// The host shows MCP servers' requests for input, from the start (<see cref="ClaudeSession.ShowsElicitations"/>).
     /// Not a command-line argument.
     /// </summary>
@@ -103,6 +109,7 @@ public static class ClaudeArguments
         AddOption(args, "--effort", options.Effort);
         AddOption(args, "--permission-mode", options.PermissionMode);
         AddOption(args, "--fallback-model", options.FallbackModel);
+        AddOption(args, "--setting-sources", options.SettingSources);
         AddOption(args, "--resume", options.Resume);
         if (options.ForkSession && options.Resume is not null)
         {

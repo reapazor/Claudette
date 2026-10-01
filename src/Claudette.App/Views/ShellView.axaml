@@ -267,6 +267,9 @@
                                             ToolTip.Tip="A new tab that carries this session on as a copy" />
                                   <MenuItem Header="Export conversation…" Command="{Binding ExportConversationCommand}"
                                             ToolTip.Tip="Save the conversation as a Markdown file or a web page" />
+                                  <!-- Started without the folder's own configuration (DESIGN.md §7, "Folder trust") -->
+                                  <MenuItem Header="Trust this folder" Command="{Binding TrustFolderCommand}" IsVisible="{Binding IsWithoutFolderSettings}"
+                                            ToolTip.Tip="Start Claude Code again with this folder's own settings, MCP servers and CLAUDE.md" />
                                   <Separator />
                                   <MenuItem Header="Move up" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MoveTabUpCommand}" CommandParameter="{Binding}" />
                                   <MenuItem Header="Move down" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MoveTabDownCommand}" CommandParameter="{Binding}" />
@@ -388,6 +391,9 @@
                                         ToolTip.Tip="A new tab that carries this session on as a copy" />
                               <MenuItem Header="Export conversation…" Command="{Binding ExportConversationCommand}"
                                         ToolTip.Tip="Save the conversation as a Markdown file or a web page" />
+                              <!-- Started without the folder's own configuration (DESIGN.md §7, "Folder trust") -->
+                              <MenuItem Header="Trust this folder" Command="{Binding TrustFolderCommand}" IsVisible="{Binding IsWithoutFolderSettings}"
+                                        ToolTip.Tip="Start Claude Code again with this folder's own settings, MCP servers and CLAUDE.md" />
                               <Separator />
                               <MenuItem Header="Close" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CloseTabCommand}" CommandParameter="{Binding}" />
                             </ContextMenu>

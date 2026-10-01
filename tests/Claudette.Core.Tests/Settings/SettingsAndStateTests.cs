@@ -15,6 +15,25 @@ public sealed class SettingsAndStateTests : IDisposable
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
     [Fact]
+    public void The_first_launch_that_knows_about_trust_trusts_the_folders_already_used()
+    {
+        var state = new AppState
+        {
+            Tabs = [new TabState { Folder = "/work/api" }, new TabState { Folder = "" }],
+            RecentFolders = [new RecentFolder { Path = "/work/web" }, new RecentFolder { Path = "/work/api" }],
+            FavoriteFolders = ["/work/docs"],
+        };
+
+        state.TrustFoldersAlreadyUsed();
+        Assert.Equal(["/work/api", "/work/web", "/work/docs"], state.TrustedFolders);
+
+        // Once set, it's the user's list: a later launch doesn't add to it.
+        state.FavoriteFolders.Add("/work/new");
+        state.TrustFoldersAlreadyUsed();
+        Assert.DoesNotContain("/work/new", state.TrustedFolders!);
+    }
+
+    [Fact]
     public void A_missing_file_loads_defaults()
     {
         var settings = new JsonFileStore<AppSettings>(Path.Combine(_root, "settings.json")).Load();
