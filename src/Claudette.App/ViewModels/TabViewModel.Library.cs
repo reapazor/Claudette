@@ -109,6 +109,7 @@ public sealed partial class TabViewModel
         switch (result)
         {
             case LibraryCopyResult.Copied:
+                _libraryCopyFailed = false;
                 _conversation.AddNote("Copied this session to the session library.");
                 break;
             case LibraryCopyResult.NoTranscript:
@@ -138,8 +139,37 @@ public sealed partial class TabViewModel
     {
         if (State.SessionId is not null && State.SyncToLibrary && !IsReadOnly)
         {
-            _ = _services.Library.CopyToLibraryAsync(LibraryRecord(), State.TranscriptPath, () => State.SyncToLibrary);
+            LibraryCopy = CopyToLibraryAsync();
         }
+    }
+
+    /// <summary>The latest copy after a turn, for tests to wait on.</summary>
+    internal Task LibraryCopy { get; private set; } = Task.CompletedTask;
+
+    /// <summary>The last copy after a turn failed: the next one that works says so.</summary>
+    private bool _libraryCopyFailed;
+
+    /// <summary>
+    /// A copy that fails says so once, until one works again: the library is missing turns another machine would need,
+    /// and nothing else would show it (DESIGN.md §9, "Writing").
+    /// </summary>
+    private async Task CopyToLibraryAsync()
+    {
+        var result = await _services.Library.CopyToLibraryAsync(LibraryRecord(), State.TranscriptPath, () => State.SyncToLibrary);
+        _services.Dispatcher.Post(() =>
+        {
+            switch (result)
+            {
+                case LibraryCopyResult.Failed failed when !_libraryCopyFailed:
+                    _libraryCopyFailed = true;
+                    _conversation.AddNote($"Couldn't copy this session to the session library: {failed.Reason} It's tried again after the next turn, or use Sync now.", NoteKind.Warning);
+                    break;
+                case LibraryCopyResult.Copied when _libraryCopyFailed:
+                    _libraryCopyFailed = false;
+                    _conversation.AddNote("Copied this session to the session library again.");
+                    break;
+            }
+        });
     }
 
     // ---- One machine at a time (DESIGN.md §9) ----------------------------------------------------------------------

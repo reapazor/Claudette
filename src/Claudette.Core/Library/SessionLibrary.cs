@@ -154,6 +154,7 @@ public sealed class SessionLibrary(string libraryFolder, TimeProvider time)
     /// Copies a session's transcript to the local working folder as <c>&lt;session-id&gt;.jsonl</c>, with its subagent
     /// transcripts in <c>&lt;session-id&gt;/subagents/</c> beside it, and returns the local path. The app resumes with
     /// <c>claude --resume &lt;that path&gt;</c>; Claude Code then keeps writing to the local file, never to the library.
+    /// A working copy newer than the library's is kept: its last turns may not have reached the library.
     /// </summary>
     /// <exception cref="FileNotFoundException">The library has no transcript for the session.</exception>
     public async Task<string> CopyToLocalAsync(string sessionId, string localSessionsFolder, CancellationToken cancellationToken = default)
@@ -162,12 +163,16 @@ public sealed class SessionLibrary(string libraryFolder, TimeProvider time)
         var source = GetTranscriptPath(sessionId)
             ?? throw new FileNotFoundException($"The session library has no transcript for session {sessionId}.", Path.Combine(folder, TranscriptName(sessionId)));
         var target = Path.Combine(localSessionsFolder, TranscriptName(sessionId));
-        await LibraryFiles.CopyIfChangedAsync(source, target, cancellationToken).ConfigureAwait(false);
+        await LibraryFiles.CopyIfNewerAsync(source, target, cancellationToken).ConfigureAwait(false);
 
         var subagents = Path.Combine(folder, SubagentsFolderName);
         if (Directory.Exists(subagents))
         {
-            await CopyTranscriptsAsync(subagents, Path.Combine(localSessionsFolder, sessionId, SubagentsFolderName), force: false, cancellationToken).ConfigureAwait(false);
+            var localSubagents = Path.Combine(localSessionsFolder, sessionId, SubagentsFolderName);
+            foreach (var file in Directory.GetFiles(subagents, "*" + TranscriptExtension).Where(IsTranscript))
+            {
+                await LibraryFiles.CopyIfNewerAsync(file, Path.Combine(localSubagents, Path.GetFileName(file)), cancellationToken).ConfigureAwait(false);
+            }
         }
         return target;
     }

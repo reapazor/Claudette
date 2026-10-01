@@ -26,9 +26,21 @@ internal static class LibraryFiles
     public static Task<bool> CopyIfChangedAsync(string source, string target, CancellationToken cancellationToken) =>
         CopyAsync(source, target, force: false, cancellationToken);
 
+    /// <summary>
+    /// Copies <paramref name="source"/> to <paramref name="target"/> unless the target is the same or newer: written
+    /// later, or as late and at least as long (transcripts only grow). A working copy that has turns the library
+    /// doesn't, because copying it there after a turn failed, isn't overwritten with the library's older one.
+    /// </summary>
+    /// <returns>True when the file was copied.</returns>
+    public static Task<bool> CopyIfNewerAsync(string source, string target, CancellationToken cancellationToken) =>
+        CopyAsync(source, target, force: false, cancellationToken, keepNewerTarget: true);
+
     /// <inheritdoc cref="CopyIfChangedAsync"/>
     /// <param name="force">Copies the file even when the target looks unchanged (<b>Sync now</b>, DESIGN.md §9).</param>
-    public static async Task<bool> CopyAsync(string source, string target, bool force, CancellationToken cancellationToken)
+    public static Task<bool> CopyAsync(string source, string target, bool force, CancellationToken cancellationToken) =>
+        CopyAsync(source, target, force, cancellationToken, keepNewerTarget: false);
+
+    private static async Task<bool> CopyAsync(string source, string target, bool force, CancellationToken cancellationToken, bool keepNewerTarget)
     {
         var from = new FileInfo(source);
         if (!from.Exists)
@@ -37,7 +49,8 @@ internal static class LibraryFiles
         }
         // Taken before copying: if the source changes meanwhile, the next copy sees a different time and copies again.
         var lastWrite = from.LastWriteTimeUtc;
-        if (!force && IsSame(from.Length, lastWrite, new FileInfo(target)))
+        var to = new FileInfo(target);
+        if (!force && (IsSame(from.Length, lastWrite, to) || keepNewerTarget && IsNewer(to, from.Length, lastWrite)))
         {
             return false;
         }
@@ -83,6 +96,10 @@ internal static class LibraryFiles
 
     private static bool IsSame(long length, DateTime lastWriteUtc, FileInfo target) =>
         target.Exists && target.Length == length && (target.LastWriteTimeUtc - lastWriteUtc).Duration() < TimestampTolerance;
+
+    private static bool IsNewer(FileInfo target, long length, DateTime lastWriteUtc) =>
+        target.Exists && (target.LastWriteTimeUtc - lastWriteUtc >= TimestampTolerance
+            || (target.LastWriteTimeUtc - lastWriteUtc).Duration() < TimestampTolerance && target.Length >= length);
 
     private static string TempPath(string target) => AtomicFile.TempPath(target);
 

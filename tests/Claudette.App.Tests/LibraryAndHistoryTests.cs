@@ -706,6 +706,49 @@ public class LibraryAndHistoryTests
     }
 
     [Fact]
+    public async Task A_copy_after_a_turn_that_fails_says_so_once_and_again_when_it_works()
+    {
+        await using var h = new TabTestHarness(s => s.Sessions.SyncNewTabs = true);
+        var tab = await h.OpenTabAsync();
+        h.WriteTranscript("s1", UserLine("s1", "hello", h.WorkFolder));
+        var library = h.Services.Settings.Sessions.LibraryFolder;
+        var blocked = Path.Combine(h.Root, "not-a-folder");
+        await File.WriteAllTextAsync(blocked, "", TestContext.Current.CancellationToken);
+        h.Services.Settings.Sessions.LibraryFolder = blocked;
+        h.Services.Library.OnSettingsChanged();
+        static bool Failed(Conversation.NoteItem n) => n.Text.StartsWith("Couldn't copy this session to the session library: ", StringComparison.Ordinal);
+
+        for (var turn = 1; turn <= 2; turn++)
+        {
+            h.Transport.EmitTurn();
+            await TabTestHarness.Eventually(() => tab.State.Tokens.Total == 120 * turn && tab.IsSettled, "the turn to finish");
+            await CopyAfterTurnAsync(h, tab);
+        }
+        var note = Assert.Single(Notes(tab), Failed);
+        Assert.Equal(Conversation.NoteKind.Warning, note.Kind);
+        Assert.EndsWith("It's tried again after the next turn, or use Sync now.", note.Text, StringComparison.Ordinal);
+
+        h.Services.Settings.Sessions.LibraryFolder = library;
+        h.Services.Library.OnSettingsChanged();
+        h.Transport.EmitTurn();
+        await TabTestHarness.Eventually(() => tab.State.Tokens.Total == 360 && tab.IsSettled, "the turn to finish");
+        await CopyAfterTurnAsync(h, tab);
+        Assert.Equal("Copied this session to the session library again.", Notes(tab)[^1].Text);
+    }
+
+    /// <summary>Waits out the copy that follows a turn, past its settle delay.</summary>
+    private static async Task CopyAfterTurnAsync(TabTestHarness h, TabViewModel tab)
+    {
+        var copy = tab.LibraryCopy;
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(TimeSpan.FromSeconds(1));
+            return copy.IsCompleted;
+        }, "the copy after the turn");
+        await copy;
+    }
+
+    [Fact]
     public async Task Sync_now_says_so_when_this_machine_no_longer_has_the_transcript()
     {
         await using var h = new TabTestHarness(s => s.Sessions.SyncNewTabs = true);

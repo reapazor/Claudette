@@ -240,6 +240,31 @@ public sealed class SessionLibraryTests : IDisposable
     }
 
     [Fact]
+    public async Task Copy_to_local_keeps_a_working_copy_with_turns_the_library_missed()
+    {
+        var (transcript, subagents) = LocalSession();
+        await _library.SaveAsync(Record(), transcript, subagents, Ct);
+        var local = _root.Combine("app-data", "sessions");
+        var path = await _library.CopyToLocalAsync(Id, local, Ct);
+        var libraryCopy = Path.Combine(_library.GetSessionFolder(Id), $"{Id}.jsonl");
+        var localAgent = Path.Combine(local, Id, "subagents", "agent-a1.jsonl");
+
+        // Turns went on here, and copying them to the library afterwards failed.
+        File.AppendAllText(path, "{\"later\":1}\n");
+        File.AppendAllText(localAgent, "{\"later\":1}\n");
+        File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(libraryCopy).AddMinutes(5));
+        await _library.CopyToLocalAsync(Id, local, Ct);
+        Assert.EndsWith("{\"later\":1}\n", File.ReadAllText(path), StringComparison.Ordinal);
+        Assert.EndsWith("{\"later\":1}\n", File.ReadAllText(localAgent), StringComparison.Ordinal);
+
+        // Another machine carried it on since: the library's is newer, even if it went back to an earlier point.
+        File.WriteAllText(libraryCopy, "{\"elsewhere\":1}\n");
+        File.SetLastWriteTimeUtc(libraryCopy, File.GetLastWriteTimeUtc(path).AddMinutes(5));
+        await _library.CopyToLocalAsync(Id, local, Ct);
+        Assert.Equal("{\"elsewhere\":1}\n", File.ReadAllText(path));
+    }
+
+    [Fact]
     public async Task Copy_to_local_throws_when_the_library_has_no_transcript()
     {
         await Assert.ThrowsAsync<FileNotFoundException>(() => _library.CopyToLocalAsync("missing", _root.Combine("local"), Ct));
