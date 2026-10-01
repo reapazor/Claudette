@@ -22,8 +22,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
 
@@ -38,7 +38,7 @@ jobs:
           count=$(gh issue list --state all --search "\"Claude Code ${{ steps.detect.outputs.version }} compatibility report\" in:title" --json number --jq length)
           echo "count=$count" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
         with:
           global-json-file: global.json

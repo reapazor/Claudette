@@ -49,9 +49,11 @@ The files are in `packaging/`, and `.github/workflows/package.yml` builds them.
   - The bundle identifier is `com.reapazor.claudette`; User Notifications need one ([§10](#10-notifications)). The entitlements allow only what .NET's JIT needs.
   - `Info.plist` has purpose strings for the Documents, Desktop, Downloads, removable and network volume prompts. Claude Code runs as Claudette's child, so macOS asks about Claudette when Claude Code reads a project in one of those places.
 - **The workflow.**
-  - A `v*` tag builds signed packages and attaches them to a draft GitHub release. **Run workflow** builds them for a given version.
+  - A `v*` tag builds signed packages and attaches them to a draft GitHub release once the tests pass too (`ci.yml`, called as a reusable workflow). **Run workflow** builds them for a given version.
   - A pull request that changes `packaging/` builds them unsigned, to check the scripts.
-  - Signing and notarization use repository secrets, listed at the top of the workflow. Without them, the packages are built unsigned.
+  - Signing and notarization use secrets, listed at the top of the workflow, kept in a `release` environment whose protection rules should allow only `v*` tags; pull requests use no environment. Without the secrets, the packages are built unsigned.
+  - The version is checked to look like one (`1.2.3`, `1.2.3-beta.1`) and reaches the scripts through the environment, never pasted into them, since **Run workflow** takes it as free text. Every action is pinned to a commit, with its version in a comment; Dependabot proposes updates ([§15](#tools-and-ci)).
+  - Symbols (`.pdb`) are kept out of the packages, as artifacts of their own, to read crash reports' stack traces with.
 - **The icon** is Claudette: Clawd, Claude Code's pixel mascot, with hair on top, a berry hair tie and a ponytail. `packaging/icon/build-icons.mjs` draws every file from one 12×12 sprite, with a whole number of pixels per cell so the small sizes stay crisp. To change the icon, change the sprite and run the script (`node packaging/icon/build-icons.mjs`).
   - **Windows:** `src/Claudette.App/Assets/claudette.ico` and `packaging/windows/Assets/`, with no background. Its taskbar sizes include 24, 36 and 48 px (100%, 150% and 200% scaling), where the sprite fills the icon.
   - **macOS:** `packaging/icon/claudette-1024.png`, on an ivory tile.

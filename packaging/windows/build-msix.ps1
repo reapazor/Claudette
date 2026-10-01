@@ -38,8 +38,14 @@ $packageVersion = ($parts[0..2] + '0') -join '.'
 
 Write-Host "Publishing Claudette $Version for win-$Architecture"
 dotnet publish (Join-Path $root 'src/Claudette.App/Claudette.App.csproj') -c Release -r "win-$Architecture" --self-contained `
-    -p:Version=$Version -p:DebugType=none -o $layout
+    -p:Version=$Version -p:DebugType=portable -o $layout
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed' }
+
+# The symbols stay out of the package, kept beside it to read crash reports' stack traces with.
+$symbols = Join-Path $root "$Output/symbols-win-$Architecture"
+if (Test-Path $symbols) { Remove-Item -Recurse -Force $symbols }
+New-Item -ItemType Directory -Force -Path $symbols | Out-Null
+Get-ChildItem $layout -Filter *.pdb | Move-Item -Destination $symbols -Force
 
 Copy-Item -Recurse -Force (Join-Path $PSScriptRoot 'Assets') (Join-Path $layout 'Assets')
 (Get-Content -Raw (Join-Path $PSScriptRoot 'Package.appxmanifest')) `
