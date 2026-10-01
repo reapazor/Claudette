@@ -134,17 +134,15 @@ public sealed class UsageTracker : IAsyncDisposable
                 {
                     continue;
                 }
-                if (shared.IsNewerFormat)
+                try
                 {
-                    if (_newerFormats.Add(machineId))
-                    {
-                        _logger.LogWarning("Left out the usage {Machine} shared: Claudette {WrittenBy} wrote it in format {Version}, and this version reads up to {Known}. Update Claudette here to include it.",
-                            shared.MachineName, shared.WrittenBy ?? "(unknown)", shared.Version, UsageSharing.FileVersion);
-                    }
-                    continue;
+                    imported += Import(machineId, shared, keep, now);
                 }
-                _newerFormats.Remove(machineId);
-                imported += Store.ImportSamples(machineId, keep is { } k ? shared.Samples.Where(sample => sample.Timestamp >= now - k) : shared.Samples);
+                catch (Exception ex) when (ex is not ObjectDisposedException)
+                {
+                    // One machine's file must not keep the others' out.
+                    _logger.LogWarning(ex, "Couldn't add the usage {Machine} shared.", shared.MachineName);
+                }
             }
             if (imported > 0)
             {
@@ -170,6 +168,22 @@ public sealed class UsageTracker : IAsyncDisposable
         {
             _sharing.Release();
         }
+    }
+
+    /// <summary>Adds one machine's shared readings to the history; returns how many were new.</summary>
+    private int Import(string machineId, SharedUsage shared, TimeSpan? keep, DateTimeOffset now)
+    {
+        if (shared.IsNewerFormat)
+        {
+            if (_newerFormats.Add(machineId))
+            {
+                _logger.LogWarning("Left out the usage {Machine} shared: Claudette {WrittenBy} wrote it in format {Version}, and this version reads up to {Known}. Update Claudette here to include it.",
+                    shared.MachineName, shared.WrittenBy ?? "(unknown)", shared.Version, UsageSharing.FileVersion);
+            }
+            return 0;
+        }
+        _newerFormats.Remove(machineId);
+        return Store.ImportSamples(machineId, keep is { } k ? shared.Samples.Where(sample => sample.Timestamp >= now - k) : shared.Samples);
     }
 
     /// <summary>A tab finished a turn: record its tokens and its name, and poll soon (at most once a minute).</summary>

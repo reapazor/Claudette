@@ -96,6 +96,45 @@ public static class BurnRate
         Project(history, currentPercent, resetsAt, now, DefaultWindow);
 
     /// <summary>
+    /// The session trendline's points from stored samples, oldest first. Within one window usage only rises, as live
+    /// readings are merged (<see cref="UsageParser.Merge"/>), so each point is the highest reading of its window so far.
+    /// Another machine's samples (DESIGN.md §6, "Sharing across machines") can lag behind this one's, from a cached
+    /// <c>get_usage</c> answer: taken as they are, a lower one in the middle would look like a reset and throw the rate
+    /// off. Windows are told apart by their reset times; a reading for an earlier window than the current one is
+    /// stale and left out, and one without a reset time is taken as it is.
+    /// </summary>
+    public static List<UsagePoint> SessionHistory(IEnumerable<UsageSample> samples)
+    {
+        var points = new List<UsagePoint>();
+        DateTimeOffset? windowResets = null;
+        var highest = 0.0;
+        foreach (var sample in samples.Where(s => s.SessionPercent is { } p && double.IsFinite(p)).OrderBy(s => s.Timestamp))
+        {
+            var percent = sample.SessionPercent!.Value;
+            if (sample.SessionResetsAt is not { } resets)
+            {
+                points.Add(new UsagePoint(sample.Timestamp, percent));
+                continue;
+            }
+            if (windowResets is { } current && current - resets > UsageAlerts.SameWindowTolerance)
+            {
+                continue;
+            }
+            if (windowResets is { } same && (resets - same).Duration() <= UsageAlerts.SameWindowTolerance)
+            {
+                highest = Math.Max(highest, percent);
+            }
+            else
+            {
+                windowResets = resets;
+                highest = percent;
+            }
+            points.Add(new UsagePoint(sample.Timestamp, highest));
+        }
+        return points;
+    }
+
+    /// <summary>
     /// Fits a least-squares line to the points in the current 5-hour window that are at most <paramref name="window"/>
     /// old, plus <paramref name="currentPercent"/> at <paramref name="now"/>, and projects it forward.
     /// </summary>

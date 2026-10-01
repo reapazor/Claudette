@@ -800,7 +800,7 @@ A tab starts in auto mode, like a Claude Code session in a terminal or VS Code, 
   - The **Files (n)** button in the composer bar opens it.
   - The counts compare Claude's "before" with the file on disk now, so later edits by you show up too.
   - A file that's back to how it was shows as unchanged.
-- Selecting a file opens a diff view (side-by-side or inline) with syntax highlighting.
+- Clicking a file, or Enter on the selected one, opens a diff view (side-by-side or inline) with syntax highlighting. The arrow keys move through the list without opening anything.
   - The view is a window of its own, so it can stay open beside the conversation.
   - It shows the changes with a few lines of context, or the **Whole file**.
   - Long lines scroll sideways with a scroll bar along the bottom, Shift and the mouse wheel, or a touchpad. Every line scrolls together, both sides at once when they're side by side, and the line numbers stay where they are. The rows scroll up and down as usual.

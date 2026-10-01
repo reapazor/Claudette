@@ -133,6 +133,12 @@ public static class UsageSharing
         return new SharedUsage(version, machine, writtenBy, account, published, samples);
     }
 
+    /// <summary>A time in Unix milliseconds; null when it's missing or out of range, rather than throwing.</summary>
     private static DateTimeOffset? Time(JsonObject obj, string name) =>
-        obj.GetDouble(name) is { } milliseconds ? DateTimeOffset.FromUnixTimeMilliseconds((long)milliseconds) : null;
+        obj.GetDouble(name) is { } milliseconds && double.IsFinite(milliseconds) && milliseconds is >= 0 and <= MaxMilliseconds
+            ? DateTimeOffset.FromUnixTimeMilliseconds((long)milliseconds)
+            : null;
+
+    /// <summary>9999-12-31, the latest time a <see cref="DateTimeOffset"/> holds.</summary>
+    private const double MaxMilliseconds = 253_402_300_799_000;
 }

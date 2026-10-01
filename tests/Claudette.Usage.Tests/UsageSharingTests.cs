@@ -62,6 +62,25 @@ public class UsageSharingTests
     }
 
     [Fact]
+    public void A_time_out_of_range_skips_its_sample_rather_than_failing_the_file()
+    {
+        var shared = UsageSharing.Read(new JsonObject
+        {
+            ["version"] = 1,
+            ["account"] = "a1b2c3",
+            ["published"] = 1e20,
+            ["samples"] = new JsonArray(
+                new JsonObject { ["at"] = 1e20, ["session"] = 10 },
+                new JsonObject { ["at"] = -5, ["session"] = 11 },
+                new JsonObject { ["at"] = At.ToUnixTimeMilliseconds(), ["session"] = 12, ["sessionResetsAt"] = 1e300 }),
+        }.ToJsonString());
+
+        var sample = Assert.Single(shared!.Samples);
+        Assert.Equal(12, sample.SessionPercent);
+        Assert.Null(sample.SessionResetsAt);
+    }
+
+    [Fact]
     public void A_file_in_a_newer_format_is_read_without_its_samples()
     {
         var shared = UsageSharing.Read(new JsonObject

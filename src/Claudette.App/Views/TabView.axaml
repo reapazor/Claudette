@@ -650,7 +650,7 @@
               </CheckBox>
             </StackPanel>
             <ListBox x:Name="ChangedFilesList" ItemsSource="{Binding ChangedFiles}" Background="Transparent"
-                     SelectionChanged="OnChangedFileSelected" DoubleTapped="OnChangedFileDoubleTapped" KeyDown="OnChangedFileKeyDown">
+                     Tapped="OnChangedFileTapped" DoubleTapped="OnChangedFileDoubleTapped">
               <ListBox.ItemTemplate>
                 <DataTemplate DataType="vm:ChangedFileRow">
                   <Grid Classes="changedfile" Classes.reviewed="{Binding IsReviewed}" ColumnDefinitions="Auto,18,*,Auto" ToolTip.Tip="{Binding StatusText}" Background="Transparent">

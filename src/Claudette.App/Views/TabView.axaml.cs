@@ -31,6 +31,8 @@ public partial class TabView : UserControl
         // Tunnel, so these are seen before the multi-line TextBox turns Enter into a new line.
         AddHandler(KeyDownEvent, OnPromptKeyDown, RoutingStrategies.Tunnel);
         Composer.AddHandler(KeyDownEvent, OnComposerKeyDown, RoutingStrategies.Tunnel);
+        // Tunnel too: the list's items take Enter for themselves.
+        ChangedFilesList.AddHandler(KeyDownEvent, OnChangedFileKeyDown, RoutingStrategies.Tunnel);
         ConversationScroll.ScrollChanged += OnConversationScrollChanged;
         // Copy on a code block goes through the tab and says "Copied" (DESIGN.md §5, "Copy and times").
         CodeBlockCopy.Attach(this);
@@ -339,35 +341,61 @@ public partial class TabView : UserControl
     }
 
     /// <summary>Without a diff tool, selecting a file opens the built-in diff view; with one, double-click opens the tool (DESIGN.md §8).</summary>
-    private void OnChangedFileSelected(object? sender, SelectionChangedEventArgs e)
+    /// <summary>
+    /// A click opens the built-in diff view (DESIGN.md §8). Not on selection, so the arrow keys move through the list
+    /// without opening a window for each file; Enter opens the selected one.
+    /// </summary>
+    private void OnChangedFileTapped(object? sender, TappedEventArgs e)
     {
-        if (ChangedFilesList.SelectedItem is ChangedFileRow row && ViewModel is { HasDiffTool: false } tab)
+        if (ChangedFileAt(e) is { } row && ViewModel is { HasDiffTool: false } tab)
         {
             tab.OpenFileDiffCommand.Execute(row);
-            // Clear it, so clicking the same file again opens it again.
-            ChangedFilesList.SelectedItem = null;
         }
     }
 
+    /// <summary>
+    /// A double click opens the diff tool when one is set. Without one, the second click of it opens the built-in view
+    /// again, as a single click would (a double click raises no second tap).
+    /// </summary>
     private void OnChangedFileDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (ChangedFileAt(e) is { } row && ViewModel is { HasDiffTool: true } tab)
+        if (ChangedFileAt(e) is not { } row || ViewModel is not { } tab)
+        {
+            return;
+        }
+        if (tab.HasDiffTool)
         {
             tab.OpenFileInDiffToolCommand.Execute(row);
         }
+        else
+        {
+            tab.OpenFileDiffCommand.Execute(row);
+        }
     }
 
+    /// <summary>Enter opens the selected file as a click (or, with a diff tool, a double click) would.</summary>
     private void OnChangedFileKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && ChangedFilesList.SelectedItem is ChangedFileRow row && ViewModel is { } tab)
         {
-            tab.OpenFileCommand.Execute(row);
+            if (tab.HasDiffTool)
+            {
+                tab.OpenFileInDiffToolCommand.Execute(row);
+            }
+            else
+            {
+                tab.OpenFileDiffCommand.Execute(row);
+            }
             e.Handled = true;
         }
     }
 
+    /// <summary>The row under a tap, unless it was on one of the row's own controls (the Reviewed box, a button).</summary>
     private static ChangedFileRow? ChangedFileAt(TappedEventArgs e) =>
-        (e.Source as Control)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as ChangedFileRow;
+        e.Source is Control source && source.FindAncestorOfType<Avalonia.Controls.Primitives.ToggleButton>(includeSelf: true) is null
+            && source.FindAncestorOfType<Button>(includeSelf: true) is null
+            ? source.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as ChangedFileRow
+            : null;
 
     private void OnShowProcesses(object? sender, RoutedEventArgs e)
     {

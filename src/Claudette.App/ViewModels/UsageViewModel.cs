@@ -163,10 +163,7 @@ public sealed partial class UsageViewModel : ViewModelBase, IDisposable
         var now = _services.Time.GetUtcNow();
         try
         {
-            _history = _tracker.Store.GetSamples(now - SessionWindow, now)
-                .Where(s => s.SessionPercent is not null)
-                .Select(s => new UsagePoint(s.Timestamp, s.SessionPercent!.Value))
-                .ToList();
+            _history = BurnRate.SessionHistory(_tracker.Store.GetSamples(now - SessionWindow, now));
         }
         catch (Exception)
         {

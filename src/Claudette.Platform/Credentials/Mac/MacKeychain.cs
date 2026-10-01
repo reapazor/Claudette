@@ -55,12 +55,28 @@ public sealed class MacKeychain : ICredentialStore
         }
     }
 
+    /// <summary>
+    /// Updates the item in place, and adds it only when there's none: deleting first and then adding would lose the
+    /// stored password if the add failed (the Keychain locking in between, say).
+    /// </summary>
     private static unsafe void Write(string key, string label, string secret)
     {
-        Delete(key);
         var bytes = Encoding.UTF8.GetBytes(secret);
         try
         {
+            using var query = CF.Dictionary(
+                (Security.Class, Security.ClassGenericPassword),
+                (Security.AttrService, CF.String(Service)),
+                (Security.AttrAccount, CF.String(key)));
+            using var changes = CF.Dictionary(
+                (Security.AttrLabel, CF.String(label)),
+                (Security.ValueData, CF.Data(bytes)));
+            var status = Security.SecItemUpdate(query.Handle, changes.Handle);
+            if (status != Security.ErrSecItemNotFound)
+            {
+                Check(status, "save the password in the Keychain");
+                return;
+            }
             using var attributes = CF.Dictionary(
                 (Security.Class, Security.ClassGenericPassword),
                 (Security.AttrService, CF.String(Service)),
@@ -138,6 +154,9 @@ internal static unsafe partial class Security
 
     [LibraryImport(Framework)]
     public static partial int SecItemDelete(nint query);
+
+    [LibraryImport(Framework)]
+    public static partial int SecItemUpdate(nint query, nint attributesToUpdate);
 
     /// <summary>The constants are exported <c>CFStringRef</c> variables: read the pointer stored at the symbol.</summary>
     private static nint Constant(string name) => *(nint*)NativeLibrary.GetExport(Library, name);

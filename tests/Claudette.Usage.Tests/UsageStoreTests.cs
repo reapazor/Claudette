@@ -331,6 +331,34 @@ public sealed class UsageStoreTests : IDisposable
     }
 
     [Fact]
+    public void Samples_from_the_future_wait_until_their_time_has_come()
+    {
+        // A machine whose clock runs ahead: imported now, its sample would move the mark past everything it sends once
+        // its clock is put right, and stand as the newest reading.
+        var store = Open();
+        var ahead = Shared(Start.AddHours(1), 50);
+
+        Assert.Equal(0, store.ImportSamples("machine-2", [ahead]));
+        Assert.Equal(1, store.ImportSamples("machine-2", [Shared(Start.AddMinutes(-1), 20), ahead]));
+        Assert.Equal(20, store.GetLatestSample()?.SessionPercent);
+
+        _time.Advance(TimeSpan.FromHours(1));
+        Assert.Equal(1, store.ImportSamples("machine-2", [ahead]));
+    }
+
+    [Fact]
+    public void A_clock_set_back_doesnt_stop_samples_being_written()
+    {
+        var store = Open();
+        Assert.True(store.AddSample(Snapshot(10)));
+
+        _time.AdjustTime(Start.AddHours(-3));
+        _time.Advance(TimeSpan.FromMinutes(1));
+
+        Assert.True(store.AddSample(Snapshot(12)));
+    }
+
+    [Fact]
     public void Another_machines_readings_dont_count_as_this_machines_last_one()
     {
         var store = Open();
@@ -424,6 +452,32 @@ public sealed class UsageStoreTests : IDisposable
 
         Assert.True(store.AddSample(Snapshot(10)));
         Assert.Single(Directory.GetFiles(Path.GetDirectoryName(DatabasePath)!, "usage.db.*.bad"));
+    }
+
+    [Fact]
+    public void A_database_damaged_past_its_header_is_found_when_opened_and_kept_aside()
+    {
+        // Opening reads only the header; without a check, every later write would fail and the history quietly stop.
+        var store = Open();
+        store.AddTurns(Enumerable.Range(0, 400).Select(i => new TurnRecord(Start.AddSeconds(i), $"tab-{i}", "s1", "claude-fable-5", 1, 2, 3, 4, 0.5)));
+        store.Dispose();
+        _stores.Remove(store);
+        using (var file = new FileStream(DatabasePath, FileMode.Open, FileAccess.Write))
+        {
+            Assert.True(file.Length > 4096 * 3);
+            // The page headers of the tables' pages: their structure, not just their contents.
+            for (var page = 1; page * 4096 < file.Length; page++)
+            {
+                file.Position = page * 4096;
+                file.Write(Enumerable.Repeat((byte)0xA5, 16).ToArray());
+            }
+        }
+
+        var reopened = Open();
+
+        Assert.Single(Directory.GetFiles(Path.GetDirectoryName(DatabasePath)!, "usage.db.*.bad"));
+        Assert.Empty(reopened.GetTurns(DateTimeOffset.MinValue, DateTimeOffset.MaxValue));
+        Assert.True(reopened.AddSample(Snapshot(10)));
     }
 
     [Fact]
