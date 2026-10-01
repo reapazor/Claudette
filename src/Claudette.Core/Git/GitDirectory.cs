@@ -73,6 +73,26 @@ internal sealed record GitDirectory(string WorkTree, string GitDir, string Commo
         return (null, IsObjectId(head) ? head.ToLowerInvariant() : null);
     }
 
+    /// <summary>
+    /// What HEAD names, read from it alone without resolving refs: the branch, or the first 7 characters of the commit
+    /// when detached. Null when HEAD can't be read.
+    /// </summary>
+    public string? ReadHeadName()
+    {
+        var head = ReadFile(Path.Combine(GitDir, "HEAD"));
+        if (head is null)
+        {
+            return null;
+        }
+        if (head.StartsWith("ref:", StringComparison.Ordinal))
+        {
+            var refName = head["ref:".Length..].Trim();
+            const string heads = "refs/heads/";
+            return refName.StartsWith(heads, StringComparison.Ordinal) ? refName[heads.Length..] : refName;
+        }
+        return head.Length >= 7 ? head[..7] : null;
+    }
+
     /// <summary>The fetch URL of <c>origin</c>, else of the first remote in the config, else null.</summary>
     public string? ReadRemoteUrl()
     {

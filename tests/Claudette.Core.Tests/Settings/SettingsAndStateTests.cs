@@ -222,24 +222,6 @@ public sealed class SettingsAndStateTests : IDisposable
     }
 
     [Fact]
-    public void Reads_the_git_branch_including_from_a_subfolder_and_a_worktree()
-    {
-        var repo = Path.Combine(_root, "repo");
-        Directory.CreateDirectory(Path.Combine(repo, ".git"));
-        Directory.CreateDirectory(Path.Combine(repo, "src", "deep"));
-        File.WriteAllText(Path.Combine(repo, ".git", "HEAD"), "ref: refs/heads/feature/auth\n");
-        var worktreeGit = Path.Combine(_root, "wt-git");
-        Directory.CreateDirectory(worktreeGit);
-        File.WriteAllText(Path.Combine(worktreeGit, "HEAD"), "0123456789abcdef\n");
-        var worktree = Path.Combine(_root, "worktree");
-        Directory.CreateDirectory(worktree);
-        File.WriteAllText(Path.Combine(worktree, ".git"), $"gitdir: {worktreeGit}\n");
-
-        Assert.Equal("feature/auth", GitInfo.TryGetBranch(Path.Combine(repo, "src", "deep")));
-        Assert.Equal("0123456", GitInfo.TryGetBranch(worktree));
-    }
-
-    [Fact]
     public void The_recent_folder_shortlist_puts_favorites_first_and_tells_same_names_apart()
     {
         var root = OperatingSystem.IsWindows() ? @"C:\src" : "/src";

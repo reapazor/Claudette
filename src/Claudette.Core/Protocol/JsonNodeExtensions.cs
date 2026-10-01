@@ -41,6 +41,9 @@ public static class JsonNodeExtensions
         return double.IsFinite(number) ? number : null;
     }
 
+    /// <summary>A number cut to a whole one, such as a token count; null when it isn't a number.</summary>
+    public static long? AsWholeNumber(this JsonNode? node) => node is JsonValue value && value.AsDouble() is { } number ? (long)number : null;
+
     /// <summary>A string, or a number's JSON text (<c>"7"</c> for <c>7</c>): an id that may come either way.</summary>
     public static string? GetStringOrNumber(this JsonObject obj, string name) => obj[name] switch
     {
