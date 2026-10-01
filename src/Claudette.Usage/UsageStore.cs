@@ -20,14 +20,12 @@ namespace Claudette.Usage;
 /// </summary>
 public sealed class UsageStore : IDisposable
 {
-    public const int SchemaVersion = 4;
+    public const int SchemaVersion = UsageSchema.Version;
 
     /// <summary>The <c>imports</c> row that holds back every machine's samples up to a time: the last Clear.</summary>
     private const string EveryMachine = "*";
     public static readonly TimeSpan MinimumSampleInterval = TimeSpan.FromMinutes(1);
 
-    private const int SqliteCorrupt = 11;
-    private const int SqliteNotADatabase = 26;
     private const string SelectSamples =
         "SELECT timestamp, session_percent, session_resets_at, weekly_percent, weekly_resets_at, models FROM samples";
 
@@ -76,84 +74,48 @@ public sealed class UsageStore : IDisposable
             return false;
         }
         var values = SampleValues.From(snapshot);
-        lock (_lock)
+        return Locked(() =>
         {
-            try
+            if (values == _lastSaved)
             {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                if (values == _lastSaved)
-                {
-                    return false;
-                }
-                var now = _time.GetUtcNow();
-                // A last write in the future means the clock was set back since: don't wait for it to catch up.
-                if (_lastWrite is { } last && now >= last && now - last < MinimumSampleInterval)
-                {
-                    return false;
-                }
+                return false;
+            }
+            var now = _time.GetUtcNow();
+            // A last write in the future means the clock was set back since: don't wait for it to catch up.
+            if (_lastWrite is { } last && now >= last && now - last < MinimumSampleInterval)
+            {
+                return false;
+            }
 
-                using var command = _connection.CreateCommand();
-                command.CommandText = """
-                    INSERT INTO samples (timestamp, session_percent, session_resets_at, weekly_percent, weekly_resets_at, models)
-                    VALUES ($timestamp, $sessionPercent, $sessionResetsAt, $weeklyPercent, $weeklyResetsAt, $models)
-                    """;
-                Add(command, "$timestamp", now.ToUnixTimeMilliseconds());
-                Add(command, "$sessionPercent", values.SessionPercent);
-                Add(command, "$sessionResetsAt", values.SessionResetsAt);
-                Add(command, "$weeklyPercent", values.WeeklyPercent);
-                Add(command, "$weeklyResetsAt", values.WeeklyResetsAt);
-                Add(command, "$models", values.Models);
-                command.ExecuteNonQuery();
-                _lastSaved = values;
-                _lastWrite = now;
-                return true;
-            }
-            catch (SqliteException ex) when (IsCorrupt(ex))
-            {
-                StartAfresh(ex);
-                throw;
-            }
-        }
+            using var command = _connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO samples (timestamp, session_percent, session_resets_at, weekly_percent, weekly_resets_at, models)
+                VALUES ($timestamp, $sessionPercent, $sessionResetsAt, $weeklyPercent, $weeklyResetsAt, $models)
+                """;
+            Add(command, "$timestamp", now.ToUnixTimeMilliseconds());
+            Add(command, "$sessionPercent", values.SessionPercent);
+            Add(command, "$sessionResetsAt", values.SessionResetsAt);
+            Add(command, "$weeklyPercent", values.WeeklyPercent);
+            Add(command, "$weeklyResetsAt", values.WeeklyResetsAt);
+            Add(command, "$models", values.Models);
+            command.ExecuteNonQuery();
+            _lastSaved = values;
+            _lastWrite = now;
+            return true;
+        });
     }
 
     /// <summary>The newest sample, from this machine or another, so the header can show something after a restart.</summary>
-    public UsageSample? GetLatestSample()
-    {
-        lock (_lock)
-        {
-            try
-            {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                return ReadLatestSample(ownOnly: false);
-            }
-            catch (SqliteException ex) when (IsCorrupt(ex))
-            {
-                StartAfresh(ex);
-                throw;
-            }
-        }
-    }
+    public UsageSample? GetLatestSample() => Locked(() => ReadLatestSample(ownOnly: false));
 
     /// <summary>This machine's own samples since <paramref name="from"/>, oldest first: what it shares, never another's.</summary>
-    public IReadOnlyList<UsageSample> GetOwnSamples(DateTimeOffset from)
+    public IReadOnlyList<UsageSample> GetOwnSamples(DateTimeOffset from) => Locked(() =>
     {
-        lock (_lock)
-        {
-            try
-            {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                using var command = _connection.CreateCommand();
-                command.CommandText = $"{SelectSamples} WHERE machine IS NULL AND timestamp >= $from ORDER BY timestamp, id";
-                Add(command, "$from", from.ToUnixTimeMilliseconds());
-                return ReadSamples(command);
-            }
-            catch (SqliteException ex) when (IsCorrupt(ex))
-            {
-                StartAfresh(ex);
-                throw;
-            }
-        }
-    }
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"{SelectSamples} WHERE machine IS NULL AND timestamp >= $from ORDER BY timestamp, id";
+        Add(command, "$from", from.ToUnixTimeMilliseconds());
+        return ReadSamples(command);
+    });
 
     /// <summary>
     /// Adds the samples another machine shared that are newer than any imported from it before, and newer than the last
@@ -162,91 +124,70 @@ public sealed class UsageStore : IDisposable
     public int ImportSamples(string machine, IEnumerable<UsageSample> samples)
     {
         ArgumentException.ThrowIfNullOrEmpty(machine);
-        lock (_lock)
+        return Locked(() =>
         {
-            try
-            {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                using var transaction = _connection.BeginTransaction();
-                using var watermark = _connection.CreateCommand();
-                watermark.Transaction = transaction;
-                watermark.CommandText = "SELECT MAX(through) FROM imports WHERE machine IN ($machine, $every)";
-                Add(watermark, "$machine", machine);
-                Add(watermark, "$every", EveryMachine);
-                var through = watermark.ExecuteScalar() is long stored ? stored : long.MinValue;
+            using var transaction = _connection.BeginTransaction();
+            using var watermark = _connection.CreateCommand();
+            watermark.Transaction = transaction;
+            watermark.CommandText = "SELECT MAX(through) FROM imports WHERE machine IN ($machine, $every)";
+            Add(watermark, "$machine", machine);
+            Add(watermark, "$every", EveryMachine);
+            var through = watermark.ExecuteScalar() is long stored ? stored : long.MinValue;
 
-                using var insert = _connection.CreateCommand();
-                insert.Transaction = transaction;
-                insert.CommandText = """
-                    INSERT INTO samples (timestamp, session_percent, session_resets_at, weekly_percent, weekly_resets_at, models, machine)
-                    VALUES ($timestamp, $sessionPercent, $sessionResetsAt, $weeklyPercent, $weeklyResetsAt, $models, $machine)
-                    """;
-                var added = 0;
-                var newest = through;
-                // A machine whose clock is ahead shares samples from the future. Imported, they'd move its mark ahead and
-                // stand as the newest reading; left for now, they come in once their time has come.
-                var latest = (_time.GetUtcNow() + FutureAllowance).ToUnixTimeMilliseconds();
-                foreach (var sample in samples)
-                {
-                    var timestamp = sample.Timestamp.ToUnixTimeMilliseconds();
-                    if (timestamp <= through || timestamp > latest)
-                    {
-                        continue;
-                    }
-                    var values = SampleValues.From(sample);
-                    insert.Parameters.Clear();
-                    Add(insert, "$timestamp", timestamp);
-                    Add(insert, "$sessionPercent", values.SessionPercent);
-                    Add(insert, "$sessionResetsAt", values.SessionResetsAt);
-                    Add(insert, "$weeklyPercent", values.WeeklyPercent);
-                    Add(insert, "$weeklyResetsAt", values.WeeklyResetsAt);
-                    Add(insert, "$models", values.Models);
-                    Add(insert, "$machine", machine);
-                    insert.ExecuteNonQuery();
-                    added++;
-                    newest = Math.Max(newest, timestamp);
-                }
-                if (newest > through)
-                {
-                    using var mark = _connection.CreateCommand();
-                    mark.Transaction = transaction;
-                    mark.CommandText = "INSERT INTO imports (machine, through) VALUES ($machine, $through) ON CONFLICT (machine) DO UPDATE SET through = excluded.through";
-                    Add(mark, "$machine", machine);
-                    Add(mark, "$through", newest);
-                    mark.ExecuteNonQuery();
-                }
-                transaction.Commit();
-                return added;
-            }
-            catch (SqliteException ex) when (IsCorrupt(ex))
+            using var insert = _connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO samples (timestamp, session_percent, session_resets_at, weekly_percent, weekly_resets_at, models, machine)
+                VALUES ($timestamp, $sessionPercent, $sessionResetsAt, $weeklyPercent, $weeklyResetsAt, $models, $machine)
+                """;
+            var added = 0;
+            var newest = through;
+            // A machine whose clock is ahead shares samples from the future. Imported, they'd move its mark ahead and
+            // stand as the newest reading; left for now, they come in once their time has come.
+            var latest = (_time.GetUtcNow() + FutureAllowance).ToUnixTimeMilliseconds();
+            foreach (var sample in samples)
             {
-                StartAfresh(ex);
-                throw;
+                var timestamp = sample.Timestamp.ToUnixTimeMilliseconds();
+                if (timestamp <= through || timestamp > latest)
+                {
+                    continue;
+                }
+                var values = SampleValues.From(sample);
+                insert.Parameters.Clear();
+                Add(insert, "$timestamp", timestamp);
+                Add(insert, "$sessionPercent", values.SessionPercent);
+                Add(insert, "$sessionResetsAt", values.SessionResetsAt);
+                Add(insert, "$weeklyPercent", values.WeeklyPercent);
+                Add(insert, "$weeklyResetsAt", values.WeeklyResetsAt);
+                Add(insert, "$models", values.Models);
+                Add(insert, "$machine", machine);
+                insert.ExecuteNonQuery();
+                added++;
+                newest = Math.Max(newest, timestamp);
             }
-        }
+            if (newest > through)
+            {
+                using var mark = _connection.CreateCommand();
+                mark.Transaction = transaction;
+                mark.CommandText = "INSERT INTO imports (machine, through) VALUES ($machine, $through) ON CONFLICT (machine) DO UPDATE SET through = excluded.through";
+                Add(mark, "$machine", machine);
+                Add(mark, "$through", newest);
+                mark.ExecuteNonQuery();
+            }
+            transaction.Commit();
+            return added;
+        });
     }
 
     /// <summary>Samples from <paramref name="from"/> to <paramref name="to"/> (both inclusive), oldest first.</summary>
-    public IReadOnlyList<UsageSample> GetSamples(DateTimeOffset from, DateTimeOffset to)
+    public IReadOnlyList<UsageSample> GetSamples(DateTimeOffset from, DateTimeOffset to) => Locked(() =>
     {
-        lock (_lock)
-        {
-            try
-            {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                using var command = _connection.CreateCommand();
-                command.CommandText = $"{SelectSamples} WHERE timestamp >= $from AND timestamp <= $to ORDER BY timestamp, id";
-                Add(command, "$from", from.ToUnixTimeMilliseconds());
-                Add(command, "$to", to.ToUnixTimeMilliseconds());
-                return ReadSamples(command);
-            }
-            catch (SqliteException ex) when (IsCorrupt(ex))
-            {
-                StartAfresh(ex);
-                throw;
-            }
-        }
-    }
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"{SelectSamples} WHERE timestamp >= $from AND timestamp <= $to ORDER BY timestamp, id";
+        Add(command, "$from", from.ToUnixTimeMilliseconds());
+        Add(command, "$to", to.ToUnixTimeMilliseconds());
+        return ReadSamples(command);
+    });
 
     /// <summary>
     /// The highest usage each window reached, for every window in the history that reset by <paramref name="now"/>, newest
@@ -256,238 +197,169 @@ public sealed class UsageStore : IDisposable
     public IReadOnlyList<WindowPeak> GetPastWindows(UsageWindow window, DateTimeOffset now)
     {
         var (percent, resetsAt) = window == UsageWindow.Session ? ("session_percent", "session_resets_at") : ("weekly_percent", "weekly_resets_at");
-        lock (_lock)
+        return Locked(() =>
         {
-            try
+            using var command = _connection.CreateCommand();
+            command.CommandText = $"""
+                SELECT ({resetsAt} + 500) / 1000, MAX({percent}) FROM samples
+                WHERE {resetsAt} IS NOT NULL AND {percent} IS NOT NULL AND {resetsAt} <= $now
+                GROUP BY ({resetsAt} + 500) / 1000
+                ORDER BY 1 DESC
+                """;
+            Add(command, "$now", now.ToUnixTimeMilliseconds());
+            using var reader = command.ExecuteReader();
+            var peaks = new List<WindowPeak>();
+            while (reader.Read())
             {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                using var command = _connection.CreateCommand();
-                command.CommandText = $"""
-                    SELECT ({resetsAt} + 500) / 1000, MAX({percent}) FROM samples
-                    WHERE {resetsAt} IS NOT NULL AND {percent} IS NOT NULL AND {resetsAt} <= $now
-                    GROUP BY ({resetsAt} + 500) / 1000
-                    ORDER BY 1 DESC
-                    """;
-                Add(command, "$now", now.ToUnixTimeMilliseconds());
-                using var reader = command.ExecuteReader();
-                var peaks = new List<WindowPeak>();
-                while (reader.Read())
-                {
-                    peaks.Add(new WindowPeak(DateTimeOffset.FromUnixTimeSeconds(reader.GetInt64(0)), reader.GetDouble(1)));
-                }
-                return peaks;
+                peaks.Add(new WindowPeak(DateTimeOffset.FromUnixTimeSeconds(reader.GetInt64(0)), reader.GetDouble(1)));
             }
-            catch (SqliteException ex) when (IsCorrupt(ex))
-            {
-                StartAfresh(ex);
-                throw;
-            }
-        }
+            return peaks;
+        });
     }
 
-    public void AddTurns(IEnumerable<TurnRecord> turns)
+    public void AddTurns(IEnumerable<TurnRecord> turns) => Locked(() =>
     {
-        lock (_lock)
+        using var transaction = _connection.BeginTransaction();
+        using var command = _connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO turns (timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd, project)
+            VALUES ($timestamp, $tabId, $sessionId, $model, $input, $output, $cacheWrite, $cacheRead, $costUsd, $project)
+            """;
+        foreach (var turn in turns)
         {
-            try
-            {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                using var transaction = _connection.BeginTransaction();
-                using var command = _connection.CreateCommand();
-                command.Transaction = transaction;
-                command.CommandText = """
-                    INSERT INTO turns (timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd, project)
-                    VALUES ($timestamp, $tabId, $sessionId, $model, $input, $output, $cacheWrite, $cacheRead, $costUsd, $project)
-                    """;
-                foreach (var turn in turns)
-                {
-                    command.Parameters.Clear();
-                    Add(command, "$timestamp", turn.Timestamp.ToUnixTimeMilliseconds());
-                    Add(command, "$tabId", turn.TabId);
-                    Add(command, "$sessionId", turn.SessionId);
-                    Add(command, "$model", turn.Model);
-                    Add(command, "$input", turn.Input);
-                    Add(command, "$output", turn.Output);
-                    Add(command, "$cacheWrite", turn.CacheWrite);
-                    Add(command, "$cacheRead", turn.CacheRead);
-                    Add(command, "$costUsd", turn.CostUsd);
-                    Add(command, "$project", turn.Project);
-                    command.ExecuteNonQuery();
-                }
-                transaction.Commit();
-            }
-            catch (SqliteException ex) when (IsCorrupt(ex))
-            {
-                StartAfresh(ex);
-                throw;
-            }
+            command.Parameters.Clear();
+            Add(command, "$timestamp", turn.Timestamp.ToUnixTimeMilliseconds());
+            Add(command, "$tabId", turn.TabId);
+            Add(command, "$sessionId", turn.SessionId);
+            Add(command, "$model", turn.Model);
+            Add(command, "$input", turn.Input);
+            Add(command, "$output", turn.Output);
+            Add(command, "$cacheWrite", turn.CacheWrite);
+            Add(command, "$cacheRead", turn.CacheRead);
+            Add(command, "$costUsd", turn.CostUsd);
+            Add(command, "$project", turn.Project);
+            command.ExecuteNonQuery();
         }
-    }
+        transaction.Commit();
+    });
 
     /// <summary>Turn records from <paramref name="from"/> to <paramref name="to"/> (both inclusive), oldest first.</summary>
-    public IReadOnlyList<TurnRecord> GetTurns(DateTimeOffset from, DateTimeOffset to, string? tabId = null)
+    public IReadOnlyList<TurnRecord> GetTurns(DateTimeOffset from, DateTimeOffset to, string? tabId = null) => Locked(() =>
     {
-        lock (_lock)
+        using var command = _connection.CreateCommand();
+        // Two queries rather than "$tabId IS NULL OR tab_id = $tabId", which SQLite can't answer from the
+        // tab's index (turns_by_tab), so it would read every turn in the range.
+        command.CommandText = tabId is null
+            ? """
+              SELECT timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd, project FROM turns
+              WHERE timestamp >= $from AND timestamp <= $to
+              ORDER BY timestamp, id
+              """
+            : """
+              SELECT timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd, project FROM turns
+              WHERE tab_id = $tabId AND timestamp >= $from AND timestamp <= $to
+              ORDER BY timestamp, id
+              """;
+        Add(command, "$from", from.ToUnixTimeMilliseconds());
+        Add(command, "$to", to.ToUnixTimeMilliseconds());
+        if (tabId is not null)
         {
-            try
-            {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                using var command = _connection.CreateCommand();
-                // Two queries rather than "$tabId IS NULL OR tab_id = $tabId", which SQLite can't answer from the
-                // tab's index (turns_by_tab), so it would read every turn in the range.
-                command.CommandText = tabId is null
-                    ? """
-                      SELECT timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd, project FROM turns
-                      WHERE timestamp >= $from AND timestamp <= $to
-                      ORDER BY timestamp, id
-                      """
-                    : """
-                      SELECT timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd, project FROM turns
-                      WHERE tab_id = $tabId AND timestamp >= $from AND timestamp <= $to
-                      ORDER BY timestamp, id
-                      """;
-                Add(command, "$from", from.ToUnixTimeMilliseconds());
-                Add(command, "$to", to.ToUnixTimeMilliseconds());
-                if (tabId is not null)
-                {
-                    Add(command, "$tabId", tabId);
-                }
-                using var reader = command.ExecuteReader();
-                var turns = new List<TurnRecord>();
-                while (reader.Read())
-                {
-                    turns.Add(new TurnRecord(
-                        DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)),
-                        reader.GetString(1),
-                        reader.IsDBNull(2) ? null : reader.GetString(2),
-                        reader.GetString(3),
-                        reader.GetInt64(4),
-                        reader.GetInt64(5),
-                        reader.GetInt64(6),
-                        reader.GetInt64(7),
-                        reader.GetDouble(8),
-                        reader.IsDBNull(9) ? null : reader.GetString(9)));
-                }
-                return turns;
-            }
-            catch (SqliteException ex) when (IsCorrupt(ex))
-            {
-                StartAfresh(ex);
-                throw;
-            }
+            Add(command, "$tabId", tabId);
         }
-    }
+        using var reader = command.ExecuteReader();
+        var turns = new List<TurnRecord>();
+        while (reader.Read())
+        {
+            turns.Add(new TurnRecord(
+                DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.GetString(3),
+                reader.GetInt64(4),
+                reader.GetInt64(5),
+                reader.GetInt64(6),
+                reader.GetInt64(7),
+                reader.GetDouble(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9)));
+        }
+        return turns;
+    });
 
     /// <summary>
     /// Keeps <paramref name="name"/> as the tab's name, so its turns are still named once it's closed. Nothing is stored
     /// for a tab without turn records.
     /// </summary>
-    public void SetTabName(string tabId, string name)
+    public void SetTabName(string tabId, string name) => Locked(() =>
     {
-        lock (_lock)
-        {
-            try
-            {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                using var command = _connection.CreateCommand();
-                command.CommandText = """
-                    INSERT INTO tabs (tab_id, name) SELECT $tabId, $name WHERE EXISTS (SELECT 1 FROM turns WHERE tab_id = $tabId)
-                    ON CONFLICT (tab_id) DO UPDATE SET name = excluded.name
-                    """;
-                Add(command, "$tabId", tabId);
-                Add(command, "$name", name);
-                command.ExecuteNonQuery();
-            }
-            catch (SqliteException ex) when (IsCorrupt(ex))
-            {
-                StartAfresh(ex);
-                throw;
-            }
-        }
-    }
+        using var command = _connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO tabs (tab_id, name) SELECT $tabId, $name WHERE EXISTS (SELECT 1 FROM turns WHERE tab_id = $tabId)
+            ON CONFLICT (tab_id) DO UPDATE SET name = excluded.name
+            """;
+        Add(command, "$tabId", tabId);
+        Add(command, "$name", name);
+        command.ExecuteNonQuery();
+    });
 
     /// <summary>Tokens per project since <paramref name="from"/>, the heaviest first; turns without a project together.</summary>
-    public IReadOnlyList<ProjectTokenSum> GetTokensByProject(DateTimeOffset from)
+    public IReadOnlyList<ProjectTokenSum> GetTokensByProject(DateTimeOffset from) => Locked(() =>
     {
-        lock (_lock)
+        using var command = _connection.CreateCommand();
+        // A turn's records (one per model) share its timestamp and tab.
+        command.CommandText = """
+            SELECT project, SUM(input), SUM(output), SUM(cache_write), SUM(cache_read), SUM(cost_usd), COUNT(DISTINCT tab_id || '|' || timestamp)
+            FROM turns
+            WHERE timestamp >= $from
+            GROUP BY project
+            ORDER BY SUM(input + output + cache_write + cache_read) DESC, project
+            """;
+        Add(command, "$from", from.ToUnixTimeMilliseconds());
+        using var reader = command.ExecuteReader();
+        var sums = new List<ProjectTokenSum>();
+        while (reader.Read())
         {
-            try
-            {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                using var command = _connection.CreateCommand();
-                // A turn's records (one per model) share its timestamp and tab.
-                command.CommandText = """
-                    SELECT project, SUM(input), SUM(output), SUM(cache_write), SUM(cache_read), SUM(cost_usd), COUNT(DISTINCT tab_id || '|' || timestamp)
-                    FROM turns
-                    WHERE timestamp >= $from
-                    GROUP BY project
-                    ORDER BY SUM(input + output + cache_write + cache_read) DESC, project
-                    """;
-                Add(command, "$from", from.ToUnixTimeMilliseconds());
-                using var reader = command.ExecuteReader();
-                var sums = new List<ProjectTokenSum>();
-                while (reader.Read())
-                {
-                    sums.Add(new ProjectTokenSum(
-                        reader.IsDBNull(0) ? null : reader.GetString(0),
-                        reader.GetInt64(1),
-                        reader.GetInt64(2),
-                        reader.GetInt64(3),
-                        reader.GetInt64(4),
-                        reader.GetDouble(5),
-                        reader.GetInt32(6)));
-                }
-                return sums;
-            }
-            catch (SqliteException ex) when (IsCorrupt(ex))
-            {
-                StartAfresh(ex);
-                throw;
-            }
+            sums.Add(new ProjectTokenSum(
+                reader.IsDBNull(0) ? null : reader.GetString(0),
+                reader.GetInt64(1),
+                reader.GetInt64(2),
+                reader.GetInt64(3),
+                reader.GetInt64(4),
+                reader.GetDouble(5),
+                reader.GetInt32(6)));
         }
-    }
+        return sums;
+    });
 
     /// <summary>Each tab's tokens since <paramref name="from"/>, the heaviest first, with its last known name.</summary>
-    public IReadOnlyList<TabTokenSum> GetTokensByTab(DateTimeOffset from)
+    public IReadOnlyList<TabTokenSum> GetTokensByTab(DateTimeOffset from) => Locked(() =>
     {
-        lock (_lock)
+        using var command = _connection.CreateCommand();
+        // A turn's records (one per model) share its timestamp.
+        command.CommandText = """
+            SELECT turns.tab_id, SUM(input), SUM(output), SUM(cache_write), SUM(cache_read), SUM(cost_usd), COUNT(DISTINCT timestamp), tabs.name
+            FROM turns LEFT JOIN tabs ON tabs.tab_id = turns.tab_id
+            WHERE timestamp >= $from
+            GROUP BY turns.tab_id
+            ORDER BY SUM(input + output + cache_write + cache_read) DESC, turns.tab_id
+            """;
+        Add(command, "$from", from.ToUnixTimeMilliseconds());
+        using var reader = command.ExecuteReader();
+        var sums = new List<TabTokenSum>();
+        while (reader.Read())
         {
-            try
-            {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                using var command = _connection.CreateCommand();
-                // A turn's records (one per model) share its timestamp.
-                command.CommandText = """
-                    SELECT turns.tab_id, SUM(input), SUM(output), SUM(cache_write), SUM(cache_read), SUM(cost_usd), COUNT(DISTINCT timestamp), tabs.name
-                    FROM turns LEFT JOIN tabs ON tabs.tab_id = turns.tab_id
-                    WHERE timestamp >= $from
-                    GROUP BY turns.tab_id
-                    ORDER BY SUM(input + output + cache_write + cache_read) DESC, turns.tab_id
-                    """;
-                Add(command, "$from", from.ToUnixTimeMilliseconds());
-                using var reader = command.ExecuteReader();
-                var sums = new List<TabTokenSum>();
-                while (reader.Read())
-                {
-                    sums.Add(new TabTokenSum(
-                        reader.GetString(0),
-                        reader.GetInt64(1),
-                        reader.GetInt64(2),
-                        reader.GetInt64(3),
-                        reader.GetInt64(4),
-                        reader.GetDouble(5),
-                        reader.GetInt32(6),
-                        reader.IsDBNull(7) ? null : reader.GetString(7)));
-                }
-                return sums;
-            }
-            catch (SqliteException ex) when (IsCorrupt(ex))
-            {
-                StartAfresh(ex);
-                throw;
-            }
+            sums.Add(new TabTokenSum(
+                reader.GetString(0),
+                reader.GetInt64(1),
+                reader.GetInt64(2),
+                reader.GetInt64(3),
+                reader.GetInt64(4),
+                reader.GetDouble(5),
+                reader.GetInt32(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7)));
         }
-    }
+        return sums;
+    });
 
     /// <summary>
     /// Deletes samples and turn records older than <paramref name="keepFor"/> (DESIGN.md §6, "Retention"), and the names
@@ -499,64 +371,43 @@ public sealed class UsageStore : IDisposable
         {
             return 0;
         }
-        lock (_lock)
+        return Locked(() =>
         {
-            try
-            {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                var cutoff = (_time.GetUtcNow() - keep).ToUnixTimeMilliseconds();
-                using var transaction = _connection.BeginTransaction();
-                var deleted = Execute(transaction, "DELETE FROM samples WHERE timestamp < $cutoff", cutoff)
-                    + Execute(transaction, "DELETE FROM turns WHERE timestamp < $cutoff", cutoff);
-                Execute(transaction, "DELETE FROM tabs WHERE tab_id NOT IN (SELECT tab_id FROM turns)", null);
-                transaction.Commit();
-                return deleted;
-            }
-            catch (SqliteException ex) when (IsCorrupt(ex))
-            {
-                StartAfresh(ex);
-                throw;
-            }
-        }
+            var cutoff = (_time.GetUtcNow() - keep).ToUnixTimeMilliseconds();
+            using var transaction = _connection.BeginTransaction();
+            var deleted = Execute(transaction, "DELETE FROM samples WHERE timestamp < $cutoff", cutoff)
+                + Execute(transaction, "DELETE FROM turns WHERE timestamp < $cutoff", cutoff);
+            Execute(transaction, "DELETE FROM tabs WHERE tab_id NOT IN (SELECT tab_id FROM turns)", null);
+            transaction.Commit();
+            return deleted;
+        });
     }
 
     /// <summary>
     /// Deletes every sample, turn record and tab name ("Clear usage history"). Samples other machines shared up to now
     /// aren't imported again.
     /// </summary>
-    public void Clear()
+    public void Clear() => Locked(() =>
     {
-        lock (_lock)
+        using (var transaction = _connection.BeginTransaction())
         {
-            try
-            {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                using (var transaction = _connection.BeginTransaction())
-                {
-                    Execute(transaction, "DELETE FROM samples", null);
-                    Execute(transaction, "DELETE FROM turns", null);
-                    Execute(transaction, "DELETE FROM tabs", null);
-                    Execute(transaction, "DELETE FROM imports", null);
-                    using var floor = _connection.CreateCommand();
-                    floor.Transaction = transaction;
-                    floor.CommandText = "INSERT INTO imports (machine, through) VALUES ($every, $now)";
-                    Add(floor, "$every", EveryMachine);
-                    Add(floor, "$now", _time.GetUtcNow().ToUnixTimeMilliseconds());
-                    floor.ExecuteNonQuery();
-                    transaction.Commit();
-                }
-                // Give the space back and leave nothing of the old rows in the file.
-                Execute(null, "VACUUM", null);
-                _lastSaved = null;
-                _lastWrite = null;
-            }
-            catch (SqliteException ex) when (IsCorrupt(ex))
-            {
-                StartAfresh(ex);
-                throw;
-            }
+            Execute(transaction, "DELETE FROM samples", null);
+            Execute(transaction, "DELETE FROM turns", null);
+            Execute(transaction, "DELETE FROM tabs", null);
+            Execute(transaction, "DELETE FROM imports", null);
+            using var floor = _connection.CreateCommand();
+            floor.Transaction = transaction;
+            floor.CommandText = "INSERT INTO imports (machine, through) VALUES ($every, $now)";
+            Add(floor, "$every", EveryMachine);
+            Add(floor, "$now", _time.GetUtcNow().ToUnixTimeMilliseconds());
+            floor.ExecuteNonQuery();
+            transaction.Commit();
         }
-    }
+        // Give the space back and leave nothing of the old rows in the file.
+        Execute(null, "VACUUM", null);
+        _lastSaved = null;
+        _lastWrite = null;
+    });
 
     public void Dispose()
     {
@@ -571,20 +422,46 @@ public sealed class UsageStore : IDisposable
         }
     }
 
+    /// <summary>
+    /// Runs <paramref name="work"/> under the lock, on a store that isn't disposed. A damaged file found on the way is kept
+    /// aside and a new one started (<see cref="StartAfresh"/>); the call that found it still fails.
+    /// </summary>
+    private T Locked<T>(Func<T> work)
+    {
+        lock (_lock)
+        {
+            try
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return work();
+            }
+            catch (SqliteException ex) when (UsageSchema.IsCorrupt(ex))
+            {
+                StartAfresh(ex);
+                throw;
+            }
+        }
+    }
+
+    /// <inheritdoc cref="Locked{T}"/>
+    private void Locked(Action work) => Locked<object?>(() =>
+    {
+        work();
+        return null;
+    });
+
     private SqliteConnection OpenOrReplace()
     {
         try
         {
-            return Open();
+            return UsageSchema.Open(Path);
         }
-        catch (SqliteException ex) when (IsCorrupt(ex))
+        catch (SqliteException ex) when (UsageSchema.IsCorrupt(ex))
         {
             SetAside(ex);
-            return Open();
+            return UsageSchema.Open(Path);
         }
     }
-
-    private static bool IsCorrupt(SqliteException ex) => ex.SqliteErrorCode is SqliteCorrupt or SqliteNotADatabase;
 
     /// <summary>
     /// The file turned out damaged after it was opened: every later write would fail too, and the history would quietly
@@ -594,7 +471,7 @@ public sealed class UsageStore : IDisposable
     {
         _connection.Dispose();
         SetAside(ex);
-        _connection = Open();
+        _connection = UsageSchema.Open(Path);
         _lastSaved = default;
         _lastWrite = null;
     }
@@ -612,102 +489,6 @@ public sealed class UsageStore : IDisposable
                 File.Move(Path + suffix, backup + suffix, overwrite: true);
             }
         }
-    }
-
-    private SqliteConnection Open()
-    {
-        // No pooling: disposing the store closes the file, so it can be deleted or moved straight away.
-        var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-        {
-            DataSource = Path,
-            Mode = SqliteOpenMode.ReadWriteCreate,
-            Pooling = false,
-        }.ToString());
-        try
-        {
-            connection.Open();
-            using var version = connection.CreateCommand();
-            version.CommandText = "PRAGMA user_version";
-            if (Convert.ToInt64(version.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) < SchemaVersion)
-            {
-                using var transaction = connection.BeginTransaction();
-                using var create = connection.CreateCommand();
-                create.Transaction = transaction;
-                create.CommandText = $"""
-                    CREATE TABLE IF NOT EXISTS samples (
-                        id INTEGER PRIMARY KEY,
-                        timestamp INTEGER NOT NULL,
-                        session_percent REAL,
-                        session_resets_at INTEGER,
-                        weekly_percent REAL,
-                        weekly_resets_at INTEGER,
-                        models TEXT
-                    );
-                    CREATE INDEX IF NOT EXISTS samples_by_time ON samples (timestamp);
-                    CREATE TABLE IF NOT EXISTS turns (
-                        id INTEGER PRIMARY KEY,
-                        timestamp INTEGER NOT NULL,
-                        tab_id TEXT NOT NULL,
-                        session_id TEXT,
-                        model TEXT NOT NULL,
-                        input INTEGER NOT NULL,
-                        output INTEGER NOT NULL,
-                        cache_write INTEGER NOT NULL,
-                        cache_read INTEGER NOT NULL,
-                        cost_usd REAL NOT NULL
-                    );
-                    CREATE INDEX IF NOT EXISTS turns_by_time ON turns (timestamp);
-                    CREATE INDEX IF NOT EXISTS turns_by_tab ON turns (tab_id, timestamp);
-                    CREATE TABLE IF NOT EXISTS tabs (
-                        tab_id TEXT PRIMARY KEY,
-                        name TEXT NOT NULL
-                    );
-                    CREATE TABLE IF NOT EXISTS imports (
-                        machine TEXT PRIMARY KEY,
-                        through INTEGER NOT NULL
-                    );
-                    """;
-                create.ExecuteNonQuery();
-                // Version 3: the machine a shared sample came from; null for this machine's own.
-                if (!HasColumn(connection, transaction, "samples", "machine"))
-                {
-                    create.CommandText = "ALTER TABLE samples ADD COLUMN machine TEXT";
-                    create.ExecuteNonQuery();
-                }
-                // Version 4: the tab's folder, for usage by project; null for turns recorded before.
-                if (!HasColumn(connection, transaction, "turns", "project"))
-                {
-                    create.CommandText = "ALTER TABLE turns ADD COLUMN project TEXT";
-                    create.ExecuteNonQuery();
-                }
-                create.CommandText = $"PRAGMA user_version = {SchemaVersion}";
-                create.ExecuteNonQuery();
-                transaction.Commit();
-            }
-            // Opening reads only the header: damage further in would fail every later write instead. The history is
-            // small (it's pruned), so checking all of it once is quick.
-            using var check = connection.CreateCommand();
-            check.CommandText = "PRAGMA quick_check";
-            if (check.ExecuteScalar() is not "ok" and var result)
-            {
-                throw new SqliteException($"The usage history is damaged: {result}", SqliteCorrupt);
-            }
-            return connection;
-        }
-        catch
-        {
-            connection.Dispose();
-            throw;
-        }
-    }
-
-    private static bool HasColumn(SqliteConnection connection, SqliteTransaction transaction, string table, string column)
-    {
-        using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = $"SELECT 1 FROM pragma_table_info('{table}') WHERE name = $column";
-        Add(command, "$column", column);
-        return command.ExecuteScalar() is not null;
     }
 
     private UsageSample? ReadLatestSample(bool ownOnly)
