@@ -1287,8 +1287,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             })));
             _session = session;
             session.ShowsElicitations = true;
-            State.ResumeAt = null;
-            State.ResumeDropsTurn = null;
+            if (!fork)
+            {
+                State.ResumeAt = null;
+                State.ResumeDropsTurn = null;
+            }
             // A new claude has none of the old one's tasks.
             Tasks.Clear();
             _ = LoadSpinnerVerbsAsync();
@@ -1296,12 +1299,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             State.SessionStartedAt ??= _services.Time.GetUtcNow();
             // The installed version is what just started; system/init confirms it with the first turn.
             SetRunningVersion(_services.InstalledClaudeVersion);
+            // The copy gets a new session id with its first turn. Until then it's still the original's, so the fork and
+            // its point stay saved: started again before that, it's a copy again, not the original.
+            _forkAwaitingId = fork;
             if (fork)
             {
-                // The copy gets a new session id with its first turn; it no longer writes to the original.
-                State.ForkOnNextStart = false;
-                State.TranscriptPath = null;
-                _forkAwaitingId = true;
                 _conversation.AddNote(_forkNote ?? "Opened as a copy. The original session is left as it was.");
                 _forkNote = null;
             }
@@ -1663,7 +1665,15 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             case TurnStarted started:
                 HasMcpServers = started.Init.Raw.GetArray("mcp_servers") is { Count: > 0 };
                 State.SessionId = started.Init.SessionId;
-                _forkAwaitingId = false;
+                if (_forkAwaitingId)
+                {
+                    // The copy has its own id now and no longer writes to the original.
+                    _forkAwaitingId = false;
+                    State.ForkOnNextStart = false;
+                    State.ResumeAt = null;
+                    State.ResumeDropsTurn = null;
+                    State.TranscriptPath = null;
+                }
                 if (started.Init.ClaudeCodeVersion is { } reported && Version.TryParse(reported, out var version))
                 {
                     SetRunningVersion(version);

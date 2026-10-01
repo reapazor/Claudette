@@ -21,7 +21,10 @@ public sealed partial class TabViewModel
     /// </summary>
     public bool SyncToLibrary => State.SyncToLibrary;
 
-    /// <summary>A copy (<b>Open a copy</b>, or a conflict copy) that hasn't had its first turn yet still has the original's id.</summary>
+    /// <summary>
+    /// This tab's Claude Code was started as a copy (<b>Open a copy</b>, a branch, or a conflict copy) and hasn't had its
+    /// first turn yet, so it still has the original's id. <see cref="TabState.ForkOnNextStart"/> stays set until then too.
+    /// </summary>
     private bool _forkAwaitingId;
 
     /// <summary><b>Sync to other machines</b> in the tab's menu.</summary>

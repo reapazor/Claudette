@@ -120,9 +120,9 @@ internal sealed class ScriptedTransport : IClaudeTransport
     public void Emit(string line) => _process.Write(line);
 
     /// <summary>A complete turn: init, a text reply and a result with usage.</summary>
-    public void EmitTurn(string reply = "ok", string model = "claude-opus-5-5")
+    public void EmitTurn(string reply = "ok", string model = "claude-opus-5-5", string sessionId = "s1")
     {
-        Emit(new JsonObject { ["type"] = "system", ["subtype"] = "init", ["session_id"] = "s1", ["model"] = model, ["permissionMode"] = "default" });
+        Emit(new JsonObject { ["type"] = "system", ["subtype"] = "init", ["session_id"] = sessionId, ["model"] = model, ["permissionMode"] = "default" });
         Emit(new JsonObject
         {
             ["type"] = "assistant",
@@ -134,7 +134,7 @@ internal sealed class ScriptedTransport : IClaudeTransport
             ["subtype"] = "success",
             ["is_error"] = false,
             ["result"] = reply,
-            ["session_id"] = "s1",
+            ["session_id"] = sessionId,
             ["modelUsage"] = new JsonObject
             {
                 [model] = new JsonObject { ["inputTokens"] = 100, ["outputTokens"] = 20, ["cacheReadInputTokens"] = 0, ["cacheCreationInputTokens"] = 0, ["costUSD"] = 0.01 },

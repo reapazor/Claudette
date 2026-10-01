@@ -81,15 +81,41 @@ public sealed class RewindAndBranchTests
         var note = Assert.IsType<NoteItem>(tab.Items[^1]);
         Assert.Equal("Went back to before your message. Edit it and send it again.", note.Text);
         Assert.DoesNotContain(tab.Items, i => i is NoteItem { Text: "Resumed." });
-        // The point is used once: the next start is a plain resume of the copy.
-        Assert.Null(tab.State.ResumeAt);
-        Assert.False(tab.State.ForkOnNextStart);
+        // Until its first turn the copy is still the original's session up to the point: both stay saved.
+        Assert.Equal((true, "att1", "u2"), (tab.State.ForkOnNextStart, tab.State.ResumeAt, tab.State.ResumeDropsTurn));
         // Reading the transcript again doesn't put its prompts in the composer's history twice.
         Assert.True(tab.RecallOlderPrompt());
         Assert.Equal("second", tab.ComposerText);
         Assert.True(tab.RecallOlderPrompt());
         Assert.Equal("first", tab.ComposerText);
         Assert.False(tab.RecallOlderPrompt());
+    }
+
+    [Fact]
+    public async Task A_copy_restarted_before_its_first_turn_is_a_copy_again_and_its_first_turn_makes_it_its_own()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await RestoreAsync(h);
+        await tab.EditAndResendCommand.ExecuteAsync(Prompt(tab, "second"));
+        await h.Shell.Confirmation!.ConfirmCommand.ExecuteAsync(null);
+        await TabTestHarness.Eventually(() => h.Factory.Launches.Count == 2 && tab.Status == TabStatus.Idle && tab.IsSettled, "the restart");
+
+        // Claude Code stopped before anything was sent, as when Claudette closes: resuming the original would carry it on.
+        h.Transport.Exit(1);
+        await TabTestHarness.Eventually(() => tab.CanRestart, "the exit");
+        await tab.RestartCommand.ExecuteAsync(null);
+        await TabTestHarness.Eventually(() => h.Factory.Launches.Count == 3 && tab.Status == TabStatus.Idle && tab.IsSettled, "the second restart");
+        var again = h.Factory.Launches[2];
+        Assert.Equal(("s1", true, "att1", "u2"), (again.Resume, again.ForkSession, again.ResumeSessionAt, again.ResumeDropsTurn));
+        Assert.Equal(["first"], tab.Items.OfType<UserMessageItem>().Select(m => m.Text));
+
+        tab.ComposerText = "second, edited";
+        await tab.SendCommand.ExecuteAsync(null);
+        h.Transport.EmitTurn("two, again", sessionId: "s2");
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle && tab.IsSettled, "the copy's first turn");
+
+        Assert.Equal("s2", tab.State.SessionId);
+        Assert.Equal((false, (string?)null, (string?)null), (tab.State.ForkOnNextStart, tab.State.ResumeAt, tab.State.ResumeDropsTurn));
     }
 
     [Fact]
@@ -275,6 +301,24 @@ public sealed class RewindAndBranchTests
         Assert.Equal(("s1", true, (string?)null), (launch.Resume, launch.ForkSession, launch.ResumeSessionAt));
         Assert.Equal(["first", "second"], copy.Items.OfType<UserMessageItem>().Select(m => m.Text));
         Assert.Equal("", copy.ComposerText);
+    }
+
+    [Fact]
+    public async Task Duplicating_a_copy_before_its_first_turn_keeps_its_point()
+    {
+        await using var h = new TabTestHarness();
+        h.Factory.ProcessPerSession = true;
+        var tab = await RestoreAsync(h);
+        await tab.BranchFromHereCommand.ExecuteAsync(Prompt(tab, "second"));
+        var branch = h.Shell.SelectedTab!;
+        await TabTestHarness.Eventually(() => h.Factory.Launches.Count == 2 && branch.Status == TabStatus.Idle && branch.IsSettled, "the branch");
+
+        await h.Shell.DuplicateTabCommand.ExecuteAsync(branch);
+        var copy = h.Shell.SelectedTab!;
+        await TabTestHarness.Eventually(() => h.Factory.Launches.Count == 3 && copy.Status == TabStatus.Idle && copy.IsSettled, "the copy");
+
+        Assert.Equal(("s1", true, "att1"), (h.Factory.Launches[2].Resume, h.Factory.Launches[2].ForkSession, h.Factory.Launches[2].ResumeSessionAt));
+        Assert.Equal(["first"], copy.Items.OfType<UserMessageItem>().Select(m => m.Text));
     }
 
     [Fact]
