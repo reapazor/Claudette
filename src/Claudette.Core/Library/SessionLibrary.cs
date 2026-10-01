@@ -218,7 +218,7 @@ public sealed class SessionLibrary(string libraryFolder, TimeProvider time)
                     || ReadRecord(folder) is not { } record
                     || keep.Contains(record.SessionId)
                     || record.LastUsed >= cutoff
-                    || LeaseManager.ReadLease(folder) is { } lease && now - lease.UpdatedAt < LeaseManager.StaleAfter)
+                    || LeaseManager.Read(folder) is var lease && (lease.Unreadable || lease.Lease is { } held && now - held.UpdatedAt < LeaseManager.StaleAfter))
                 {
                     continue;
                 }

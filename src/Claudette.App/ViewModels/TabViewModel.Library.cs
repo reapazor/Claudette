@@ -114,6 +114,9 @@ public sealed partial class TabViewModel
             case LibraryCopyResult.Failed failed:
                 _conversation.AddNote($"Couldn't copy this session to the session library: {failed.Reason}", NoteKind.Warning);
                 break;
+            case LibraryCopyResult.NotHeld when !IsReadOnly:
+                _conversation.AddNote("Didn't copy this session to the session library: its lease there couldn't be read, or another machine has it open. Try again in a moment.", NoteKind.Warning);
+                break;
         }
     }
 
@@ -205,9 +208,12 @@ public sealed partial class TabViewModel
                     await OnTakenOverAsync(other.Machine);
                     return false;
                 case LeaseStatus.Mine:
+                case LeaseStatus.Unreadable:
+                    // Unreadable: perhaps a lease mid-sync. The session still works here; the copy after the next turn
+                    // takes the lease if it's free by then, and refuses if another machine has it.
                     return true;
                 default:
-                    library.Leases.Acquire(sessionId, library.Library.GetSessionFolder(sessionId));
+                    library.Leases.TakeOver(sessionId, library.Library.GetSessionFolder(sessionId));
                     return true;
             }
         }

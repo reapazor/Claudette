@@ -983,10 +983,12 @@ Claude Code's credentials and settings are never copied.
 - A lease that hasn't been refreshed in 10 minutes counts as stale.
 - The lease names the machine and a random id for this run of Claudette, so two copies of Claudette on one machine are told apart.
 - When a refresh finds another machine's name in the lease, the session was taken over. The tab stops its `claude` process, becomes read-only, and says where the session continued.
+- Every copy to the library checks the lease first, as **Sync now** does, because leases are only refreshed once a minute. A turn that ends after another machine took the session over writes nothing, and the tab becomes read-only then rather than at the next refresh. The copy takes the lease last, so a lease of this run's means the copy finished.
+- A lease file that can't be read (a sync client half way through writing it, or a damaged one) isn't treated as free: nothing takes the lease or writes the session on the strength of it, a refresh leaves it alone, and retention keeps the session. A restored tab still starts from this machine's transcript, and the next copy looks again.
 - If the sync client creates conflict copies (for example `session (1).jsonl`), Claudette shows them in History as separate, forked entries. It never merges them.
   - It recognizes the numbered copies Google Drive and OneDrive make, Dropbox's "conflicted copy", Syncthing's `.sync-conflict-…`, and `<id>-<machine>.jsonl`.
   - Opening one copies it to a folder of its own and resumes it with `--fork-session`, so it can't overwrite the working copy of the original.
-- Library retention (Settings → Sessions) never deletes a session that's open here in a tab that syncs, or held by a live lease. An old library copy of a tab that no longer syncs is pruned like any other.
+- Library retention (Settings → Sessions) never deletes a session that's open here in a tab that syncs, or held by a live or unreadable lease. An old library copy of a tab that no longer syncs is pruned like any other.
 
 **Privacy.** Transcripts contain code, command output and anything else Claude read in the project. When the user picks a library folder inside a known cloud-sync location, Claudette says so and asks them to confirm.
 

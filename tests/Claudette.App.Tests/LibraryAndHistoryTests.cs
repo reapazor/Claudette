@@ -140,6 +140,40 @@ public class LibraryAndHistoryTests
     }
 
     [Fact]
+    public async Task A_turn_that_ends_after_a_take_over_doesnt_copy_over_it()
+    {
+        // Leases are refreshed once a minute; the copy after a turn must not wait for that, or it would overwrite what
+        // the other machine wrote and take the session back.
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        tab.SetSyncToLibrary(true);
+        h.WriteTranscript("s1", UserLine("s1", "hello", h.WorkFolder));
+        h.Transport.EmitTurn();
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(TimeSpan.FromSeconds(1));
+            return h.Services.Library.Leases.HeldSessions.Contains("s1");
+        }, "the lease");
+        var library = h.Services.Library.Library.GetTranscriptPath("s1")!;
+        var copied = await File.ReadAllTextAsync(library, TestContext.Current.CancellationToken);
+        var lease = Path.Combine(h.Services.Library.Library.GetSessionFolder("s1"), LeaseManager.FileName);
+        var theirs = new JsonObject { ["machine"] = "LAPTOP-02", ["owner"] = "other", ["updatedAt"] = h.Time.GetUtcNow().ToString("O") }.ToJsonString();
+        await File.WriteAllTextAsync(lease, theirs, TestContext.Current.CancellationToken);
+
+        h.WriteTranscript("s1", UserLine("s1", "hello", h.WorkFolder), UserLine("s1", "written after the take-over", h.WorkFolder));
+        h.Transport.EmitTurn();
+
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(TimeSpan.FromSeconds(1));
+            return tab.IsReadOnly;
+        }, "read-only");
+        Assert.Equal("LAPTOP-02", tab.TakenOverBy);
+        Assert.Equal(copied, await File.ReadAllTextAsync(library, TestContext.Current.CancellationToken));
+        Assert.Equal(theirs, await File.ReadAllTextAsync(lease, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task Opening_a_library_session_takes_its_lease_as_it_starts()
     {
         await using var h = new TabTestHarness();

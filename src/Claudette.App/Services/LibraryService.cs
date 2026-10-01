@@ -27,6 +27,12 @@ public abstract record LibraryCopyResult
 
     /// <summary>Writing to the library failed, for example because its folder isn't available.</summary>
     public sealed record Failed(string Reason) : LibraryCopyResult;
+
+    /// <summary>
+    /// Another machine holds the session, or its lease couldn't be read, so nothing was written. When the session was
+    /// taken over from this machine, <see cref="LibraryService.LeaseLost"/> says so too.
+    /// </summary>
+    public sealed record NotHeld : LibraryCopyResult;
 }
 
 /// <summary>
@@ -151,10 +157,22 @@ public sealed class LibraryService : IDisposable
                 }
             }
             var subagents = Path.Combine(Path.GetDirectoryName(transcript)!, record.SessionId, SessionLibrary.SubagentsFolderName);
+            // Leases are refreshed once a minute, so another machine may have taken the session over since: check, or
+            // this copy would overwrite what it wrote and take the session back.
+            if (!stillSyncing())
+            {
+                return new LibraryCopyResult.NotSyncing();
+            }
+            var sessionFolder = Library.GetSessionFolder(record.SessionId);
+            if (!Leases.MayWrite(record.SessionId, sessionFolder))
+            {
+                return new LibraryCopyResult.NotHeld();
+            }
             await Library.SaveAsync(record, transcript, subagents, force).ConfigureAwait(false);
+            // The lease is taken last, so a lease of this run's says the copy is complete.
             if (stillSyncing())
             {
-                Leases.Acquire(record.SessionId, Library.GetSessionFolder(record.SessionId));
+                Leases.Renew(record.SessionId, sessionFolder);
             }
             return new LibraryCopyResult.Copied();
         }

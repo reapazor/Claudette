@@ -246,7 +246,7 @@ public sealed class SessionLibraryTests : IDisposable
     }
 
     [Fact]
-    public async Task Prune_deletes_old_sessions_except_kept_ones_and_live_leases()
+    public async Task Prune_deletes_old_sessions_except_kept_ones_and_live_or_unreadable_leases()
     {
         var now = _time.GetUtcNow();
         async Task Save(string id, TimeSpan age)
@@ -259,6 +259,8 @@ public sealed class SessionLibraryTests : IDisposable
         await Save("old-kept", TimeSpan.FromDays(40));
         await Save("old-leased", TimeSpan.FromDays(40));
         await Save("old-stale-lease", TimeSpan.FromDays(40));
+        await Save("old-unreadable-lease", TimeSpan.FromDays(40));
+        File.WriteAllText(Path.Combine(_library.GetSessionFolder("old-unreadable-lease"), "lease.json"), "{ half");
         File.WriteAllText(Path.Combine(_library.GetSessionFolder("old-leased"), "lease.json"),
             $"{{\"machine\":\"LAPTOP\",\"updatedAt\":\"{now.AddMinutes(-2):O}\",\"owner\":\"x\"}}");
         File.WriteAllText(Path.Combine(_library.GetSessionFolder("old-stale-lease"), "lease.json"),
@@ -270,7 +272,7 @@ public sealed class SessionLibraryTests : IDisposable
 
         Assert.Equal(2, deleted);
         Assert.Equal(
-            ["old-kept", "old-leased", "recent", "unreadable"],
+            ["old-kept", "old-leased", "old-unreadable-lease", "recent", "unreadable"],
             Directory.GetDirectories(_library.SessionsFolder).Select(Path.GetFileName).Order(StringComparer.Ordinal));
     }
 

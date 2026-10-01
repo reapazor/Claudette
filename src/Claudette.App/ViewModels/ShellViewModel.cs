@@ -423,7 +423,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         if (takeOver)
         {
-            _services.Library.Leases.Acquire(entry.SessionId, _services.Library.Library.GetSessionFolder(entry.SessionId));
+            _services.Library.Leases.TakeOver(entry.SessionId, _services.Library.Library.GetSessionFolder(entry.SessionId));
         }
         OpenSession(NewState(entry, folder, transcriptPath: null, fork, _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp));
     }
@@ -484,7 +484,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         if (takeOver)
         {
-            library.Leases.Acquire(entry.SessionId, library.Library.GetSessionFolder(entry.SessionId));
+            library.Leases.TakeOver(entry.SessionId, library.Library.GetSessionFolder(entry.SessionId));
         }
         OpenSession(NewState(entry, folder, transcript, fork, _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp));
     }
