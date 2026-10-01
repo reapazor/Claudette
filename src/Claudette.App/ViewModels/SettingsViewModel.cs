@@ -225,6 +225,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         new(SettingsCategory.ClaudeCode, "Sign in"),
         new(SettingsCategory.ClaudeCode, "Sign out"),
         new(SettingsCategory.ClaudeCode, "Path to claude"),
+        new(SettingsCategory.ClaudeCode, "Fallback model"),
+        new(SettingsCategory.ClaudeCode, "Keep copies of files Claude changes, so prompts can be rewound"),
+        new(SettingsCategory.ClaudeCode, "Show every hook run in the conversation"),
         .. LoginShellSearchEntries(),
         new(SettingsCategory.ClaudeCode, "Connect new tabs to the Claude app (Remote Control)"),
         new(SettingsCategory.ClaudeCode, "Push notifications on your phone"),
@@ -558,6 +561,31 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     {
         get => _settings.ClaudeCode.KeepAwakeWhileConnected;
         set => Set(value, v => _settings.ClaudeCode.KeepAwakeWhileConnected = v);
+    }
+
+    /// <summary>Settings → Claude Code → <b>Fallback model</b>: none, or one of the models.</summary>
+    public IReadOnlyList<Choice> FallbackModelChoices => field ??=
+        [new(null, "None"), .. ModelChoices.Where(c => c.Value is not null)];
+
+    public Choice FallbackModel
+    {
+        get => FallbackModelChoices.FirstOrDefault(c => c.Value == _settings.ClaudeCode.FallbackModel)
+            ?? (_settings.ClaudeCode.FallbackModel is { } custom ? new Choice(custom, custom) : FallbackModelChoices[0]);
+        set => Set(value?.Value, v => _settings.ClaudeCode.FallbackModel = v);
+    }
+
+    /// <summary>Settings → Claude Code → <b>Keep copies of files Claude changes, so prompts can be rewound</b>.</summary>
+    public bool KeepFileCheckpoints
+    {
+        get => _settings.ClaudeCode.KeepFileCheckpoints;
+        set => Set(value, v => _settings.ClaudeCode.KeepFileCheckpoints = v);
+    }
+
+    /// <summary>Settings → Claude Code → <b>Show every hook run in the conversation</b>.</summary>
+    public bool ShowAllHookRuns
+    {
+        get => _settings.ClaudeCode.ShowAllHookRuns;
+        set => Set(value, v => _settings.ClaudeCode.ShowAllHookRuns = v);
     }
 
     /// <summary>The account can use Remote Control. When it can't, the setting and the tabs' switches are disabled.</summary>

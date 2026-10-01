@@ -209,6 +209,21 @@ public sealed class ClaudeCodeSettings
 
     /// <summary>Keep the computer from sleeping while a tab is connected to the Claude app (DESIGN.md §18). The display can still sleep.</summary>
     public bool KeepAwakeWhileConnected { get; set; } = true;
+
+    /// <summary>
+    /// A model alias or id Claude Code falls back to when the tab's model is overloaded (<c>--fallback-model</c>); null
+    /// for none. Applies to tabs started after the change.
+    /// </summary>
+    public string? FallbackModel { get; set; }
+
+    /// <summary>
+    /// Claude Code keeps a copy of each file before Claude changes it, so a prompt's changes can be put back (DESIGN.md
+    /// §5, "Rewind and branch"). On by default, as in Claude Code's terminal.
+    /// </summary>
+    public bool KeepFileCheckpoints { get; set; } = true;
+
+    /// <summary>A row in the conversation for every hook run, not only those that fail or print (DESIGN.md §5, "Hook runs").</summary>
+    public bool ShowAllHookRuns { get; set; }
 }
 
 public sealed class NewTabSettings

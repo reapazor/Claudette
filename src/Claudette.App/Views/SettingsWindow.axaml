@@ -222,6 +222,20 @@
             <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                        Text="So the Claude app can still reach them. The screen can still turn off." />
           </StackPanel>
+          <!-- How tabs run (DESIGN.md §5, "Rewind and branch", "Hook runs"; §13, "Launch") -->
+          <TextBlock Text="Sessions" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+            <TextBlock Text="Fallback model" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" MinWidth="200" ItemsSource="{Binding FallbackModelChoices}" SelectedItem="{Binding FallbackModel}" />
+          </Grid>
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,-8,0,0"
+                     Text="When a tab's model is overloaded, Claude Code switches to this one rather than wait. Applies to tabs started after the change." />
+          <CheckBox Content="Keep copies of files Claude changes, so prompts can be rewound" IsChecked="{Binding KeepFileCheckpoints}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="Restore files and Edit and resend put files back as they were before a prompt. Claude Code keeps the copies with the session, as its terminal does. Applies to tabs started after the change." />
+          <CheckBox Content="Show every hook run in the conversation" IsChecked="{Binding ShowAllHookRuns}" />
+          <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+                     Text="Off, only hooks that fail, or print something while they run, get a row." />
           <!-- macOS and Linux only (DESIGN.md §13, "Login shell environment") -->
           <CheckBox Content="Use my login shell's environment" IsChecked="{Binding UseLoginShellEnvironment}"
                     IsVisible="{x:Static vm:SettingsViewModel.ShowLoginShellSetting}" />
