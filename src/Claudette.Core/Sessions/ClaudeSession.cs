@@ -27,6 +27,7 @@ public sealed class ClaudeSession : IAsyncDisposable
     public static readonly TimeSpan InitializeTimeout = TimeSpan.FromSeconds(90);
 
     private readonly IClaudeTransport _transport;
+    private readonly TimeProvider _time;
     private readonly ControlChannel _control;
     private readonly ILogger _logger;
     private readonly ProtocolDiagnostics? _diagnostics;
@@ -44,6 +45,7 @@ public sealed class ClaudeSession : IAsyncDisposable
     public ClaudeSession(IClaudeTransport transport, TimeProvider timeProvider, ILogger<ClaudeSession>? logger = null, ProtocolDiagnostics? diagnostics = null)
     {
         _transport = transport;
+        _time = timeProvider;
         _logger = logger ?? NullLogger<ClaudeSession>.Instance;
         _diagnostics = diagnostics;
         _control = new ControlChannel(transport.SendAsync, timeProvider);
@@ -180,20 +182,31 @@ public sealed class ClaudeSession : IAsyncDisposable
     public Task<JsonObject> SendControlRequestAsync(JsonObject request, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
         _control.RequestAsync(request, timeout ?? DefaultControlTimeout, cancellationToken);
 
-    /// <summary>Asks Claude Code to exit by closing its input, and ends it if it hasn't exited within <paramref name="grace"/>.</summary>
+    /// <summary>
+    /// Asks Claude Code to exit by closing its input, and ends it if it hasn't exited within <paramref name="grace"/>.
+    /// Waits at most another <paramref name="grace"/> for the rest of its output, so closing a tab can't hang on it.
+    /// </summary>
     public async Task StopAsync(TimeSpan grace)
     {
         _transport.CloseInput();
         try
         {
-            await _transport.Completion.WaitAsync(grace).ConfigureAwait(false);
+            await _transport.Completion.WaitAsync(grace, _time).ConfigureAwait(false);
         }
         catch (TimeoutException)
         {
             _logger.LogWarning("Claude Code didn't exit within {Grace}; ending it.", grace);
             _transport.Terminate();
         }
-        await _readLoop.ConfigureAwait(false);
+        try
+        {
+            await _readLoop.WaitAsync(grace, _time).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            _logger.LogWarning("Claude Code's output didn't end within {Grace} of ending it; not waiting for the rest.", grace);
+            await _lifetime.CancelAsync().ConfigureAwait(false);
+        }
     }
 
     public async ValueTask DisposeAsync()
