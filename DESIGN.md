@@ -391,6 +391,16 @@ A user message's **⋯** menu goes back to it. Claude Code does the work: a resu
 - A copy keeps the tab's settings, its kept quick suffixes, whether it syncs, and its files' reviewed marks ([§8](#8-file-changes--diff-view)).
 - Fork keeps the copied entries' ids (checked with 2.1.286), so going back again in a copy finds its point in the copy's transcript.
 
+### Find
+
+**Find in the conversation** (`Ctrl/Cmd+F`, or whatever Settings → Keyboard says) opens a bar over the conversation: a search box, *"3 of 12"*, previous and next, and close.
+
+- It looks through prompts, replies, thinking, tool calls with their input and output, notes, hook runs, permission cards' outcomes, and subagents' groups with everything in them, ignoring case.
+- Typing goes to the newest match, as a conversation is read from the bottom. `Enter` goes to the next one and `Shift+Enter` to the one before, wrapping around; `Esc` closes the bar and puts the focus back in the composer.
+- The match is brought into view and marked with the selected-row color. A match only in what a collapsed card hides (a tool's output, a thought, a hook's output) opens the card; one in a subagent's work opens its group. A match in a card's header leaves it as it is.
+- New output while the bar is open joins the matches without moving the current one. Pressing the shortcut again goes back to the box with its text selected.
+- History searches across sessions, including Claude's replies on request ([§9](#history)).
+
 ### Composer
 
 - Multi-line text box. `Enter` sends, `Shift+Enter` adds a new line.
@@ -1447,7 +1457,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 
 ### Keyboard shortcuts
 
-Settings → Keyboard lists every shortcut Claudette handles, with its default from the section that describes it: new tab, close tab, next and previous tab, go to tab 1–9, History, Settings, collapsing the sidebar, Stop, the quick suffixes menu, allowing or denying the waiting prompt, and running the project's main action (`Ctrl/Cmd+Shift+E`, [§18](#project-tools)).
+Settings → Keyboard lists every shortcut Claudette handles, with its default from the section that describes it: new tab, close tab, next and previous tab, go to tab 1–9, History, Settings, collapsing the sidebar, Stop, the quick suffixes menu, allowing or denying the waiting prompt, running the project's main action (`Ctrl/Cmd+Shift+E`, [§18](#project-tools)), finding in the conversation (`Ctrl/Cmd+F`, [§5](#find)), going to the next tab waiting for you (`Ctrl/Cmd+J`, [§4](#keyboard)) and the command palette (`Ctrl/Cmd+Shift+P`, [§4](#command-palette)).
 
 - **Rebinding.** Click a shortcut and press the new keys; Esc cancels. **Reset** puts one back, **Remove** clears it, and **Reset to defaults** restores them all.
 - **One key for both OSes.** Shortcuts are stored with a *Primary* modifier: Ctrl on Windows and Linux, Cmd on macOS. That way a shortcut synced between a Windows machine and a Mac means the same thing on both. Ctrl is its own modifier only on macOS; elsewhere it is Primary.

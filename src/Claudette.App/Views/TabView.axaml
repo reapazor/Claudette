@@ -86,6 +86,22 @@
     <Style Selector=".compact ItemsControl#ConversationItems > ContentPresenter">
       <Setter Property="Margin" Value="0,0,0,3" />
     </Style>
+    <!-- Find in the conversation (DESIGN.md §5, "Find"): a bar over the conversation, and the match it shows marked. -->
+    <Style Selector="Border.findbar">
+      <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="Padding" Value="16,4" />
+    </Style>
+    <Style Selector="TextBox.findbox">
+      <Setter Property="Width" Value="260" />
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Padding" Value="8,3" />
+    </Style>
+    <Style Selector="ItemsControl#ConversationItems > ContentPresenter.findcurrent">
+      <Setter Property="Background" Value="{DynamicResource SelectedRowBrush}" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
     <Style Selector="Border.usermessage">
       <Setter Property="Background" Value="{DynamicResource UserBoxBrush}" />
       <Setter Property="BorderBrush" Value="{DynamicResource UserBoxBorderBrush}" />
@@ -985,6 +1001,26 @@
     <!-- Conversation -->
     <Grid Grid.Row="0">
       <DockPanel>
+        <!-- Find in the conversation (DESIGN.md §5, "Find"): Enter for the next match, Shift+Enter the one before, Esc closes -->
+        <Border DockPanel.Dock="Top" Classes="findbar" IsVisible="{Binding Find.IsOpen}">
+          <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+            <TextBox x:Name="FindBox" Classes="findbox" Watermark="Find in the conversation" Text="{Binding Find.Query}"
+                     AutomationProperties.Name="Find in the conversation" KeyDown="OnFindKeyDown" />
+            <TextBlock Classes="muted small" Text="{Binding Find.CountText}" VerticalAlignment="Center" MinWidth="64" TextAlignment="Center" />
+            <Button Classes="flat" Padding="6,4" VerticalAlignment="Center" Command="{Binding Find.PreviousCommand}"
+                    ToolTip.Tip="Previous match (Shift+Enter)" AutomationProperties.Name="Previous match">
+              <Path Data="{StaticResource IconChevronUp}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="12" Height="12" Stretch="None" />
+            </Button>
+            <Button Classes="flat" Padding="6,4" VerticalAlignment="Center" Command="{Binding Find.NextCommand}"
+                    ToolTip.Tip="Next match (Enter)" AutomationProperties.Name="Next match">
+              <Path Data="{StaticResource IconChevronDown}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="12" Height="12" Stretch="None" />
+            </Button>
+            <Button Classes="flat" Padding="6,4" VerticalAlignment="Center" Click="OnCloseFind"
+                    ToolTip.Tip="Close (Esc)" AutomationProperties.Name="Close find">
+              <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
+            </Button>
+          </StackPanel>
+        </Border>
         <!-- Pinned to-do list -->
         <Border DockPanel.Dock="Top" IsVisible="{Binding TodoList.HasItems}" Background="{DynamicResource SubtleBrush}"
                 BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,4">

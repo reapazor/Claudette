@@ -34,6 +34,7 @@ public partial class TabView : UserControl
         // Tunnel too: the list's items take Enter for themselves.
         ChangedFilesList.AddHandler(KeyDownEvent, OnChangedFileKeyDown, RoutingStrategies.Tunnel);
         ConversationScroll.ScrollChanged += OnConversationScrollChanged;
+        ConversationItems.ContainerPrepared += OnConversationContainerPrepared;
         // Copy on a code block goes through the tab and says "Copied" (DESIGN.md §5, "Copy and times").
         CodeBlockCopy.Attach(this);
         WireComposerAssist();
@@ -193,6 +194,8 @@ public partial class TabView : UserControl
             _tab.ScrollToRequested -= OnScrollToRequested;
             _tab.AgentWindowRequested -= OnAgentWindowRequested;
             _tab.ComposerFocusRequested -= OnComposerFocusRequested;
+            _tab.FindFocusRequested -= OnFindFocusRequested;
+            _tab.Find.PropertyChanged -= OnFindPropertyChanged;
             _tab.PropertyChanged -= OnTabPropertyChanged;
             _tab.ProjectTools.PropertyChanged -= OnProjectToolsPropertyChanged;
             // The list belonged to that tab.
@@ -206,13 +209,91 @@ public partial class TabView : UserControl
             _tab.ScrollToRequested += OnScrollToRequested;
             _tab.AgentWindowRequested += OnAgentWindowRequested;
             _tab.ComposerFocusRequested += OnComposerFocusRequested;
+            _tab.FindFocusRequested += OnFindFocusRequested;
+            _tab.Find.PropertyChanged += OnFindPropertyChanged;
             _tab.PropertyChanged += OnTabPropertyChanged;
             _tab.ProjectTools.PropertyChanged += OnProjectToolsPropertyChanged;
         }
         WatchProjectOutput();
+        MarkFindCurrent();
     }
 
     private TabViewModel? _tab;
+
+    // ---- Find in the conversation (DESIGN.md §5, "Find") ---------------------------------------------------------
+
+    /// <summary>The item marked as the current match, whose container has the <c>findcurrent</c> class.</summary>
+    private ConversationItem? _findMarked;
+
+    private void OnFindFocusRequested() => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+    {
+        FindBox.Focus();
+        FindBox.SelectAll();
+    });
+
+    private void OnFindPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ConversationSearch.Current))
+        {
+            MarkFindCurrent();
+        }
+    }
+
+    /// <summary>Marks the current match's container; the conversation is virtualized, so a new container is marked as it's made.</summary>
+    private void MarkFindCurrent()
+    {
+        if (_findMarked is not null && ConversationItems.ContainerFromItem(_findMarked) is { } old)
+        {
+            old.Classes.Remove("findcurrent");
+        }
+        _findMarked = _tab?.Find.Current;
+        if (_findMarked is not null && ConversationItems.ContainerFromItem(_findMarked) is { } current)
+        {
+            current.Classes.Add("findcurrent");
+        }
+    }
+
+    private void OnConversationContainerPrepared(object? sender, ContainerPreparedEventArgs e) =>
+        e.Container.Classes.Set("findcurrent", _findMarked is not null && ReferenceEquals(ConversationItems.ItemFromContainer(e.Container), _findMarked));
+
+    /// <summary>Enter goes to the next match, Shift+Enter the one before, Esc closes the bar.</summary>
+    private void OnFindKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (ViewModel is not { } tab)
+        {
+            return;
+        }
+        switch (e.Key)
+        {
+            case Key.Enter when e.KeyModifiers == KeyModifiers.Shift:
+                tab.Find.PreviousCommand.Execute(null);
+                break;
+            case Key.Enter when e.KeyModifiers == KeyModifiers.None:
+                tab.Find.NextCommand.Execute(null);
+                break;
+            case Key.Escape when e.KeyModifiers == KeyModifiers.None:
+                CloseFind(tab);
+                break;
+            default:
+                return;
+        }
+        e.Handled = true;
+    }
+
+    private void OnCloseFind(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } tab)
+        {
+            CloseFind(tab);
+        }
+    }
+
+    /// <summary>Closes the bar, and the focus goes back to the composer.</summary>
+    private void CloseFind(TabViewModel tab)
+    {
+        tab.Find.CloseCommand.Execute(null);
+        Composer.Focus();
+    }
 
     /// <summary>A message is back in the composer to edit (DESIGN.md §5, "Rewind and branch"): the caret goes after it.</summary>
     private void OnComposerFocusRequested() => Avalonia.Threading.Dispatcher.UIThread.Post(() =>

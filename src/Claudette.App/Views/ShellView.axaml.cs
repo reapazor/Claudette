@@ -355,6 +355,10 @@ public partial class ShellView : UserControl
         {
             shell.ToggleSidebarCommand.Execute(null);
         }
+        else if (Is(KeyboardShortcuts.Find) && shell.SelectedTab is { } findTab)
+        {
+            findTab.OpenFindCommand.Execute(null);
+        }
         else if (Is(KeyboardShortcuts.RunProjectAction) && shell.SelectedTab is { } projectTab)
         {
             // Launch the editor, for Unreal (DESIGN.md §18, "Project tools").

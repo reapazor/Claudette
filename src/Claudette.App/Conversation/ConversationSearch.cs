@@ -107,6 +107,22 @@ public sealed partial class ConversationSearch : ObservableObject
         SetCurrent(_matches.LastOrDefault());
     }
 
+    /// <summary>
+    /// The match is only in what a collapsed card hides (a tool's input and output, a thought, a subagent's work), so
+    /// the card opens to show it.
+    /// </summary>
+    public bool IsHidden(ConversationItem item)
+    {
+        var query = Query.Trim();
+        return item switch
+        {
+            ThinkingItem thinking => !thinking.IsExpanded,
+            ToolUseItem tool => !tool.IsExpanded && !Has(tool.Name, query) && !Has(tool.Summary, query),
+            HookRunItem hook => !hook.IsExpanded && !Has(hook.Title, query),
+            _ => false,
+        };
+    }
+
     private static bool Matches(ConversationItem item, string query) => item switch
     {
         SubagentItem agent => Has(agent.Name, query) || Has(agent.FullSummary, query) || Has(agent.Output, query) || agent.Items.Any(child => Matches(child, query)),

@@ -106,6 +106,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         Agents.Changed += OnAgentsChanged;
         Tasks = new RunningTasks(services.Time, Agents);
         Tasks.Changed += OnTasksChanged;
+        Find = new ConversationSearch(Items);
+        Find.CurrentChanged += OnFindCurrentChanged;
         _conversation = new ConversationBuilder(Items, TodoList, ModelDisplayName)
         {
             ExpandThinking = services.Settings.Appearance.ExpandThinking,
