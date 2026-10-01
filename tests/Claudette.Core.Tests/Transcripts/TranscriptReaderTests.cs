@@ -10,6 +10,22 @@ public class TranscriptReaderTests
         TranscriptReader.Read(File.ReadLines(Path.Combine(AppContext.BaseDirectory, "Fixtures", "transcripts", "2.1.284", $"{name}.jsonl")));
 
     [Fact]
+    public void Each_item_keeps_its_entry_id_and_the_one_before_it()
+    {
+        // Where the conversation can be resumed to rewind or branch (DESIGN.md §5, "Rewind and branch").
+        var transcript = TranscriptReader.Read(
+        [
+            """{"type":"user","uuid":"u-1","parentUuid":null,"message":{"role":"user","content":"first"}}""",
+            """{"type":"assistant","uuid":"a-1","parentUuid":"u-1","message":{"content":[{"type":"text","text":"reply"}]}}""",
+            """{"type":"user","uuid":"u-2","parentUuid":"a-1","message":{"role":"user","content":"second"}}""",
+        ]);
+
+        Assert.Equal([("u-1", null), ("a-1", "u-1"), ("u-2", "a-1")], transcript.Items.Select(i => (i.Uuid, i.ParentUuid)));
+        var reply = Assert.IsType<TranscriptMessage>(transcript.Items[1]);
+        Assert.Equal("a-1", reply.Message.Raw.GetString("uuid"));
+    }
+
+    [Fact]
     public void Reads_prompts_assistant_messages_and_tool_results_in_order()
     {
         var transcript = Load();

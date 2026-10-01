@@ -29,6 +29,35 @@ public class ConversationBuilderTests
         Assert.Equal(2, _items.Count);
     }
 
+    // ---- Rewind and branch points (DESIGN.md §5) ------------------------------------------------------------------
+
+    [Fact]
+    public void A_prompt_gets_its_id_when_echoed_and_knows_where_to_resume_before_it()
+    {
+        var first = _builder.AddUserMessage("one");
+        Apply("""{"type":"user","uuid":"u-1","isReplay":true,"message":{"role":"user","content":"one"}}""");
+        Apply("""{"type":"assistant","uuid":"a-1","message":{"content":[{"type":"text","text":"done one"}]}}""");
+        var second = _builder.AddUserMessage("two");
+        var third = _builder.AddUserMessage("three");
+        // Queued prompts are echoed in the order they're taken.
+        Apply("""{"type":"user","uuid":"u-2","isReplay":true,"message":{"role":"user","content":[{"type":"text","text":"two"}]}}""");
+        Apply("""{"type":"user","uuid":"u-3","isReplay":true,"message":{"role":"user","content":"three"}}""");
+
+        Assert.Equal(("u-1", (string?)null), (first.Uuid, first.ResumeAt));
+        Assert.Equal(("u-2", "a-1"), (second.Uuid, second.ResumeAt));
+        Assert.Equal("u-3", third.Uuid);
+        Assert.True(second.CanRestoreFiles);
+    }
+
+    [Fact]
+    public void A_cleared_conversation_starts_without_a_resume_point()
+    {
+        Apply("""{"type":"assistant","uuid":"a-1","message":{"content":[{"type":"text","text":"before"}]}}""");
+        _builder.Clear();
+
+        Assert.Null(_builder.AddUserMessage("after").ResumeAt);
+    }
+
     // ---- Hook runs (DESIGN.md §5) -------------------------------------------------------------------------------
 
     private static string Hook(string subtype, string id, string? outcome = null, int? exitCode = null, string? output = null, string? stdout = null, string? stderr = null)
@@ -366,6 +395,7 @@ public class ConversationBuilderTests
             StreamEventMessage { TextDelta: { } text } s => new TextDelta(text, s.ParentToolUseId),
             AssistantMessage a => new AssistantMessageReceived(a),
             UserMessage { LocalCommandOutput: { } output } => new LocalCommandOutputReceived(output),
+            UserMessage { IsReplay: true } u => new PromptReplayed(u),
             UserMessage u => new ToolResultsReceived(u),
             ResultMessage r => new TurnCompleted(r),
             SystemMessage s => new SystemNotice(s),

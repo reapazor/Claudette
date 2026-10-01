@@ -12,6 +12,15 @@ public abstract record TranscriptItem
 {
     /// <summary>The entry's <c>timestamp</c>: when it was sent (DESIGN.md §5). Null when the entry has none.</summary>
     public DateTimeOffset? Time { get; init; }
+
+    /// <summary>The entry's <c>uuid</c>: where a resume can stop (DESIGN.md §5, "Rewind and branch").</summary>
+    public string? Uuid { get; init; }
+
+    /// <summary>
+    /// The entry before it in the conversation (<c>parentUuid</c>). For a prompt, resuming there leaves out the prompt
+    /// and everything after it; null for the first.
+    /// </summary>
+    public string? ParentUuid { get; init; }
 }
 
 /// <summary>Something the user typed.</summary>
@@ -161,7 +170,7 @@ public static class TranscriptReader
                     customTitle = entry.GetString("customTitle") ?? customTitle;
                     break;
                 case "assistant" when entry.GetObject("message") is { } message:
-                    if (Parse(new JsonObject { ["type"] = "assistant", ["message"] = message.DeepClone(), ["parent_tool_use_id"] = parentToolUseId }) is { } assistant)
+                    if (Parse(new JsonObject { ["type"] = "assistant", ["message"] = message.DeepClone(), ["parent_tool_use_id"] = parentToolUseId, ["uuid"] = entry.GetString("uuid") }) is { } assistant)
                     {
                         items.Add(new Entry(time, new TranscriptMessage(assistant)));
                     }
@@ -169,6 +178,11 @@ public static class TranscriptReader
                 case "user" when entry.GetObject("message") is { } message:
                     ReadUser(entry, message, parentToolUseId, time, items);
                     break;
+            }
+            if (items.Count > before && (entry.GetString("uuid") is not null || entry.GetString("parentUuid") is not null))
+            {
+                var item = items[^1];
+                items[^1] = new Entry(item.Time, item.Item with { Uuid = entry.GetString("uuid"), ParentUuid = entry.GetString("parentUuid") });
             }
         }
         return new ReadResult(items, aiTitle, customTitle, startedAt);
@@ -195,6 +209,7 @@ public static class TranscriptReader
             var user = new JsonObject
             {
                 ["type"] = "user",
+                ["uuid"] = entry.GetString("uuid"),
                 ["message"] = message.DeepClone(),
                 ["tool_use_result"] = (entry["toolUseResult"] ?? entry["tool_use_result"])?.DeepClone(),
                 ["parent_tool_use_id"] = parentToolUseId,

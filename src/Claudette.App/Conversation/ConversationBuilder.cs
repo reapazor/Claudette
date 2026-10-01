@@ -22,6 +22,10 @@ public sealed class ConversationBuilder
     private AssistantTextItem? _openText;
     private ThinkingItem? _openThinking;
     private NoteItem? _retryNote;
+
+    // The last entry of the main conversation Claude Code gave an id: where a resume would stop to leave out what comes
+    // next (DESIGN.md §5, "Rewind and branch").
+    private string? _lastEntryUuid;
     private AgentMap? _agents;
     private RunningTasks? _tasks;
 
@@ -98,11 +102,18 @@ public sealed class ConversationBuilder
     }
 
     public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null, bool isAutoContinue = false) =>
-        AddUser(new UserMessageItem(text, suffixText, isCheckIn, isAutoContinue) { Images = images ?? [] }, Now());
+        AddUser(new UserMessageItem(text, suffixText, isCheckIn, isAutoContinue) { Images = images ?? [], ResumeAt = _lastEntryUuid }, Now());
 
-    /// <summary>A prompt from a transcript, sent at <paramref name="sentAt"/>: null when its entry has no time.</summary>
-    public UserMessageItem ReplayUserMessage(string text, IReadOnlyList<MessageImage> images, DateTimeOffset? sentAt) =>
-        AddUser(new UserMessageItem(text) { Images = images }, sentAt);
+    /// <summary>
+    /// A prompt from a transcript, sent at <paramref name="sentAt"/>: null when its entry has no time. Its entry's
+    /// <paramref name="uuid"/> and <paramref name="parentUuid"/> are where to rewind or branch from it.
+    /// </summary>
+    public UserMessageItem ReplayUserMessage(string text, IReadOnlyList<MessageImage> images, DateTimeOffset? sentAt, string? uuid = null, string? parentUuid = null)
+    {
+        var item = AddUser(new UserMessageItem(text) { Images = images, Uuid = uuid, ResumeAt = parentUuid ?? _lastEntryUuid }, sentAt);
+        _lastEntryUuid = uuid ?? _lastEntryUuid;
+        return item;
+    }
 
     private UserMessageItem AddUser(UserMessageItem item, DateTimeOffset? sentAt)
     {
@@ -168,6 +179,8 @@ public sealed class ConversationBuilder
         _openText = null;
         _openThinking = null;
         _retryNote = null;
+        // A cleared conversation is a new one: nothing before it to go back to.
+        _lastEntryUuid = null;
     }
 
     public void Apply(SessionEvent sessionEvent)
@@ -196,10 +209,29 @@ public sealed class ConversationBuilder
 
             case AssistantMessageReceived assistant:
                 ApplyAssistant(assistant.Message);
+                _lastEntryUuid = assistant.Message.Raw.GetString("uuid") ?? _lastEntryUuid;
                 break;
 
             case ToolResultsReceived results:
                 ApplyToolResults(results.Message);
+                _lastEntryUuid = results.Message.Uuid ?? _lastEntryUuid;
+                break;
+
+            case PromptReplayed replayed when replayed.Message.Uuid is { } uuid:
+                // A prompt that was sent, echoed back with its id. Prompts sent while Claude worked wait their turn, so
+                // it's the earliest still without one that reads the same, else the earliest still without one.
+                var waiting = Items.OfType<UserMessageItem>().Where(m => m.Uuid is null).ToArray();
+                var sent = replayed.Message.Raw.GetObject("message")?["content"] switch
+                {
+                    JsonValue value when value.GetValueKind() == JsonValueKind.String => value.GetValue<string>(),
+                    JsonArray blocks => string.Join("\n", blocks.OfType<JsonObject>().Where(b => b.GetString("type") == "text").Select(b => b.GetString("text"))),
+                    _ => null,
+                };
+                if ((waiting.FirstOrDefault(m => sent is not null && m.CopyText.Trim() == sent.Trim()) ?? waiting.FirstOrDefault()) is { } prompt)
+                {
+                    prompt.Uuid = uuid;
+                }
+                _lastEntryUuid = uuid;
                 break;
 
             case LocalCommandOutputReceived local:

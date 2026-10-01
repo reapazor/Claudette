@@ -77,9 +77,26 @@ public static class MessageTimes
         TimeZoneInfo.ConvertTime(sent, clock.LocalTimeZone).ToString("f", CultureInfo.CurrentCulture);
 }
 
-public sealed class UserMessageItem(string text, string? suffixText = null, bool isCheckIn = false, bool isAutoContinue = false) : MessageItem
+public sealed partial class UserMessageItem(string text, string? suffixText = null, bool isCheckIn = false, bool isAutoContinue = false) : MessageItem
 {
     public string Text { get; } = text;
+
+    /// <summary>
+    /// The prompt's transcript id, once Claude Code has echoed it back (or from the transcript): the point its files can
+    /// be put back to (DESIGN.md §5, "Rewind and branch").
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRestoreFiles))]
+    public partial string? Uuid { get; set; }
+
+    /// <summary>
+    /// The conversation entry just before this prompt: resuming there leaves the prompt out. Null for the first prompt,
+    /// before which there's nothing to keep.
+    /// </summary>
+    public string? ResumeAt { get; set; }
+
+    /// <summary>Restore files to before this message: it has a checkpoint to go back to.</summary>
+    public bool CanRestoreFiles => Uuid is not null;
 
     /// <summary>Quick suffixes appended to the message, shown in a lighter style (DESIGN.md §5, "Quick suffixes").</summary>
     public string? SuffixText { get; } = suffixText;
