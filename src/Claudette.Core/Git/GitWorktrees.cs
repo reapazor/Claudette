@@ -146,9 +146,23 @@ public sealed class GitWorktrees(GitWorkingTree git)
     /// </summary>
     public async Task<GitWorktree?> FindAsync(string folder, string path, CancellationToken cancellationToken = default)
     {
+        if (await ListAsync(folder, cancellationToken).ConfigureAwait(false) is not { } worktrees)
+        {
+            return null;
+        }
         var target = Normalize(path);
-        return (await ListAsync(folder, cancellationToken).ConfigureAwait(false))?
-            .FirstOrDefault(w => !w.IsMain && Diffs.ChangedFiles.PlatformPathComparer.Equals(w.Path, target));
+        if (worktrees.FirstOrDefault(w => !w.IsMain && Diffs.ChangedFiles.PlatformPathComparer.Equals(w.Path, target)) is { } found)
+        {
+            return found;
+        }
+        // Git lists worktrees by their real paths, so one reached through a symbolic link (macOS's /var is
+        // /private/var) only matches as git names it. Returned as the caller spells it, to compare with tabs' folders.
+        if (await git.GetRepositoryRootAsync(path, cancellationToken).ConfigureAwait(false) is { } real
+            && worktrees.FirstOrDefault(w => !w.IsMain && Diffs.ChangedFiles.PlatformPathComparer.Equals(w.Path, Normalize(real))) is { } linked)
+        {
+            return linked with { Path = target };
+        }
+        return null;
     }
 
     /// <summary>What removing <paramref name="worktree"/> would discard; null when git can't tell, which counts as work.</summary>

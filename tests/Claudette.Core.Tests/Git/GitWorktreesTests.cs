@@ -156,6 +156,26 @@ public sealed class GitWorktreesTests : IDisposable
     }
 
     [Fact]
+    public async Task A_worktree_reached_through_a_symbolic_link_is_found_and_removed()
+    {
+        Assert.SkipWhen(!IsolatedGitLauncher.GitInstalled, "git isn't on PATH.");
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "A symbolic link to a folder needs Developer Mode on Windows.");
+        var path = await AddWorktreeAsync("swift-river", locked: true);
+        // As macOS's /var is /private/var: git names the worktree by its real path.
+        var link = Path.Combine(_root, "link");
+        Directory.CreateSymbolicLink(link, _repo);
+        var linked = GitWorktrees.PathFor(link, "swift-river");
+
+        var worktree = Assert.IsType<GitWorktree>(await _worktrees.FindAsync(link, linked, Token));
+
+        Assert.Equal(linked, worktree.Path);
+        Assert.True(worktree.IsLocked);
+        Assert.Equal(new GitWorktreeWork(false, 0), await _worktrees.InspectAsync(worktree, Token));
+        Assert.Null(await _worktrees.RemoveAsync(link, worktree, discard: false, ownCommits: 0, Token));
+        Assert.False(Directory.Exists(path));
+    }
+
+    [Fact]
     public async Task Branches_worktrees_left_behind_are_listed()
     {
         Assert.SkipWhen(!IsolatedGitLauncher.GitInstalled, "git isn't on PATH.");
