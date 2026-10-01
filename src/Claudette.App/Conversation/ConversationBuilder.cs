@@ -431,6 +431,17 @@ public sealed class ConversationBuilder
         _permissions[request.RequestId] = item;
         Items.Add(item);
         _agents?.OnPrompt(item);
+        if (item is PlanItem plan && _todoList is { } todos)
+        {
+            // An approved plan heads the Tasks page (DESIGN.md §5, "Tasks").
+            plan.Answered += (_, _) =>
+            {
+                if (plan.State == PermissionState.Allowed && plan.HasPlan)
+                {
+                    todos.SetPlan(plan.Plan.ToString());
+                }
+            };
+        }
     }
 
     private void ApplyAssistant(AssistantMessage message)
