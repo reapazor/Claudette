@@ -9,7 +9,8 @@
     {
       "name": "Rebuild Self (Debug)",
       "command": "dotnet build src\\Claudette.App\\Claudette.App.csproj -c Debug",
-      "mode": "output"
+      "mode": "output",
+      "ifExists": "src/Claudette.App/Claudette.App.csproj"
     }
   ]
 }

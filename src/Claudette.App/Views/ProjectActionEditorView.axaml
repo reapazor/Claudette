@@ -15,6 +15,13 @@
       <TextBlock Text="Working folder" Margin="0,4,0,0" />
       <TextBox Classes="mono" Text="{Binding WorkingFolder}" PlaceholderText="The tab's folder" AutomationProperties.Name="Working folder" />
       <TextBlock Classes="muted small" Text="{Binding Folder, StringFormat='Relative to {0}'}" TextWrapping="Wrap" />
+      <TextBlock Text="Only show when this exists" Margin="0,4,0,0" />
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <TextBox Classes="mono" Text="{Binding IfExists}" PlaceholderText="Always shown" AutomationProperties.Name="Only show when this exists" />
+        <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseIfExistsCommand}" />
+      </Grid>
+      <TextBlock Classes="muted small" TextWrapping="Wrap"
+                 Text="A file or folder, relative to the same folder, such as the build the action runs. Separate several with semicolons." />
       <StackPanel Spacing="4" IsVisible="{Binding AsksForFile}" Margin="0,4,0,0">
         <TextBlock Text="Save in" />
         <RadioButton GroupName="ProjectActionFile" Content="{Binding LocalText}" IsChecked="{Binding SaveToLocal}" />

@@ -162,4 +162,37 @@ public class ProjectSettingsUiTests
         window.Close();
         await Verify($"{shown}\n--- Add a link, with an address that won't open ---\n{dialogText}");
     }
+
+    [AvaloniaFact]
+    public async Task The_action_dialog_asks_what_must_exist_and_scrolls_to_Save_in_a_window_at_its_opening_size()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await OpenTabAsync(h, project: false);
+        var window = ShowSettings(h, tab, SettingsViewModel.ActionsPage, out var settings);
+        window.Width = 820;
+        window.Height = 650;
+
+        // From the project's menu: the tallest the dialog gets, as it asks for the file too.
+        settings.Project!.StartNewAction();
+        UiText.Settle(window);
+        var dialog = window.GetVisualDescendants().OfType<ProjectActionEditorView>().Single();
+        Assert.True(dialog.IsEffectivelyVisible);
+        // Nothing is cut off: its title is in the window at the top, and Save once scrolled to the end.
+        var scroller = window.GetVisualDescendants().OfType<ScrollViewer>().Single(s => s.Name == "EditorScroller");
+        var title = dialog.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == "Add an action");
+        Assert.InRange(title.TranslatePoint(default, window)!.Value.Y, 0, window.ClientSize.Height);
+        scroller.ScrollToEnd();
+        UiText.Settle(window);
+        var save = dialog.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "Save");
+        Assert.InRange(save.TranslatePoint(new Point(0, save.Bounds.Height), window)!.Value.Y, 0, window.ClientSize.Height);
+        var ifExists = dialog.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "Only show when this exists");
+        Assert.Equal("Always shown", ifExists.PlaceholderText);
+
+        h.Platform.FileToPick = Path.Combine(h.WorkFolder, "Build", "Game.exe");
+        dialog.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "Browse…").Command!.Execute(null);
+        UiText.Settle(window);
+        Assert.Equal("Build/Game.exe", ifExists.Text);
+
+        window.Close();
+    }
 }

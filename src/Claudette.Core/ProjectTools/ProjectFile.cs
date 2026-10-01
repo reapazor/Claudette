@@ -191,6 +191,18 @@ public static class ProjectFile
         {
             json["folder"] = action.WorkingFolder.Trim();
         }
+        switch (action.IfExists)
+        {
+            case null or []:
+                json.Remove("ifExists");
+                break;
+            case [var one]:
+                json["ifExists"] = one;
+                break;
+            case var several:
+                json["ifExists"] = new JsonArray([.. several.Select(p => (JsonNode?)p)]);
+                break;
+        }
         json["mode"] = action.Mode == CustomActionMode.LaunchAndForget ? "launch" : "output";
         return json;
     }

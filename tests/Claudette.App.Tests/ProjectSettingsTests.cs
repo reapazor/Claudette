@@ -430,14 +430,39 @@ public class ProjectSettingsTests
         Assert.Equal(["Build", "Play"], project.ProjectActions.Select(r => r.Name));
         Assert.EndsWith("  · only when Build/Game exists", project.ProjectActions[1].Detail, StringComparison.Ordinal);
 
-        // The dialog doesn't edit it, and saving keeps it.
+        // The dialog shows it, and keeps it when something else changes.
         project.SelectedProjectAction = project.ProjectActions[1];
         project.EditProjectActionCommand.Execute(null);
         var editor = Assert.IsType<ProjectActionEditorViewModel>(project.Editor);
+        Assert.Equal("Build/Game", editor.IfExists);
         editor.Name = "Play the build";
         editor.SaveCommand.Execute(null);
         Assert.EndsWith("only when Build/Game exists", project.ProjectActions[1].Detail, StringComparison.Ordinal);
         Assert.Equal("Build/Game", Read(local)["actions"]![1]!["ifExists"]!.GetValue<string>());
+
+        // Browse… writes a file under the tab's folder relative to it; several are separated by semicolons.
+        project.SelectedProjectAction = project.ProjectActions[0];
+        project.EditProjectActionCommand.Execute(null);
+        editor = Assert.IsType<ProjectActionEditorViewModel>(project.Editor);
+        Assert.Equal("", editor.IfExists);
+        h.Platform.FileToPick = Path.Combine(h.WorkFolder, "Makefile");
+        await editor.BrowseIfExistsCommand.ExecuteAsync(null);
+        Assert.Equal("Makefile", editor.IfExists);
+        editor.IfExists += " ; src/ ;";
+        editor.SaveCommand.Execute(null);
+        Assert.Equal(["Makefile", "src/"], Read(local)["actions"]![0]!["ifExists"]!.AsArray().Select(p => p!.GetValue<string>()));
+        Assert.EndsWith("only when Makefile and src/ exist", project.ProjectActions[0].Detail, StringComparison.Ordinal);
+        await TabTestHarness.Eventually(() => !tab.ProjectActions.Any(), "the tab's actions");
+
+        // Emptied, the field is gone from the file and the action is always shown.
+        project.SelectedProjectAction = project.ProjectActions[0];
+        project.EditProjectActionCommand.Execute(null);
+        editor = Assert.IsType<ProjectActionEditorViewModel>(project.Editor);
+        Assert.Equal("Makefile; src/", editor.IfExists);
+        editor.IfExists = "  ";
+        editor.SaveCommand.Execute(null);
+        Assert.Null(Read(local)["actions"]![0]!["ifExists"]);
+        await TabTestHarness.Eventually(() => tab.ProjectActions.Select(a => a.Label).SequenceEqual(["Build"]), "the tab's actions");
 
         // A build makes it; the next read shows the action.
         Write(Path.Combine(h.WorkFolder, "Build", "Game"), "");

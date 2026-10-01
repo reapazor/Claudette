@@ -848,18 +848,21 @@
       </StackPanel>
     </ScrollViewer>
 
-    <!-- The project pages' small dialogs: a link, or an action (DESIGN.md §18) -->
+    <!-- The project pages' small dialogs: a link, or an action (DESIGN.md §18). The action's is taller than the
+         window opens, so it scrolls. -->
     <Border Grid.ColumnSpan="2" Classes="overlay" IsVisible="{Binding Project.HasEditor, FallbackValue=False}">
-      <ContentControl Content="{Binding Project.Editor, FallbackValue={x:Null}}" HorizontalAlignment="Center" VerticalAlignment="Center">
-        <ContentControl.DataTemplates>
-          <DataTemplate DataType="vm:ProjectActionEditorViewModel">
-            <views:ProjectActionEditorView />
-          </DataTemplate>
-          <DataTemplate DataType="vm:ProjectLinkEditorViewModel">
-            <views:ProjectLinkEditorView />
-          </DataTemplate>
-        </ContentControl.DataTemplates>
-      </ContentControl>
+      <ScrollViewer Name="EditorScroller" VerticalScrollBarVisibility="Auto">
+        <ContentControl Content="{Binding Project.Editor, FallbackValue={x:Null}}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,16">
+          <ContentControl.DataTemplates>
+            <DataTemplate DataType="vm:ProjectActionEditorViewModel">
+              <views:ProjectActionEditorView />
+            </DataTemplate>
+            <DataTemplate DataType="vm:ProjectLinkEditorViewModel">
+              <views:ProjectLinkEditorView />
+            </DataTemplate>
+          </ContentControl.DataTemplates>
+        </ContentControl>
+      </ScrollViewer>
     </Border>
   </Grid>
 </Window>

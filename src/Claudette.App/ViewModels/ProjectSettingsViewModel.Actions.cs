@@ -8,7 +8,7 @@ namespace Claudette.App.ViewModels;
 
 /// <summary>
 /// An entry of a project file's <c>actions</c> on Settings' Actions page (DESIGN.md §18, "Custom actions"). It keeps the
-/// entry's JSON as written, so saving keeps fields Claudette doesn't edit, such as <c>os</c> and <c>ifExists</c>.
+/// entry's JSON as written, so saving keeps fields Claudette doesn't edit, such as <c>os</c>.
 /// </summary>
 public sealed record CustomActionRow(JsonNode? Raw, CustomProjectAction? Action, string? Problem, bool ForThisOS)
 {
@@ -98,7 +98,7 @@ public sealed partial class ProjectSettingsViewModel
     /// <b>Add an action…</b> from the project's menu: the dialog asks which file the action goes in, as it did
     /// over the main window, and the page shows that file once it's saved.
     /// </summary>
-    internal void StartNewAction() => Editor = new ProjectActionEditorViewModel(Folder, null, (action, scope) =>
+    internal void StartNewAction() => Editor = new ProjectActionEditorViewModel(Folder, _services.Platform, null, (action, scope) =>
     {
         SelectedProjectActionFile = ProjectActionFiles.Single(f => f.Value == scope);
         AddActionRow(action, scope);
@@ -109,7 +109,7 @@ public sealed partial class ProjectSettingsViewModel
     private void AddProjectAction()
     {
         var scope = Scope;
-        Editor = new ProjectActionEditorViewModel(Folder, null, (action, _) => AddActionRow(action, scope), CloseEditor);
+        Editor = new ProjectActionEditorViewModel(Folder, _services.Platform, null, (action, _) => AddActionRow(action, scope), CloseEditor);
     }
 
     private void AddActionRow(CustomProjectAction action, ProjectFileScope scope)
@@ -131,7 +131,7 @@ public sealed partial class ProjectSettingsViewModel
         }
         var rows = ProjectActions;
         var scope = Scope;
-        Editor = new ProjectActionEditorViewModel(Folder, existing, (action, _) =>
+        Editor = new ProjectActionEditorViewModel(Folder, _services.Platform, existing, (action, _) =>
         {
             var index = rows.IndexOf(row);
             if (index >= 0)
