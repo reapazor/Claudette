@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 using System.Threading.Channels;
@@ -145,9 +146,10 @@ public sealed class ProcessLauncher(TimeProvider? timeProvider = null, TimeSpan?
                     _process.Kill(entireProcessTree: true);
                 }
             }
-            catch (InvalidOperationException)
+            catch (Exception ex) when (ex is InvalidOperationException or AggregateException or Win32Exception or NotSupportedException)
             {
-                // Already exited.
+                // Already exited; or it, or a process it started, isn't ours to end (the rest are ended regardless). Its
+                // callers are closing a tab or the app, which mustn't stop halfway over it.
             }
         }
 

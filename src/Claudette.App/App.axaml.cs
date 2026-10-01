@@ -272,14 +272,27 @@ public partial class App : Application
                 _services.State.Window = _placement.Current();
                 _services.SaveState();
             }
-            if (_mainViewModel is not null)
+            try
             {
-                await _mainViewModel.DisposeAsync();
+                if (_mainViewModel is not null)
+                {
+                    await _mainViewModel.DisposeAsync();
+                }
             }
-            if (_services is not null)
+            finally
             {
-                await _services.FlushAsync();
-                await _services.DisposeAsync();
+                // Whatever closing the tabs met, the state, settings and usage are written.
+                if (_services is not null)
+                {
+                    try
+                    {
+                        await _services.FlushAsync();
+                    }
+                    finally
+                    {
+                        await _services.DisposeAsync();
+                    }
+                }
             }
         }
         finally
