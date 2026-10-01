@@ -341,24 +341,28 @@
                   <TextBlock Classes="muted small" Text="{Binding Hint}" />
                   <ItemsControl ItemsSource="{Binding Options}">
                     <ItemsControl.ItemTemplate>
-                      <DataTemplate DataType="conv:QuestionOption">
-                        <Panel>
-                          <RadioButton GroupName="{Binding Group}" IsChecked="{Binding IsSelected}"
-                                       IsVisible="{Binding !$parent[ItemsControl].((conv:QuestionEntry)DataContext).MultiSelect}">
-                            <StackPanel>
-                              <TextBlock Text="{Binding Label}" />
-                              <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
-                            </StackPanel>
-                          </RadioButton>
-                          <CheckBox IsChecked="{Binding IsSelected}"
-                                    IsVisible="{Binding $parent[ItemsControl].((conv:QuestionEntry)DataContext).MultiSelect}">
-                            <StackPanel>
-                              <TextBlock Text="{Binding Label}" />
-                              <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
-                            </StackPanel>
-                          </CheckBox>
-                        </Panel>
-                      </DataTemplate>
+                      <controls:QuestionOptionTemplate>
+                        <controls:QuestionOptionTemplate.Single>
+                          <DataTemplate DataType="conv:QuestionOption">
+                            <RadioButton GroupName="{Binding Group}" IsChecked="{Binding IsSelected}">
+                              <StackPanel>
+                                <TextBlock Text="{Binding Label}" />
+                                <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+                              </StackPanel>
+                            </RadioButton>
+                          </DataTemplate>
+                        </controls:QuestionOptionTemplate.Single>
+                        <controls:QuestionOptionTemplate.Multiple>
+                          <DataTemplate DataType="conv:QuestionOption">
+                            <CheckBox IsChecked="{Binding IsSelected}">
+                              <StackPanel>
+                                <TextBlock Text="{Binding Label}" />
+                                <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+                              </StackPanel>
+                            </CheckBox>
+                          </DataTemplate>
+                        </controls:QuestionOptionTemplate.Multiple>
+                      </controls:QuestionOptionTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
                   <TextBox Text="{Binding OtherText}" PlaceholderText="Other: type your own answer" />

@@ -333,7 +333,7 @@ public sealed partial class PermissionItem : PromptItem
 }
 
 /// <summary>One option of a clarifying question.</summary>
-public sealed partial class QuestionOption(string label, string? description, string group) : ObservableObject
+public sealed partial class QuestionOption(string label, string? description, string group, bool multiSelect) : ObservableObject
 {
     public string Label { get; } = label;
 
@@ -343,6 +343,9 @@ public sealed partial class QuestionOption(string label, string? description, st
 
     /// <summary>Radio button group, so single-choice options exclude each other.</summary>
     public string Group { get; } = group;
+
+    /// <summary>Whether its question takes any number of answers, so it's a check box rather than a radio button.</summary>
+    public bool MultiSelect { get; } = multiSelect;
 
     [ObservableProperty]
     public partial bool IsSelected { get; set; }
@@ -366,7 +369,7 @@ public sealed partial class QuestionEntry : ObservableObject
                 continue;
             }
             var description = option["description"] is JsonValue d && d.GetValueKind() == JsonValueKind.String ? d.GetValue<string>() : null;
-            var entry = new QuestionOption(label, description, group);
+            var entry = new QuestionOption(label, description, group, MultiSelect);
             entry.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(QuestionOption.IsSelected))
