@@ -29,6 +29,23 @@ public class ConversationBuilderTests
         Assert.Equal(2, _items.Count);
     }
 
+    [Fact]
+    public void Claude_Codes_notices_are_notes_at_their_level()
+    {
+        // As the Agent SDK documents system/informational: a hook's message to the user, and a fallback warning.
+        Apply("""{"type":"system","subtype":"informational","content":"PostToolUse:Bash says: Formatted 3 files","level":"info","tool_use_id":"t1","uuid":"i-1","session_id":"s"}""");
+        Apply("""{"type":"system","subtype":"informational","content":"  Switched to Sonnet: the context window is now 200K tokens.\n","level":"warning","uuid":"i-2","session_id":"s"}""");
+        Apply("""{"type":"system","subtype":"informational","content":"A tip.","level":"someday","uuid":"i-3","session_id":"s"}""");
+        Apply("""{"type":"system","subtype":"informational","content":"  ","level":"warning","uuid":"i-4","session_id":"s"}""");
+
+        var notes = _items.OfType<NoteItem>().Select(n => (n.Text, n.Kind)).ToList();
+        Assert.Equal([
+            ("PostToolUse:Bash says: Formatted 3 files", NoteKind.Info),
+            ("Switched to Sonnet: the context window is now 200K tokens.", NoteKind.Warning),
+            ("A tip.", NoteKind.Info),
+        ], notes);
+    }
+
     // ---- Rewind and branch points (DESIGN.md §5) ------------------------------------------------------------------
 
     [Fact]

@@ -486,6 +486,13 @@ The user's and project's hooks ([Claude Code hooks](https://code.claude.com/docs
 - The rest run quietly. **Show every hook run in the conversation** (Settings → Claude Code, off by default) gives every run a row, from its start (*running…*) to how it ended (*done*, *failed*, *cancelled*).
 - Hook names and output are the hook's own text, shown as text. Find looks through them, and an export keeps the failed ones.
 
+### Notices
+
+Claude Code's own warnings and notices come as `system/informational` messages: a model fallback (since 2.1.286 also when it shrinks the context window from 1M to 200K tokens), a hook's message to the user (`systemMessage`, each line starting with the hook's name, such as *"PostToolUse:Bash says: …"*), and a `UserPromptSubmit` hook's reason for blocking a prompt.
+
+- Each is a note in the conversation, as text: a warning (`level` `warning`) in the warning color, the rest (`info`, `notice`, `suggestion`, and a level Claudette doesn't know) as plain notes. An empty one is skipped.
+- Find looks through them as through other notes.
+
 ### Running tasks
 
 Claude Code keeps some work going after a turn ends, and its own UIs count it (*"1 running task"*). So does Claudette.
@@ -1410,7 +1417,7 @@ The `system/init` message that follows gives `session_id`, `model`, `permissionM
 | Need | How | Documented |
 |---|---|---|
 | Send a message, with images | A `user` message as one JSON line on stdin. Images are base64 `image` content blocks before the text ([§5](#attachments)). See "Messages sent while Claude is working" below. | Yes |
-| Receive output | JSON lines on stdout: `system/init`, `system/status`, `assistant`, `user` (tool results, with `tool_use_result`), `stream_event` (partial text), `result`, `rate_limit_event`, `auth_status`, `permission_denied`, `api_retry`, `conversation_reset`, `task_started` / `task_progress` / `task_updated` / `task_notification`, `tool_progress`, `thinking_tokens`, `autocompact_state` | Yes |
+| Receive output | JSON lines on stdout: `system/init`, `system/status`, `assistant`, `user` (tool results, with `tool_use_result`), `stream_event` (partial text), `result`, `rate_limit_event`, `auth_status`, `permission_denied`, `informational`, `api_retry`, `conversation_reset`, `task_started` / `task_progress` / `task_updated` / `task_notification`, `tool_progress`, `thinking_tokens`, `autocompact_state` | Yes |
 | Stop the current turn | `interrupt`. The reply lists `still_queued` messages; the turn ends with a `result` of `error_during_execution` / `aborted_streaming`. SIGINT is a fallback. Never SIGTERM: it leaves the turn unfinished with no result. | Yes |
 | Permission prompts | Incoming `can_use_tool`; reply allow, allow with `updatedPermissions`, or deny with a message ([§7](#7-permission-prompts)) | Behavior yes, wire format no |
 | Hook callbacks | `hooks` in `initialize`; incoming `hook_callback`, answered with the hook's output (below) | Behavior yes, wire format no |

@@ -493,6 +493,13 @@ items:
     usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: PromptTests
+  - id: "informational"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkinformationalmessage
+    test: ConversationBuilderTests
+    fallback: system/informational with content and level (info, notice, suggestion, warning) becomes a note, a warning in the warning color. Without it Claude Code's notices aren't shown, as before.
   - id: "compact_boundary"
     kind: message
     status: documented

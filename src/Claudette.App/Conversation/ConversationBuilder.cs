@@ -312,6 +312,15 @@ public sealed class ConversationBuilder
                 AddNote(trigger == "auto" ? "Claude Code compacted the conversation to free up context." : "Conversation compacted.");
                 break;
 
+            case SystemNotice { Message.Subtype: "informational" } informational:
+                // Claude Code's warnings and notices, and hooks' messages to the user (DESIGN.md §5, "Notices"): plain
+                // text at its level.
+                if (informational.Message.Raw.GetString("content")?.Trim() is { Length: > 0 } notice)
+                {
+                    AddNote(notice, informational.Message.Raw.GetString("level") == "warning" ? NoteKind.Warning : NoteKind.Info);
+                }
+                break;
+
             case SystemNotice { Message.Subtype: "permission_denied" } denied:
                 // Denied without asking, by a rule or the permission mode.
                 var raw = denied.Message.Raw;
