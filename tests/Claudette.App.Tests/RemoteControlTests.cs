@@ -144,11 +144,11 @@ public class RemoteControlTests
         var tab = await h.OpenTabAsync();
         await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
 
-        h.Transport.Emit("""{"type":"system","subtype":"worker_shutting_down","reason":"remote_control_disabled","uuid":"u1","session_id":"s1"}""");
+        h.Transport.Emit("""{"type":"system","subtype":"worker_shutting_down","reason":"heartbeat_lost","uuid":"u1","session_id":"s1"}""");
 
         await TabTestHarness.Eventually(() => !tab.RemoteControl.Status.IsConnected, "the shutdown");
-        Assert.Equal("Remote Control was turned off.", tab.RemoteControl.Status.Detail);
-        Assert.Contains(tab.InfoRows, r => r is { Label: "Claude app", Value: "Not connected: Remote Control was turned off." });
+        Assert.Equal("Claude Code closed the connection (heartbeat lost).", tab.RemoteControl.Status.Detail);
+        Assert.Contains(tab.InfoRows, r => r is { Label: "Claude app", Value: "Not connected: Claude Code closed the connection (heartbeat lost)." });
         Assert.False(h.SleepBlocker.IsBlocking);
         var notes = InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Count());
 
@@ -156,8 +156,70 @@ public class RemoteControlTests
         h.Transport.Emit("""{"type":"system","subtype":"worker_shutting_down","reason":"host_exit","uuid":"u2","session_id":"s1"}""");
         h.Transport.EmitTurn();
         await TabTestHarness.Eventually(() => tab.Items.OfType<TurnSummaryItem>().Any(), "a turn");
-        Assert.Equal("Remote Control was turned off.", tab.RemoteControl.Status.Detail);
+        Assert.Equal("Claude Code closed the connection (heartbeat lost).", tab.RemoteControl.Status.Detail);
         Assert.Equal(notes, InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Count()));
+    }
+
+    [Fact]
+    public async Task Turned_off_by_a_policy_no_tab_tries_again_until_another_account_signs_in()
+    {
+        await using var h = new TabTestHarness(s => s.ClaudeCode.ConnectNewTabsToClaudeApp = true);
+        AnswerConnected(h);
+        h.Services.RemoteControl.UseAccount(new AuthStatus(true, "claude.ai", "firstParty", "me@example.com", "Example", "max", null, null));
+        var tab = await h.OpenTabAsync();
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
+
+        // As 2.1.286 disconnects a session when the organization's policy turns Remote Control off.
+        h.Transport.Emit("""{"type":"system","subtype":"worker_shutting_down","reason":"remote_control_disabled","uuid":"u1","session_id":"s1"}""");
+
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.State == RemoteControlState.Unavailable, "the policy");
+        Assert.Equal(RemoteControlProtocol.TurnedOffByPolicy, tab.RemoteControl.Status.Detail);
+        Assert.Equal("Remote Control stopped: Remote Control is turned off by a policy.", InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last().Text));
+        Assert.Equal(RemoteControlProtocol.TurnedOffByPolicy, h.Services.RemoteControl.PolicyReason);
+        Assert.False(h.SleepBlocker.IsBlocking);
+        // The tab keeps the user's choice; it just doesn't try.
+        Assert.True(tab.RemoteControl.IsOn);
+        var requests = RemoteRequests(h).Count;
+
+        // A new tab doesn't try either, and says why.
+        await h.Shell.CloseTabCommand.ExecuteAsync(tab);
+        await TabTestHarness.Eventually(() => !h.Shell.HasTabs && !tab.IsProcessRunning, "the first tab to close");
+        var second = await h.OpenTabAsync();
+        await TabTestHarness.Eventually(() => second.RemoteControl.Status.State == RemoteControlState.Unavailable, "the second tab");
+        Assert.Equal(requests, RemoteRequests(h).Count);
+        Assert.Contains("Not connecting to the Claude app: Remote Control is turned off by a policy.", InlineDispatcher.Read(() => second.Items.OfType<NoteItem>().Select(n => n.Text).ToList()));
+        Assert.False(second.RemoteControl.CanToggle && !second.RemoteControl.IsOn);
+
+        // The same account checked again changes nothing; another one may be allowed, so the tabs try again.
+        h.Services.RemoteControl.UseAccount(new AuthStatus(true, "claude.ai", "firstParty", "me@example.com", "Example", "max", null, null));
+        Assert.NotNull(h.Services.RemoteControl.PolicyReason);
+        h.Services.RemoteControl.UseAccount(new AuthStatus(true, "claude.ai", "firstParty", "me@example.org", "Other", "max", null, null));
+        Assert.Null(h.Services.RemoteControl.PolicyReason);
+        await TabTestHarness.Eventually(() => second.RemoteControl.Status.IsConnected, "the second tab to connect");
+    }
+
+    [Fact]
+    public async Task Disconnecting_from_here_isnt_taken_for_a_policy()
+    {
+        await using var h = new TabTestHarness(s => s.ClaudeCode.ConnectNewTabsToClaudeApp = true);
+        // Connecting is answered; disconnecting is left waiting, to be answered below.
+        h.Transport.Answers["remote_control"] = request => request["enabled"]!.GetValue<bool>() ? new JsonObject { ["session_url"] = SessionUrl } : null;
+        var tab = await h.OpenTabAsync();
+        await TabTestHarness.Eventually(() => tab.RemoteControl.Status.IsConnected, "the connection");
+
+        // Claude Code says why the worker shuts down before it answers the request to disconnect.
+        var leaving = tab.RemoteControl.ToggleCommand.ExecuteAsync(null);
+        await TabTestHarness.Eventually(() => DisconnectRequestId(h) is not null, "the request to disconnect");
+        h.Transport.Emit("""{"type":"system","subtype":"worker_shutting_down","reason":"remote_control_disabled","uuid":"u1","session_id":"s1"}""");
+        await TabTestHarness.Eventually(() => !tab.RemoteControl.Status.IsConnected, "the shutdown");
+        h.Transport.Emit(Claudette.Core.Protocol.OutgoingMessages.ControlSuccess(DisconnectRequestId(h)!, []).ToJsonString());
+        await leaving;
+
+        Assert.Equal(RemoteControlState.NotConnected, tab.RemoteControl.Status.State);
+        Assert.Null(h.Services.RemoteControl.PolicyReason);
+
+        static string? DisconnectRequestId(TabTestHarness h) => h.Transport.Sent
+            .LastOrDefault(m => IsRemoteRequest(m) && !m["request"]!["enabled"]!.GetValue<bool>())?["request_id"]?.GetValue<string>();
     }
 
     // ---- The switch -----------------------------------------------------------------------------------------------

@@ -133,6 +133,20 @@ public class RemoteControlProtocolTests
         Assert.Equal("Claude Code closed the connection (heartbeat lost).", RemoteControlProtocol.ShutdownReason("heartbeat_lost"));
     }
 
+    [Fact]
+    public void A_policy_turning_it_off_makes_it_not_available_unless_the_tab_was_leaving()
+    {
+        var connected = new RemoteControlStatus(RemoteControlState.Connected, SessionUrl);
+        var message = new JsonObject { ["type"] = "system", ["subtype"] = "worker_shutting_down", ["reason"] = "remote_control_disabled" };
+
+        Assert.Equal(new RemoteControlStatus(RemoteControlState.Unavailable, Detail: RemoteControlProtocol.TurnedOffByPolicy), RemoteControlProtocol.AfterWorkerShuttingDown(connected, message));
+        Assert.True(RemoteControlProtocol.SaysTurnedOffByPolicy("worker_shutting_down", message));
+        Assert.Equal(RemoteControlState.NotConnected, RemoteControlProtocol.AfterWorkerShuttingDown(connected, message, leaving: true)!.State);
+        Assert.False(RemoteControlProtocol.SaysTurnedOffByPolicy("worker_shutting_down", message, leaving: true));
+        Assert.True(RemoteControlProtocol.SaysTurnedOffByPolicy("bridge_state", Bridge("policy_disabled")));
+        Assert.False(RemoteControlProtocol.SaysTurnedOffByPolicy("bridge_state", Bridge("failed")));
+    }
+
     [Theory]
     [InlineData(null, null, null, null, true)]
     [InlineData(true, "claude.ai", "firstParty", null, true)]

@@ -105,7 +105,7 @@ public static partial class RemoteControlProtocol
             (RemoteBridgeState.Reconnecting, RemoteControlState.Connected) => current with { Detail = Reconnecting },
             (RemoteBridgeState.Failed, RemoteControlState.Connected) => new(RemoteControlState.NotConnected, Detail: detail ?? "The connection to claude.ai failed."),
             (RemoteBridgeState.PolicyDisabled, RemoteControlState.Connecting or RemoteControlState.Connected) =>
-                new(RemoteControlState.Unavailable, Detail: detail ?? "Remote Control is turned off by a policy."),
+                new(RemoteControlState.Unavailable, Detail: detail ?? TurnedOffByPolicy),
             _ => null,
         };
     }
@@ -115,10 +115,32 @@ public static partial class RemoteControlProtocol
 
     /// <summary>
     /// A connected tab after <c>system/worker_shutting_down</c> (documented): no longer connected, and why. Null when the
-    /// tab isn't connected, so one replayed from earlier in a resumed session changes nothing.
+    /// tab isn't connected, so one replayed from earlier in a resumed session changes nothing. Since 2.1.286 Claude Code
+    /// disconnects a session when the organization's policy turns Remote Control off, with the reason
+    /// <c>remote_control_disabled</c>: that makes it not available, unless the tab was leaving anyway.
     /// </summary>
-    public static RemoteControlStatus? AfterWorkerShuttingDown(RemoteControlStatus current, JsonObject message) =>
-        current.IsConnected ? new RemoteControlStatus(RemoteControlState.NotConnected, Detail: ShutdownReason(message.GetString("reason"))) : null;
+    /// <param name="leaving">Claudette asked Claude Code to disconnect.</param>
+    public static RemoteControlStatus? AfterWorkerShuttingDown(RemoteControlStatus current, JsonObject message, bool leaving = false) =>
+        !current.IsConnected ? null
+        : !leaving && message.GetString("reason") == PolicyShutdownReason ? new RemoteControlStatus(RemoteControlState.Unavailable, Detail: TurnedOffByPolicy)
+        : new RemoteControlStatus(RemoteControlState.NotConnected, Detail: ShutdownReason(message.GetString("reason")));
+
+    /// <summary>The <c>worker_shutting_down</c> reason for Remote Control turned off where Claude Code is used.</summary>
+    public const string PolicyShutdownReason = "remote_control_disabled";
+
+    /// <summary>What a tab says when a policy turned Remote Control off and Claude Code didn't say more.</summary>
+    public const string TurnedOffByPolicy = "Remote Control is turned off by a policy.";
+
+    /// <summary>
+    /// The message says a policy turned Remote Control off: <c>bridge_state</c> <c>policy_disabled</c>, or
+    /// <c>worker_shutting_down</c> for <see cref="PolicyShutdownReason"/> while the tab wasn't leaving.
+    /// </summary>
+    public static bool SaysTurnedOffByPolicy(string? subtype, JsonObject message, bool leaving = false) => subtype switch
+    {
+        "bridge_state" => BridgeState(message) == RemoteBridgeState.PolicyDisabled,
+        "worker_shutting_down" => !leaving && message.GetString("reason") == PolicyShutdownReason,
+        _ => false,
+    };
 
     /// <summary>A <c>worker_shutting_down</c> reason in words. It's a short snake_case code such as <c>host_exit</c>.</summary>
     public static string ShutdownReason(string? reason) => reason switch

@@ -36,7 +36,24 @@ public sealed class RemoteControlService : IDisposable
     public AuthStatus? Account { get; private set; }
 
     /// <summary>Why this account can't use Remote Control, or null when it may. A tab's switch is off and disabled then.</summary>
-    public string? UnavailableReason => RemoteControlEligibility.Check(Account, EnvironmentVariable);
+    public string? UnavailableReason => RemoteControlEligibility.Check(Account, EnvironmentVariable) ?? PolicyReason;
+
+    /// <summary>
+    /// What Claude Code said when a policy turned Remote Control off, in any tab. Every tab then stops trying to connect,
+    /// rather than each trying again whenever it starts, until Claudette restarts or another account signs in.
+    /// </summary>
+    public string? PolicyReason { get; private set; }
+
+    /// <summary>A tab heard that a policy turned Remote Control off.</summary>
+    public void OnTurnedOffByPolicy(string reason)
+    {
+        if (PolicyReason is not null)
+        {
+            return;
+        }
+        PolicyReason = reason;
+        AvailabilityChanged?.Invoke();
+    }
 
     public bool IsAvailable => UnavailableReason is null;
 
@@ -49,6 +66,11 @@ public sealed class RemoteControlService : IDisposable
     public void UseAccount(AuthStatus? account)
     {
         var before = UnavailableReason;
+        if (account?.Email != Account?.Email || account?.OrganizationName != Account?.OrganizationName)
+        {
+            // Another account's organization may allow it.
+            PolicyReason = null;
+        }
         Account = account;
         if (UnavailableReason != before)
         {

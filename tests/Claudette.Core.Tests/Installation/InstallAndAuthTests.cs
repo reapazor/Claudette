@@ -51,6 +51,29 @@ public class InstallAndAuthTests
         Assert.Null(status.Email);
     }
 
+    [Fact]
+    public void Reads_an_API_key_sign_in_as_2_1_286_reports_it()
+    {
+        // claude auth status from 2.1.286 with ANTHROPIC_API_KEY set. Since 2.1.286 a Console sign-in's stored key reports
+        // api_key too; 2.1.285 called it claude.ai, so it read as a Claude plan.
+        const string json = """
+            {
+              "loggedIn": true,
+              "authMethod": "api_key",
+              "apiProvider": "firstParty",
+              "analyticsDisabled": true,
+              "projectsDirectory": "/home/me/.claude/projects",
+              "configDirectory": "/home/me/.claude",
+              "apiKeySource": "ANTHROPIC_API_KEY"
+            }
+            """;
+
+        Assert.True(ClaudeAuth.TryParseStatus(json, out var status));
+        Assert.Equal(("api_key", "firstParty"), (status.AuthMethod, status.ApiProvider));
+        Assert.Equal("Claude Code is signed in with an API key. Remote Control needs a claude.ai subscription sign-in.",
+            Claudette.Core.RemoteControl.RemoteControlEligibility.Check(status, _ => null));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("Error: something")]

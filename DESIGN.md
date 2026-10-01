@@ -1394,7 +1394,7 @@ claude -p --input-format stream-json --output-format stream-json --verbose
 - `account`: `email`, `organization`, `subscriptionType` and `tokenSource`.
 - Also `current_permission_mode`, `agents`, output styles and `pid`.
 
-The `system/init` message that follows gives `session_id`, `model`, `permissionMode`, `claude_code_version` and `capabilities`. In 2.1.284 the capabilities were `interrupt_receipt_v1`, `interrupt_cancel_queued_v1`, `msg_lifecycle_v1`, `mcp_read_resource_v1` and `mcp_tool_ui_meta_v1`. 2.1.285 can add `third_party_notification_caution`, which goes with the notifications a cloud session queues for Claude; Claudette doesn't use it.
+The `system/init` message that follows gives `session_id`, `model`, `permissionMode`, `claude_code_version` and `capabilities`. In 2.1.284 the capabilities were `interrupt_receipt_v1`, `interrupt_cancel_queued_v1`, `msg_lifecycle_v1`, `mcp_read_resource_v1` and `mcp_tool_ui_meta_v1`. 2.1.285 can add `third_party_notification_caution`, which goes with the notifications a cloud session queues for Claude, and 2.1.286 lists `sdk_mcp_tools_list_changed`, `sdk_mcp_manifests` and `ui_surface_v1`; Claudette uses none of them.
 
 **Wire format.** Every control message is one JSON line:
 
@@ -1703,7 +1703,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 | Piece | Location |
 |---|---|
 | Fake transport and replay transport | `tests/Claudette.Core.Tests/Support/` |
-| Protocol fixtures | `tests/Claudette.Core.Tests/Fixtures/protocol/2.1.284/`: `01`–`06` and `signed-out` from the spikes, `07`–`11` from `ProtocolRecordingTests`, and `12-subagents` recorded from the mock's `SUBAGENTS`. A later version's folder (`2.1.285/`) holds `07`–`11` recorded again when its compatibility report is handled; the parsing and Diagnostics tests read every version's |
+| Protocol fixtures | `tests/Claudette.Core.Tests/Fixtures/protocol/2.1.284/`: `01`–`06` and `signed-out` from the spikes, `07`–`11` from `ProtocolRecordingTests`, and `12-subagents` recorded from the mock's `SUBAGENTS`. A later version's folder (`2.1.285/`, `2.1.286/`) holds `07`–`11` recorded again when its compatibility report is handled; the parsing and Diagnostics tests read every version's |
 | Record mode | `tools/Claudette.Fixtures/` (`ProtocolFixtureWriter`: a protocol log to a cleaned fixture), used by `ProtocolRecordingTests` and `LiveTests` |
 | `fake-claude` | `tools/Claudette.FakeClaude/`. Scripted by the prompt (`ASK_PERMISSION`, `SLOW`, `CRASH`, `SPAWN`, `SILENT`, `HANG`, `AUTH_FAIL`, `LIMIT`, `RUN_BASH`, `SUBAGENTS`) and by environment variables, rather than scenario files; see the header of its `Program.cs`. Its sign-in (`auth login`, `auth logout`, the sign-in control requests) is kept in a file in `CLAUDE_CONFIG_DIR`, so a sign-in sticks. Its reply to a message with images names their media types. |
 | Mock Messages API | `tools/Claudette.MockApi/`. Runs in-process in tests, or on its own with `dotnet run`. |
@@ -1783,15 +1783,21 @@ The first real report, for 2.1.285 (#27), matched 47 changes, mostly docs rewrit
 - `result` has five new timing fields (`process_turn_index` and `time_to_request_*`), now known to Diagnostics, and `system/init` can list a capability Claudette doesn't use.
 - Nothing else in the protocol changed: the Agent SDK types only gained settings documentation and a `provider_not_allowed` startup failure. The real-CLI tests pass against 2.1.285.
 
+The report for 2.1.286 matched 51 changes. What it changed:
+
+- `claude auth status` now reports a Console sign-in's stored key as `api_key`, where 2.1.285 said `claude.ai`. Claudette already reads `api_key` as an API key: the account menu says so, its billing link goes to the Console, and Remote Control isn't offered ([§11](#11-sign-in), [§18](#remote-control-the-claude-app)).
+- A policy turning Remote Control off now disconnects the session, with `worker_shutting_down` and the reason `remote_control_disabled`. The tab says Remote Control isn't available, and no tab tries again until Claudette restarts or another account signs in.
+- The recorded scenarios (`07`–`11`, in `2.1.286/`) are otherwise the same. In them 2.1.286 sent no `autocompact_state`, `rate_limit_event`, `active_goal` or `commands_changed`, `result` lost 2.1.285's timing fields, and `system/init` gained `memory_paths` and the capabilities `sdk_mcp_tools_list_changed`, `sdk_mcp_manifests` and `ui_surface_v1`. Claudette needs none of them. The subagent hand-back frame, `api_retry`'s attempt counts and the real-CLI tests are unchanged.
+
 ### Tested versions
 
 - Claudette records two versions:
   - `ClaudeLocator.MinimumVersion` (`minimum` in `compat/surface.yaml`): the hard floor from [§12](#applying-it).
   - `ClaudeLocator.LastTestedVersion` (`lastTested`): updated each time a compatibility report is handled.
-- A version newer than the last tested one is allowed. Settings → Claude Code shows a quiet note, *"Newer than the last tested version (2.1.285)"*, and nothing more intrusive.
+- A version newer than the last tested one is allowed. Settings → Claude Code shows a quiet note, *"Newer than the last tested version (2.1.286)"*, and nothing more intrusive.
 - A version older than the last tested one, but not older than the minimum, is supported too, with a nudge to update and nothing that blocks:
-  - Settings → Claude Code adds *"Older than the last tested version (2.1.285); updating is recommended"*.
-  - When the update badge offers a newer version ([§12](#applying-it)), its dialog adds *"Claudette was last tested with 2.1.285."*
+  - Settings → Claude Code adds *"Older than the last tested version (2.1.286); updating is recommended"*.
+  - When the update badge offers a newer version ([§12](#applying-it)), its dialog adds *"Claudette was last tested with 2.1.286."*
   - Only the minimum is required. It goes up only when Claudette starts relying on something a newer version adds, not with each compatibility report.
 
 ### Staying tolerant at runtime
@@ -2376,7 +2382,8 @@ A tab can be used from the Claude app on a phone, or at claude.ai/code, while Cl
 - **Undocumented, so there's a fallback.** A Claude Code that rejects the request as unsupported (*"Unsupported control request subtype: remote_control"*) gets `/remote-control <the tab's name>` instead, as a message of its own, sent only while Claude isn't working so the next turn to end is its answer. It isn't shown as something the user sent, and its reply is shown as a note rather than a reply, read tolerantly: a claude.ai/code address means connected; *isn't available*, *requires*, *disabled* and the like mean not available, with the reply as the reason; anything else counts as connected, with the reply as the note. With 2.1.284 the fallback only says why the tab isn't connected.
 - **What Claude Code reports afterwards.**
   - `system/bridge_state` (undocumented), with `state` and `detail`: `ready` and `connected` bring a dropped connection back; `reconnecting` keeps the tab connected, with its icon dimmed; `failed` disconnects it, with the reason; `policy_disabled` makes it not available. A state Claudette doesn't know changes nothing.
-  - `system/worker_shutting_down` (documented): a connected tab is disconnected, with its reason (`host_exit`, `remote_control_disabled`…). One that arrives while the tab isn't connected is ignored, since a resumed session can replay old ones.
+  - `system/worker_shutting_down` (documented): a connected tab is disconnected, with its reason (`host_exit`…). One that arrives while the tab isn't connected is ignored, since a resumed session can replay old ones.
+  - Turned off by a policy: `bridge_state` `policy_disabled`, or since 2.1.286 `worker_shutting_down` with the reason `remote_control_disabled` while the tab wasn't disconnecting itself. The tab says Remote Control isn't available, and so does every other tab: none tries to connect again, as each would whenever it starts, until Claudette restarts or another account signs in. The tab's switch stays as the user left it.
   - The process exiting disconnects the tab.
 
 **States.** Not connected, Connecting, Connected (with the session's address, when Claude Code gave it) and Not available (with Claude Code's reason). What the tab shows:

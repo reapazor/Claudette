@@ -542,7 +542,7 @@ public sealed partial class RemoteControlViewModel : ViewModelBase
         var next = message.Subtype switch
         {
             "bridge_state" => RemoteControlProtocol.AfterBridgeState(Status, _url, message.Raw),
-            "worker_shutting_down" => RemoteControlProtocol.AfterWorkerShuttingDown(Status, message.Raw),
+            "worker_shutting_down" => RemoteControlProtocol.AfterWorkerShuttingDown(Status, message.Raw, leaving: _disconnecting),
             _ => null,
         };
         if (next is null)
@@ -550,6 +550,11 @@ public sealed partial class RemoteControlViewModel : ViewModelBase
             return;
         }
         Status = next;
+        if (next.State == RemoteControlState.Unavailable && RemoteControlProtocol.SaysTurnedOffByPolicy(message.Subtype, message.Raw, leaving: _disconnecting))
+        {
+            // The other tabs, and this one when it starts again, don't try to connect again.
+            _services.RemoteControl.OnTurnedOffByPolicy(next.Detail ?? RemoteControlProtocol.TurnedOffByPolicy);
+        }
         if (before.IsConnected && !next.IsConnected)
         {
             _host.AddNote(next.State == RemoteControlState.Unavailable

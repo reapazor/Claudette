@@ -41,7 +41,7 @@ public sealed partial class ClaudeLocator(
     /// The newest Claude Code version Claudette has been checked against (DESIGN.md §16, "Tested versions"). Newer
     /// versions are allowed. Kept in step with compat/surface.yaml.
     /// </summary>
-    public static readonly Version LastTestedVersion = new(2, 1, 285);
+    public static readonly Version LastTestedVersion = new(2, 1, 286);
 
     private static readonly TimeSpan VersionTimeout = TimeSpan.FromSeconds(20);
 
