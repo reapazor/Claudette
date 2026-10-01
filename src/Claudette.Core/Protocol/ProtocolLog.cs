@@ -7,7 +7,7 @@ namespace Claudette.Core.Protocol;
 /// <summary>
 /// A session's raw protocol traffic, one line per message with its time and direction (DESIGN.md §13, "Logging"):
 /// <c>&lt;</c> from Claude Code, <c>&gt;</c> to it. Off by default (Settings → Advanced), because it holds everything
-/// the session sees, file contents included.
+/// the session sees, file contents included. Sign-in secrets are taken out first (<see cref="ProtocolRedaction"/>).
 /// </summary>
 public sealed class ProtocolLog : IDisposable
 {
@@ -60,6 +60,7 @@ public sealed class ProtocolLog : IDisposable
 
     private void Write(char direction, string line)
     {
+        line = ProtocolRedaction.Redact(line);
         var stamp = _time.GetUtcNow().UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
         lock (_lock)
         {

@@ -58,6 +58,7 @@ public sealed partial class AppUpdateViewModel : ObservableObject, IDisposable
     public string? ManualText => Available is null ? null
         : _updates.Kind == AppInstallKind.Other ? "This copy of Claudette can't update itself. Download the new version from its release page."
         : Available.Asset is null ? "This release has no package for this computer yet. See its release page."
+        : Available.Asset.Sha256 is null ? "GitHub published no checksum for this release's package, so Claudette can't check it. Download it from its release page."
         : null;
 
     public bool HasManualText => ManualText is not null;
@@ -71,7 +72,7 @@ public sealed partial class AppUpdateViewModel : ObservableObject, IDisposable
     /// <summary>Checking and installing the package, after any download.</summary>
     public bool IsInstalling => _updates.IsInstalling && !_updates.IsDownloading;
 
-    private bool Installable => _updates.CanInstall && Available?.Asset is not null;
+    private bool Installable => _updates.CanInstall && Available?.Asset is { Sha256: not null };
 
     /// <summary>Download now and install later, from the badge or Settings.</summary>
     public bool CanDownload => Installable && _updates.DownloadedPath is null && !IsBusy;

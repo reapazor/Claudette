@@ -86,7 +86,7 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
   Settings → General has the same actions.
 - **Downloading.**
   - The package goes to `updates/<version>/` in the data folder, under a temporary name.
-  - It's kept only once its size and the SHA-256 digest GitHub publishes for it match. A package that doesn't match is deleted.
+  - It's kept only once its size and the SHA-256 digest GitHub publishes for it match. A package that doesn't match is deleted. A package GitHub publishes no digest for isn't downloaded at all: the dialog says so and links to the release page.
   - A package already downloaded isn't fetched again. Downloads of the running version and older ones are deleted at launch.
 - **Checking the package** before anything closes. If the package fails a check, nothing else happens.
   - **MSIX:** its manifest must be `reapazor.Claudette`, from the same publisher as the installed package (compared as the package family name, so a package signed by someone else would install beside this one instead of replacing it). It must also be the release's version and this machine's architecture. Windows checks the signature when it installs.
@@ -1228,7 +1228,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
 - **Threading.** Each session reads its process on a background task. Events go to the UI thread through a channel, and streaming text is batched so the UI isn't updated for every token.
 - **Resilience.** If a process exits unexpectedly, the tab shows an error with a **Restart** button that resumes the same session ID.
 - **Shutdown.** When Claudette closes while a tab is working, it interrupts the turn first so the session is left in a clean state.
-- **Logging.** Raw protocol traffic can be logged per session (off by default) to help debug parsing problems when Claude Code changes its output. Claudette's own warnings and errors always go to `claudette.log` in the log folder (**Open log folder**), which is kept under 2 MB: past that it becomes `claudette.1.log`, replacing the one before.
+- **Logging.** Raw protocol traffic can be logged per session (off by default) to help debug parsing problems when Claude Code changes its output. Sign-in secrets are taken out of each line before it's written: the pasted sign-in code and its state, values under the usual names for tokens, keys and passwords, and the `code` and `state` of an address. Claudette's own warnings and errors always go to `claudette.log` in the log folder (**Open log folder**), which is kept under 2 MB: past that it becomes `claudette.1.log`, replacing the one before.
 - **Nothing ends the app by surprise.** Each session event is applied on its own: one that fails is logged and noted once in the conversation (*"Claudette couldn't show part of this conversation…"*), and the rest carry on. An exception nothing else caught on the UI thread is logged and handled rather than closing Claudette, which would leave every tab's `claude` running ([§4](#process-monitor)), and a failed background task nobody waited for is logged.
 
 ### Integration with Claude Code
