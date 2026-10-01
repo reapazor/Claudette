@@ -48,6 +48,8 @@ jobs:
       # failed download doesn't fail the run.
       - name: Install Claude Code
         if: ${{ matrix.real-cli }}
+        # bash with pipefail: a failed download makes the attempt fail, rather than piping nothing into bash, which succeeds.
+        shell: bash
         run: |
           version=$(sed -n 's/^[[:space:]]*lastTested:[[:space:]]*\([0-9.]*\).*/\1/p' compat/surface.yaml)
           echo "Installing Claude Code $version"
