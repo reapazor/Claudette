@@ -2,7 +2,7 @@ using Claudette.App.ViewModels;
 
 namespace Claudette.App.Tests;
 
-/// <summary>The command palette (DESIGN.md §3, "Command palette").</summary>
+/// <summary>The command palette (DESIGN.md §4, "Command palette").</summary>
 public class CommandPaletteTests
 {
     private readonly List<string> _ran = [];

@@ -293,6 +293,18 @@ internal sealed class NoPlatform : IPlatformServices
 
     public Task<string?> PickFileAsync(string title) => Task.FromResult(FileToPick);
 
+    /// <summary>What the save dialog returns: null is Cancel.</summary>
+    public string? SavePathToPick { get; set; }
+
+    /// <summary>What the last save dialog suggested, and offered.</summary>
+    public (string Name, IReadOnlyList<SaveFileType> Types)? LastSaveDialog { get; private set; }
+
+    public Task<string?> PickSaveFileAsync(string title, string suggestedName, IReadOnlyList<SaveFileType> types)
+    {
+        LastSaveDialog = (suggestedName, types);
+        return Task.FromResult(SavePathToPick);
+    }
+
     public Task OpenUrlAsync(string url)
     {
         OpenedUrls.Add(url);

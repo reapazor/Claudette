@@ -413,6 +413,14 @@ A user message's **⋯** menu goes back to it. Claude Code does the work: a resu
 - New output while the bar is open joins the matches without moving the current one. Pressing the shortcut again goes back to the box with its text selected.
 - History searches across sessions, including Claude's replies on request ([§9](#history)).
 
+### Export
+
+**Export conversation…**, in the tab's menu and the command palette, saves the conversation as a file to read or share. The save dialog offers **Markdown** (`.md`, the default) and **Web page** (`.html`, one file with its style inline); the name chosen decides which.
+
+- Prompts and replies in full, with their times. A reply's Markdown is kept as written; in the web page it's shown as text, so nothing in it runs.
+- Tool calls as one line each with their result's summary, and a Bash command with its output (its first 4,000 characters). A subagent is one line with its report. Permission cards' outcomes, a plan's text, failed hooks and errors are kept; Claudette's other notes, and thinking, are left out.
+- The file is written to a temporary name and renamed. The tab says where it went.
+
 ### Composer
 
 - Multi-line text box. `Enter` sends, `Shift+Enter` adds a new line.
@@ -557,6 +565,7 @@ Saved snippets of instructions that can be added to a message in one click, such
   - The conversation itself is kept. Claude Code applies a model switch in place, even in the middle of a turn.
 - The model list and each model's effort levels come from Claude Code (see [Integration](#integration-with-claude-code)), not a list built into Claudette.
 - New tabs start with the default model and effort from Settings.
+- **Fallback model.** Settings → Claude Code → **Fallback model** (none by default) starts tabs with `--fallback-model`: when the tab's model is overloaded, Claude Code switches to that one rather than wait. It applies to tabs started after the change.
 
 ### Check-ins on long turns
 

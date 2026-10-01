@@ -93,6 +93,7 @@ public sealed partial class ShellViewModel
             }
             Command("Tab settings…", () => OpenTabSettingsCommand.Execute(tab));
             AsyncCommand("Duplicate tab", () => DuplicateTabAsync(tab));
+            AsyncCommand("Export conversation…", () => tab.ExportConversationCommand.ExecuteAsync(null));
             if (tab.RestartCommand.CanExecute(null))
             {
                 AsyncCommand("Restart Claude Code", () => tab.RestartCommand.ExecuteAsync(null));

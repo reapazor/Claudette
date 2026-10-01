@@ -28,6 +28,23 @@ public sealed class AvaloniaPlatformServices(Func<TopLevel?> topLevel) : IPlatfo
         return files.Count > 0 ? files[0].TryGetLocalPath() : null;
     }
 
+    public async Task<string?> PickSaveFileAsync(string title, string suggestedName, IReadOnlyList<SaveFileType> types)
+    {
+        if (topLevel() is not { } top)
+        {
+            return null;
+        }
+        var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = title,
+            SuggestedFileName = suggestedName,
+            DefaultExtension = types.Count > 0 ? types[0].Extension : null,
+            FileTypeChoices = [.. types.Select(t => new FilePickerFileType(t.Name) { Patterns = [$"*.{t.Extension}"] })],
+            ShowOverwritePrompt = true,
+        });
+        return file?.TryGetLocalPath();
+    }
+
     public async Task OpenUrlAsync(string url)
     {
         if (topLevel() is { } top && Uri.TryCreate(url, UriKind.Absolute, out var uri))
