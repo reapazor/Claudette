@@ -81,6 +81,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     private ClaudeSession? _session;
     private Task? _pump;
     private Task? _starting;
+    /// <summary>Cancelled when the tab closes: a start under way stops there, and no new one begins.</summary>
+    private readonly CancellationTokenSource _closing = new();
     private bool _restoredTranscript;
     private bool _restartAfterSignIn;
     /// <summary>
@@ -1193,7 +1195,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>Starts the process if it isn't running: restored tabs start on first selection or message.</summary>
     public async Task EnsureStartedAsync()
     {
-        if (_session is not null || IsSessionMissing || Status == TabStatus.Error && (!Directory.Exists(Folder) || WaitsForSignIn))
+        if (_closing.IsCancellationRequested || _session is not null || IsSessionMissing || Status == TabStatus.Error && (!Directory.Exists(Folder) || WaitsForSignIn))
         {
             return;
         }
@@ -1243,6 +1245,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             resume = localCopy;
         }
+        if (_closing.IsCancellationRequested)
+        {
+            return;
+        }
         var fork = State.ForkOnNextStart && resume is not null;
         // Only a tab that syncs takes part in leases (DESIGN.md §9, "One machine at a time").
         if (resume is not null && !fork && State.SyncToLibrary && !await ClaimLeaseAsync())
@@ -1266,7 +1272,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 environment["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] = "true";
             }
             var resumeAt = resume is null ? null : State.ResumeAt;
-            var session = await sessions.StartAsync(await WithPerforceAsync(await ProjectTools.WithNoteAsync(new ClaudeLaunchOptions
+            var options = await WithPerforceAsync(await ProjectTools.WithNoteAsync(new ClaudeLaunchOptions
             {
                 WorkingDirectory = Folder,
                 Resume = resume,
@@ -1284,7 +1290,15 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 ProtocolLogPath = _services.ProtocolLogPath(FolderName),
                 // The presence file, among others: no pushes to the phone while Claudette is in front (DESIGN.md §10).
                 EnvironmentOverrides = environment,
-            })));
+            }));
+            // Closed while the start was under way: nothing is started for a tab that's gone.
+            _closing.Token.ThrowIfCancellationRequested();
+            var session = await sessions.StartAsync(options, _closing.Token);
+            if (_closing.IsCancellationRequested)
+            {
+                await session.DisposeAsync();
+                return;
+            }
             _session = session;
             session.ShowsElicitations = true;
             if (!fork)
@@ -1325,6 +1339,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             _contextRefresh = RefreshContextUsageAsync(session);
             // Before any prompt goes out, so the phone sees the whole turn (DESIGN.md §18, "Remote Control").
             RemoteControl.ConnectOnStart(session);
+        }
+        catch (OperationCanceledException) when (_closing.IsCancellationRequested)
+        {
+            // Closed: the start's claude, if there was one, is stopped already.
         }
         catch (Exception ex) when (Core.Auth.SignInErrors.IsSignInFailure(ex))
         {
@@ -1955,6 +1973,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>Closing the tab. By default everything the tab started is stopped too; the user can keep it running.</summary>
     public async ValueTask CloseAsync(bool killProcesses)
     {
+        await _closing.CancelAsync();
         _checkIns.Dispose();
         _autoContinue.Dispose();
         foreach (var timer in _copied.Values)
@@ -1972,6 +1991,18 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         StopPerforce();
         ProjectTools.CloseRuns(killProcesses);
         ChangedFiles.StopReviewSync();
+        if (_starting is { } starting)
+        {
+            // A start under way stops at the cancellation, or finishes: either way, what it started is stopped next.
+            try
+            {
+                await starting;
+            }
+            catch (Exception)
+            {
+                // It reported its own failure.
+            }
+        }
         ReleaseLease();
         await StopSessionAsync(killProcesses);
         ChangedFiles.CleanUpDiffFiles();

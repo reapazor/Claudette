@@ -205,6 +205,12 @@ internal sealed class ScriptedSessionFactory(ScriptedTransport transport, TimePr
     /// <summary>Each session started gets a pretend process of its own, for tests with more than one tab running.</summary>
     public bool ProcessPerSession { get; set; }
 
+    /// <summary>While set, a start waits for it once <c>claude</c> is running, as a slow handshake would.</summary>
+    public TaskCompletionSource? StartGate { get; set; }
+
+    /// <summary>Every session started, including ones a start stopped before handing them over.</summary>
+    public List<ClaudeSession> Sessions { get; } = [];
+
     public async Task<ClaudeSession> StartAsync(ClaudeLaunchOptions options, CancellationToken cancellationToken = default)
     {
         Launches.Add(options);
@@ -221,7 +227,21 @@ internal sealed class ScriptedSessionFactory(ScriptedTransport transport, TimePr
             transport.RestartIfExited();
         }
         var session = new ClaudeSession(transport.ForSession(), time);
-        await session.InitializeAsync(options.Hooks, cancellationToken);
+        Sessions.Add(session);
+        try
+        {
+            if (StartGate is { } gate)
+            {
+                await gate.Task.WaitAsync(cancellationToken);
+            }
+            await session.InitializeAsync(options.Hooks, cancellationToken);
+        }
+        catch
+        {
+            // As the real factory does: a start that fails leaves no claude running.
+            await session.DisposeAsync();
+            throw;
+        }
         return session;
     }
 }

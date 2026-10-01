@@ -10,6 +10,27 @@ namespace Claudette.App.Tests;
 public class TabViewModelTests
 {
     [Fact]
+    public async Task Closing_a_tab_while_it_starts_leaves_no_claude_running()
+    {
+        await using var h = new TabTestHarness();
+        var gate = h.Factory.StartGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Opening waits for the start, which waits at the gate.
+        var opening = h.Shell.OpenFolderAsync(h.WorkFolder);
+        await TabTestHarness.Eventually(() => h.Factory.Sessions.Count == 1, "claude to start");
+        var tab = h.Shell.SelectedTab!;
+
+        await h.Shell.CloseTabCommand.ExecuteAsync(tab);
+        await opening;
+
+        Assert.Equal(SessionState.Exited, h.Factory.Sessions[0].State);
+        Assert.Empty(h.Shell.AllTabs);
+        Assert.False(gate.Task.IsCompleted);
+        // Nothing starts again for it, either.
+        await tab.EnsureStartedAsync();
+        Assert.Single(h.Factory.Launches);
+    }
+
+    [Fact]
     public async Task Suffixes_are_appended_and_kept_chips_stay()
     {
         await using var h = new TabTestHarness();
