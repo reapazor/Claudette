@@ -1,8 +1,10 @@
 using System.Text.Json.Nodes;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
+using Claudette.App.Conversation;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
@@ -72,6 +74,54 @@ public class ConversationScrollUiTests
         }
     }
 
+    private static Point Center(Window window, ScrollViewer scroll) =>
+        scroll.TranslatePoint(new Point(scroll.Bounds.Width / 2, scroll.Bounds.Height / 2), window)!.Value;
+
+    /// <summary>Scrolls up by about <paramref name="distance"/> with the mouse wheel, as a reader does: a notch a frame.</summary>
+    private static void WheelUp(Window window, ScrollViewer scroll, double distance)
+    {
+        var target = Math.Max(0, scroll.Offset.Y - distance);
+        var center = Center(window, scroll);
+        for (var notch = 0; notch < 200 && scroll.Offset.Y > target; notch++)
+        {
+            window.MouseWheel(center, new Vector(0, 1));
+            UiText.Settle(window);
+        }
+    }
+
+    /// <summary>
+    /// Scrolling up in the same moment new output arrives (or the list corrects its estimate of what's above) leaves
+    /// the reader where they went, rather than taking them back to the bottom.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Scrolling_up_as_the_conversation_grows_stays_where_the_reader_went()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell }, 1100, 800);
+        var scroll = window.GetVisualDescendants().OfType<ScrollViewer>().Single(s => s.Name == "ConversationScroll");
+        double FromBottom() => scroll.Extent.Height - scroll.Viewport.Height - scroll.Offset.Y;
+        for (var i = 0; i < 10; i++)
+        {
+            tab.ComposerText = $"question {i}";
+            await tab.SendCommand.ExecuteAsync(null);
+            h.Transport.EmitTurn(string.Join("\n\n", Enumerable.Repeat($"Reply {i}: some text that wraps over a line or two in the conversation view.", 1 + (i % 5))));
+            await UiText.SettleUntilAsync(window, () => tab.Status == TabStatus.Idle && tab.IsSettled && FromBottom() <= 1, $"turn {i} at the bottom");
+        }
+
+        // New output, then a notch of the wheel before the next layout pass: the wheel's pass sees the move and the
+        // growth together.
+        tab.Items.Add(new NoteItem("Arrived as the reader scrolled up.", NoteKind.Info));
+        window.MouseWheel(Center(window, scroll), new Vector(0, 1));
+        UiText.Settle(window);
+
+        Assert.True(FromBottom() > 40, $"back at the bottom ({FromBottom():0} from it)");
+        // Output that comes later leaves them there too.
+        tab.Items.Add(new NoteItem("And more.", NoteKind.Info));
+        UiText.Settle(window);
+        Assert.True(FromBottom() > 40, $"back at the bottom after more output ({FromBottom():0} from it)");
+    }
+
     [AvaloniaFact]
     public async Task Scrolling_back_through_earlier_replies_holds_still_too()
     {
@@ -91,8 +141,7 @@ public class ConversationScrollUiTests
         // A screen at a time back up, as a reader would: what's at the top of the view stays put once it's there.
         for (var page = 0; page < 8 && scroll.Offset.Y > 0; page++)
         {
-            scroll.Offset = new Vector(0, Math.Max(0, scroll.Offset.Y - scroll.Viewport.Height));
-            UiText.Settle(window);
+            WheelUp(window, scroll, scroll.Viewport.Height);
             var top = items.GetRealizedContainers().OrderBy(c => c.TranslatePoint(default, scroll)!.Value.Y).First(c => c.TranslatePoint(new Point(0, c.Bounds.Height), scroll)!.Value.Y > 0);
             var (index, y) = (items.IndexFromContainer(top), top.TranslatePoint(default, scroll)!.Value.Y);
             for (var frame = 0; frame < 6; frame++)

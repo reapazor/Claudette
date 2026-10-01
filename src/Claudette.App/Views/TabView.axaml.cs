@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Styling;
@@ -18,8 +19,14 @@ namespace Claudette.App.Views;
 /// </summary>
 public partial class TabView : UserControl
 {
-    private const double StickToBottomThreshold = 40;
     private bool _stickToBottom = true;
+
+    /// <summary>
+    /// The reader is scrolling up (the wheel, a scroll bar, a key, a swipe): the next move up is theirs, even when the
+    /// content grows in the same layout pass. Without it, a move up is the list correcting its estimate of the
+    /// messages above, which keeps its place at the bottom.
+    /// </summary>
+    private bool _readerScrolling;
 
     /// <summary>The conversation keeps at least this much room beside the side panel, however wide it was dragged.</summary>
     private const double MinConversationWidth = 360;
@@ -35,6 +42,13 @@ public partial class TabView : UserControl
         AddHandler(KeyDownEvent, OnPromptKeyDown, RoutingStrategies.Tunnel);
         ComposerPanel.Sent += () => _stickToBottom = true;
         ConversationScroll.ScrollChanged += OnConversationScrollChanged;
+        // Seen even when the scroll viewer handles them.
+        ConversationScroll.AddHandler(PointerWheelChangedEvent, (_, e) => _readerScrolling |= e.Delta.Y > 0, RoutingStrategies.Tunnel, handledEventsToo: true);
+        ConversationScroll.AddHandler(PointerPressedEvent, (_, e) => _readerScrolling |= IsOnScrollBar(e.Source), RoutingStrategies.Tunnel, handledEventsToo: true);
+        ConversationScroll.AddHandler(PointerMovedEvent, (_, e) => _readerScrolling |= IsOnScrollBar(e.Source) && e.GetCurrentPoint(ConversationScroll).Properties.IsLeftButtonPressed,
+            RoutingStrategies.Tunnel, handledEventsToo: true);
+        ConversationScroll.AddHandler(KeyDownEvent, (_, e) => _readerScrolling |= e.Key is Key.Up or Key.PageUp or Key.Home, RoutingStrategies.Tunnel, handledEventsToo: true);
+        ConversationScroll.AddHandler(InputElement.ScrollGestureEvent, (_, e) => _readerScrolling |= e.Delta.Y < 0, RoutingStrategies.Tunnel, handledEventsToo: true);
         ConversationItems.ContainerPrepared += OnConversationContainerPrepared;
         // Copy on a code block goes through the tab and says "Copied" (DESIGN.md §5, "Copy and times").
         CodeBlockCopy.Attach(this);
@@ -141,19 +155,16 @@ public partial class TabView : UserControl
     {
         var scroll = ConversationScroll;
         var distanceFromBottom = scroll.Extent.Height - scroll.Viewport.Height - scroll.Offset.Y;
-        if (e.ExtentDelta.Y != 0)
+        (_stickToBottom, var scrollToEnd) = FollowOutput.Update(_stickToBottom, _readerScrolling, e.OffsetDelta.Y, e.ExtentDelta.Y, distanceFromBottom);
+        _readerScrolling = false;
+        if (scrollToEnd)
         {
-            if (_stickToBottom)
-            {
-                ScrollToEnd();
-            }
+            ScrollToEnd();
         }
-        else if (e.OffsetDelta.Y != 0)
-        {
-            _stickToBottom = distanceFromBottom <= StickToBottomThreshold;
-        }
-        JumpToLatest.IsVisible = !_stickToBottom && distanceFromBottom > StickToBottomThreshold;
+        JumpToLatest.IsVisible = !_stickToBottom && distanceFromBottom > FollowOutput.Threshold;
     }
+
+    private static bool IsOnScrollBar(object? source) => source is Visual visual && visual.FindAncestorOfType<ScrollBar>(includeSelf: true) is not null;
 
     private void OnJumpToLatest(object? sender, RoutedEventArgs e)
     {
