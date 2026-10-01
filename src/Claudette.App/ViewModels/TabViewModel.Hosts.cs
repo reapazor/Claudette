@@ -5,8 +5,8 @@ using Claudette.Platform.Processes;
 namespace Claudette.App.ViewModels;
 
 /// <summary>
-/// What the tab gives its child view models: the process monitor, changed files, project tools, Remote Control and
-/// Perforce. Each sees only its own host interface, over the <see cref="ITabAreaHost"/> they share; where one area needs
+/// What the tab gives its child view models: the process monitor, changed files, project tools, Remote Control,
+/// Perforce and the context indicator. Each sees only its own host interface, over the <see cref="ITabAreaHost"/> they share; where one area needs
 /// another, it goes through the tab.
 /// </summary>
 public sealed partial class TabViewModel : IProcessMonitorHost, IChangedFilesHost, IProjectToolsHost, IRemoteControlHost, IPerforceHost, IContextHost
@@ -46,12 +46,6 @@ public sealed partial class TabViewModel : IProcessMonitorHost, IChangedFilesHos
     bool IProjectToolsHost.IsProjectPageShowing => IsSelected && IsSidePanelOpen && IsProjectPage;
 
     long? IProjectToolsHost.CurrentChangelist => Perforce.CurrentChangelist;
-
-    void IProjectToolsHost.AddNote(string text, NoteKind kind) => _conversation.AddNote(text, kind);
-
-    void IProjectToolsHost.Confirm(string title, string message, string confirmText, Func<Task> onConfirm) => _shell.Confirm(title, message, confirmText, onConfirm);
-
-    void IProjectToolsHost.InfoRowsChanged() => OnPropertyChanged(nameof(InfoRows));
 
     void IProjectToolsHost.OpenProjectPage() => OpenProjectPage();
 

@@ -11,29 +11,15 @@ using CommunityToolkit.Mvvm.Input;
 namespace Claudette.App.ViewModels;
 
 /// <summary>What project tools need from their tab.</summary>
-internal interface IProjectToolsHost
+internal interface IProjectToolsHost : ITabAreaHost
 {
-    string Id { get; }
-
-    string Folder { get; }
-
     string FolderName { get; }
-
-    /// <summary>The tab's name, for the "project action finished" notification.</summary>
-    string DisplayName { get; }
 
     /// <summary>The Project page of the side panel shows, on the selected tab.</summary>
     bool IsProjectPageShowing { get; }
 
     /// <summary>The tab's Perforce changelist, for <c>{changelist}</c> in links (DESIGN.md §18, "Links").</summary>
     long? CurrentChangelist { get; }
-
-    void AddNote(string text, NoteKind kind = NoteKind.Info);
-
-    void Confirm(string title, string message, string confirmText, Func<Task> onConfirm);
-
-    /// <summary>The tab info card's Project row changed.</summary>
-    void InfoRowsChanged();
 
     /// <summary>Opens the side panel on the Project page.</summary>
     void OpenProjectPage();
