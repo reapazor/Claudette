@@ -550,6 +550,35 @@ public class SidePanelTests
     }
 
     [Fact]
+    public async Task Each_process_keeps_its_row_from_sample_to_sample()
+    {
+        await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true);
+        var tab = await h.OpenTabAsync();
+        var tree = h.Trees.Trees[4242];
+        tree.Children.Add((5001, "node"));
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+        await TabTestHarness.Eventually(() => tab.ProcessMonitor.Processes.Count == 2, "the first sample");
+        var (claude, node) = (tab.ProcessMonitor.Processes[0], tab.ProcessMonitor.Processes[1]);
+        var changes = new List<System.Collections.Specialized.NotifyCollectionChangedAction>();
+        tab.ProcessMonitor.Processes.CollectionChanged += (_, e) => changes.Add(e.Action);
+
+        tree.Children.Add((5002, "dotnet"));
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+        await TabTestHarness.Eventually(() => tab.ProcessMonitor.Processes.Count == 3, "the second sample");
+
+        // The rows that were there are the same rows; only the new one was added.
+        Assert.Same(claude, tab.ProcessMonitor.Processes[0]);
+        Assert.Same(node, tab.ProcessMonitor.Processes[1]);
+        Assert.Equal([System.Collections.Specialized.NotifyCollectionChangedAction.Add], changes);
+
+        tree.Children.RemoveAll(c => c.Item1 == 5001);
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+        await TabTestHarness.Eventually(() => tab.ProcessMonitor.Processes.Count == 2, "the third sample");
+        Assert.Equal(["claude", "dotnet"], tab.ProcessMonitor.Processes.Select(p => p.Name));
+        Assert.Same(claude, tab.ProcessMonitor.Processes[0]);
+    }
+
+    [Fact]
     public async Task The_header_totals_the_tabs_processes_while_the_monitor_is_on()
     {
         await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true);
