@@ -870,7 +870,7 @@ public sealed partial class ProjectToolsViewModel : ViewModelBase
             }
         }
         // Each run keeps its own lines, whichever run the Project page shows.
-        job.Output += lines => _services.Dispatcher.Post(() => run.Append(lines));
+        job.Output += lines => run.Receive(lines, _services.Dispatcher);
         _ = WatchJobAsync(run, job);
         job.Begin();
         ToolsChanged();

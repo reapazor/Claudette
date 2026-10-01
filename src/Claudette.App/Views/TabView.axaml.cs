@@ -561,21 +561,26 @@ public partial class TabView : UserControl
     /// <summary>A project job's output follows its newest line, as a terminal does.</summary>
     private void OnProjectOutputChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
-        // A batch of lines is one Add, or a Reset when the start was trimmed to keep to the limit.
+        // A batch of lines is one Add (after a Remove when the oldest were dropped), or a Reset when it replaced them all.
         if (e.Action is System.Collections.Specialized.NotifyCollectionChangedAction.Add or System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
         {
             ScrollProjectOutputToEnd();
         }
     }
 
+    /// <summary>A scroll to the newest line is on its way: batches until then go with it.</summary>
+    private bool _projectScrollPending;
+
     private void ScrollProjectOutputToEnd()
     {
-        if (!ProjectOutputList.IsEffectivelyVisible)
+        if (!ProjectOutputList.IsEffectivelyVisible || _projectScrollPending)
         {
             return;
         }
+        _projectScrollPending = true;
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
+            _projectScrollPending = false;
             if (ProjectOutputList.ItemCount > 0)
             {
                 ProjectOutputList.ScrollIntoView(ProjectOutputList.ItemCount - 1);

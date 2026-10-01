@@ -390,9 +390,10 @@ public class ProjectToolsTests
         var run = tab.ProjectTools.SelectedRun!;
         await TabTestHarness.Eventually(() => run.Output.LastOrDefault() == "line 5200", "the output");
 
-        Assert.Equal(ProjectRunViewModel.MaxOutputLines, run.Output.Count);
-        Assert.Equal("line 201", run.Output[0]);
-        Assert.Equal(201, run.OutputDropped);
+        // The oldest go 500 at a time: past 5,000, the first 500 (the command line and lines 1 to 499) went.
+        Assert.Equal(4701, run.Output.Count);
+        Assert.Equal("line 500", run.Output[0]);
+        Assert.Equal(500, run.OutputDropped);
         Assert.Contains("5,000", run.OutputNote!.Replace(".", ",", StringComparison.Ordinal).Replace(" ", ",", StringComparison.Ordinal), StringComparison.Ordinal);
         await tab.ProjectTools.CopyOutputCommand.ExecuteAsync(null);
         Assert.EndsWith("line 5200", h.Platform.Clipboard, StringComparison.Ordinal);

@@ -118,6 +118,41 @@ public class ProjectToolsUiTests
     }
 
     [AvaloniaFact]
+    public async Task A_long_log_follows_its_newest_line_while_the_oldest_are_dropped()
+    {
+        var launcher = new FakeLauncher();
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher(), launcher: launcher);
+        UnrealFixture.Write(h.Root, h.WorkFolder);
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        await UiText.SettleUntilAsync(window, () => tab.ProjectTools.Project is not null, "the project");
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(tab.ProjectTools.Actions.Single(a => a.Id == "build-editor"));
+        var run = tab.ProjectTools.Runs.Single();
+        run.OpenCommand.Execute(null);
+        UiText.Settle(window);
+        var output = window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "ProjectOutputList");
+        Assert.True(output.IsEffectivelyVisible);
+
+        // In batches, as a busy build writes them, past the limit more than once.
+        var process = launcher.Processes.Last();
+        for (var i = 1; i <= 6200; i++)
+        {
+            process.WriteOutput($"line {i}");
+            if (i % 400 == 0)
+            {
+                await UiText.SettleUntilAsync(window, () => run.Output[^1] == $"line {i}", "the batch");
+            }
+        }
+        await UiText.SettleUntilAsync(window, () => run.Output[^1] == "line 6200", "the output");
+        UiText.Settle(window);
+
+        Assert.Equal(1500, run.OutputDropped);
+        var shown = output.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text).ToList();
+        Assert.Contains("line 6200", shown);
+        Assert.DoesNotContain("line 1", shown);
+    }
+
+    [AvaloniaFact]
     public async Task A_folder_with_no_project_has_the_row_named_after_it_and_its_menu_lists_the_links()
     {
         await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());

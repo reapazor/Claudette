@@ -2136,7 +2136,7 @@ A tab can do things for the project in its folder: launch the editor, generate p
 - **The Project page** of the side panel ([§3](#3-main-window)), beside Changed files, Agents and Processes. Its button shows a busy dot while a job runs. It shows:
   - the project's details: its file, the engine's version, folder and kind, the editor target and the configuration;
   - the selected run (see **Runs**, below): its status (running, succeeded, failed with its exit code, stopped), **Stop**, which ends the job's whole process tree, and **Copy**;
-  - its output, monospace and scrollable, following the newest line. Each run keeps its last 5,000 lines and says how many were dropped.
+  - its output, monospace and scrollable, following the newest line. Each run keeps at most its last 5,000 lines, dropping the oldest 500 at a time, and says how many were dropped.
   - (It had a button per action at first. The project's menu has them, so the page leaves its room to the log.)
 - **Runs.** Each job is a run: a build, generating project files, a custom action with output, Clean's deletion, or one that couldn't start, whose log says why. Launch and Open actions start a program that runs on its own, with no output, so they don't make one.
   - **In the sidebar**, each run is an entry under its tab's row, newest last ([§4](#sidebar)): its state, its name, and how long it has run or how it ended. Clicking one selects the tab and opens the Project page on its log.
