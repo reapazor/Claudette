@@ -56,7 +56,7 @@ The files are in `packaging/`, and `.github/workflows/package.yml` builds them.
   - **Windows:** `src/Claudette.App/Assets/claudette.ico` and `packaging/windows/Assets/`, with no background. Its taskbar sizes include 24, 36 and 48 px (100%, 150% and 200% scaling), where the sprite fills the icon.
   - **macOS:** `packaging/icon/claudette-1024.png`, on an ivory tile.
   - **SVG:** `packaging/icon/claudette.svg`. The script also writes it to `.idea/.idea.Claudette/.idea/icon.svg`, where Rider looks for a project icon.
-  - **Animation frames** ([§10](#10-notifications)): `src/Claudette.App/Assets/AppIcon/`, embedded in the app. The taskbar overlay's spark, and Claudette typing and waving on the Dock icon, drawn at half the macOS icon's size so the Dock icon doesn't shift when an animation starts.
+  - **Animation frames** ([§10](#10-notifications)): `src/Claudette.App/Assets/AppIcon/`, embedded in the app. The taskbar overlay's spark and hourglass, and Claudette typing, waving and waiting by an hourglass on the Dock icon, drawn at half the macOS icon's size so the Dock icon doesn't shift when an animation starts.
 
 > **Not yet tested on a real machine:** installing and running the MSIX and the `.dmg`, and signing and notarization, which need the certificates. The pull request build checks that both packages build.
 
@@ -630,6 +630,7 @@ Claude Code does the same in its own terminal (`autoContinueAtUsageLimit`, since
 - **While it waits.**
   - A bar over the composer says so: *"You've hit your session limit. The task continues by itself when it resets, at 15:45."*, with **Don't continue**.
   - The tab's row shows *Usage limit · continues at 15:45* in place of the model ([§4](#sidebar)), and its info card has a **Usage limit** row with the bar's text.
+  - The Dock or taskbar icon shows an hourglass until the limit resets ([§10](#10-notifications)).
   - A day other than today reads *"on Mon at 09:00"*.
 - **When it doesn't continue by itself** the bar says why, with **Continue when it resets** (or **Continue**, once it has) and a close button:
   - Turned off, in Settings or for the tab: *"You've hit your session limit. It resets at 15:45."*
@@ -1047,9 +1048,10 @@ Clicking a notification brings Claudette to the front and goes to the relevant t
   - A usage alert opens the Usage panel, an update opens the update dialog, and the sign-in notification opens the sign-in dialog ([§11](#signing-in)).
   - A project action's notification selects its tab and opens its Project page on the log of the run it's about.
 - **Badge.** Settings → Notifications → **Show the number of tabs needing input on the Dock or taskbar icon**. On Windows it's an overlay icon on the taskbar button, drawn by Claudette.
-- **The icon while tabs work.** Settings → Notifications → **Animate the Dock or taskbar icon while tabs are working** (on by default).
-  - **Windows:** while any tab is working, the taskbar button's overlay shows Claude's spark, pulsing. The overlay holds one image, and the number of tabs needing input comes first: the spark comes back once no tab needs input, or at once with the badge off. Windows takes the button's own icon from the package (or, unpackaged, from Claudette's AppUserModelID), so only the overlay can move.
-  - **macOS:** the whole Dock icon moves: Claudette types while tabs work, and waves while a tab needs input, under the badge's number.
+- **The icon while tabs work or wait.** Settings → Notifications → **Animate the Dock or taskbar icon while tabs are working or waiting** (on by default).
+  - **Waiting for a usage limit.** While a usage limit has stopped a tab's task and hasn't reset ([§6](#continuing-after-a-limit-resets)), the icon shows an hourglass, its sand running slowly down before it turns over. It shows whether or not the task will continue by itself, and goes once the limit resets, a turn starts, or the user chooses **Don't continue**. It goes before tabs working: the limit stopped a task, and the other tabs are likely to run into it too. It doesn't flash the taskbar button, since nothing needs the user.
+  - **Windows:** while any tab is working, the taskbar button's overlay shows Claude's spark, pulsing. The overlay holds one image: the number of tabs needing input comes first, then the hourglass, then the spark. The spark or hourglass comes back once no tab needs input, or at once with the badge off. Windows takes the button's own icon from the package (or, unpackaged, from Claudette's AppUserModelID), so only the overlay can move.
+  - **macOS:** the whole Dock icon moves, under the badge's number: Claudette types while tabs work, stands by the hourglass, on the tile's bottom-right corner, while a tab waits for a usage limit, and waves while a tab needs input.
   - The frames are drawn with the icon ([§2](#packaging-and-signing)).
 - **Flashing.** When a tab starts needing input while Claudette isn't in front, the Windows taskbar button flashes until Claudette comes to the front, or no tab needs input any more. It follows **A tab needs permission or an answer**. The Dock has nothing like it; the waving does that job.
 - **How each OS does it** (the code is in `Claudette.Platform/Notifications`):
@@ -1394,7 +1396,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Check-ins | On/off. Run time before checking in. Quiet time before checking in. Check-in message text. Notify me when a check-in is sent. See [§5](#check-ins-on-long-turns). |
 | Diff tool | Built-in, a preset or a custom command, with **Test**. See [§8](#external-diff-tool). |
 | Project tools | Unreal's default editor configuration (Development or DebugGame). Project files for Visual Studio, VS Code or Xcode (the OS's own by default). Tell Claude about Unreal projects (on by default). Unity's default code optimization (Release or Debug), and Tell Claude about Unity projects (on by default). The Godot executable (**Browse…**, **Detect**), and Tell Claude about Godot projects (on by default). Open solutions with the OS's app, Rider, Visual Studio, VS Code or another program (**Browse…**). See [§18](#project-tools). |
-| Notifications | On/off for each type in [§10](#10-notifications), including **A project action finishes**. Dock/taskbar badge on/off, and animating the icon while tabs work. |
+| Notifications | On/off for each type in [§10](#10-notifications), including **A project action finishes**. Dock/taskbar badge on/off, and animating the icon while tabs work or wait. |
 | Keyboard | List of shortcuts, each one rebindable ([below](#keyboard-shortcuts)). |
 | Perforce | Off by default. Keep Perforce logins fresh. Password source. Renew-before time. Tickets for all hosts. Show changelist on tabs. The stored password (**Save** / **Forget**). Per-folder server and user. See [§18](#perforce-ticket-handling). |
 | Advanced | Protocol logging and **Open log folder**. **Diagnostics** page ([§16](#staying-tolerant-at-runtime)). Extra command-line arguments passed to `claude`. Minimum supported Claude Code version (read-only). |
@@ -1815,6 +1817,9 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
       - **Still to verify on real machines:** the MSIX's startup task, its activation and the handover to it; the LaunchAgent on macOS; and the minimized start on real Windows, macOS and Linux desktops.
     - **Continuing after a limit resets ([§6](#continuing-after-a-limit-resets)).** When a plan usage limit stops a task, the tab waits for the reset and sends *"Continue from where you left off."*, as Claude Code does in its terminal but not in `-p` runs. A bar over the composer says when, with **Don't continue**; the tab's row and info card say so too. It holds for a reset more than a day away, after three continues in a row that hit the limit again, and for a reset missed by more than 30 minutes (asleep, or Claudette closed), offering **Continue when it resets** or **Continue**. On by default in Settings → Usage, with **Auto-continue** per tab in **Tab settings…**; the wait is saved with the tab. ✅ Built 2026-09-29.
       - **Still to verify** against a real subscription at its limit: the order of the rejected `rate_limit_event` and the failed `result` (either works), `api_error_status` 429 and `terminal_reason` `api_error` on the result, and `rateLimitType` naming the weekly, Opus and Sonnet limits. So far it has been tested against messages shaped from the SDK reference and others' reports; no fixture has been recorded at a real limit.
+    - **The icon while a usage limit waits ([§10](#10-notifications)).** While a usage limit has stopped a tab's task and hasn't reset, the Windows taskbar overlay shows an hourglass whose sand runs down and turns over, and the macOS Dock icon shows Claudette by it. It goes after the count of tabs needing input (waving, on macOS) and before tabs working. The setting became **Animate the Dock or taskbar icon while tabs are working or waiting**. ✅ Built 2026-09-30.
+      - **Still to verify on real machines:** the hourglass on the Windows taskbar at 100%, 150% and 200%, on light and dark taskbars; the Dock frames on macOS.
+    - **The Project page drops its action buttons ([§18](#project-tools)).** The project's menu at the sidebar's foot has the actions, so the side panel's Project page keeps the project's details and the runs' logs. ✅ Built 2026-09-30.
 16. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features
@@ -1968,13 +1973,13 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - (The tab's menu had the same entries in a submenu until the row showed for every tab, which made it redundant.)
 - **The Project page** of the side panel ([§3](#3-main-window)), beside Changed files, Agents and Processes. Its button shows a busy dot while a job runs. It shows:
   - the project's details: its file, the engine's version, folder and kind, the editor target and the configuration;
-  - a button per action;
   - the selected run (see **Runs**, below): its status (running, succeeded, failed with its exit code, stopped), **Stop**, which ends the job's whole process tree, and **Copy**;
   - its output, monospace and scrollable, following the newest line. Each run keeps its last 5,000 lines and says how many were dropped.
+  - (It had a button per action at first. The project's menu has them, so the page leaves its room to the log.)
 - **Runs.** Each job is a run: a build, generating project files, a custom action with output, Clean's deletion, or one that couldn't start, whose log says why. Launch and Open actions start a program that runs on its own, with no output, so they don't make one.
   - **In the sidebar**, each run is an entry under its tab's row, newest last ([§4](#sidebar)): its state, its name, and how long it has run or how it ended. Clicking one selects the tab and opens the Project page on its log.
   - **Entries stay** until the user closes them, whatever the result: × on a finished one takes it and its log away. A running one has **Stop** in the × button's place, so a stray click never ends a build.
-  - **Which log the page shows:** a run that starts shows itself; clicking an entry shows that one; closing the one showing shows the newest left. With no runs, the page has only the project's details and actions.
+  - **Which log the page shows:** a run that starts shows itself; clicking an entry shows that one; closing the one showing shows the newest left. With no runs, the page has only the project's details.
   - Closing the tab takes its runs away. They aren't saved: they're gone when Claudette quits or restarts.
 - **The keyboard.** **Run the project's main action**, `Ctrl/Cmd+Shift+E` by default and rebindable ([§14](#keyboard-shortcuts)): Launch editor for Unreal, Open in Unity, Open in Godot, else the folder's first custom action.
 

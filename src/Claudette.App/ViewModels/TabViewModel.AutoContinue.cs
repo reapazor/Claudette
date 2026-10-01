@@ -36,6 +36,12 @@ public sealed partial class TabViewModel
 
     public string ContinueAfterLimitText => LimitWait is { HasReset: true } ? "Continue" : "Continue when it resets";
 
+    /// <summary>
+    /// The limit hasn't reset, and the user didn't choose <b>Don't continue</b>: the Dock or taskbar icon shows an
+    /// hourglass (DESIGN.md §10).
+    /// </summary>
+    public bool IsWaitingForLimitReset => LimitWait is { HasReset: false, Hold: not LimitWaitHold.Cancelled };
+
     /// <summary>What the bar says.</summary>
     public string? LimitWaitText => LimitWait is not { } wait ? null : wait switch
     {
@@ -101,6 +107,7 @@ public sealed partial class TabViewModel
         LimitWait = wait;
         State.LimitWait = wait;
         _services.SaveState();
+        _shell.OnTabStatusChanged();
     }
 
     /// <summary>Sends the message that continues the task, labeled as sent by Claudette, as a check-in is.</summary>

@@ -22,8 +22,23 @@ public static class AppIconAnimations
     /// <summary>The Dock icon while a tab needs input (macOS): Claudette waving.</summary>
     public static AppIconAnimation Waving { get; } = Load("waving", "A tab needs your input", frames: 2, TimeSpan.FromMilliseconds(450));
 
+    /// <summary>
+    /// The taskbar overlay while a tab waits for a usage limit to reset (Windows): an hourglass whose sand runs slowly
+    /// down, rests, and turns over.
+    /// </summary>
+    public static AppIconAnimation Hourglass { get; } = Load("hourglass", "Waiting for a usage limit to reset", SandRunning);
+
+    /// <summary>The Dock icon while a tab waits for a usage limit to reset (macOS): Claudette by the hourglass.</summary>
+    public static AppIconAnimation Waiting { get; } = Load("waiting", "Waiting for a usage limit to reset", SandRunning);
+
+    /// <summary>The hourglass's frames: full, three as the sand runs, empty, and turning over.</summary>
+    private static TimeSpan[] SandRunning => [.. new[] { 800, 700, 700, 700, 1000, 250 }.Select(ms => TimeSpan.FromMilliseconds(ms))];
+
     private static AppIconAnimation Load(string name, string description, int frames, TimeSpan each) =>
-        new(name, description, [.. Enumerable.Range(0, frames).Select(i => new AppIconFrame(Read($"{name}-{i}.png"), each))]);
+        Load(name, description, [.. Enumerable.Repeat(each, frames)]);
+
+    private static AppIconAnimation Load(string name, string description, IReadOnlyList<TimeSpan> durations) =>
+        new(name, description, [.. durations.Select((duration, i) => new AppIconFrame(Read($"{name}-{i}.png"), duration))]);
 
     private static byte[] Read(string file)
     {

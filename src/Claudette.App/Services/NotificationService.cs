@@ -37,6 +37,7 @@ public sealed class NotificationService : IDisposable
     private readonly Dictionary<string, NotificationTarget> _shown = new(StringComparer.Ordinal);
     private IAppBadge _badge = NullNotifier.Instance;
     private int _tabsNeedingInput;
+    private int _tabsLimited;
     private int _tabsWorking;
     private int _badgeShown = -1;
     private bool _flashing;
@@ -146,10 +147,11 @@ public sealed class NotificationService : IDisposable
     }
 
     /// <summary>
-    /// The number of tabs with a waiting prompt, question or plan, and of tabs working. When more tabs need input while
-    /// Claudette isn't in front, the taskbar button flashes, if that notification is on.
+    /// The number of tabs with a waiting prompt, question or plan, of tabs a usage limit stopped that wait for it to
+    /// reset, and of tabs working. When more tabs need input while Claudette isn't in front, the taskbar button flashes,
+    /// if that notification is on.
     /// </summary>
-    public void SetTabActivity(int needingInput, int working)
+    public void SetTabActivity(int needingInput, int limited, int working)
     {
         if (needingInput > _tabsNeedingInput && !IsAppActive && IsEnabled(NotificationKind.NeedsInput))
         {
@@ -160,6 +162,7 @@ public sealed class NotificationService : IDisposable
             SetFlashing(false);
         }
         _tabsNeedingInput = needingInput;
+        _tabsLimited = limited;
         _tabsWorking = working;
         UpdateBadge();
     }
@@ -176,11 +179,15 @@ public sealed class NotificationService : IDisposable
             _badgeShown = count;
             _badge.SetCount(count);
         }
+        // A tab needing input comes first. Then a usage limit, over other tabs working: it stopped a task, and the
+        // rest are likely to run into it too.
         Animate(!settings.AnimateIcon ? null : _badge.Surface switch
         {
-            // The overlay shows the count or the spark, and the count matters more.
-            AppIconSurface.Overlay => count == 0 && _tabsWorking > 0 ? AppIconAnimations.Spark : null,
-            AppIconSurface.Icon => _tabsNeedingInput > 0 ? AppIconAnimations.Waving : _tabsWorking > 0 ? AppIconAnimations.Typing : null,
+            AppIconSurface.Overlay when count > 0 => null,
+            AppIconSurface.Overlay => _tabsLimited > 0 ? AppIconAnimations.Hourglass : _tabsWorking > 0 ? AppIconAnimations.Spark : null,
+            AppIconSurface.Icon => _tabsNeedingInput > 0 ? AppIconAnimations.Waving
+                : _tabsLimited > 0 ? AppIconAnimations.Waiting
+                : _tabsWorking > 0 ? AppIconAnimations.Typing : null,
             _ => null,
         });
     }

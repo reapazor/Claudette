@@ -695,8 +695,8 @@
             <views:AgentDetails Grid.Row="3" IsVisible="{Binding HasAgents}" />
           </Grid>
 
-          <!-- Project (DESIGN.md §18, "Project tools"): the project's details, its actions, and the selected run's log: the
-               newest, or the one clicked in the sidebar -->
+          <!-- Project (DESIGN.md §18, "Project tools"): the project's details and the selected run's log: the newest, or the
+               one clicked in the sidebar. The actions are in the project's menu at the sidebar's foot. -->
           <DockPanel x:Name="ProjectPage" IsVisible="{Binding IsProjectPage}">
             <StackPanel DockPanel.Dock="Top" Margin="12,0,12,6" Spacing="8">
               <TextBlock Text="{Binding ProjectHeaderTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
@@ -714,19 +714,6 @@
                       <TextBlock Classes="muted small" Text="{Binding Label}" />
                       <SelectableTextBlock Grid.Column="1" Classes="small" Text="{Binding Value}" TextWrapping="Wrap" />
                     </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <ItemsControl ItemsSource="{Binding ProjectActions}">
-                <ItemsControl.ItemsPanel>
-                  <ItemsPanelTemplate>
-                    <WrapPanel ItemSpacing="6" LineSpacing="6" />
-                  </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate DataType="tools:ProjectAction">
-                    <Button Content="{Binding Label}" IsEnabled="{Binding IsEnabled}" ToolTip.Tip="{Binding Tip}" ToolTip.ShowOnDisabled="True"
-                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RunProjectActionCommand}" CommandParameter="{Binding}" />
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
