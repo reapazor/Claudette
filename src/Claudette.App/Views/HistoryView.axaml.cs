@@ -26,5 +26,11 @@ public partial class HistoryView : UserControl
             history.CloseCommand.Execute(null);
             e.Handled = true;
         }
+        else if (e.Key == Key.Enter && e.Source == SearchBox && DataContext is HistoryViewModel searching && searching.SearchRepliesCommand.CanExecute(null))
+        {
+            // Enter in the search box looks through Claude's replies too (DESIGN.md §9, "History").
+            searching.SearchRepliesCommand.Execute(null);
+            e.Handled = true;
+        }
     }
 }

@@ -920,6 +920,7 @@ A tab starts in auto mode, like a Claude Code session in a terminal or VS Code, 
 
 - **History** (`Ctrl/Cmd+Shift+H`, or from the new tab menu) lists past sessions, grouped by folder. Each entry shows the name/title, the machine it was last used on, last activity time, first prompt and message count.
 - Search by title, folder and prompt text: every prompt of a session, not just the first (up to about 1,000 characters of each and 16,000 per session, kept in History's cache).
+- **Search Claude's replies too** (a button under the results, or Enter in the search box) looks through the replies of the sessions the search didn't match. Replies aren't kept in the cache, so it reads each transcript then, off the UI thread, skipping lines cheaply as the scan does; sessions appear as they're found. A session matches when every word is in its title, prompts, folder or Claude's replies (subagents' and tool calls don't count), and shows the start of the reply that matched, around the word. Typing again, or **Refresh**, drops those results.
 - Opening an entry resumes that session in a new tab. The earlier conversation is loaded into the view so you can scroll back through it. A session that's already open in a tab just selects that tab. The tab syncs if the session came from the library or has a library record ([Which tabs sync](#session-library-sync-across-machines)).
 - History combines two sources:
   - Claude Code's own session storage on this machine, so it includes sessions started in the terminal.

@@ -67,6 +67,35 @@ public class LibraryAndHistoryTests
     }
 
     [Fact]
+    public async Task Searching_Claudes_replies_adds_sessions_only_a_reply_matches()
+    {
+        await using var h = new TabTestHarness();
+        h.WriteTranscript("s1", UserLine("s1", "Why does the build fail?", h.WorkFolder), ReplyLine("s1", "Set VULKAN_SDK before you build."));
+        h.WriteTranscript("s2", UserLine("s2", "Add Vulkan support", h.WorkFolder), ReplyLine("s2", "Done."));
+        h.WriteTranscript("s3", UserLine("s3", "Rename the parser", h.WorkFolder), ReplyLine("s3", "Renamed."));
+        h.Shell.OpenHistoryCommand.Execute(null);
+        var history = h.Shell.History!;
+        await TabTestHarness.Eventually(() => !history.IsLoading, "History to load");
+
+        history.Search = "vulkan";
+        Assert.Equal(["s2"], history.Groups.SelectMany(g => g.Entries).Select(e => e.SessionId));
+
+        await history.SearchRepliesCommand.ExecuteAsync(null);
+        await TabTestHarness.Eventually(() => history.Groups.SelectMany(g => g.Entries).Count() == 2, "the reply's session");
+
+        var fromReply = history.Groups.SelectMany(g => g.Entries).Single(e => e.SessionId == "s1");
+        Assert.Equal("Set VULKAN_SDK before you build.", fromReply.MatchedReply);
+        Assert.Null(history.Groups.SelectMany(g => g.Entries).Single(e => e.SessionId == "s2").MatchedReply);
+        Assert.Equal("Found 1 session more in Claude's replies.", history.ReplySearchText);
+
+        // A new search starts again from the prompts.
+        history.Search = "vulkan rename";
+        Assert.Empty(history.Groups);
+        Assert.Null(history.ReplySearchText);
+        Assert.Null(fromReply.MatchedReply);
+    }
+
+    [Fact]
     public async Task A_library_session_from_another_machine_resumes_from_a_local_copy()
     {
         await using var h = new TabTestHarness();
@@ -743,6 +772,14 @@ public class LibraryAndHistoryTests
         };
         await h.Services.Library.Library.SaveAsync(record, source, subagentsDirectory: null);
     }
+
+    private static string ReplyLine(string sessionId, string text) => new JsonObject
+    {
+        ["type"] = "assistant",
+        ["message"] = new JsonObject { ["role"] = "assistant", ["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text }) },
+        ["sessionId"] = sessionId,
+        ["timestamp"] = "2026-09-28T10:01:00Z",
+    }.ToJsonString();
 
     private static string UserLine(string sessionId, string text, string cwd) => new JsonObject
     {

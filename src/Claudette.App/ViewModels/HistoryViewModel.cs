@@ -50,6 +50,11 @@ public sealed class HistoryEntry
 
     public bool IsOpen { get; set; }
 
+    /// <summary>Where Claude's replies matched the search, when only they did (DESIGN.md §9, "History").</summary>
+    public string? MatchedReply { get; set; }
+
+    public bool HasMatchedReply => MatchedReply is not null;
+
     public bool IsLocal => LocalTranscript is not null;
 
     /// <summary>
@@ -83,14 +88,110 @@ public sealed partial class HistoryViewModel : ViewModelBase
     }
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SearchRepliesCommand))]
     public partial string Search { get; set; } = "";
 
-    partial void OnSearchChanged(string value) => Filter();
+    partial void OnSearchChanged(string value)
+    {
+        // A new search: the replies' matches were for the old one.
+        StopSearchingReplies();
+        Filter();
+    }
+
+    // ---- Search Claude's replies too ----------------------------------------------------------------------------
+
+    private readonly Dictionary<HistoryEntry, string> _replyMatches = [];
+    private CancellationTokenSource? _replySearch;
+
+    /// <summary>Looking through transcripts for <see cref="SearchRepliesCommand"/>.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SearchRepliesCommand))]
+    public partial bool IsSearchingReplies { get; set; }
+
+    /// <summary>"Searching Claude's replies…", then what it found; null before a search.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasReplySearchText))]
+    public partial string? ReplySearchText { get; set; }
+
+    public bool HasReplySearchText => ReplySearchText is not null;
+
+    private bool CanSearchReplies() => !IsSearchingReplies && !IsLoading && Words().Length > 0;
+
+    /// <summary>
+    /// Looks through Claude's replies in the sessions the search didn't match, reading each transcript (History keeps
+    /// only prompts), and adds those whose replies have the words the rest lacks. Results appear as they're found.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanSearchReplies))]
+    private async Task SearchRepliesAsync()
+    {
+        StopSearchingReplies();
+        var words = Words();
+        var candidates = _all
+            .Where(e => !MatchesWithoutReplies(e, words) && (e.LocalTranscript ?? e.LibraryTranscript) is not null)
+            .ToArray();
+        var search = _replySearch = new CancellationTokenSource();
+        IsSearchingReplies = true;
+        ReplySearchText = $"Searching Claude's replies in {Sessions(candidates.Length)}…";
+        try
+        {
+            var found = await Task.Run(() =>
+            {
+                var count = 0;
+                foreach (var entry in candidates)
+                {
+                    search.Token.ThrowIfCancellationRequested();
+                    var known = string.Join('\n', entry.Title, entry.FirstPrompt, entry.Prompts, entry.Folder);
+                    if (ReplySearch.Find((entry.LocalTranscript ?? entry.LibraryTranscript)!, words, known, search.Token) is { } snippet)
+                    {
+                        count++;
+                        _services.Dispatcher.Post(() =>
+                        {
+                            if (!search.IsCancellationRequested)
+                            {
+                                _replyMatches[entry] = snippet;
+                                Filter();
+                            }
+                        });
+                    }
+                }
+                return count;
+            }, search.Token);
+            ReplySearchText = found == 0 ? "Claude's replies in the other sessions don't mention that either." : $"Found {Sessions(found)} more in Claude's replies.";
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(_replySearch, search))
+            {
+                IsSearchingReplies = false;
+            }
+        }
+
+        static string Sessions(int n) => $"{n} session{(n == 1 ? "" : "s")}";
+    }
+
+    private void StopSearchingReplies()
+    {
+        _replySearch?.Cancel();
+        _replySearch = null;
+        IsSearchingReplies = false;
+        ReplySearchText = null;
+        foreach (var entry in _replyMatches.Keys)
+        {
+            entry.MatchedReply = null;
+        }
+        _replyMatches.Clear();
+    }
+
+    private string[] Words() => Search.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
     public ObservableCollection<HistoryGroup> Groups { get; } = [];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
+    [NotifyCanExecuteChangedFor(nameof(SearchRepliesCommand))]
     public partial bool IsLoading { get; set; } = true;
 
     [ObservableProperty]
@@ -117,6 +218,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
 
     private async Task LoadAsync()
     {
+        StopSearchingReplies();
         IsLoading = true;
         Error = null;
         var library = _services.Library;
@@ -227,15 +329,23 @@ public sealed partial class HistoryViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Search by title and prompt text; grouped by folder, most recent first.</summary>
+    /// <summary>
+    /// Search by title, prompt text and folder, plus the sessions <see cref="SearchRepliesCommand"/> found; grouped by
+    /// folder, most recent first.
+    /// </summary>
     private void Filter()
     {
-        var words = Search.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var matches = _all.Where(e => words.All(w =>
-            e.Title.Contains(w, StringComparison.OrdinalIgnoreCase)
-            || (e.FirstPrompt?.Contains(w, StringComparison.OrdinalIgnoreCase) ?? false)
-            || (e.Prompts?.Contains(w, StringComparison.OrdinalIgnoreCase) ?? false)
-            || (e.Folder?.Contains(w, StringComparison.OrdinalIgnoreCase) ?? false)));
+        var words = Words();
+        var matches = _all.Where(e =>
+        {
+            if (MatchesWithoutReplies(e, words))
+            {
+                e.MatchedReply = null;
+                return true;
+            }
+            e.MatchedReply = _replyMatches.GetValueOrDefault(e);
+            return e.MatchedReply is not null;
+        });
         Groups.Clear();
         foreach (var group in matches.GroupBy(e => e.Folder is null ? "" : FolderHistory.Normalize(e.Folder), StringComparer.OrdinalIgnoreCase)
                      .OrderByDescending(g => g.Max(e => e.LastActivity)))
@@ -246,6 +356,12 @@ public sealed partial class HistoryViewModel : ViewModelBase
         }
         OnPropertyChanged(nameof(IsEmpty));
     }
+
+    private static bool MatchesWithoutReplies(HistoryEntry e, string[] words) => words.All(w =>
+        e.Title.Contains(w, StringComparison.OrdinalIgnoreCase)
+        || (e.FirstPrompt?.Contains(w, StringComparison.OrdinalIgnoreCase) ?? false)
+        || (e.Prompts?.Contains(w, StringComparison.OrdinalIgnoreCase) ?? false)
+        || (e.Folder?.Contains(w, StringComparison.OrdinalIgnoreCase) ?? false));
 
     private static string Ago(TimeSpan span) => span switch
     {
