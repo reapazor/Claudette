@@ -465,6 +465,34 @@ items:
     docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkcontrolinterruptresponse
     test: QueuedMessageTests, RealCliTests
     fallback: Read with cancelled from the interrupt receipt. Ids Claudette didn't send are ignored, as the SDK says to.
+  - id: "gitOperation"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/GitChips.cs, src/Claudette.App/Conversation/ConversationItems.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
+    fallback: commit (sha, kind, branch), push (branch), branch (ref, action) and pr (number, url, action) become chips on the Bash card; an unknown action names the pull request plainly, and only an http(s) url is a link. Without it the card shows the output, as before.
+  - id: "timedOutAfterMs"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationItems.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
+    fallback: The Bash card's summary says the command reached its time limit and carries on in the background. Without it the summary is the output's first line.
+  - id: "backgroundTaskId"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationItems.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ConversationBuilderTests
+    fallback: With backgroundedByUser, the Bash card's summary says it runs in the background, or was moved there. Without it the summary is the output's first line.
+  - id: "dangerouslyDisableSandbox"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/PromptItems.cs
+    docs: https://code.claude.com/docs/en/sandboxing
+    test: PromptTests
+    fallback: True on a Bash permission request's input adds a warning to the card. Without it nothing is said, as before.
   - id: "mcp_authenticate"
     kind: control
     status: undocumented

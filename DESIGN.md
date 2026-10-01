@@ -375,7 +375,7 @@ The conversation is drawn from Claude Code's structured output stream, not from 
 | Thinking | Collapsed "Thinking…" row; click to expand. |
 | Tool call | Compact card: tool icon, name and a one-line summary (file path, command, search pattern). Expand to see full input and output; an output over 20,000 characters shows its start, with **Show all (n KB)**. |
 | Edit / Write | Card shows `+added −removed`; expand for an inline diff, or **Open diff** to see the file in the diff view ([§8](#8-file-changes--diff-view)): from before Claude's first change in this session to the file now, as Changed files shows it. |
-| Bash | Shows the command; output is collapsed and uses a monospace font. |
+| Bash | Shows the command; output is collapsed and uses a monospace font. What git did shows as chips under it, from the result's `gitOperation`: *"Committed 1a2b3c4 on main"*, *"Pushed main"*, *"Rebased onto origin/main"*, *"Opened PR #42"* (a link to the pull request). A command that reached its time limit says so and that it carries on in the background (`timedOutAfterMs`), and one in the background says *"Running in the background"* or *"Moved to the background"* (`backgroundTaskId`, `backgroundedByUser`). |
 | Subagent (Task) | Nested, collapsible group holding that agent's text and tool calls, with its result line (its report). A background subagent's group stays running until it finishes. The agent map shows every subagent as a tree ([§18](#agent-map)). |
 | To-do list | Pinned checklist at the top of the conversation while it exists. |
 | Permission prompt | Inline card with buttons. See [§7](#7-permission-prompts). |
@@ -850,7 +850,7 @@ The plan's limits are the account's, so every machine signed in to it sees the s
 ## 7. Permission Prompts
 
 - When Claude Code needs permission to use a tool, the tab shows an inline card with:
-  - The tool and its input (the command, file path, or a diff preview for edits).
+  - The tool and its input (the command, file path, or a diff preview for edits). A command that asks to run outside the sandbox (`dangerouslyDisableSandbox`) says so in the warning color: it would have the file and network access the sandbox keeps from it.
   - Buttons: **Allow**, **Always allow** and **Deny**. Deny has an optional message telling Claude what to do instead.
   - **Always allow** saves an allow rule for that tool and input pattern (for example `Bash(dotnet test:*)`) to the project's `.claude/settings.local.json`. That is Claude Code's personal, uncommitted project settings file, so the rule also applies to terminal sessions in that folder. The rule is sent as part of the permission reply, and Claude Code writes the file itself.
   - The **Always allow** button has a menu with **Allow for this session only**, which doesn't save anything.
@@ -1486,7 +1486,7 @@ Confirmed against Claude Code 2.1.284 with the mock Messages API (2026-09-29):
 **Tool results.** The `user` message that carries a tool result also has a `tool_use_result` field with structured details:
 
 - Edit and Write: `originalFile`, `structuredPatch`, `oldString` / `newString`. Transcripts keep `originalFile` only up to 10,000 characters ([§8](#8-file-changes--diff-view), "Large files in transcripts").
-- Bash: `stdout`, `stderr`, `interrupted`.
+- Bash: `stdout`, `stderr`, `interrupted`, and `gitOperation`, `timedOutAfterMs`, `backgroundTaskId` and `backgroundedByUser` for the card's chips and summary ([§5](#5-conversation-view)).
 
 The conversation view and diff view use these instead of parsing the tool result text.
 

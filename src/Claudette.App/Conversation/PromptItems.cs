@@ -117,6 +117,7 @@ public sealed partial class PermissionItem : PromptItem
             _ => $"Allow {name}?",
         };
         Command = request.ToolName == "Bash" ? Str(input, "command") : null;
+        IsUnsandboxed = request.ToolName == "Bash" && input["dangerouslyDisableSandbox"] is JsonValue unsandboxed && unsandboxed.GetValueKind() == JsonValueKind.True;
         Detail = Command is not null ? null : ToolUseItem.Summarize(request.ToolName, input) is { Length: > 0 } summary ? summary : null;
         Description = request.Description is { } description && description != Detail && description != Path.GetFileName(path ?? "") ? description : null;
         Reason = request.DecisionReason;
@@ -145,6 +146,12 @@ public sealed partial class PermissionItem : PromptItem
     public string? Command { get; }
 
     public bool HasCommand => Command is not null;
+
+    /// <summary>
+    /// The command asks to run outside the sandbox (<c>dangerouslyDisableSandbox</c>), with the file and network access
+    /// the sandbox would have kept from it (DESIGN.md §7).
+    /// </summary>
+    public bool IsUnsandboxed { get; }
 
     /// <summary>The file path, URL or other one-line summary of the input.</summary>
     public string? Detail { get; }

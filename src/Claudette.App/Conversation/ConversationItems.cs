@@ -380,9 +380,8 @@ public partial class ToolUseItem : ConversationItem
                 var stdout = Str(result, "stdout") ?? "";
                 var stderr = Str(result, "stderr") ?? "";
                 Output = string.Join('\n', new[] { stdout, stderr }.Where(s => s.Length > 0));
-                ResultSummary = result["interrupted"] is JsonValue interrupted && interrupted.GetValueKind() == JsonValueKind.True
-                    ? "Interrupted"
-                    : FirstLine(Output) ?? FirstLine(text);
+                ResultSummary = BashSummary(result) ?? FirstLine(Output) ?? FirstLine(text);
+                GitChips = Conversation.GitChips.From(result.GetObject("gitOperation"));
                 OnPropertyChanged(nameof(CanExpand));
                 return;
             }
@@ -393,6 +392,27 @@ public partial class ToolUseItem : ConversationItem
             Output = text;
         }
         OnPropertyChanged(nameof(CanExpand));
+    }
+
+    /// <summary>What git did, read from a Bash result's <c>gitOperation</c>: "Committed 1a2b3c4 on main", "Opened PR #42".</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasGitChips))]
+    public partial IReadOnlyList<GitChip> GitChips { get; private set; } = [];
+
+    public bool HasGitChips => GitChips.Count > 0;
+
+    /// <summary>How a Bash command ended, when its result says more than its output's first line (DESIGN.md §5).</summary>
+    private static string? BashSummary(JsonObject result)
+    {
+        if (result.GetDouble("timedOutAfterMs") is { } timedOut)
+        {
+            return $"Reached its {ViewModels.WorkingLine.Elapsed(TimeSpan.FromMilliseconds(timedOut))} time limit; carries on in the background";
+        }
+        if (result.GetString("backgroundTaskId") is not null)
+        {
+            return result.GetBool("backgroundedByUser") == true ? "Moved to the background" : "Running in the background";
+        }
+        return result.GetBool("interrupted") == true ? "Interrupted" : null;
     }
 
     /// <summary>The most telling input field, such as the file path or command.</summary>

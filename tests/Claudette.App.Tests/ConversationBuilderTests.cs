@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Collections.ObjectModel;
 using Claudette.App.Conversation;
 using Claudette.Core.Protocol;
@@ -44,6 +45,46 @@ public class ConversationBuilderTests
             ("Switched to Sonnet: the context window is now 200K tokens.", NoteKind.Warning),
             ("A tip.", NoteKind.Info),
         ], notes);
+    }
+
+    [Fact]
+    public void A_bash_card_says_what_git_did_and_how_the_command_ended()
+    {
+        string Result(string id, JsonObject toolUseResult) => new JsonObject
+        {
+            ["type"] = "user",
+            ["message"] = new JsonObject { ["role"] = "user", ["content"] = new JsonArray(new JsonObject { ["type"] = "tool_result", ["tool_use_id"] = id, ["content"] = "done" }) },
+            ["tool_use_result"] = toolUseResult,
+        }.ToJsonString();
+        Apply("""{"type":"assistant","message":{"content":[{"type":"tool_use","id":"b1","name":"Bash","input":{"command":"git commit -am fix && git push && gh pr create"}},{"type":"tool_use","id":"b2","name":"Bash","input":{"command":"npm test"}},{"type":"tool_use","id":"b3","name":"Bash","input":{"command":"npm run dev","run_in_background":true}}]}}""");
+
+        // As the Agent SDK documents Bash's output.
+        Apply(Result("b1", JsonNode.Parse("""
+            {"stdout":"[main 1a2b3c4] fix","stderr":"","interrupted":false,
+             "gitOperation":{"commit":{"sha":"1a2b3c4d5e6f","kind":"committed","branch":"main"},"push":{"branch":"main"},
+                             "branch":{"ref":"origin/main","action":"rebased"},"pr":{"number":42,"url":"https://github.com/o/r/pull/42","action":"created"}}}
+            """)!.AsObject()));
+        Apply(Result("b2", new JsonObject { ["stdout"] = "", ["stderr"] = "", ["interrupted"] = false, ["backgroundTaskId"] = "bash_1", ["timedOutAfterMs"] = 120000 }));
+        Apply(Result("b3", new JsonObject { ["stdout"] = "", ["stderr"] = "", ["interrupted"] = false, ["backgroundTaskId"] = "bash_2" }));
+
+        var cards = _items.OfType<ToolUseItem>().ToList();
+        Assert.Equal(["Committed 1a2b3c4 on main", "Pushed main", "Rebased onto origin/main", "Opened PR #42"], cards[0].GitChips.Select(c => c.Text));
+        Assert.Equal("https://github.com/o/r/pull/42", cards[0].GitChips[^1].Url);
+        Assert.Equal("Reached its 2m 00s time limit; carries on in the background", cards[1].ResultSummary);
+        Assert.Empty(cards[1].GitChips);
+        Assert.Equal("Running in the background", cards[2].ResultSummary);
+    }
+
+    [Fact]
+    public void Git_chips_name_only_what_they_know_and_link_only_to_web_addresses()
+    {
+        var chips = GitChips.From(JsonNode.Parse("""
+            {"commit":{"sha":"abc","kind":"amended"},"pr":{"number":7,"url":"javascript:alert(1)","action":"something-new"},"push":{}}
+            """)!.AsObject());
+
+        Assert.Equal(["Amended abc", "PR #7"], chips.Select(c => c.Text));
+        Assert.Null(chips[1].Url);
+        Assert.Empty(GitChips.From(null));
     }
 
     // ---- Rewind and branch points (DESIGN.md §5) ------------------------------------------------------------------

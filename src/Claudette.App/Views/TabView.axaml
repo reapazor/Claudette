@@ -460,6 +460,27 @@
         </Grid>
         <TextBlock Classes="muted small mono" Text="{Binding ResultSummary}" Classes.error="{Binding IsError}" TextTrimming="CharacterEllipsis"
                    Margin="22,0,0,0" IsVisible="{Binding HasResultSummary}" />
+        <!-- What git did in a Bash command: a commit, a push, a pull request (DESIGN.md §5) -->
+        <ItemsControl ItemsSource="{Binding GitChips}" Margin="22,4,0,0" IsVisible="{Binding HasGitChips}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel ItemSpacing="6" LineSpacing="4" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="conv:GitChip">
+              <Panel>
+                <Border Classes="chip" IsVisible="{Binding !HasUrl}">
+                  <TextBlock Classes="small" Text="{Binding Text}" />
+                </Border>
+                <Button Classes="flat chip" IsVisible="{Binding HasUrl}" ToolTip.Tip="{Binding Url}"
+                        Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenLinkCommand}" CommandParameter="{Binding Url}">
+                  <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding Text}" TextDecorations="Underline" />
+                </Button>
+              </Panel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
         <!-- Expanded -->
         <StackPanel Spacing="6" Margin="22,2,0,4" IsVisible="{Binding IsExpanded}">
@@ -519,6 +540,8 @@
           <Border Classes="codeblock" IsVisible="{Binding HasCommand}">
             <SelectableTextBlock Classes="mono" Text="{Binding Command, StringFormat='$ {0}'}" TextWrapping="Wrap" />
           </Border>
+          <TextBlock Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding IsUnsandboxed}"
+                     Text="Asks to run outside the sandbox, with the file and network access the sandbox would keep from it." />
           <SelectableTextBlock Classes="mono" Text="{Binding Detail}" TextWrapping="Wrap" IsVisible="{Binding HasDetail}" />
           <Border Classes="codeblock" Padding="0" IsVisible="{Binding HasDiff}">
             <ScrollViewer MaxHeight="240" HorizontalScrollBarVisibility="Auto">

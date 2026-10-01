@@ -73,6 +73,20 @@ public class PromptTests
     }
 
     [Fact]
+    public async Task A_command_asking_to_run_outside_the_sandbox_says_so()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+
+        var prompt = await PromptAsync<PermissionItem>(h, tab, """
+            {"type":"control_request","request_id":"p1","request":{"subtype":"can_use_tool","tool_name":"Bash","tool_use_id":"t1","input":{"command":"curl example.com","dangerouslyDisableSandbox":true}}}
+            """);
+
+        Assert.True(prompt.IsUnsandboxed);
+        Assert.False((await PromptAsync<PermissionItem>(h, tab, BashRequest.Replace("\"p1\"", "\"p2\"", StringComparison.Ordinal))).IsUnsandboxed);
+    }
+
+    [Fact]
     public async Task Allow_for_this_session_only_saves_nothing()
     {
         await using var h = new TabTestHarness();
