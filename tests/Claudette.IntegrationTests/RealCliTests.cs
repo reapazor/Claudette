@@ -399,6 +399,16 @@ public sealed class RealCliTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_refused_start_says_why()
+    {
+        // DESIGN.md §4, "Why it couldn't start": every claude starts with CLAUDE_CODE_STARTUP_FAILURE_RESULTS=1 (checked with 2.1.286).
+        var ex = await Assert.ThrowsAsync<ClaudeSessionExitedException>(() => StartAsync(environment: new() { ["HTTPS_PROXY"] = "not-a-url", ["https_proxy"] = "not-a-url" }));
+
+        Assert.Equal("proxy_invalid", ex.StartupFailure?.Reason);
+        Assert.Contains("https_proxy", ex.StartupFailure!.Errors, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Interrupt_stops_a_streaming_reply()
     {
         await using var session = await StartAsync();

@@ -381,6 +381,37 @@ public class ClaudeSessionTests
     }
 
     [Fact]
+    public async Task A_refused_start_says_why()
+    {
+        // What 2.1.286 writes, with CLAUDE_CODE_STARTUP_FAILURE_RESULTS=1, before exiting instead of answering initialize.
+        _transport.AutoRespond["initialize"] = _ => null;
+        await using var session = new ClaudeSession(_transport, _time);
+        var starting = session.InitializeAsync(TestContext.Current.CancellationToken);
+        await _transport.WaitForSentAsync(m => Type(m) == "control_request");
+        _transport.Emit("""{"type":"result","subtype":"error_during_execution","is_error":true,"num_turns":0,"session_id":"s1","total_cost_usd":0,"errors":["Invalid proxy URL in HTTPS_PROXY: \"not-a-url\" cannot be parsed as a URL.\nFix or unset HTTPS_PROXY and restart Claude Code."],"startup_failure_reason":"proxy_invalid","result_index":0}""");
+        _transport.Exit(1, "Invalid proxy URL in HTTPS_PROXY");
+
+        var ex = await Assert.ThrowsAsync<ClaudeSessionExitedException>(() => starting);
+
+        Assert.Equal("proxy_invalid", ex.StartupFailure!.Reason);
+        Assert.Equal("A proxy setting isn't a complete URL. Fix or unset it, then restart the tab.", ex.Message);
+        Assert.StartsWith("A proxy setting isn't a complete URL. Fix or unset it, then restart the tab.\nClaude Code said: Invalid proxy URL in HTTPS_PROXY", ex.StartupFailure.Message, StringComparison.Ordinal);
+        Assert.Equal(StartupFailureFix.None, ex.StartupFailure.Fix);
+    }
+
+    [Theory]
+    [InlineData("cwd_unavailable", StartupFailureFix.ChooseFolder, "The tab's folder was deleted or moved, or can't be read.")]
+    [InlineData("bypass_root", StartupFailureFix.None, "Bypass permissions mode can't be used while running as root. Choose another permission mode in Tab settings…, then restart the tab.")]
+    [InlineData("something_new", StartupFailureFix.None, "It went wrong")]
+    public void Each_reason_is_explained(string reason, StartupFailureFix fix, string summary)
+    {
+        var failure = new StartupFailure(reason, "It went wrong\nin detail");
+
+        Assert.Equal((fix, summary), (failure.Fix, failure.Summary));
+        Assert.Equal("Claude Code refused to start (something new).", new StartupFailure("something_new", "").Summary);
+    }
+
+    [Fact]
     public async Task Bad_and_unknown_lines_are_skipped_and_counted()
     {
         await using var session = await StartAsync();

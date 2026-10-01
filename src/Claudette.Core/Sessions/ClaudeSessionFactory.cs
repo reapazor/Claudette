@@ -23,13 +23,21 @@ public sealed class ClaudeSessionFactory(
 {
     private readonly ILoggerFactory _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
 
+    private static IReadOnlyDictionary<string, string?> WithStartupFailureResults(IReadOnlyDictionary<string, string?>? overrides)
+    {
+        var merged = overrides is null ? new Dictionary<string, string?>(StringComparer.Ordinal) : new Dictionary<string, string?>(overrides, StringComparer.Ordinal);
+        merged.TryAdd(StartupFailure.ResultsVariable, "1");
+        return merged;
+    }
+
     public async Task<ClaudeSession> StartAsync(ClaudeLaunchOptions options, CancellationToken cancellationToken = default)
     {
         var userEnvironment = environment is null ? null : await environment.GetAsync(cancellationToken).ConfigureAwait(false);
         var spec = new ProcessStartSpec(claudePath, ClaudeArguments.ForStreamingSession(options))
         {
             WorkingDirectory = options.WorkingDirectory,
-            Environment = ClaudeEnvironment.From(userEnvironment, options.EnvironmentOverrides),
+            // A refused start says why in a result, for every reason (DESIGN.md §4, "Why it couldn't start").
+            Environment = ClaudeEnvironment.From(userEnvironment, WithStartupFailureResults(options.EnvironmentOverrides)),
             TrackProcessTree = true,
         };
         // The log first: if it can't be opened, no claude has been started to leave running.

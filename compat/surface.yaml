@@ -409,6 +409,20 @@ items:
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: RealCliTests
     fallback: See control_request. SIGINT also ends a turn (documented in headless mode).
+  - id: "startup_failure_reason"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/StartupFailure.cs, src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#startup_failure_reason
+    test: ClaudeSessionTests, AccountAndSignInTests, RealCliTests
+    fallback: Read from the error_during_execution result written before exiting, with its errors. Each known reason is put in words; an unknown one shows the errors. Without the result, the start error is the last line of the error output, as before.
+  - id: "CLAUDE_CODE_STARTUP_FAILURE_RESULTS"
+    kind: env
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSessionFactory.cs
+    docs: https://code.claude.com/docs/en/env-vars
+    test: RealCliTests
+    fallback: Set to 1 for every claude a tab starts, unless the environment sets it. Without it Claude Code writes the result only for a few reasons.
   - id: "cancel_queued"
     kind: field
     status: documented

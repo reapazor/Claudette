@@ -245,6 +245,32 @@ public class AccountAndSignInTests
         Assert.NotNull(h.Notifier.Last("ProcessError"));
     }
 
+    [Fact]
+    public async Task A_start_Claude_Code_refused_says_why_and_offers_the_fix()
+    {
+        await using var h = new TabTestHarness();
+        h.Factory.StartFailure = new ClaudeSessionExitedException(new TransportExit(1, "--dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons"),
+            new StartupFailure("bypass_root", "--dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons"));
+
+        await h.Shell.OpenFolderAsync(h.WorkFolder);
+        var tab = h.Shell.SelectedTab!;
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Error, "the error");
+
+        Assert.Equal("Bypass permissions mode can't be used while running as root. Choose another permission mode in Tab settings…, then restart the tab.", tab.ErrorMessage);
+        Assert.Equal("Claude Code couldn't start: Bypass permissions mode can't be used while running as root. Choose another permission mode in Tab settings…, then restart the tab.\nClaude Code said: --dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons",
+            InlineDispatcher.Read(() => tab.Items.OfType<NoteItem>().Last().Text));
+        Assert.False(tab.IsFolderMissing);
+        Assert.NotNull(h.Notifier.Last("ProcessError"));
+
+        // A folder Claude Code can't use is the missing folder's case: choose where it is now.
+        h.Factory.StartFailure = new ClaudeSessionExitedException(new TransportExit(1, ""), new StartupFailure("cwd_unavailable", "The working directory is unavailable"));
+        await h.Shell.CloseTabCommand.ExecuteAsync(tab);
+        await h.Shell.OpenFolderAsync(h.WorkFolder);
+        var second = h.Shell.SelectedTab!;
+        await TabTestHarness.Eventually(() => second.IsFolderMissing, "the folder");
+        Assert.Equal(TabStatus.Error, second.Status);
+    }
+
     // ---- The sign-in dialog: control requests ---------------------------------------------------------------------
 
     [Fact]

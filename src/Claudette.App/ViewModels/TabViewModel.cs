@@ -1469,6 +1469,21 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             OnStartFailedForSignIn(ex);
         }
+        catch (ClaudeSessionExitedException exited) when (exited.StartupFailure is { } failure)
+        {
+            // Claude Code said why it refused to start (DESIGN.md §4, "Why it couldn't start").
+            ErrorMessage = failure.Summary;
+            _conversation.AddNote($"Claude Code couldn't start: {failure.Message}", NoteKind.Error);
+            NotifyProcessError($"Claude Code couldn't start: {failure.Summary}");
+            if (failure.Fix == StartupFailureFix.ChooseFolder)
+            {
+                MarkFolderMissing();
+            }
+            else
+            {
+                Status = TabStatus.Error;
+            }
+        }
         catch (Exception ex)
         {
             ErrorMessage = $"Couldn't start Claude Code: {ex.Message}";

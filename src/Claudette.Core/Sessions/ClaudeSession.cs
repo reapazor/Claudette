@@ -9,10 +9,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Claudette.Core.Sessions;
 
 /// <summary>The session's process ended while a request was waiting for it.</summary>
-public sealed class ClaudeSessionExitedException(TransportExit exit)
-    : Exception($"Claude Code exited (code {exit.ExitCode?.ToString() ?? "unknown"}).")
+public sealed class ClaudeSessionExitedException(TransportExit exit, StartupFailure? startupFailure = null)
+    : Exception(startupFailure?.Summary ?? $"Claude Code exited (code {exit.ExitCode?.ToString() ?? "unknown"}).")
 {
     public TransportExit Exit { get; } = exit;
+
+    /// <summary>Why Claude Code refused to start, when it said (DESIGN.md §4, "Why it couldn't start").</summary>
+    public StartupFailure? StartupFailure { get; } = startupFailure;
 }
 
 /// <summary>
@@ -85,6 +88,9 @@ public sealed class ClaudeSession : IAsyncDisposable
     public string? ClaudeCodeVersion { get; private set; }
 
     public IReadOnlyList<string> Capabilities { get; private set; } = [];
+
+    /// <summary>Why Claude Code refused to start, from the result it wrote before exiting; null otherwise.</summary>
+    public StartupFailure? StartupFailure { get; private set; }
 
     /// <summary>The <c>claude</c> process id, for the process monitor (DESIGN.md §4). Null for test transports.</summary>
     public int? ProcessId => _transport.ProcessId;
@@ -357,7 +363,7 @@ public sealed class ClaudeSession : IAsyncDisposable
         }
 
         var exit = await _transport.Completion.ConfigureAwait(false);
-        _control.FailAll(new ClaudeSessionExitedException(exit));
+        _control.FailAll(new ClaudeSessionExitedException(exit, StartupFailure));
         foreach (var request in _pendingPermissions.Values)
         {
             request.Cancel();
@@ -466,6 +472,7 @@ public sealed class ClaudeSession : IAsyncDisposable
 
             case ResultMessage result:
                 SessionId = result.SessionId ?? SessionId;
+                StartupFailure ??= StartupFailure.From(result);
                 Publish(new TurnCompleted(result));
                 SetState(SessionState.Idle);
                 break;
