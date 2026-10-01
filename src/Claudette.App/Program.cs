@@ -30,7 +30,8 @@ internal sealed class Program
         // One Claudette per user and data folder: a second launch hands its arguments over and exits. A build that
         // Claudette restarted into takes over instead: the one that started it has stopped listening.
         var instance = new SingleInstance(paths.DataDirectory);
-        if (LaunchArguments.RestoreNonce(args) is null && instance.TryHandOffAsync(args).GetAwaiter().GetResult())
+        var restoring = LaunchArguments.RestoreNonce(args) is not null;
+        if (!restoring && instance.TryHandOffAsync(args).GetAwaiter().GetResult())
         {
             instance.Dispose();
             return;
@@ -47,7 +48,13 @@ internal sealed class Program
             instance.Dispose();
             return;
         }
-        instance.Listen();
+        // Claim the data folder: another launch may have got past the hand-off above at the same moment. Whichever
+        // claims first runs, and the other hands its arguments to it (DESIGN.md §4).
+        if (!instance.StartAsync(args, takeOver: restoring).GetAwaiter().GetResult())
+        {
+            instance.Dispose();
+            return;
+        }
         Instance = instance;
         try
         {

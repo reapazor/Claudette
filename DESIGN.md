@@ -296,6 +296,9 @@ Using the picker:
 - Choosing any of these opens a new tab in that folder.
 - The lists hold favorites first, then recent folders, up to 10, leaving out folders that no longer exist. Folders with the same name show their parent too (`work/api`), as tab groups do.
 - **One Claudette at a time.** A launch while Claudette is running (from the jump list, or by opening the app again) passes its arguments to the running one over a named pipe and exits. The running one comes to the front, and opens a tab if a folder was given. A development copy with its own `CLAUDETTE_HOME` counts as a separate instance.
+  - The running one holds a lock on `instance.lock` in the data folder, so two launches at the same moment can't both start: the one that doesn't get the lock hands its arguments to the one that did, waiting up to 10 seconds for it to listen. If it never does, the launch starts anyway rather than do nothing. The lock ends with the process, so a crash never leaves it held.
+  - Only the same user's Claudette is handed arguments, and only the same user's launches are read (`CurrentUserOnly` on both ends).
+  - A restart into a new build or version (§9, §2) lets go of the lock as it stops listening; the new one waits for the lock and hands nothing on. If it doesn't start, the old one takes the lock back.
 - The macOS menu bar also has **File → New Tab**, **History…** and **Close Tab**, and the app menu has **Settings…**. Each shows its shortcut from Settings → Keyboard ([§14](#keyboard-shortcuts)).
 
 ### Process monitor
