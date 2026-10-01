@@ -205,18 +205,39 @@ public class ConversationBuilderTests
     {
         _builder.Apply(new ThinkingDelta("a", null));
         var thinking = Assert.IsType<ThinkingItem>(_items[0]);
-        var changes = 0;
-        thinking.PropertyChanged += (_, e) => changes += e.PropertyName == nameof(ThinkingItem.Text) ? 1 : 0;
+        var (changes, shown) = (0, 0);
+        thinking.PropertyChanged += (_, e) =>
+        {
+            changes += e.PropertyName == nameof(ThinkingItem.Text) ? 1 : 0;
+            shown += e.PropertyName == nameof(ThinkingItem.ShownText) ? 1 : 0;
+        };
 
         for (var i = 0; i < 2000; i++)
         {
             _builder.Apply(new ThinkingDelta("bc", null));
         }
 
-        Assert.Equal(2000, changes);
+        // Collapsed, the view has nothing to show; the text is said to change as it grows by an eighth, not every piece.
+        Assert.Equal(0, shown);
+        Assert.Null(thinking.ShownText);
+        Assert.InRange(changes, 5, 40);
         Assert.Equal(4001, thinking.Text.Length);
         Assert.Same(thinking.Text, thinking.Text);
         Assert.True(thinking.HasText);
+
+        // Expanded, it shows all of it so far, and grows from there.
+        thinking.IsExpanded = true;
+        Assert.Equal(1, shown);
+        Assert.Equal(4001, thinking.ShownText!.Length);
+        for (var i = 0; i < 1000; i++)
+        {
+            _builder.Apply(new ThinkingDelta("de", null));
+        }
+        Assert.InRange(shown, 2, 10);
+        // Once it's done, the view has every last piece.
+        Apply("""{"type":"assistant","message":{"content":[{"type":"text","text":"Done"}]}}""");
+        Assert.False(thinking.IsStreaming);
+        Assert.Equal(6001, thinking.ShownText!.Length);
     }
 
     [Fact]

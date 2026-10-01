@@ -379,7 +379,7 @@
           </StackPanel>
         </Button>
         <SelectableTextBlock Classes="muted" FontStyle="Italic" TextWrapping="Wrap" Margin="22,0,0,4"
-                             Text="{Binding Text}" IsVisible="{Binding IsExpanded}" />
+                             Text="{Binding ShownText}" IsVisible="{Binding IsExpanded}" />
       </StackPanel>
     </DataTemplate>
 

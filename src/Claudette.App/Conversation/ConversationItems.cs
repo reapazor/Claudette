@@ -143,9 +143,12 @@ public sealed partial class ThinkingItem : ConversationItem
     private readonly System.Text.StringBuilder _text = new();
     private string? _textAsString = "";
 
+    /// <summary>How long <see cref="ShownText"/> was when the view was last told it changed.</summary>
+    private int _shownLength;
+
     /// <summary>
-    /// The thinking so far. It streams in small pieces, so it's kept in a builder and made into a string only when read
-    /// (by the view, while the row is expanded), rather than copied whole for every piece.
+    /// The thinking so far. It streams in small pieces, so it's kept in a builder and made into a string only when read,
+    /// rather than copied whole for every piece.
     /// </summary>
     public string Text
     {
@@ -153,7 +156,7 @@ public sealed partial class ThinkingItem : ConversationItem
         set
         {
             _text.Clear().Append(value);
-            TextChanged();
+            TextChanged(force: true);
         }
     }
 
@@ -162,22 +165,52 @@ public sealed partial class ThinkingItem : ConversationItem
         if (text.Length > 0)
         {
             _text.Append(text);
-            TextChanged();
+            TextChanged(force: false);
         }
     }
 
-    private void TextChanged()
+    /// <summary>
+    /// What the view shows: the text while the row is expanded, else nothing, so collapsed thinking is never made into a
+    /// string. While it streams in, the view hears of it as it grows by an eighth (at least 256 characters) rather than
+    /// with every piece, and all of it once it's done.
+    /// </summary>
+    public string? ShownText => IsExpanded ? Text : null;
+
+    private void TextChanged(bool force)
     {
         _textAsString = null;
+        if (HasText != _saidHasText)
+        {
+            _saidHasText = HasText;
+            OnPropertyChanged(nameof(HasText));
+        }
+        if (force || _shownLength == 0 || _text.Length - _shownLength >= Math.Max(256, _shownLength / 8))
+        {
+            ShowText();
+        }
+    }
+
+    private bool _saidHasText;
+
+    private void ShowText()
+    {
+        _shownLength = _text.Length;
         OnPropertyChanged(nameof(Text));
-        OnPropertyChanged(nameof(HasText));
+        if (IsExpanded)
+        {
+            OnPropertyChanged(nameof(ShownText));
+        }
     }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Header))]
     public partial bool IsStreaming { get; set; } = true;
 
+    // All of it, once it's done.
+    partial void OnIsStreamingChanged(bool value) => ShowText();
+
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShownText))]
     public partial bool IsExpanded { get; set; }
 
     public bool HasText => _text.Length > 0;

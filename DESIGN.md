@@ -158,7 +158,7 @@ Settings → Appearance → **Style** picks one of two looks, in light and dark 
 - A dense, calm layout that follows the OS light or dark theme, with neutral greys and the OS's accent color for selection, meters and checked boxes.
 - Tool calls are compact one-line rows with a small status dot (running, done, failed), expandable for detail, not heavy cards. A row's summary is cut to fit; hovering it shows it in full (a whole command, with its line breaks, or a file's whole path).
 - Diffs are inline, in red and green.
-- Thinking is a collapsed row.
+- Thinking is a collapsed row. Collapsed, its text isn't laid out at all; expanded while it streams in, it grows in steps (each an eighth longer) rather than with every piece, and shows all of it once it's done.
 - User prompts sit in a subtle bordered box rather than a chat bubble.
 - The composer is a rounded box with the mode and model controls beside it, and a square Stop button.
 - Inline code and code blocks use VS Code's Light+ and Dark+ colors. They change with the theme, as the diff view's do, including in code already shown and in a diff view that's open.
