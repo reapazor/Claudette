@@ -98,8 +98,11 @@ The backlog is the open GitHub issues on `reapazor/Claudette` assigned to `reapa
 dotnet build Claudette.slnx
 dotnet test Claudette.slnx --filter "Category!=Live"                  # everything free (RealCli skips without Claude Code)
 dotnet test Claudette.slnx --filter "Category!=RealCli&Category!=Live" # no Claude Code needed
+dotnet test Claudette.slnx --filter "Category!=Live" --collect "Code Coverage;Format=cobertura" --results-directory TestResults  # coverage, locally only (not in CI)
 dotnet run --project src/Claudette.App -- --folder <path>             # uses your real account: messages cost usage
 ```
+
+Each project has a `packages.lock.json`, and CI restores in locked mode: after changing a package, restore and commit the lock files with it.
 
 `global.json` pins the .NET SDK (10.0.400, or a later 10.0.4xx). If `dotnet` says it isn't found, don't work around it and don't change `global.json`:
 

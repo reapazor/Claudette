@@ -1560,8 +1560,11 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
 - xUnit v3, Avalonia.Headless.XUnit, Verify (snapshot testing, `Verify.XunitV3`) and Microsoft.Extensions.TimeProvider.Testing (`FakeTimeProvider`). xunit.v3 stays on 3.2.x until Avalonia.Headless.XUnit supports 4.x, and so Verify.XunitV3 stays on 32.0.x, the last built against it.
 - GitHub Actions (`.github/workflows/ci.yml`):
   - A build-and-test job on Windows, macOS and Linux runs everything except `RealCli` and `Live`, for every push and pull request.
-  - A second Linux job installs Claude Code and runs the `RealCli` tests.
-  - A test that hangs fails its job after 10 minutes, naming the test (`--blame-hang-timeout`), and no job runs longer than 30 minutes.
+  - A second Linux job installs Claude Code, at `lastTested` from `compat/surface.yaml` so a new release can't turn a pull request red, and runs every `RealCli` test in the solution. The daily compatibility check tries new releases and the minimum version ([§16](#daily-compatibility-check)).
+  - A test that hangs fails its job after 10 minutes, naming the test (`--blame-hang-timeout`), and no job runs longer than 30 minutes. A newer push to a pull request cancels its running checks.
+  - Packages are restored exactly as each project's `packages.lock.json` says (`--locked-mode`), and cached by those files. A package change updates the lock files when restored locally; commit them with it.
+  - Each job's summary page lists its test counts per assembly and its failures. A failed job keeps its test results, the blame files naming a hung test, and any changed view's `*.received.txt` as an artifact for a week.
+  - Coverage isn't measured in CI, to keep its minutes down; run it locally (`CLAUDE.md`, "Commands").
 
 ### Where things are
 
