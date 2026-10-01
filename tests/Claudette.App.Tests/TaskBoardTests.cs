@@ -28,6 +28,20 @@ public class TaskBoardTests
     }
 
     [Fact]
+    public void An_error_result_which_is_only_text_changes_nothing()
+    {
+        _list.ApplyToolUse("t1", "TaskCreate", new JsonObject { ["subject"] = "Write tests" });
+
+        // Claude Code gives a failed call's details as its error text.
+        _list.ApplyToolResult("t1", "<tool_use_error>No such task</tool_use_error>", JsonValue.Create("Error: No such task"));
+        _list.ApplyToolResult("t2", "Error", JsonValue.Create("Error"));
+        _list.ApplyToolResult("t3", "", new JsonObject { ["task"] = "not an object" });
+
+        var item = Assert.Single(_list.Items);
+        Assert.Null(item.Id);
+    }
+
+    [Fact]
     public void A_restored_tab_dates_its_tasks_by_the_transcript_not_the_restore()
     {
         var builder = new ConversationBuilder([], _list) { Time = _time };

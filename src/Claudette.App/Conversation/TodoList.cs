@@ -240,9 +240,11 @@ public sealed partial class TodoList : ObservableObject
     /// A <c>TaskCreate</c> result carries the new task's id, which later <c>TaskUpdate</c> calls use. A <c>TaskList</c>
     /// result is the whole list as Claude Code has it: it fills in what the calls didn't show.
     /// </summary>
+    /// <param name="toolUseResult">The result's details; an error's is just its text, a string.</param>
     public void ApplyToolResult(string toolUseId, string resultText, JsonNode? toolUseResult)
     {
-        if (toolUseResult?["tasks"] is JsonArray listed)
+        var details = toolUseResult as JsonObject;
+        if (details?["tasks"] is JsonArray listed)
         {
             ApplyTaskList(listed);
             return;
@@ -251,7 +253,7 @@ public sealed partial class TodoList : ObservableObject
         {
             return;
         }
-        item.Id = (toolUseResult?["task"]?["id"] ?? toolUseResult?["taskId"] ?? toolUseResult?["id"]) switch
+        item.Id = ((details?["task"] as JsonObject)?["id"] ?? details?["taskId"] ?? details?["id"]) switch
         {
             JsonValue v when v.GetValueKind() == JsonValueKind.String => v.GetValue<string>(),
             JsonValue v when v.GetValueKind() == JsonValueKind.Number => v.ToJsonString(),
