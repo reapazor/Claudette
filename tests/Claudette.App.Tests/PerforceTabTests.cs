@@ -171,7 +171,8 @@ public class PerforceTabTests
         EmitBash(h, "b1", "p4 sync //depot/...", "Your session has expired, please login again.", isError: true);
         await TabTestHarness.Eventually(() => h.Transport.SentUserTexts.Contains(TabViewModel.PerforceRetryMessage), "the retry message");
         EmitBash(h, "b2", "p4 sync //depot/...", "Your session has expired, please login again.", isError: true);
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await Waiting.NeverAsync(() => p4.Logins.Count > 1 || h.Transport.SentUserTexts.Count(t => t == TabViewModel.PerforceRetryMessage) > 1,
+            "a second login or retry message");
 
         Assert.Single(p4.Logins);
         Assert.Single(h.Transport.SentUserTexts, t => t == TabViewModel.PerforceRetryMessage);

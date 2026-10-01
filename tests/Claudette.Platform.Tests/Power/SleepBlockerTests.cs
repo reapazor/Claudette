@@ -117,8 +117,7 @@ public class SleepBlockerTests
         var blocker = new ProcessSleepBlocker(new ProcessLauncher(), new ProcessStartSpec("sleep", ["30"]), "sleep");
 
         blocker.SetBlocking(true);
-        await Task.Delay(200, TestContext.Current.CancellationToken);
-        Assert.True(blocker.IsBlocking);
+        await Waiting.NeverAsync(() => !blocker.IsBlocking, "the helper stopped by itself");
 
         blocker.SetBlocking(false);
         Assert.False(blocker.IsBlocking);
@@ -153,9 +152,8 @@ public class SleepBlockerTests
         using var blocker = ProcessSleepBlocker.Caffeinate(new ProcessLauncher(), Environment.ProcessId);
 
         blocker.SetBlocking(true);
-        await Task.Delay(300, TestContext.Current.CancellationToken);
+        await Waiting.NeverAsync(() => !blocker.IsBlocking, $"caffeinate stopped: {blocker.Describe()}", TimeSpan.FromMilliseconds(300));
 
-        Assert.True(blocker.IsBlocking, blocker.Describe());
         blocker.SetBlocking(false);
         Assert.False(blocker.IsBlocking);
     }
@@ -175,14 +173,7 @@ public class SleepBlockerTests
         await Eventually(() => !blocker.IsBlocking);
     }
 
-    private static async Task Eventually(Func<bool> condition)
-    {
-        for (var i = 0; i < 500 && !condition(); i++)
-        {
-            await Task.Delay(10, TestContext.Current.CancellationToken);
-        }
-        Assert.True(condition(), "Timed out.");
-    }
+    private static Task Eventually(Func<bool> condition) => Waiting.UntilAsync(condition);
 
     private sealed class Probe(string? systemdInhibit) : IFileProbe
     {

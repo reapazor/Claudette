@@ -252,7 +252,8 @@ public sealed class MacAppInstallerTests : IDisposable
         }
     }
 
-    private async Task<(int ExitCode, string Log)> RunHelperAsync(int readyTicks)
+    /// <param name="launches">How many launches the log should hold once the helper is done.</param>
+    private async Task<(int ExitCode, string Log)> RunHelperAsync(int readyTicks, int launches)
     {
         var script = Path.Combine(Updates, "update-helper.sh");
         File.WriteAllText(script, MacAppInstaller.HelperScript());
@@ -267,10 +268,11 @@ public sealed class MacAppInstallerTests : IDisposable
         using var helper = Process.Start(start)!;
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         await helper.WaitForExitAsync(timeout.Token);
-        // Let the last launch write its line.
-        await Task.Delay(300, TestContext.Current.CancellationToken);
+        // The last launch may still be writing its line.
         var log = Path.Combine(_root, "launches.log");
-        return (helper.ExitCode, File.Exists(log) ? File.ReadAllText(log) : "");
+        string Read() => File.Exists(log) ? File.ReadAllText(log) : "";
+        await Waiting.UntilAsync(() => Read().Count(c => c == '\n') >= launches, $"{launches} launches");
+        return (helper.ExitCode, Read());
     }
 
     [Fact]
@@ -281,7 +283,7 @@ public sealed class MacAppInstallerTests : IDisposable
         MakeExecutable(App, "old", signalsReady: true);
         MakeExecutable(Staged, "new", signalsReady: true);
 
-        var (exitCode, log) = await RunHelperAsync(readyTicks: 40);
+        var (exitCode, log) = await RunHelperAsync(readyTicks: 40, launches: 1);
 
         Assert.Equal(0, exitCode);
         Assert.Equal("new --restore n1\n", log);
@@ -298,7 +300,7 @@ public sealed class MacAppInstallerTests : IDisposable
         MakeExecutable(App, "old", signalsReady: true);
         MakeExecutable(Staged, "new", signalsReady: false);
 
-        var (exitCode, log) = await RunHelperAsync(readyTicks: 4);
+        var (exitCode, log) = await RunHelperAsync(readyTicks: 4, launches: 2);
 
         Assert.Equal(1, exitCode);
         Assert.Equal("new --restore n1\nold --restore n1\n", log);

@@ -38,19 +38,8 @@ public static class UiText
     /// Settles the window until <paramref name="condition"/> holds, for content that renders in the background, such as
     /// Markdown, which LiveMarkdown parses off the UI thread.
     /// </summary>
-    public static async Task SettleUntilAsync(Window window, Func<bool> condition, string what)
-    {
-        for (var i = 0; i < 100; i++)
-        {
-            Settle(window);
-            if (condition())
-            {
-                return;
-            }
-            await Task.Delay(20);
-        }
-        Assert.Fail($"Timed out waiting for {what} to render.");
-    }
+    public static Task SettleUntilAsync(Window window, Func<bool> condition, string what) =>
+        Waiting.UntilAsync(condition, what, poll: () => Settle(window));
 
     public static string Describe(Visual root, params (string From, string To)[] replacements)
     {

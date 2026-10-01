@@ -369,14 +369,7 @@ public sealed class PerforceTicketKeeperTests : IDisposable
         return events;
     }
 
-    private static async Task WaitFor(Func<bool> condition)
-    {
-        for (var i = 0; i < 500 && !condition(); i++)
-        {
-            await Task.Delay(10, TestContext.Current.CancellationToken);
-        }
-        Assert.True(condition(), "Timed out waiting.");
-    }
+    private static Task WaitFor(Func<bool> condition) => Waiting.UntilAsync(condition);
 
     /// <summary>Hands out the given passwords in turn; null is "none" (cancelled, or nothing stored).</summary>
     private sealed class FakePasswords(params string?[] passwords) : IPerforcePasswordProvider

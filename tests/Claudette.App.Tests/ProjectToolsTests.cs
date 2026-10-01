@@ -366,8 +366,7 @@ public class ProjectToolsTests
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-and-launch"));
         launcher.Processes.Last().Exit(2);
         await TabTestHarness.Eventually(() => LastRun(tab)!.Failed, "the failed build");
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        Assert.DoesNotContain(launcher.Started, s => s.FileName == editor);
+        await Waiting.NeverAsync(() => launcher.Started.Any(s => s.FileName == editor), "the editor launched after a failed build");
 
         await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-and-launch"));
         launcher.Processes.Last().Exit(0);

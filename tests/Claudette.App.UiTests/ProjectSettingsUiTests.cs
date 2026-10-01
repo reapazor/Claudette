@@ -32,10 +32,9 @@ public class ProjectSettingsUiTests
     private static async Task<TabViewModel> OpenTabAsync(TabTestHarness h, bool project)
     {
         var tab = await h.OpenTabAsync();
-        for (var i = 0; i < 100 && project && tab.Project is null; i++)
+        if (project)
         {
-            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-            await Task.Delay(20);
+            await Waiting.UntilAsync(() => tab.Project is not null, "the project", poll: () => Avalonia.Threading.Dispatcher.UIThread.RunJobs());
         }
         Assert.Equal(project, tab.Project is not null);
         return tab;

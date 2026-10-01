@@ -9,8 +9,10 @@ namespace Claudette.Platform.Tests.Processes;
 
 /// <summary>
 /// Real process trees on the current OS (DESIGN.md §4, Process monitor). Waits here are real time, but only for OS
-/// processes to appear or exit, polled with a short limit.
+/// processes to appear or exit, polled with a short limit. They run on their own (<see cref="RealProcesses"/>): their
+/// CPU measurements and process scans would see other tests' processes and load.
 /// </summary>
+[Collection(nameof(RealProcesses))]
 public sealed class RealProcessTreeTests
 {
     private static readonly TimeSpan WaitLimit = TimeSpan.FromSeconds(5);
@@ -402,3 +404,7 @@ public sealed class RealProcessTreeTests
         }
     }
 }
+
+/// <summary>Tests that measure real processes, run apart from every other test.</summary>
+[CollectionDefinition(nameof(RealProcesses), DisableParallelization = true)]
+public sealed class RealProcesses;

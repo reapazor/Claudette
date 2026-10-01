@@ -77,7 +77,7 @@ public class SingleInstanceTests
 
             var running = Assert.Single(Enumerable.Range(0, 4), n => started[n]);
             Assert.True(instances[running].IsClaimed);
-            await WaitForAsync(() => received.Count == 3);
+            await Waiting.UntilAsync(() => received.Count == 3, "the other launches' arguments");
             Assert.Equal(
                 Enumerable.Range(0, 4).Where(n => n != running).Select(n => $"/work/{n}").Order(),
                 received.Select(args => args[1]).Order());
@@ -152,16 +152,6 @@ public class SingleInstanceTests
     }
 
     private static string NewScope() => Path.Combine(Path.GetTempPath(), $"claudette-instance-{Guid.NewGuid():N}");
-
-    private static async Task WaitForAsync(Func<bool> condition)
-    {
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(10);
-        while (!condition() && DateTimeOffset.UtcNow < deadline)
-        {
-            await Task.Delay(20, TestContext.Current.CancellationToken);
-        }
-        Assert.True(condition());
-    }
 
     /// <summary>The listener starts in the background; give it a moment to be ready.</summary>
     private static async Task<bool> HandOffAsync(SingleInstance instance, string[] args)

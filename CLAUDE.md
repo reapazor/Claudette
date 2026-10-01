@@ -88,7 +88,7 @@ The backlog is the open GitHub issues on `reapazor/Claudette` assigned to `reapa
 - Tests tagged `[Trait("Category", "Live")]` use real tokens. Only run them when asked to. They read `CLAUDETTE_LIVE_API_KEY` (a separate, spend-limited key) and `CLAUDETTE_LIVE_CONFIG_DIR` (a signed-in config folder) and skip without them.
 - Never use a real Perforce server or real Perforce credentials: use `FakeP4` (`tests/Claudette.Core.Tests/Support/`). The macOS Keychain round trip runs only with `CLAUDETTE_TEST_KEYCHAIN=1`.
 - UI snapshots: a changed view writes `*.received.txt` next to its `*.verified.txt` in `tests/Claudette.App.UiTests`. Read the difference; if the change is intended, rename the received file over the verified one. In a UI test, `await Verify(...)` resumes off the UI thread, so make it the last step.
-- Test time-based behavior with `FakeTimeProvider`, not sleeps.
+- Test time-based behavior with `FakeTimeProvider`, not sleeps. To wait for real work (a process, a background thread, rendering), use `Waiting.UntilAsync` (`tests/Shared/`, in every test project) or `TabTestHarness.Eventually`, which go by the clock; never a loop count or a fixed delay. Where something must not happen, wait for the moment it would have; only when nothing marks that moment, use `Waiting.NeverAsync`.
 - Recorded protocol fixtures live in `tests/Claudette.Core.Tests/Fixtures/protocol/<claude-version>/`. Remove paths, emails and account details before checking one in: record them with `ProtocolRecordingTests` (`CLAUDETTE_RECORD_FIXTURES=<folder>`, against the mock) or convert a protocol log with `tools/Claudette.Fixtures`, both of which clean them, then read the result before committing.
 - xunit.v3 stays on 3.2.x until `Avalonia.Headless.XUnit` supports 4.x.
 

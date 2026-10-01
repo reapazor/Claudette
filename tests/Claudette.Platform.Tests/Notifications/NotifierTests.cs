@@ -163,14 +163,7 @@ public class NotifierTests
         return advanced?.GetValue("Start_TrackDocs") is 0;
     }
 
-    private static async Task WaitFor(Func<bool> condition)
-    {
-        for (var i = 0; i < 500 && !condition(); i++)
-        {
-            await Task.Delay(10, TestContext.Current.CancellationToken);
-        }
-        Assert.True(condition());
-    }
+    private static Task WaitFor(Func<bool> condition) => Waiting.UntilAsync(condition);
 
     private sealed class Probe(string? notifySend) : IFileProbe
     {
