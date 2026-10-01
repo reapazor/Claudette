@@ -1,7 +1,7 @@
-using Claudette.Core;
 using System.Collections.ObjectModel;
 using Claudette.App.Conversation;
 using Claudette.App.Services;
+using Claudette.Core;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
 using Claudette.Platform.Processes;

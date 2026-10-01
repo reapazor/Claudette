@@ -1,8 +1,8 @@
-using Claudette.Core;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using Claudette.App.Conversation;
 using Claudette.App.Services;
+using Claudette.Core;
 using Claudette.Core.ProjectTools;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;

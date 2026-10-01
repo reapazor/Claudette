@@ -1,6 +1,6 @@
-using Claudette.Core.Protocol;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Protocol;
 
 namespace Claudette.App.Conversation;
 

@@ -1,7 +1,7 @@
 using Claudette.App.Services;
+using Claudette.Core;
 using Claudette.Core.Accessibility;
 using Claudette.Core.Settings;
-using Claudette.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 

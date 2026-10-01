@@ -1,11 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.App.ViewModels;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Claudette.App.ViewModels;
 using LiveMarkdown.Avalonia;
 
 namespace Claudette.App.Conversation;

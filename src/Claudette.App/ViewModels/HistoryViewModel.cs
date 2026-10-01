@@ -1,6 +1,6 @@
-using Claudette.Core;
 using System.Collections.ObjectModel;
 using Claudette.App.Services;
+using Claudette.Core;
 using Claudette.Core.History;
 using Claudette.Core.Library;
 using Claudette.Core.Settings;

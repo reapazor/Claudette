@@ -1,5 +1,5 @@
-using Claudette.Core;
 using System.Collections.ObjectModel;
+using Claudette.Core;
 using Claudette.Core.Settings;
 using CommunityToolkit.Mvvm.Input;
 

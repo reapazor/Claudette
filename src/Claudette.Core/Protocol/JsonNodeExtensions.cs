@@ -45,7 +45,10 @@ public static class JsonNodeExtensions
     public static long? AsWholeNumber(this JsonNode? node) => node is JsonValue value && value.AsDouble() is { } number ? (long)number : null;
 
     /// <summary>A string, or a number's JSON text (<c>"7"</c> for <c>7</c>): an id that may come either way.</summary>
-    public static string? GetStringOrNumber(this JsonObject obj, string name) => obj[name] switch
+    public static string? GetStringOrNumber(this JsonObject obj, string name) => obj[name].AsStringOrNumber();
+
+    /// <inheritdoc cref="GetStringOrNumber"/>
+    public static string? AsStringOrNumber(this JsonNode? node) => node switch
     {
         JsonValue value when value.GetValueKind() == JsonValueKind.String => value.GetValue<string>(),
         JsonValue value when value.GetValueKind() == JsonValueKind.Number => value.ToJsonString(),

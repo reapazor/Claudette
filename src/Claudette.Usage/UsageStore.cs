@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
-using Claudette.Core.Protocol;
 using Claudette.Core.Json;
+using Claudette.Core.Protocol;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;

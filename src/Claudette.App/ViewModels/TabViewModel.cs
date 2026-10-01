@@ -1,8 +1,8 @@
-using Claudette.Core;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using Claudette.App.Conversation;
 using Claudette.App.Services;
+using Claudette.Core;
 using Claudette.Core.Claude;
 using Claudette.Core.Development;
 using Claudette.Core.Git;

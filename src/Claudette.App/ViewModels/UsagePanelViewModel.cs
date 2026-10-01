@@ -1,7 +1,7 @@
-using Claudette.Core;
 using System.Globalization;
 using Claudette.App.Controls;
 using Claudette.App.Services;
+using Claudette.Core;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
 using Claudette.Usage;

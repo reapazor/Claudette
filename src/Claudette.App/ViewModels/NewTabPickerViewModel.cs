@@ -1,6 +1,6 @@
-using Claudette.Core;
 using System.Collections.ObjectModel;
 using Claudette.App.Services;
+using Claudette.Core;
 using Claudette.Core.Git;
 using Claudette.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;

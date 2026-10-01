@@ -1,5 +1,5 @@
-using Claudette.Core;
 using Claudette.App.Services;
+using Claudette.Core;
 using Claudette.Core.Claude;
 using Claudette.Core.Sessions;
 using CommunityToolkit.Mvvm.ComponentModel;

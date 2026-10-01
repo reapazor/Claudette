@@ -1,8 +1,9 @@
-using Claudette.Core;
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Claudette.Core;
+using Claudette.Core.Protocol;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Claudette.App.Conversation;
@@ -262,12 +263,8 @@ public sealed partial class TodoList : ObservableObject
         {
             return;
         }
-        item.Id = ((details?["task"] as JsonObject)?["id"] ?? details?["taskId"] ?? details?["id"]) switch
-        {
-            JsonValue v when v.GetValueKind() == JsonValueKind.String => v.GetValue<string>(),
-            JsonValue v when v.GetValueKind() == JsonValueKind.Number => v.ToJsonString(),
-            _ => TaskNumber().Match(resultText) is { Success: true } m ? m.Groups[1].Value : null,
-        };
+        item.Id = ((details?["task"] as JsonObject)?["id"] ?? details?["taskId"] ?? details?["id"]).AsStringOrNumber()
+            ?? (TaskNumber().Match(resultText) is { Success: true } m ? m.Groups[1].Value : null);
     }
 
     private void ApplyTaskList(IEnumerable<JsonObject> listed)
@@ -360,20 +357,10 @@ public sealed partial class TodoList : ObservableObject
         }
     }
 
-    private static string? Text(JsonObject obj, string name) => obj[name] switch
-    {
-        JsonValue value when value.GetValueKind() == JsonValueKind.String => value.GetValue<string>(),
-        JsonValue value when value.GetValueKind() == JsonValueKind.Number => value.ToJsonString(),
-        _ => null,
-    };
+    private static string? Text(JsonObject obj, string name) => obj.GetStringOrNumber(name);
 
     private static IEnumerable<string> Ids(JsonObject obj, string name) =>
-        (obj[name] as JsonArray ?? []).Select(v => v switch
-        {
-            JsonValue value when value.GetValueKind() == JsonValueKind.String => value.GetValue<string>(),
-            JsonValue value when value.GetValueKind() == JsonValueKind.Number => value.ToJsonString(),
-            _ => null,
-        }).OfType<string>();
+        (obj[name] as JsonArray ?? []).Select(v => v.AsStringOrNumber()).OfType<string>();
 
     [GeneratedRegex(@"#(\d+)")]
     private static partial Regex TaskNumber();
