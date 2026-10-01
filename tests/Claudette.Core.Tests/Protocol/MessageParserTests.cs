@@ -217,6 +217,181 @@ public class MessageParserTests
         Assert.NotEmpty(error);
     }
 
+    // ---- Typed views of system messages and fields -------------------------------------------------------------
+
+    [Fact]
+    public void Reads_a_hook_run()
+    {
+        // As Claude Code 2.1.284 sends them with --include-hook-events.
+        var started = Parse<SystemMessage>("""{"type":"system","subtype":"hook_started","hook_id":"h1","hook_name":"PreToolUse:Bash","hook_event":"PreToolUse","uuid":"x","session_id":"s1"}""").HookRun;
+        var progress = Parse<SystemMessage>("""{"type":"system","subtype":"hook_progress","hook_id":"h1","hook_name":"PreToolUse:Bash","hook_event":"PreToolUse","output":"step 1","stdout":"step 1\n","stderr":"","session_id":"s1"}""").HookRun;
+        var response = Parse<SystemMessage>("""{"type":"system","subtype":"hook_response","hook_id":"h1","hook_name":"PreToolUse:Bash","hook_event":"PreToolUse","output":"","stdout":"","stderr":"Blocked: rm -rf","exit_code":2,"outcome":"error","uuid":"y","session_id":"s1"}""").HookRun;
+
+        Assert.Equal(new HookRunNotice(HookRunStage.Started, "h1", "PreToolUse:Bash", "PreToolUse", null, null, null, null, HookOutcome.Unknown), started);
+        Assert.Equal((HookRunStage.Progress, "step 1", "step 1\n", ""), (progress!.Stage, progress.Output, progress.Stdout, progress.Stderr));
+        Assert.Equal((HookRunStage.Response, 2, HookOutcome.Error, "Blocked: rm -rf"), (response!.Stage, response.ExitCode, response.Outcome, response.Stderr));
+    }
+
+    [Theory]
+    [InlineData("success", HookOutcome.Success)]
+    [InlineData("cancelled", HookOutcome.Cancelled)]
+    [InlineData("timed_out", HookOutcome.Unknown)]
+    public void A_hook_outcome_Claudette_does_not_know_reads_as_unknown(string outcome, HookOutcome expected)
+    {
+        var hook = Parse<SystemMessage>($$"""{"type":"system","subtype":"hook_response","hook_id":"h1","outcome":"{{outcome}}"}""").HookRun;
+
+        Assert.Equal(expected, hook!.Outcome);
+    }
+
+    [Theory]
+    [InlineData("""{"type":"system","subtype":"hook_started"}""")]
+    [InlineData("""{"type":"system","subtype":"hook_started","hook_id":""}""")]
+    [InlineData("""{"type":"system","subtype":"hook_response","hook_id":7,"outcome":"error"}""")]
+    public void A_hook_message_without_an_id_has_no_run(string line) =>
+        Assert.Null(Parse<SystemMessage>(line).HookRun);
+
+    [Fact]
+    public void Odd_hook_fields_read_as_missing()
+    {
+        var hook = Parse<SystemMessage>("""{"type":"system","subtype":"hook_response","hook_id":"h1","hook_name":3,"hook_event":null,"output":["a"],"exit_code":"2","outcome":true,"extra":{}}""").HookRun;
+
+        Assert.Equal(new HookRunNotice(HookRunStage.Response, "h1", null, null, null, null, null, null, HookOutcome.Unknown), hook);
+    }
+
+    [Fact]
+    public void Reads_api_retry()
+    {
+        var retry = ParseAll<SystemMessage>("11-api-retry").Select(m => m.ApiRetry).OfType<ApiRetryNotice>().First();
+
+        Assert.Equal(new ApiRetryNotice(1, 10, 567, 529, "overloaded"), retry);
+    }
+
+    [Fact]
+    public void An_api_retry_prefers_the_error_category_and_reads_odd_fields_as_missing()
+    {
+        var categorized = Parse<SystemMessage>("""{"type":"system","subtype":"api_retry","attempt":2,"retry_delay_ms":4000.7,"error_status":null,"error_category":"rate_limit","error":"other"}""").ApiRetry;
+        var bare = Parse<SystemMessage>("""{"type":"system","subtype":"api_retry","attempt":"2","max_retries":true,"error_category":5}""").ApiRetry;
+
+        Assert.Equal(new ApiRetryNotice(2, null, 4000, null, "rate_limit"), categorized);
+        Assert.Equal(new ApiRetryNotice(null, null, null, null, null), bare);
+    }
+
+    [Fact]
+    public void Reads_compact_boundary()
+    {
+        var compacted = ParseAll<SystemMessage>("10-compact").Select(m => m.CompactBoundary).OfType<CompactBoundaryNotice>().Single();
+        var automatic = Parse<SystemMessage>("""{"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"auto"}}""").CompactBoundary;
+        var bare = Parse<SystemMessage>("""{"type":"system","subtype":"compact_boundary","compact_metadata":"auto"}""").CompactBoundary;
+
+        Assert.Equal(("manual", false), (compacted.Trigger, compacted.IsAutomatic));
+        Assert.True(automatic!.IsAutomatic);
+        Assert.Equal(((string?)null, false), (bare!.Trigger, bare.IsAutomatic));
+    }
+
+    [Theory]
+    [InlineData("info", NoticeLevel.Info)]
+    [InlineData("notice", NoticeLevel.Notice)]
+    [InlineData("suggestion", NoticeLevel.Suggestion)]
+    [InlineData("warning", NoticeLevel.Warning)]
+    [InlineData("someday", NoticeLevel.Unknown)]
+    public void Reads_an_informational_notice(string level, NoticeLevel expected)
+    {
+        // As the Agent SDK documents system/informational: here, a hook's message to the user.
+        var notice = Parse<SystemMessage>($$"""{"type":"system","subtype":"informational","content":"PostToolUse:Bash says: Formatted 3 files","level":"{{level}}","tool_use_id":"t1","uuid":"i-1","session_id":"s"}""").Informational;
+
+        Assert.Equal(new InformationalNotice("PostToolUse:Bash says: Formatted 3 files", expected), notice);
+    }
+
+    [Fact]
+    public void Odd_informational_fields_read_as_missing() =>
+        Assert.Equal(new InformationalNotice(null, NoticeLevel.Unknown), Parse<SystemMessage>("""{"type":"system","subtype":"informational","content":["x"],"level":2}""").Informational);
+
+    [Fact]
+    public void Reads_permission_denied()
+    {
+        var withReason = Parse<SystemMessage>("""{"type":"system","subtype":"permission_denied","tool_name":"Bash","tool_use_id":"t1","decision_reason":"Matched a deny rule","message":"denied"}""").PermissionDenied;
+        var withMessage = Parse<SystemMessage>("""{"type":"system","subtype":"permission_denied","tool_name":"Bash","decision_reason":null,"message":"denied"}""").PermissionDenied;
+        var bare = Parse<SystemMessage>("""{"type":"system","subtype":"permission_denied","tool_name":{}}""").PermissionDenied;
+
+        Assert.Equal(new PermissionDeniedNotice("Bash", "Matched a deny rule"), withReason);
+        Assert.Equal(new PermissionDeniedNotice("Bash", "denied"), withMessage);
+        Assert.Equal(new PermissionDeniedNotice(null, null), bare);
+    }
+
+    [Fact]
+    public void Reads_elicitation_complete()
+    {
+        var complete = Parse<SystemMessage>("""{"type":"system","subtype":"elicitation_complete","mcp_server_name":"auth","elicitation_id":"el-1"}""").ElicitationComplete;
+
+        Assert.Equal("el-1", complete!.ElicitationId);
+        Assert.Null(Parse<SystemMessage>("""{"type":"system","subtype":"elicitation_complete","elicitation_id":1}""").ElicitationComplete);
+    }
+
+    [Fact]
+    public void Other_system_messages_have_no_typed_views()
+    {
+        var others = ProtocolFixture.AllNames().SelectMany(ParseAll<SystemMessage>).Where(m => m.Subtype is not ("api_retry" or "compact_boundary")).ToArray();
+        var retry = Parse<SystemMessage>("""{"type":"system","subtype":"api_retry","hook_id":"h1","elicitation_id":"el-1","tool_name":"Bash","content":"x"}""");
+
+        Assert.Contains(others, m => m.Subtype == "status");
+        Assert.All(others, m => Assert.True(
+            m.HookRun is null && m.ApiRetry is null && m.CompactBoundary is null && m.Informational is null && m.PermissionDenied is null
+            && m.ElicitationComplete is null, m.Subtype));
+        // Each view goes by the subtype alone.
+        Assert.Equal((false, true, false, false, false, false),
+            (retry.HookRun is not null, retry.ApiRetry is not null, retry.CompactBoundary is not null, retry.Informational is not null,
+                retry.PermissionDenied is not null, retry.ElicitationComplete is not null));
+    }
+
+    [Fact]
+    public void Counts_the_mcp_servers_in_system_init()
+    {
+        Assert.Equal(0, ParseFirst<SystemInitMessage>("01-mock-basic").McpServerCount);
+        Assert.Equal(2, Parse<SystemInitMessage>("""{"type":"system","subtype":"init","session_id":"s","mcp_servers":[{"name":"a","status":"connected"},{"name":"b","status":"failed"}]}""").McpServerCount);
+        Assert.Equal(0, Parse<SystemInitMessage>("""{"type":"system","subtype":"init","session_id":"s","mcp_servers":{"a":1}}""").McpServerCount);
+    }
+
+    [Fact]
+    public void Reads_an_assistant_messages_uuid_and_resume_reason()
+    {
+        var rerun = Parse<AssistantMessage>("""{"type":"assistant","uuid":"a-1","resume_reason":"interrupted_turn","message":{"content":[]}}""");
+        var odd = Parse<AssistantMessage>("""{"type":"assistant","uuid":1,"resume_reason":{},"message":{"content":[]}}""");
+
+        Assert.Equal(("a-1", "interrupted_turn"), (rerun.Uuid, rerun.ResumeReason));
+        Assert.Equal(((string?)null, (string?)null), (odd.Uuid, odd.ResumeReason));
+        Assert.Null(ParseFirst<AssistantMessage>("01-mock-basic").ResumeReason);
+    }
+
+    [Theory]
+    [InlineData("""{"type":"user","isReplay":true,"message":{"role":"user","content":"one"}}""", "one")]
+    [InlineData("""{"type":"user","isReplay":true,"message":{"role":"user","content":[{"type":"text","text":"two"},{"type":"image","source":{}},{"type":"text","text":"lines"}]}}""", "two\nlines")]
+    [InlineData("""{"type":"user","isReplay":true,"message":{"role":"user","content":[{"type":"image","source":{}}]}}""", "")]
+    [InlineData("""{"type":"user","isReplay":true,"message":{"role":"user","content":[{"type":"text"},{"type":"text","text":"after"}]}}""", "\nafter")]
+    [InlineData("""{"type":"user","isReplay":true,"message":{"role":"user","content":42}}""", null)]
+    [InlineData("""{"type":"user","isReplay":true,"message":{"role":"user"}}""", null)]
+    [InlineData("""{"type":"user","isReplay":true}""", null)]
+    public void Reads_a_replayed_prompts_text(string line, string? text) =>
+        Assert.Equal(text, Parse<UserMessage>(line).PromptText);
+
+    [Fact]
+    public void Reads_which_calls_were_interrupted()
+    {
+        var results = Parse<UserMessage>("""{"type":"user","message":{"content":[]},"tool_result_meta":[{"id":"t1","non_execution_kind":"interrupted"},{"id":"t2","non_execution_kind":"permission-rule"},"odd"]}""");
+        var denied = ParseAll<UserMessage>("07-permission-denied").Single(u => u.Raw["tool_result_meta"] is not null);
+
+        Assert.True(results.WasInterrupted("t1"));
+        Assert.False(results.WasInterrupted("t2"));
+        Assert.False(results.WasInterrupted("t3"));
+        Assert.False(denied.WasInterrupted("toolu_mock_1"));
+        Assert.False(Parse<UserMessage>("""{"type":"user","message":{"content":[]},"tool_result_meta":{"id":"t1"}}""").WasInterrupted("t1"));
+    }
+
+    private static T Parse<T>(string line) where T : ClaudeMessage
+    {
+        Assert.True(MessageParser.TryParse(line, out var message, out var error), error);
+        return Assert.IsType<T>(message);
+    }
+
     private static T ParseFirst<T>(string fixture) where T : ClaudeMessage => ParseAll<T>(fixture).First();
 
     private static IEnumerable<T> ParseAll<T>(string fixture) where T : ClaudeMessage =>

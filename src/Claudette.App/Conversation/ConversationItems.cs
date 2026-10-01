@@ -679,4 +679,36 @@ public sealed partial class UnsupportedMessageItem(string messageType, string js
 public sealed class TurnSummaryItem(string text) : ConversationItem
 {
     public string Text { get; } = text;
+
+    /// <summary>The footer for a turn's result; null when the result says none of those.</summary>
+    /// <param name="modelName">Turns a model id into a display name.</param>
+    internal static TurnSummaryItem? For(ResultMessage result, Func<string?, string?> modelName)
+    {
+        var parts = new List<string>();
+        if (result.DurationMs is { } ms)
+        {
+            parts.Add(ms >= 60_000 ? $"{(int)(ms / 60_000)}m {ms % 60_000 / 1000:0}s" : $"{ms / 1000:0.#}s");
+        }
+        if (result.Usage is { } usage)
+        {
+            var input = (Number(usage["input_tokens"]) ?? 0) + (Number(usage["cache_creation_input_tokens"]) ?? 0) + (Number(usage["cache_read_input_tokens"]) ?? 0);
+            var output = Number(usage["output_tokens"]) ?? 0;
+            parts.Add($"{Tokens(input)} in · {Tokens(output)} out");
+        }
+        if (result.ModelUsage is { Count: > 0 } models)
+        {
+            parts.Add(string.Join(", ", models.Select(m => modelName(m.Key) ?? m.Key)));
+        }
+        return parts.Count > 0 ? new TurnSummaryItem(string.Join(" · ", parts)) : null;
+    }
+
+    private static string Tokens(long count) => count switch
+    {
+        >= 1_000_000 => $"{count / 1_000_000.0:0.#}M",
+        >= 1_000 => $"{count / 1_000.0:0.#}k",
+        _ => count.ToString(),
+    };
+
+    private static long? Number(JsonNode? node) =>
+        node is JsonValue value && value.GetValueKind() == JsonValueKind.Number ? (long)value.GetValue<double>() : null;
 }

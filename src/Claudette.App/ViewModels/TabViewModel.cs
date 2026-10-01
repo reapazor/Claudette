@@ -1609,7 +1609,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 UpdateStatus();
                 break;
             case TurnStarted started:
-                HasMcpServers = started.Init.Raw.GetArray("mcp_servers") is { Count: > 0 };
+                HasMcpServers = started.Init.McpServerCount > 0;
                 State.SessionId = started.Init.SessionId;
                 OnWorkingFolderReported(started.Init.Cwd);
                 if (_forkAwaitingId)

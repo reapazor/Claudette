@@ -284,20 +284,20 @@ items:
   - id: "api_retry"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.Core/Status/ApiTrouble.cs
+    usedIn: src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.Core/Status/ApiTrouble.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: ServiceStatusTests
   # A retry or a failed turn on Anthropic's side checks Claude's status page straight away (DESIGN.md §18, "Service status").
   - id: "error_status"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Status/ApiTrouble.cs
+    usedIn: src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.Core/Status/ApiTrouble.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: ServiceStatusTests
   - id: "error_category"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.Core/Status/ApiTrouble.cs
+    usedIn: src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.Core/Status/ApiTrouble.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: ServiceStatusTests
   - id: "api_error_status"
@@ -433,7 +433,7 @@ items:
   - id: "resume_reason"
     kind: field
     status: documented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript#resume_reason
     test: RestartTests, RealCliTests
     fallback: On a re-run's assistant messages and result; the first one adds a note. Without it the re-run reads as an ordinary turn.
@@ -597,7 +597,7 @@ items:
   - id: "decision_reason"
     kind: field
     status: undocumented
-    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
+    usedIn: src/Claudette.Core/Sessions/PermissionRequest.cs, src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: PermissionRequestTests
     fallback: Documented as the canUseTool option decisionReason; both spellings are read. Without it the card just doesn't say why.
@@ -643,20 +643,20 @@ items:
   - id: "permission_denied"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    usedIn: src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: PromptTests
   - id: "informational"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    usedIn: src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript#sdkinformationalmessage
     test: ConversationBuilderTests
     fallback: system/informational with content and level (info, notice, suggestion, warning) becomes a note, a warning in the warning color. Without it Claude Code's notices aren't shown, as before.
   - id: "compact_boundary"
     kind: message
     status: documented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    usedIn: src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: TabViewModelTests
   - id: "/compact"
@@ -1557,7 +1557,7 @@ items:
   - id: "tool_result_meta"
     kind: field
     status: undocumented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     test: AgentMapTests
     fallback: Marks an Agent call cut off by an interrupt or a stop (non_execution_kind "interrupted"). Without it, the "[Request interrupted" result text and the stopped task_notification still mark the subagent stopped.
   - id: "stop_task (subagents)"
@@ -1884,7 +1884,7 @@ items:
   - id: "control_cancel_request for can_use_tool answered in the Claude app"
     kind: behavior
     status: undocumented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.App/Conversation/PendingPrompts.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     test: RemoteControlTests
     fallback: When a connected device answers a permission prompt, question or plan, 2.1.284 withdraws the host's copy with control_cancel_request (from its injectControlResponse). The card closes and reads "Answered in the Claude app" while the tab is connected and Claudette didn't stop the turn. Without it the card stays open until the turn moves on, as for any withdrawn request.
   - id: "CLAUDE_CLIENT_PRESENCE_FILE"

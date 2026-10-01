@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Claudette.Core.Protocol;
@@ -23,10 +24,35 @@ public sealed record SystemInitMessage(
 
     /// <summary>The entries of <see cref="SlashCommands"/> bound to the terminal, such as <c>doctor</c>; not offered.</summary>
     public IReadOnlyList<string> TerminalSlashCommands => Raw.GetStringList("terminal_slash_commands");
+
+    /// <summary>How many MCP servers the session has (<c>mcp_servers</c>), whether they connected or not.</summary>
+    public int McpServerCount => Raw.GetArray("mcp_servers")?.Count ?? 0;
 }
 
-/// <summary>Any other <c>system</c> message, such as <c>status</c>, <c>task_started</c> or <c>api_retry</c>.</summary>
-public sealed record SystemMessage(string Subtype, JsonObject Raw) : ClaudeMessage("system", Raw);
+/// <summary>
+/// Any other <c>system</c> message, such as <c>status</c>, <c>task_started</c> or <c>api_retry</c>. The subtypes
+/// Claudette reads have typed views (<see cref="HookRun"/> and the rest), null for every other subtype.
+/// </summary>
+public sealed record SystemMessage(string Subtype, JsonObject Raw) : ClaudeMessage("system", Raw)
+{
+    /// <summary><c>hook_started</c>, <c>hook_progress</c> or <c>hook_response</c>: a hook's run.</summary>
+    public HookRunNotice? HookRun => HookRunNotice.From(this);
+
+    /// <summary><c>api_retry</c>: a failed API request about to be tried again.</summary>
+    public ApiRetryNotice? ApiRetry => ApiRetryNotice.From(this);
+
+    /// <summary><c>compact_boundary</c>: the conversation was compacted.</summary>
+    public CompactBoundaryNotice? CompactBoundary => CompactBoundaryNotice.From(this);
+
+    /// <summary><c>informational</c>: one of Claude Code's notices, or a hook's message to the user.</summary>
+    public InformationalNotice? Informational => InformationalNotice.From(this);
+
+    /// <summary><c>permission_denied</c>: a tool call denied without asking.</summary>
+    public PermissionDeniedNotice? PermissionDenied => PermissionDeniedNotice.From(this);
+
+    /// <summary><c>elicitation_complete</c>: an MCP server's URL request is done.</summary>
+    public ElicitationCompleteNotice? ElicitationComplete => ElicitationCompleteNotice.From(this);
+}
 
 public sealed record AssistantMessage(
     string? MessageId,
@@ -34,7 +60,17 @@ public sealed record AssistantMessage(
     IReadOnlyList<ContentBlock> Content,
     string? ParentToolUseId,
     string? Error,
-    JsonObject Raw) : ClaudeMessage("assistant", Raw);
+    JsonObject Raw) : ClaudeMessage("assistant", Raw)
+{
+    /// <summary>The transcript entry's id, when Claude Code gives it.</summary>
+    public string? Uuid => Raw.GetString("uuid");
+
+    /// <summary>
+    /// Why Claude Code is running this turn again, such as <c>interrupted_turn</c> after a restart cut it off; null for
+    /// an ordinary reply.
+    /// </summary>
+    public string? ResumeReason => Raw.GetString("resume_reason");
+}
 
 /// <summary>
 /// A <c>user</c> message from Claude Code: tool results (with structured details in <see cref="ToolUseResult"/>),
@@ -54,6 +90,25 @@ public sealed record UserMessage(
 
     /// <summary>A prompt the host sent, echoed back (<c>--replay-user-messages</c>), not a tool's result.</summary>
     public bool IsReplay => Raw.GetBool("isReplay") == true;
+
+    /// <summary>
+    /// The text of a prompt (<see cref="IsReplay"/>): its content when that's a string, else its text blocks joined by
+    /// new lines. Null when the message has no content.
+    /// </summary>
+    public string? PromptText => Raw.GetObject("message")?["content"] switch
+    {
+        JsonValue value when value.GetValueKind() == JsonValueKind.String => value.GetValue<string>(),
+        JsonArray => string.Join("\n", Content.OfType<TextBlock>().Select(b => b.Text)),
+        _ => null,
+    };
+
+    /// <summary>
+    /// Whether the call <paramref name="toolUseId"/> was cut off by an interrupt or a stop: Claude Code marks it in
+    /// <c>tool_result_meta</c>.
+    /// </summary>
+    public bool WasInterrupted(string toolUseId) =>
+        Raw.GetArray("tool_result_meta") is { } meta
+        && meta.OfType<JsonObject>().Any(m => m.GetString("id") == toolUseId && m.GetString("non_execution_kind") == "interrupted");
 
     /// <summary>The text of a local command's output (for example "Set model to …"), or null.</summary>
     public string? LocalCommandOutput
