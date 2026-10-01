@@ -484,6 +484,57 @@ public class AgentMapTests
     }
 
     [Fact]
+    public async Task The_counts_follow_each_agents_state_and_start_again_after_clear()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        var map = tab.Agents;
+        h.Transport.Emit(Wire.Init());
+        h.Transport.Emit(Wire.Agent("a1", "One", "p"));
+        h.Transport.Emit(Wire.TaskStarted("task-a", "a1"));
+        h.Transport.Emit(Wire.Agent("a2", "Two", "p", parent: "a1"));
+        h.Transport.Emit(Wire.Agent("a3", "Three", "p"));
+        h.Transport.Emit(Wire.CanUseTool("req-1", "b1", "touch marker.txt", agentId: "task-a"));
+        await TabTestHarness.Eventually(() => map.Find("a1")?.IsWaiting == true, "the prompt");
+
+        // Each count is what a walk of the tree would find.
+        void CountsMatchTheTree()
+        {
+            var tree = Walk(map.Root).Skip(1).ToList();
+            Assert.Equal(tree.Count, map.Subagents.Count);
+            Assert.Equal(tree.Count(n => n.IsActive), map.ActiveCount);
+            Assert.Equal(tree.Count(n => n.IsWaiting), map.WaitingCount);
+            Assert.Equal(tree.Any(n => n.IsTicking) || map.Root.IsTicking, map.IsTicking);
+        }
+        CountsMatchTheTree();
+        Assert.Equal((3, 1), (map.ActiveCount, map.WaitingCount));
+        Assert.Equal(["a1", "a2", "a3"], map.Subagents.Select(n => n.ToolUseId));
+
+        h.Transport.Emit(Wire.Result("a2", "done", parent: "a1"));
+        h.Transport.Emit(Wire.Result("a3", "Agent type 'nope' not found", isError: true));
+        await TabTestHarness.Eventually(() => map.Find("a3")!.IsFailed, "the results");
+        CountsMatchTheTree();
+        Assert.Equal("1 agent running (1 waiting on you); 1 done, 1 failed", map.Summary);
+
+        var stale = map.Find("a1")!;
+        var prompt = Assert.IsType<PermissionItem>(stale.WaitingPrompt);
+        h.Transport.Emit("""{"type":"conversation_reset","trigger":"clear"}""");
+        await TabTestHarness.Eventually(() => !tab.HasAgents, "the map to clear");
+        Assert.False(map.Contains(stale));
+        Assert.True(map.Contains(map.Root));
+
+        // A card of the old conversation that changes now doesn't count in the new one.
+        prompt.AllowCommand.Execute(null);
+        h.Transport.Emit(Wire.Agent("b1", "New", "p"));
+        await TabTestHarness.Eventually(() => tab.HasAgents, "the new subagent");
+        CountsMatchTheTree();
+        Assert.Equal((1, 0), (map.ActiveCount, map.WaitingCount));
+        Assert.Equal("1 agent running", map.Summary);
+
+        static IEnumerable<AgentNode> Walk(AgentNode node) => node.Children.SelectMany(Walk).Prepend(node);
+    }
+
+    [Fact]
     public async Task A_restored_tab_shows_the_finished_tree_without_live_status()
     {
         await using var h = new TabTestHarness();

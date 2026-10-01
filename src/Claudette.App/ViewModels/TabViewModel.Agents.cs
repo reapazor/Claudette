@@ -29,7 +29,7 @@ public sealed partial class TabViewModel
     /// <summary>"2 agents running" while any are, else how many there were.</summary>
     public string AgentsButtonText => Agents.ActiveCount is > 0 and var active
         ? $"{active} agent{(active == 1 ? "" : "s")} running"
-        : $"Agents ({Agents.Subagents.Count()})";
+        : $"Agents ({Agents.Subagents.Count})";
 
     public bool HasAgents => Agents.HasSubagents;
 
@@ -138,7 +138,7 @@ public sealed partial class TabViewModel
         OnPropertyChanged(nameof(HasAgents));
         OnPropertyChanged(nameof(HasActiveAgents));
         OnPropertyChanged(nameof(AgentsButtonText));
-        if (SelectedAgent is { } selected && !Agents.Root.DescendantsAndSelf().Contains(selected))
+        if (SelectedAgent is { } selected && !Agents.Contains(selected))
         {
             // Gone after /clear.
             SelectedAgent = null;

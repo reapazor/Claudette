@@ -61,6 +61,14 @@ public sealed partial class AgentNode : ObservableObject
 
     public AgentNode? Parent { get; }
 
+    internal AgentMap Map => _map;
+
+    /// <summary>A subagent in its map's counts: from when it's added until <c>/clear</c> takes it away.</summary>
+    internal bool IsCounted { get; set; }
+
+    /// <summary>The state its map last counted it in.</summary>
+    internal AgentStatus? CountedStatus { get; set; }
+
     /// <summary>The subagent's group in the conversation; null for the main agent.</summary>
     public SubagentItem? Item { get; }
 
@@ -511,6 +519,7 @@ public sealed partial class AgentNode : ObservableObject
         OnPropertyChanged(nameof(StopText));
         OnPropertyChanged(nameof(ShowText));
         Tick();
+        _map.Recount(this);
         _map.NotifyChanged();
     }
 
@@ -542,18 +551,6 @@ public sealed partial class AgentNode : ObservableObject
     }
 
     internal void SetTaskId(string taskId) => TaskId ??= taskId;
-
-    internal IEnumerable<AgentNode> DescendantsAndSelf()
-    {
-        yield return this;
-        foreach (var child in Children)
-        {
-            foreach (var node in child.DescendantsAndSelf())
-            {
-                yield return node;
-            }
-        }
-    }
 
     /// <summary>It, or an agent above it, runs in the background, so it isn't tied to the turn.</summary>
     internal bool IsDetachedFromTurn()

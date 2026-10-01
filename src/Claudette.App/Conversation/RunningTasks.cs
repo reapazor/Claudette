@@ -42,12 +42,11 @@ public sealed partial class RunningTask : ObservableObject
     private string? _toolName;
     private JsonObject? _toolInput;
 
-    internal RunningTask(RunningTasks owner, string taskId, string? toolUseId, int order)
+    internal RunningTask(RunningTasks owner, string taskId, string? toolUseId)
     {
         _owner = owner;
         TaskId = taskId;
         ToolUseId = toolUseId;
-        Order = order;
         StartedAt = owner.Now;
     }
 
@@ -62,8 +61,6 @@ public sealed partial class RunningTask : ObservableObject
 
     /// <summary>When Claudette heard it start, from the injected clock.</summary>
     public DateTimeOffset StartedAt { get; }
-
-    internal int Order { get; }
 
     /// <summary>
     /// Claude Code does this for its own operation (<c>ambient</c>), such as a live-update watcher: the SDK says to
@@ -230,6 +227,9 @@ public sealed class RunningTasks
     private readonly Dictionary<string, RunningTask> _byId = [];
     private readonly Dictionary<string, RunningTask> _byToolUse = [];
 
+    /// <summary>The tasks that haven't ended, in the order they started: the only ones that can be running.</summary>
+    private readonly List<RunningTask> _open = [];
+
     public RunningTasks(TimeProvider time, AgentMap? agents = null)
     {
         _time = time;
@@ -295,8 +295,9 @@ public sealed class RunningTasks
             case "task_started":
                 if (task is null)
                 {
-                    task = new RunningTask(this, taskId, raw.GetString("tool_use_id"), _byId.Count);
+                    task = new RunningTask(this, taskId, raw.GetString("tool_use_id"));
                     _byId[taskId] = task;
+                    _open.Add(task);
                     if (task.ToolUseId is { } toolUseId)
                     {
                         _byToolUse[toolUseId] = task;
@@ -310,6 +311,7 @@ public sealed class RunningTasks
                 break;
             case "task_notification" when task is not null && IsTerminal(raw.GetString("status")):
                 task.End();
+                _open.Remove(task);
                 break;
             default:
                 return;
@@ -346,6 +348,7 @@ public sealed class RunningTasks
         }
         _byId.Clear();
         _byToolUse.Clear();
+        _open.Clear();
         Update(notify: false);
     }
 
@@ -360,7 +363,7 @@ public sealed class RunningTasks
 
     private void Update(bool notify)
     {
-        foreach (var task in _byId.Values.Where(t => t is { Agent: null, TaskType: "local_agent" }))
+        foreach (var task in _open.Where(t => t is { Agent: null, TaskType: "local_agent" }))
         {
             task.Agent = _agents?.FindByTask(task.TaskId) ?? (task.ToolUseId is { } id ? _agents?.Find(id) : null);
             if (task.Agent is not null)
@@ -368,7 +371,7 @@ public sealed class RunningTasks
                 task.Refresh();
             }
         }
-        var running = _byId.Values.Where(t => t.IsRunning).OrderBy(t => t.Order).ToList();
+        var running = _open.Where(t => t.IsRunning).ToList();
         var changed = !running.SequenceEqual(Running);
         if (changed)
         {
