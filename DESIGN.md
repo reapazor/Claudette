@@ -1446,6 +1446,8 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 
 - Claudette's settings are stored as JSON in the app data folder: `%APPDATA%\Claudette\settings.json` on Windows, `~/Library/Application Support/Claudette/settings.json` on macOS, and `~/.config/claudette/settings.json` on Linux.
 - Settings files have a version number so later releases can migrate them.
+- Claudette's files are written whole or not at all: to a temporary file next to the real one, flushed to the disk, then renamed over it (tried again for up to about two seconds while something else, such as an antivirus scanner or a backup, has the file open). A crash or a power cut leaves the old file or the new one, never half of one.
+- A settings or state file that isn't valid JSON is kept next to it as `<name>.<time>.bad`, and Claudette starts from defaults. One that can't be read at all (still in use after the retries, or not permitted) is left alone: Claudette starts from defaults for this run but doesn't save over it, so it's back at the next launch.
 - Claudette's settings are separate from Claude Code's. Claudette doesn't edit `~/.claude/settings.json` or a project's `.claude/` settings except where this document says it does.
 
 ### Settings sync (optional)

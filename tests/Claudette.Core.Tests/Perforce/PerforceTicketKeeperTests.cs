@@ -177,18 +177,23 @@ public sealed class PerforceTicketKeeperTests : IDisposable
         _p4.TicketExpires = _time.GetUtcNow().AddMinutes(50);
         var (keeper, _) = Keeper();
         keeper.Start();
-        await WaitFor(() => _p4.StatusChecks == 1 && keeper.Status is not null);
+        await keeper.CurrentCheck;
+        Assert.Equal(1, _p4.StatusChecks);
+        Assert.NotNull(keeper.Status);
         Assert.Empty(_p4.Logins);
 
+        // Each tick's check must finish before the next tick, or the next one shares it instead of checking again.
         _time.Advance(PerforceTicketKeeper.CheckInterval);
-        await WaitFor(() => _p4.StatusChecks >= 2);
+        await keeper.CurrentCheck;
+        Assert.Equal(2, _p4.StatusChecks);
         // 35 minutes left: still more than 30.
         Assert.Empty(_p4.Logins);
 
         _time.Advance(PerforceTicketKeeper.CheckInterval);
+        await keeper.CurrentCheck;
         // 20 minutes left: renew.
-        await WaitFor(() => _p4.Logins.Count == 1);
-        await WaitFor(() => keeper.ExpiresAt == _p4.TicketExpires);
+        Assert.Single(_p4.Logins);
+        Assert.Equal(_p4.TicketExpires, keeper.ExpiresAt);
     }
 
     [Fact]

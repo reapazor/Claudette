@@ -56,6 +56,73 @@ public sealed class SettingsAndStateTests : IDisposable
     }
 
     [Fact]
+    public async Task A_file_that_cant_be_read_is_left_alone_and_not_saved_over()
+    {
+        // An antivirus scanner or backup holding it, say: not damaged, so it comes back at the next launch.
+        var path = Path.Combine(_root, "settings.json");
+        File.WriteAllText(path, """{ "appearance": { "theme": "dark" } }""");
+        var store = new JsonFileStore<AppSettings>(path);
+        using (Unreadable(path))
+        {
+            var settings = store.Load();
+            Assert.True(store.CouldNotRead);
+            Assert.Equal(ThemeChoice.System, settings.Appearance.Theme);
+
+            settings.Appearance.Theme = ThemeChoice.Light;
+            await store.SaveAsync(settings, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Empty(Directory.GetFiles(_root, "settings.json.*"));
+        Assert.Equal(ThemeChoice.Dark, store.Load().Appearance.Theme);
+        Assert.False(store.CouldNotRead);
+    }
+
+    [Fact]
+    public async Task Saves_leave_no_temporary_files()
+    {
+        var store = new JsonFileStore<AppState>(Path.Combine(_root, "state.json"));
+
+        await store.SaveAsync(new AppState(), TestContext.Current.CancellationToken);
+        await store.SaveAsync(new AppState(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(["state.json"], Directory.GetFiles(_root).Select(Path.GetFileName));
+    }
+
+    /// <summary>Makes a file unreadable until disposed: held open without sharing on Windows, no permissions elsewhere.</summary>
+    private static IDisposable Unreadable(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        }
+        var mode = File.GetUnixFileMode(path);
+        File.SetUnixFileMode(path, UnixFileMode.None);
+        var restore = new Restore(() =>
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(path, mode);
+            }
+        });
+        try
+        {
+            File.ReadAllText(path);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return restore;
+        }
+        restore.Dispose();
+        Assert.Skip("Running as root, which can read any file.");
+        return restore;
+    }
+
+    private sealed class Restore(Action action) : IDisposable
+    {
+        public void Dispose() => action();
+    }
+
+    [Fact]
     public async Task Tabs_round_trip_with_their_token_totals()
     {
         var store = new JsonFileStore<AppState>(Path.Combine(_root, "state.json"));

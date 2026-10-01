@@ -116,6 +116,18 @@ public sealed class PerforceTicketKeeper : IDisposable
 
     public event Action<PerforceKeeperEvent>? Changed;
 
+    /// <summary>The check under way (shared by everyone who asks meanwhile), or a completed task: for tests to wait on.</summary>
+    internal Task CurrentCheck
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _running ?? Task.CompletedTask;
+            }
+        }
+    }
+
     /// <summary>Checks now, and every 15 minutes from now.</summary>
     public void Start()
     {

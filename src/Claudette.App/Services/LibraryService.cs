@@ -225,7 +225,11 @@ public sealed class LibraryService : IDisposable
         }
         try
         {
-            var remote = await Task.Run(() => SettingsSync.ReadFile(Library.SettingsSyncFile)).ConfigureAwait(true);
+            if (await Task.Run(() => SettingsSync.TryReadFile(Library.SettingsSyncFile)).ConfigureAwait(true) is not { } remote)
+            {
+                _logger.LogInformation("Couldn't read the synced settings file just now; trying again at the next sync.");
+                return;
+            }
             var result = SettingsSync.Merge(FlattenSettings(), _services.State.SettingsSync ?? new SettingsSyncState(), remote, _services.Time.GetUtcNow(), MachineName);
             if (result.ToApply.Count > 0)
             {

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Claudette.Core.Files;
 using Claudette.Core.Settings;
 
 namespace Claudette.Core.Development;
@@ -39,13 +40,7 @@ public sealed class RestartSnapshot
     /// <summary>Set when the restart is for installing a release, rather than a new source build.</summary>
     public AppUpdateHandover? Update { get; set; }
 
-    public void Save(string path)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(this, JsonFileStore<RestartSnapshot>.Options));
-        File.Move(temp, path, overwrite: true);
-    }
+    public void Save(string path) => AtomicFile.WriteAllText(path, JsonSerializer.Serialize(this, JsonFileStore<RestartSnapshot>.Options));
 
     /// <summary>
     /// The snapshot in <paramref name="path"/> if it was written for <paramref name="nonce"/> and isn't stale. With no

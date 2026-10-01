@@ -235,6 +235,21 @@ public sealed class SettingsSyncTests : IDisposable
     }
 
     [Fact]
+    public void A_file_that_cant_be_read_isnt_merged_as_empty()
+    {
+        // Merging with nothing and writing the result would drop the settings only other machines know.
+        var path = _root.Combine("settings-sync.json");
+        Assert.NotNull(SettingsSync.TryReadFile(path));
+        Assert.Empty(SettingsSync.TryReadFile(path)!.Values);
+
+        File.WriteAllText(path, "{ half written by a sync cli");
+        Assert.Null(SettingsSync.TryReadFile(path));
+
+        File.WriteAllText(path, "[]");
+        Assert.Null(SettingsSync.TryReadFile(path));
+    }
+
+    [Fact]
     public async Task Two_machines_converge_through_the_file()
     {
         var path = _root.Combine("settings-sync.json");
