@@ -1,0 +1,31 @@
+# Monthly, grouped: one pull request for NuGet packages and one for GitHub Actions (DESIGN.md §15, "Tools and CI").
+# Each pull request runs CI, so fewer, larger ones keep its minutes down.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      nuget:
+        patterns: ['*']
+    ignore:
+      # xunit.v3 stays on 3.2.x until Avalonia.Headless.XUnit supports 4.x, and Verify.XunitV3 on 32.0.x, the last built
+      # against it (Directory.Packages.props).
+      - dependency-name: xunit.v3
+        versions: ['>= 4']
+      - dependency-name: xunit.runner.visualstudio
+        versions: ['>= 4']
+      - dependency-name: Verify.XunitV3
+        versions: ['>= 33']
+
+  # Workflows pin actions by commit; Dependabot moves the pin and the version comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      actions:
+        patterns: ['*']

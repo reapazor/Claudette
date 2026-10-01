@@ -1565,6 +1565,7 @@ The spike's Node scripts (a mock Messages API, a stream-json driver and the scen
   - Packages are restored exactly as each project's `packages.lock.json` says (`--locked-mode`), and cached by those files. A package change updates the lock files when restored locally; commit them with it.
   - Each job's summary page lists its test counts per assembly and its failures. A failed job keeps its test results, the blame files naming a hung test, and any changed view's `*.received.txt` as an artifact for a week.
   - Coverage isn't measured in CI, to keep its minutes down; run it locally (`CLAUDE.md`, "Commands").
+- Dependabot (`.github/dependabot.yml`) opens one pull request a month for NuGet packages and one for GitHub Actions, each grouping every update. It leaves xunit.v3 and xunit.runner.visualstudio below 4 and Verify.XunitV3 below 33, for the reason above. Workflows pin actions by commit, with the version in a comment.
 
 ### Where things are
 
