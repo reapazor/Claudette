@@ -109,12 +109,19 @@ public sealed partial class TodoList : ObservableObject
 
     /// <summary>The plan the user approved last (ExitPlanMode), shown above the tasks; null before one.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasPlan), nameof(HasAnything))]
+    [NotifyPropertyChangedFor(nameof(HasPlan), nameof(HasAnything), nameof(PlanMarkdown))]
     public partial string? Plan { get; private set; }
+
+    /// <summary>The plan, for the Markdown view.</summary>
+    public LiveMarkdown.Avalonia.ObservableStringBuilder PlanMarkdown => new(Plan ?? "");
+
+    /// <summary>"Approved 14:05", under the plan.</summary>
+    public string? PlanApprovedText => PlanApprovedAt is { } at ? $"Approved {at.ToLocalTime():t}" : null;
 
     public bool HasPlan => !string.IsNullOrWhiteSpace(Plan);
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PlanApprovedText))]
     public partial DateTimeOffset? PlanApprovedAt { get; private set; }
 
     /// <summary>The Tasks page has something to show.</summary>

@@ -3,9 +3,20 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace Claudette.App.ViewModels;
 
+/// <summary>The pages of the side panel (DESIGN.md §3).</summary>
+public enum SidePanelPage
+{
+    Files,
+    Agents,
+    Project,
+    Processes,
+    Tasks,
+    Mcp,
+}
+
 /// <summary>
-/// The side panel (DESIGN.md §3): Changed files, Agents, Project when the tab has project tools, and Processes when the
-/// monitor is on. Which page shows, and how wide it is.
+/// The side panel (DESIGN.md §3): Changed files, Agents, Tasks, Project when the tab has project tools, MCP when the
+/// session has MCP servers, and Processes when the monitor is on. Which page shows, and how wide it is.
 /// </summary>
 public sealed partial class TabViewModel
 {
@@ -22,6 +33,10 @@ public sealed partial class TabViewModel
         if (value)
         {
             _ = ChangedFiles.RefreshAsync();
+            if (IsMcpPage)
+            {
+                _ = McpServers.RefreshAsync();
+            }
         }
         ProjectTools.UpdateShownRun();
         ProcessMonitor.OnSidePanelOpenChanged();
@@ -29,34 +44,65 @@ public sealed partial class TabViewModel
 
     /// <summary>Which page of the side panel shows.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsFilesPage))]
-    public partial bool IsProcessesPage { get; set; }
+    [NotifyPropertyChangedFor(nameof(IsFilesPage), nameof(IsAgentsPage), nameof(IsProjectPage), nameof(IsProcessesPage), nameof(IsTasksPage), nameof(IsMcpPage))]
+    public partial SidePanelPage Page { get; set; }
 
-    public bool IsFilesPage => !IsProcessesPage && !IsAgentsPage && !IsProjectPage;
-
-    partial void OnIsProcessesPageChanged(bool value)
+    partial void OnPageChanged(SidePanelPage value)
     {
-        ProcessMonitor.IsPanelVisible = value && IsSidePanelOpen;
-        if (value)
+        ProcessMonitor.IsPanelVisible = value == SidePanelPage.Processes && IsSidePanelOpen;
+        ProjectTools.UpdateShownRun();
+        if (value == SidePanelPage.Mcp && IsSidePanelOpen)
         {
-            IsAgentsPage = false;
-            IsProjectPage = false;
+            _ = McpServers.RefreshAsync();
         }
     }
 
-    /// <summary>The Project page of the side panel is showing.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsFilesPage))]
-    public partial bool IsProjectPage { get; set; }
+    public bool IsFilesPage => Page == SidePanelPage.Files;
 
-    partial void OnIsProjectPageChanged(bool value)
+    /// <summary>The Agents page of the side panel is showing. Setting it false goes back to Changed files.</summary>
+    public bool IsAgentsPage
     {
-        if (value)
+        get => Page == SidePanelPage.Agents;
+        set => SetPage(SidePanelPage.Agents, value);
+    }
+
+    /// <summary>The Project page of the side panel is showing.</summary>
+    public bool IsProjectPage
+    {
+        get => Page == SidePanelPage.Project;
+        set => SetPage(SidePanelPage.Project, value);
+    }
+
+    public bool IsProcessesPage
+    {
+        get => Page == SidePanelPage.Processes;
+        set => SetPage(SidePanelPage.Processes, value);
+    }
+
+    /// <summary>The Tasks page: the plan and the tasks Claude is working through (DESIGN.md §5, "Tasks").</summary>
+    public bool IsTasksPage
+    {
+        get => Page == SidePanelPage.Tasks;
+        set => SetPage(SidePanelPage.Tasks, value);
+    }
+
+    /// <summary>The MCP page: the session's MCP servers (DESIGN.md §4, "MCP servers").</summary>
+    public bool IsMcpPage
+    {
+        get => Page == SidePanelPage.Mcp;
+        set => SetPage(SidePanelPage.Mcp, value);
+    }
+
+    private void SetPage(SidePanelPage page, bool showing)
+    {
+        if (showing)
         {
-            IsProcessesPage = false;
-            IsAgentsPage = false;
+            Page = page;
         }
-        ProjectTools.UpdateShownRun();
+        else if (Page == page)
+        {
+            Page = SidePanelPage.Files;
+        }
     }
 
     [RelayCommand]
@@ -80,18 +126,27 @@ public sealed partial class TabViewModel
     internal void OnSidePanelWidthChanged() => OnPropertyChanged(nameof(SidePanelWidth));
 
     [RelayCommand]
-    private void ShowFilesPage()
+    private void ShowFilesPage() => Page = SidePanelPage.Files;
+
+    [RelayCommand]
+    private void ShowProcessesPage() => Page = SidePanelPage.Processes;
+
+    [RelayCommand]
+    private void ShowProjectPage() => Page = SidePanelPage.Project;
+
+    [RelayCommand]
+    private void ShowTasksPage() => Page = SidePanelPage.Tasks;
+
+    [RelayCommand]
+    private void ShowMcpPage() => Page = SidePanelPage.Mcp;
+
+    /// <summary>The composer bar's way to the Tasks page: opens the side panel on it.</summary>
+    [RelayCommand]
+    private void OpenTasksPage()
     {
-        IsProcessesPage = false;
-        IsAgentsPage = false;
-        IsProjectPage = false;
+        IsSidePanelOpen = true;
+        Page = SidePanelPage.Tasks;
     }
-
-    [RelayCommand]
-    private void ShowProcessesPage() => IsProcessesPage = true;
-
-    [RelayCommand]
-    private void ShowProjectPage() => IsProjectPage = true;
 
     /// <summary>Opens the side panel on the Project page: <b>Show output…</b>, a run's entry, or its notification.</summary>
     private void OpenProjectPage()

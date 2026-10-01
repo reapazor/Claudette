@@ -99,6 +99,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         TodoList.Time = services.Time;
         ProcessMonitor = new ProcessMonitorViewModel(services, this);
         ChangedFiles = new ChangedFilesViewModel(services, this);
+        McpServers = new McpServersViewModel(() => _session);
         ProjectTools = new ProjectToolsViewModel(services, this);
         RemoteControl = new RemoteControlViewModel(services, this);
         Agents = new AgentMap(services.Time, ModelDisplayName);
@@ -178,6 +179,13 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     /// <summary>The processes the tab started (DESIGN.md §4, "Process monitor").</summary>
     public ProcessMonitorViewModel ProcessMonitor { get; }
+
+    /// <summary>The session's MCP servers, for the side panel's MCP page (DESIGN.md §4, "MCP servers").</summary>
+    public McpServersViewModel McpServers { get; }
+
+    /// <summary>The session has MCP servers, as its last <c>system/init</c> listed: the side panel offers the MCP page.</summary>
+    [ObservableProperty]
+    public partial bool HasMcpServers { get; private set; }
 
     /// <summary>The files Claude changed in this session, and their diffs (DESIGN.md §8).</summary>
     public ChangedFilesViewModel ChangedFiles { get; }
@@ -1639,6 +1647,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 UpdateStatus();
                 break;
             case TurnStarted started:
+                HasMcpServers = started.Init.Raw.GetArray("mcp_servers") is { Count: > 0 };
                 State.SessionId = started.Init.SessionId;
                 _forkAwaitingId = false;
                 if (started.Init.ClaudeCodeVersion is { } reported && Version.TryParse(reported, out var version))

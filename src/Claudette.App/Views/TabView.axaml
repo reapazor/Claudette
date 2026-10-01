@@ -380,7 +380,7 @@
       <StackPanel Classes="toolcard">
         <Grid ColumnDefinitions="*,Auto">
           <Button Classes="flat row" Command="{Binding ToggleCommand}" IsHitTestVisible="{Binding CanExpand}">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
               <TextBlock Classes="status" Classes.busy="{Binding !IsComplete}" Classes.ok="{Binding IsComplete}" Classes.failed="{Binding IsError}"
                          Text="●" VerticalAlignment="Center" Margin="0,0,8,0" />
               <Path Grid.Column="1" Classes="toolicon" Data="{Binding IconKey, Converter={x:Static conv:ToolIcons.Geometry}}" Margin="0,0,6,0" />
@@ -707,7 +707,24 @@
             <Button Grid.Column="3" Classes="pagetab" Classes.selected="{Binding IsProcessesPage}" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding ProcessMonitor.IsOn}">
               <TextBlock Text="Processes" Classes.muted="{Binding !IsProcessesPage}" />
             </Button>
-            <Button Grid.Column="5" Classes="flat" Padding="6" VerticalAlignment="Center" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
+            <!-- Tasks (DESIGN.md §5, "Tasks"): "2 of 5" done -->
+            <Button Grid.Column="4" Classes="pagetab" Classes.selected="{Binding IsTasksPage}" Command="{Binding ShowTasksPageCommand}" IsVisible="{Binding TodoList.HasAnything}"
+                    ToolTip.Tip="{Binding TodoList.Summary}">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Text="Tasks" Classes.muted="{Binding !IsTasksPage}" />
+                <TextBlock Classes="muted small" Text="{Binding TodoList.Badge}" VerticalAlignment="Center" IsVisible="{Binding TodoList.HasItems}" />
+              </StackPanel>
+            </Button>
+            <!-- MCP servers (DESIGN.md §4, "MCP servers"); a warning dot when one failed -->
+            <Button Grid.Column="5" Classes="pagetab" Classes.selected="{Binding IsMcpPage}" Command="{Binding ShowMcpPageCommand}" IsVisible="{Binding HasMcpServers}"
+                    ToolTip.Tip="{Binding McpServers.Attention, TargetNullValue='MCP servers'}">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Text="MCP" Classes.muted="{Binding !IsMcpPage}" />
+                <TextBlock Classes="status warning" Text="●" FontSize="8" VerticalAlignment="Center"
+                           IsVisible="{Binding McpServers.Attention, Converter={x:Static ObjectConverters.IsNotNull}}" />
+              </StackPanel>
+            </Button>
+            <Button Grid.Column="7" Classes="flat" Padding="6" VerticalAlignment="Center" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
               <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
             </Button>
           </Grid>
@@ -814,6 +831,88 @@
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
+          </DockPanel>
+
+          <!-- Tasks (DESIGN.md §5, "Tasks"): the approved plan, then each task with its state, owner, what it waits on and times -->
+          <DockPanel IsVisible="{Binding IsTasksPage}">
+            <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="12,0,12,6" Text="{Binding TodoList.Summary}" IsVisible="{Binding TodoList.HasItems}" />
+            <ScrollViewer>
+              <StackPanel Margin="12,0,12,12" Spacing="10">
+                <Border Classes="codeblock" IsVisible="{Binding TodoList.HasPlan}">
+                  <StackPanel Spacing="4">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="Plan" FontWeight="SemiBold" />
+                      <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding TodoList.PlanApprovedText}" VerticalAlignment="Center" />
+                    </Grid>
+                    <md:MarkdownRenderer MarkdownBuilder="{Binding TodoList.PlanMarkdown}" />
+                  </StackPanel>
+                </Border>
+                <ItemsControl ItemsSource="{Binding TodoList.Items}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Spacing="8" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="conv:TodoItem">
+                      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                        <TextBlock Text="{Binding Glyph}" Classes.muted="{Binding IsDone}" />
+                        <StackPanel Grid.Column="1" Spacing="2">
+                          <TextBlock TextWrapping="Wrap" Classes.muted="{Binding IsDone}" Classes.strong="{Binding IsActive}">
+                            <Run Classes="muted" Text="{Binding NumberText}" />
+                            <Run Text="{Binding DisplayText}" />
+                          </TextBlock>
+                          <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+                          <TextBlock Classes="small warning" Text="{Binding BlockedText}" IsVisible="{Binding IsBlocked}" />
+                          <TextBlock Classes="muted small">
+                            <Run Text="{Binding Owner}" />
+                            <Run Text="{Binding TimeText}" />
+                          </TextBlock>
+                        </StackPanel>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </ScrollViewer>
+          </DockPanel>
+
+          <!-- MCP servers (DESIGN.md §4, "MCP servers") -->
+          <DockPanel IsVisible="{Binding IsMcpPage}">
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="12,0,12,6">
+              <TextBlock Classes="muted small" Text="This session's MCP servers." VerticalAlignment="Center" />
+              <Button Grid.Column="1" Classes="flat" Content="Refresh" Command="{Binding McpServers.RefreshCommand}" />
+            </Grid>
+            <TextBlock DockPanel.Dock="Top" Classes="small error" Margin="12,0,12,6" Text="{Binding McpServers.Error}" TextWrapping="Wrap" IsVisible="{Binding McpServers.HasError}" />
+            <ScrollViewer>
+              <ItemsControl ItemsSource="{Binding McpServers.Servers}" Margin="12,0,12,12">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Spacing="10" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="vm:McpServerRow">
+                    <StackPanel Spacing="2">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="1" Classes="small" Classes.muted="{Binding !IsFailed}" Classes.warning="{Binding IsFailed}" Text="{Binding StateText}" />
+                      </Grid>
+                      <TextBlock Classes="muted small" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" />
+                      <SelectableTextBlock Classes="small error" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
+                      <StackPanel Orientation="Horizontal" Spacing="8" IsEnabled="{Binding !IsBusy}">
+                        <Button Classes="flat" Content="Reconnect" IsVisible="{Binding CanReconnect}"
+                                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ReconnectCommand}" CommandParameter="{Binding}" />
+                        <Button Classes="flat" Content="Turn off" IsVisible="{Binding !IsDisabled}" ToolTip.Tip="Disconnect it and remove its tools, for this session"
+                                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ToggleCommand}" CommandParameter="{Binding}" />
+                        <Button Classes="flat" Content="Turn on" IsVisible="{Binding IsDisabled}"
+                                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ToggleCommand}" CommandParameter="{Binding}" />
+                      </StackPanel>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
           </DockPanel>
 
           <!-- Processes (DESIGN.md §4, "Process monitor") -->
