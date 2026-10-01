@@ -69,6 +69,9 @@ public sealed class HistoryEntry
 /// <summary>A folder in History, with its sessions.</summary>
 public sealed record HistoryGroup(string Label, string? Folder, IReadOnlyList<HistoryEntry> Entries);
 
+/// <summary>A folder's heading in History's list, above its sessions.</summary>
+public sealed record HistoryHeading(string Label, string? Folder);
+
 /// <summary>
 /// History (DESIGN.md §9): past sessions grouped by folder, from Claude Code's own storage on this machine (so it
 /// includes terminal sessions) and from the session library (which can include other machines). Opening one resumes it
@@ -91,11 +94,45 @@ public sealed partial class HistoryViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(SearchRepliesCommand))]
     public partial string Search { get; set; } = "";
 
+    /// <summary>How long typing pauses before History filters: a long one is thousands of sessions' prompts.</summary>
+    public static readonly TimeSpan SearchDelay = TimeSpan.FromMilliseconds(150);
+
+    private ITimer? _searchTimer;
+    private int _filterVersion;
+    private bool _replyFilterQueued;
+
+    /// <summary>The latest filtering, for tests to wait on.</summary>
+    internal Task Filtering { get; private set; } = Task.CompletedTask;
+
+    /// <summary>A search is waiting for typing to pause, or being filtered.</summary>
+    internal bool IsFilterPending => _searchTimer is not null || !Filtering.IsCompleted;
+
     partial void OnSearchChanged(string value)
     {
         // A new search: the replies' matches were for the old one.
         StopSearchingReplies();
-        Filter();
+        _searchTimer?.Dispose();
+        _searchTimer = _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() =>
+        {
+            _searchTimer?.Dispose();
+            _searchTimer = null;
+            Filtering = FilterAsync();
+        }), null, SearchDelay, Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>Filters again once, however many replies were found meanwhile.</summary>
+    private void QueueFilter()
+    {
+        if (_replyFilterQueued)
+        {
+            return;
+        }
+        _replyFilterQueued = true;
+        _services.Dispatcher.Post(() =>
+        {
+            _replyFilterQueued = false;
+            Filtering = FilterAsync();
+        });
     }
 
     // ---- Search Claude's replies too ----------------------------------------------------------------------------
@@ -149,7 +186,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
                             if (!search.IsCancellationRequested)
                             {
                                 _replyMatches[entry] = snippet;
-                                Filter();
+                                QueueFilter();
                             }
                         });
                     }
@@ -191,7 +228,17 @@ public sealed partial class HistoryViewModel : ViewModelBase
 
     private string[] Words() => Search.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-    public ObservableCollection<HistoryGroup> Groups { get; } = [];
+    /// <summary>The sessions the search matches, by folder, most recent first.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEmpty))]
+    public partial IReadOnlyList<HistoryGroup> Groups { get; private set; } = [];
+
+    /// <summary>
+    /// <see cref="Groups"/> as one list, each folder's <see cref="HistoryHeading"/> before its sessions, so the view
+    /// virtualizes it: only the rows on screen are built, however long History is.
+    /// </summary>
+    [ObservableProperty]
+    public partial IReadOnlyList<object> Rows { get; private set; } = [];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
@@ -244,7 +291,13 @@ public sealed partial class HistoryViewModel : ViewModelBase
                 {
                     stored = [];
                 }
-                return Merge(local, stored, machine, now, open);
+                // Sessions only in the library are summarized from its copies, cached as Claude Code's own are.
+                var localIds = local.Select(s => s.SessionId).ToHashSet(StringComparer.Ordinal);
+                var libraryOnly = stored.Where(e => e.IsConflictCopy || !localIds.Contains(e.Record.SessionId)).Select(e => e.TranscriptPath).ToArray();
+                IReadOnlyDictionary<string, SessionSummary?> summaries = index is null
+                    ? libraryOnly.ToDictionary(p => p, HistoryIndex.ReadSummary, StringComparer.Ordinal)
+                    : await index.SummarizeAsync(libraryOnly).ConfigureAwait(false);
+                return Merge(local, stored, summaries, machine, now, open);
             });
         }
         catch (Exception ex)
@@ -253,11 +306,14 @@ public sealed partial class HistoryViewModel : ViewModelBase
             _all = [];
         }
         // Fill the list before saying it's loaded, so nothing sees "loaded" with an empty list.
-        Filter();
+        _searchTimer?.Dispose();
+        _searchTimer = null;
+        await (Filtering = FilterAsync());
         IsLoading = false;
     }
 
-    private static List<HistoryEntry> Merge(IReadOnlyList<SessionSummary> local, IReadOnlyList<LibraryEntry> stored, string machine, DateTimeOffset now, HashSet<string> open)
+    private static List<HistoryEntry> Merge(IReadOnlyList<SessionSummary> local, IReadOnlyList<LibraryEntry> stored, IReadOnlyDictionary<string, SessionSummary?> librarySummaries,
+        string machine, DateTimeOffset now, HashSet<string> open)
     {
         var records = stored.Where(e => !e.IsConflictCopy).GroupBy(e => e.Record.SessionId).ToDictionary(g => g.Key, g => g.First());
         var entries = new List<HistoryEntry>();
@@ -283,7 +339,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
                 continue;
             }
             // A session only in the library, from another machine (or older than Claude Code's own cleanup).
-            var summary = HistoryIndex.ReadSummary(libraryEntry.TranscriptPath);
+            var summary = librarySummaries.GetValueOrDefault(libraryEntry.TranscriptPath);
             var title = record.Name ?? summary?.Title ?? summary?.FirstPrompt ?? "Untitled session";
             entries.Add(Entry(record.SessionId, libraryEntry.IsConflictCopy ? $"{title} ({libraryEntry.ConflictLabel})" : title,
                 summary?.FirstPrompt ?? record.FirstPrompt, record.Folder, record.Machine, record.LastUsed,
@@ -335,30 +391,53 @@ public sealed partial class HistoryViewModel : ViewModelBase
 
     /// <summary>
     /// Search by title, prompt text and folder, plus the sessions <see cref="SearchRepliesCommand"/> found; grouped by
-    /// folder, most recent first.
+    /// folder, most recent first. The matching runs off the UI thread; a later filtering wins over an earlier one.
     /// </summary>
-    private void Filter()
+    private async Task FilterAsync()
     {
+        var version = ++_filterVersion;
         var words = Words();
-        var matches = _all.Where(e =>
+        var all = _all;
+        var replies = new Dictionary<HistoryEntry, string>(_replyMatches);
+        var (groups, matched) = await Task.Run(() => Match(all, words, replies));
+        if (version != _filterVersion)
+        {
+            return;
+        }
+        foreach (var entry in all)
+        {
+            entry.MatchedReply = matched.GetValueOrDefault(entry);
+        }
+        Groups = groups;
+        Rows = [.. groups.SelectMany(g => g.Entries.Prepend<object>(new HistoryHeading(g.Label, g.Folder)))];
+    }
+
+    private static (IReadOnlyList<HistoryGroup> Groups, Dictionary<HistoryEntry, string> Matched) Match(
+        IReadOnlyList<HistoryEntry> all, string[] words, Dictionary<HistoryEntry, string> replies)
+    {
+        var matched = new Dictionary<HistoryEntry, string>();
+        var matches = all.Where(e =>
         {
             if (MatchesWithoutReplies(e, words))
             {
-                e.MatchedReply = null;
                 return true;
             }
-            e.MatchedReply = _replyMatches.GetValueOrDefault(e);
-            return e.MatchedReply is not null;
-        });
-        Groups.Clear();
+            if (replies.TryGetValue(e, out var reply))
+            {
+                matched[e] = reply;
+                return true;
+            }
+            return false;
+        }).ToArray();
+        var groups = new List<HistoryGroup>();
         foreach (var group in matches.GroupBy(e => e.Folder is null ? "" : FolderHistory.Normalize(e.Folder), StringComparer.OrdinalIgnoreCase)
                      .OrderByDescending(g => g.Max(e => e.LastActivity)))
         {
             var folder = group.First().Folder;
             var label = folder is null ? "Unknown folder" : Path.GetFileName(folder.TrimEnd('/', '\\')) is { Length: > 0 } name ? name : folder;
-            Groups.Add(new HistoryGroup(label, folder, group.ToArray()));
+            groups.Add(new HistoryGroup(label, folder, group.ToArray()));
         }
-        OnPropertyChanged(nameof(IsEmpty));
+        return (groups, matched);
     }
 
     private static bool MatchesWithoutReplies(HistoryEntry e, string[] words) => words.All(w =>

@@ -77,8 +77,10 @@ public class LibraryAndHistoryTests
         var history = h.Shell.History!;
         await TabTestHarness.Eventually(() => !history.IsLoading, "History to load");
 
-        history.Search = "vulkan";
+        await SearchAsync(h, history, "vulkan");
         Assert.Equal(["s2"], history.Groups.SelectMany(g => g.Entries).Select(e => e.SessionId));
+        // The view's one list: the folder's heading, then its sessions.
+        Assert.Equal(["work", "s2"], history.Rows.Select(r => r is HistoryHeading heading ? heading.Label : ((HistoryEntry)r).SessionId));
 
         await history.SearchRepliesCommand.ExecuteAsync(null);
         await TabTestHarness.Eventually(() => history.Groups.SelectMany(g => g.Entries).Count() == 2, "the reply's session");
@@ -90,9 +92,11 @@ public class LibraryAndHistoryTests
 
         // A new search starts again from the prompts.
         history.Search = "vulkan rename";
-        Assert.Empty(history.Groups);
         Assert.Null(history.ReplySearchText);
         Assert.Null(fromReply.MatchedReply);
+        await SearchAsync(h, history, "vulkan rename");
+        Assert.Empty(history.Groups);
+        Assert.True(history.IsEmpty);
     }
 
     [Fact]
@@ -734,6 +738,15 @@ public class LibraryAndHistoryTests
         await TabTestHarness.Eventually(() => tab.State.Tokens.Total == 360 && tab.IsSettled, "the turn to finish");
         await CopyAfterTurnAsync(h, tab);
         Assert.Equal("Copied this session to the session library again.", Notes(tab)[^1].Text);
+    }
+
+    /// <summary>Types a search into History and waits for typing's pause and the filtering after it.</summary>
+    private static async Task SearchAsync(TabTestHarness h, HistoryViewModel history, string text)
+    {
+        history.Search = text;
+        Assert.True(history.IsFilterPending);
+        h.Time.Advance(HistoryViewModel.SearchDelay);
+        await TabTestHarness.Eventually(() => !history.IsFilterPending, "the search");
     }
 
     /// <summary>Waits out the copy that follows a turn, past its settle delay.</summary>
