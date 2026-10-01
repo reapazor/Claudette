@@ -82,6 +82,8 @@ public class SidePanelUiTests
         var tab = await h.OpenTabAsync();
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
         tab.IsSidePanelOpen = true;
+        // The panel's pages are only in the visual tree once it has been laid out open.
+        UiText.Settle(window);
         var (first, second) = (Path.Combine(h.WorkFolder, "auth.cs"), Path.Combine(h.WorkFolder, "login.cs"));
         await File.WriteAllTextAsync(first, "b\n", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(second, "b\n", TestContext.Current.CancellationToken);
@@ -132,6 +134,8 @@ public class SidePanelUiTests
         var tab = await h.OpenTabAsync();
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
         tab.IsSidePanelOpen = true;
+        // The panel's pages are only in the visual tree once it has been laid out open.
+        UiText.Settle(window);
         var (first, second) = (Path.Combine(h.WorkFolder, "auth.cs"), Path.Combine(h.WorkFolder, "login.cs"));
         await File.WriteAllTextAsync(first, "b\n", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(second, "b\n", TestContext.Current.CancellationToken);

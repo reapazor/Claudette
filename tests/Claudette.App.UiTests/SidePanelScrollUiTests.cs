@@ -72,6 +72,8 @@ public class SidePanelScrollUiTests
         var tab = await h.OpenTabAsync();
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
         tab.IsSidePanelOpen = true;
+        // The panel's pages are only in the visual tree once it has been laid out open.
+        UiText.Settle(window);
         var folder = Directory.CreateDirectory(Path.Combine([h.WorkFolder, .. Enumerable.Repeat("a_folder_with_a_long_name_that_goes_on", 6), "src"])).FullName;
         var file = Path.Combine(folder, "auth.cs");
         await File.WriteAllTextAsync(file, "b\n", TestContext.Current.CancellationToken);
