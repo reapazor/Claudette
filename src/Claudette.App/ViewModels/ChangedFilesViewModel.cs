@@ -468,7 +468,8 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
             new DiffReview(
                 () => ReviewedFiles.LatestChange(Changes.Find(row.Path)),
                 () => Reviewed.IsReviewed(row.Path, Changes.Find(row.Path)),
-                change => SetFileReviewed(row.Path, reviewed: true, change))));
+                change => SetFileReviewed(row.Path, reviewed: true, change)),
+            FromGit: row.FromGit));
     }
 
     /// <summary>

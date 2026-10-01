@@ -928,6 +928,7 @@ The diff view can put back what Claude changed, when it knows what the file held
 
 - **Revert** on a hunk's header undoes just that change, leaving Claude's others.
 - **Revert file** puts the whole file back as it was before Claude's first change, after asking in place (*Put the whole file back?*). A file Claude created is deleted.
+- With Changed files showing git's changes, the diff is against HEAD, and so is the revert: the file goes back to HEAD, in the line endings it has now (git keeps its copy in the ones it was committed in). A file that isn't at HEAD, such as an untracked one that may be the user's own, has nothing to go back to: neither revert is offered, and it's never deleted.
 - Either only writes if the file is still what the view showed: if Claude, or anything else, changed it since, nothing is written and the view says to refresh. Line endings, a missing newline at the end and a UTF-8 byte order mark are kept.
 - The file is written to a temporary name and renamed, as Claudette's own files are. Changed files picks the change up as it does any other.
 

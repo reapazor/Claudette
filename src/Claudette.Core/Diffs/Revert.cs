@@ -31,6 +31,15 @@ public static class Revert
     }
 
     /// <summary>
+    /// <paramref name="text"/> with <paramref name="like"/>'s line endings, when <paramref name="like"/> has Windows ones
+    /// and <paramref name="text"/> only Unix ones (as git hands back a file it converts on checkout); otherwise as it is.
+    /// </summary>
+    public static string? WithLineEndingsOf(string? text, string? like) =>
+        text is null || like is null || !like.Contains("\r\n", StringComparison.Ordinal) || text.Contains('\r', StringComparison.Ordinal)
+            ? text
+            : text.ReplaceLineEndings("\r\n");
+
+    /// <summary>
     /// Writes <paramref name="text"/> to <paramref name="path"/> only if the file still holds
     /// <paramref name="expectedCurrent"/> (null: missing). False when it changed meanwhile. A null
     /// <paramref name="text"/> deletes the file: it didn't exist before Claude made it.

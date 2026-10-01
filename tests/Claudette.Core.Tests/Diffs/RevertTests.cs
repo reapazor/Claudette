@@ -43,6 +43,14 @@ public class RevertTests
         Assert.Equal("one\r\ntwo\r\nthree", reverted);
     }
 
+    [Theory]
+    [InlineData("a\nb\n", "x\r\ny\r\n", "a\r\nb\r\n")]
+    [InlineData("a\nb\n", "x\ny\n", "a\nb\n")]
+    [InlineData("a\r\nb\n", "x\r\ny\r\n", "a\r\nb\n")]
+    [InlineData(null, "x\r\n", null)]
+    public void Git_copies_take_the_files_line_endings_when_it_has_Windows_ones(string? text, string like, string? expected) =>
+        Assert.Equal(expected, Revert.WithLineEndingsOf(text, like));
+
     [Fact]
     public void A_file_changed_since_the_diff_isnt_touched()
     {
