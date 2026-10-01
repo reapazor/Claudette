@@ -42,15 +42,18 @@ public class SleepBlockerTests
     }
 
     [Fact]
-    public void Systemd_inhibit_blocks_sleep_while_sleep_infinity_runs()
+    public void Systemd_inhibit_blocks_sleep_while_claudette_runs()
     {
-        var blocker = ProcessSleepBlocker.SystemdInhibit(_launcher, new Probe("/usr/bin/systemd-inhibit"));
+        var blocker = ProcessSleepBlocker.SystemdInhibit(_launcher, 4242, new Probe("/usr/bin/systemd-inhibit"));
 
         blocker.SetBlocking(true);
 
         var spec = Assert.Single(_launcher.Specs);
         Assert.Equal("/usr/bin/systemd-inhibit", spec.FileName);
-        Assert.Equal(["--what=sleep", "--who=Claudette", "--why=Tabs are connected to the Claude app", "--mode=block", "sleep", "infinity"], spec.Arguments);
+        Assert.Equal(
+            ["--what=sleep", "--who=Claudette", "--why=Tabs are connected to the Claude app", "--mode=block",
+             "/bin/sh", "-c", "while kill -0 \"$1\" 2>/dev/null; do sleep 10; done", "claudette-awake", "4242"],
+            spec.Arguments);
         // Claudette's own environment, like its other helpers.
         Assert.Null(spec.Environment);
         blocker.Dispose();
@@ -61,7 +64,7 @@ public class SleepBlockerTests
     [Fact]
     public void Without_systemd_inhibit_nothing_is_kept_awake_and_Diagnostics_says_why()
     {
-        var blocker = ProcessSleepBlocker.SystemdInhibit(_launcher, new Probe(null));
+        var blocker = ProcessSleepBlocker.SystemdInhibit(_launcher, 4242, new Probe(null));
 
         blocker.SetBlocking(true);
 
@@ -74,7 +77,7 @@ public class SleepBlockerTests
     [Fact]
     public async Task A_helper_that_stops_by_itself_no_longer_blocks_and_says_why()
     {
-        var blocker = ProcessSleepBlocker.SystemdInhibit(_launcher, new Probe("/usr/bin/systemd-inhibit"));
+        var blocker = ProcessSleepBlocker.SystemdInhibit(_launcher, 4242, new Probe("/usr/bin/systemd-inhibit"));
         blocker.SetBlocking(true);
 
         _launcher.Started[0].WriteError("Failed to inhibit: Access denied");
@@ -124,6 +127,23 @@ public class SleepBlockerTests
         failing.SetBlocking(true);
         await Eventually(() => !failing.IsBlocking);
         Assert.Equal("Not keeping the computer awake: sh stopped (exit code 3): no logind here", failing.Describe());
+    }
+
+    [Fact]
+    public async Task The_inhibitors_command_ends_when_claudette_does()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The helpers run on macOS and Linux.");
+        // The command systemd-inhibit runs, without systemd-inhibit: it waits while the process it watches is there.
+        static ProcessStartSpec Watching(int pid) => new("/bin/sh", ProcessSleepBlocker.SystemdInhibitArguments(pid).Skip(5).ToArray());
+        var gone = System.Diagnostics.Process.Start("sh", ["-c", "exit 0"])!;
+        await gone.WaitForExitAsync(TestContext.Current.CancellationToken);
+
+        await using var watchingGone = new ProcessLauncher().Start(Watching(gone.Id));
+        await using var watchingUs = new ProcessLauncher().Start(Watching(Environment.ProcessId));
+
+        Assert.Equal(0, await watchingGone.Exited.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+        Assert.False(watchingUs.Exited.IsCompleted);
+        watchingUs.Kill();
     }
 
     [Fact]
