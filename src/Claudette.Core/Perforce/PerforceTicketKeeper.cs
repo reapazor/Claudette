@@ -164,6 +164,18 @@ public sealed class PerforceTicketKeeper : IDisposable
         _userLoginTimer?.Dispose();
     }
 
+    /// <summary>A check or login is under way, which an <see cref="EnsureFreshAsync"/> call now would share.</summary>
+    public bool IsBusy
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _running is { IsCompleted: false };
+            }
+        }
+    }
+
     private bool IsRecentlyValid()
     {
         var now = _time.GetUtcNow();

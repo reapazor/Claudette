@@ -83,6 +83,9 @@ public sealed partial class TabViewModel
     /// <summary>The Perforce workspace this tab's folder is in, while ticket handling is on for it.</summary>
     public PerforceWorkspace? PerforceWorkspace => _perforceKeeper?.Workspace;
 
+    /// <summary>For tests: the ticket keeper is checking or logging in.</summary>
+    internal bool IsCheckingPerforceTicket => _perforceKeeper?.IsBusy == true;
+
     /// <summary>The password prompt, while one is open.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPerforcePrompt))]

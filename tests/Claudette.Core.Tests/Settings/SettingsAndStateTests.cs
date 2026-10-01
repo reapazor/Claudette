@@ -72,7 +72,8 @@ public sealed class SettingsAndStateTests : IDisposable
             await store.SaveAsync(settings, TestContext.Current.CancellationToken);
         }
 
-        Assert.Empty(Directory.GetFiles(_root, "settings.json.*"));
+        // Nothing set aside and no temporary file left. ("settings.json.*" would match the file itself: a Windows pattern.)
+        Assert.Equal(["settings.json"], Directory.GetFiles(_root).Select(Path.GetFileName));
         Assert.Equal(ThemeChoice.Dark, store.Load().Appearance.Theme);
         Assert.False(store.CouldNotRead);
     }
