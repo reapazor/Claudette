@@ -2,6 +2,7 @@ using System.Text.Json;
 using Claudette.Core;
 using Claudette.Core.Auth;
 using Claudette.Core.Claude;
+using Claudette.Core.Composer;
 using Claudette.Core.Credentials;
 using Claudette.Core.Diffs;
 using Claudette.Core.Git;
@@ -328,6 +329,28 @@ public sealed class AppServices : IAsyncDisposable
             trusted.Add(folder);
             SaveState();
         }
+    }
+
+    private readonly Dictionary<string, WeakReference<ProjectFileIndex>> _fileIndexes = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The <c>@</c> file index for <paramref name="folder"/>, one for all the tabs in it (DESIGN.md §5, "Composer"). Held
+    /// weakly here: the tabs keep it, and it goes once they've all closed. Called on the UI thread.
+    /// </summary>
+    public ProjectFileIndex FileIndexFor(string folder)
+    {
+        var key = FolderHistory.Normalize(folder);
+        if (_fileIndexes.TryGetValue(key, out var weak) && weak.TryGetTarget(out var index))
+        {
+            return index;
+        }
+        foreach (var gone in _fileIndexes.Where(e => !e.Value.TryGetTarget(out _)).Select(e => e.Key).ToArray())
+        {
+            _fileIndexes.Remove(gone);
+        }
+        index = new ProjectFileIndex(folder, Git, Time);
+        _fileIndexes[key] = new WeakReference<ProjectFileIndex>(index);
+        return index;
     }
 
     /// <summary>For the working line's verbs (DESIGN.md §5). Tests give it a seed.</summary>

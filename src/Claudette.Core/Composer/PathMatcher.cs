@@ -15,7 +15,8 @@ namespace Claudette.Core.Composer;
 /// </summary>
 public static class PathMatcher
 {
-    public static IReadOnlyList<IndexedPath> Match(IReadOnlyList<IndexedPath> paths, string query, int limit = 50)
+    /// <param name="cancellationToken">Cancelled when another keystroke makes this match stale.</param>
+    public static IReadOnlyList<IndexedPath> Match(IReadOnlyList<IndexedPath> paths, string query, int limit = 50, CancellationToken cancellationToken = default)
     {
         query = query.Replace('\\', '/');
         if (query.Length == 0)
@@ -28,8 +29,13 @@ public static class PathMatcher
         }
 
         var scored = new List<(IndexedPath Path, int Score)>();
-        foreach (var path in paths)
+        for (var i = 0; i < paths.Count; i++)
         {
+            if ((i & 1023) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            var path = paths[i];
             // Having picked a folder, list what's in it rather than the folder again.
             if (query.EndsWith('/') && path.Path.Equals(query, StringComparison.OrdinalIgnoreCase))
             {

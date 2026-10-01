@@ -226,6 +226,19 @@ public partial class ComposerTests
         Assert.Empty(tab.Completions.Items);
     }
 
+    [Fact]
+    public async Task Tabs_in_the_same_folder_share_one_listing_of_its_files()
+    {
+        await using var h = new TabTestHarness();
+        h.Factory.ProcessPerSession = true;
+        var first = await h.OpenTabAsync();
+        await h.Shell.OpenFolderAsync(h.WorkFolder);
+        var second = h.Shell.SelectedTab!;
+        Assert.NotSame(first, second);
+
+        Assert.Same(first.FileIndex, second.FileIndex);
+    }
+
     // ---- Attachments --------------------------------------------------------------------------------------------
 
     [Fact]

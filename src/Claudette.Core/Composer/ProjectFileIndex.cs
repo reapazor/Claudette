@@ -2,33 +2,34 @@ using Claudette.Core.Git;
 
 namespace Claudette.Core.Composer;
 
-/// <summary>A file or folder in a tab's working folder, relative to it with forward slashes. Folders end in <c>/</c>.</summary>
-public sealed record IndexedPath(string Path)
+/// <summary>
+/// A file or folder in a tab's working folder, relative to it with forward slashes. Folders end in <c>/</c>. Its parts
+/// are worked out once, since matching reads them for every path on every keystroke.
+/// </summary>
+public sealed record IndexedPath
 {
-    public bool IsFolder => Path.EndsWith('/');
+    public IndexedPath(string path)
+    {
+        Path = path;
+        IsFolder = path.EndsWith('/');
+        var trimmed = IsFolder ? path[..^1] : path;
+        var slash = trimmed.LastIndexOf('/');
+        Name = trimmed[(slash + 1)..];
+        Parent = slash < 0 ? "" : trimmed[..(slash + 1)];
+        Depth = trimmed.AsSpan().Count('/');
+    }
+
+    public string Path { get; }
+
+    public bool IsFolder { get; }
 
     /// <summary>The last segment, without a folder's trailing slash.</summary>
-    public string Name
-    {
-        get
-        {
-            var trimmed = Path.TrimEnd('/');
-            return trimmed[(trimmed.LastIndexOf('/') + 1)..];
-        }
-    }
+    public string Name { get; }
 
     /// <summary>The folder it's in, with a trailing slash, or empty at the top.</summary>
-    public string Parent
-    {
-        get
-        {
-            var trimmed = Path.TrimEnd('/');
-            var slash = trimmed.LastIndexOf('/');
-            return slash < 0 ? "" : trimmed[..(slash + 1)];
-        }
-    }
+    public string Parent { get; }
 
-    public int Depth => Path.TrimEnd('/').Count(c => c == '/');
+    public int Depth { get; }
 }
 
 /// <summary>
@@ -54,8 +55,8 @@ public sealed class ProjectFileIndex(string folder, GitWorkingTree git, TimeProv
     /// <summary>How long a listing is used before it's refreshed.</summary>
     public TimeSpan MaxAge { get; init; } = TimeSpan.FromSeconds(15);
 
-    /// <summary>At most this many entries are kept, so a huge folder can't use unbounded memory.</summary>
-    public int MaxEntries { get; init; } = 100_000;
+    /// <summary>At most this many files are kept, with the folders they're in, so a huge folder can't use unbounded memory.</summary>
+    public int MaxFiles { get; init; } = 100_000;
 
     /// <summary>The walk (outside git) stops after this many entries.</summary>
     public int MaxWalkEntries { get; init; } = 20_000;
@@ -117,7 +118,7 @@ public sealed class ProjectFileIndex(string folder, GitWorkingTree git, TimeProv
         try
         {
             var files = Directory.Exists(Folder) ? await git.ListFilesAsync(Folder).ConfigureAwait(false) : null;
-            var paths = files is not null ? WithFolders(files, MaxEntries) : Walk(Folder, MaxWalkEntries, MaxWalkDepth);
+            var paths = files is not null ? WithFolders(files, MaxFiles) : Walk(Folder, MaxWalkEntries, MaxWalkDepth);
             lock (_lock)
             {
                 _paths = paths;
@@ -135,13 +136,15 @@ public sealed class ProjectFileIndex(string folder, GitWorkingTree git, TimeProv
         }
     }
 
-    /// <summary>The files git listed, plus the folders they're in, sorted.</summary>
-    internal static IReadOnlyList<IndexedPath> WithFolders(IReadOnlyList<string> files, int maxEntries)
+    /// <summary>The files git listed, at most <paramref name="maxFiles"/>, plus the folders they're in, sorted.</summary>
+    internal static IReadOnlyList<IndexedPath> WithFolders(IReadOnlyList<string> files, int maxFiles)
     {
         var paths = new HashSet<string>(StringComparer.Ordinal);
+        var kept = 0;
         foreach (var file in files)
         {
-            if (paths.Count >= maxEntries)
+            // Folders don't count: a deep tree of few files would otherwise keep fewer of them.
+            if (kept >= maxFiles)
             {
                 break;
             }
@@ -154,7 +157,10 @@ public sealed class ProjectFileIndex(string folder, GitWorkingTree git, TimeProv
             {
                 paths.Add(path[..(slash + 1)]);
             }
-            paths.Add(path);
+            if (paths.Add(path))
+            {
+                kept++;
+            }
         }
         return paths.Order(StringComparer.Ordinal).Select(p => new IndexedPath(p)).ToArray();
     }

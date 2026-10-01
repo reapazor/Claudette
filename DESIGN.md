@@ -523,7 +523,8 @@ Claude Code keeps some work going after a turn ends, and its own UIs count it (*
 - **Files.** Typing `@` at the start of a word lists the working folder's files and folders.
   - In a git repository the list is `git ls-files --cached --others --exclude-standard`, so `.gitignore` is respected.
   - Elsewhere it's a breadth-first walk of the folder that skips `.git`, `.hg`, `.svn`, `node_modules`, `bin`, `obj`, `.vs`, `.idea`, `__pycache__` and `.venv`, and stops at 20,000 entries or 16 levels deep.
-  - The list is cached per tab. It's refreshed when it's more than 15 seconds old and after each turn, and the old list is used while the new one loads.
+  - The list is cached per folder, one for all the tabs in it, and kept up to 100,000 files (folders don't count against it). It's refreshed when it's more than 15 seconds old and after each turn, and the old list is used while the new one loads.
+  - Matching runs off the UI thread, and a keystroke stops a match the one before started rather than letting it finish.
   - Matching ignores case. Best first: a name that starts with what's typed, a path that does (`src/de` finds `src/deep/`), a path segment that does, a name or path that contains it, then its letters in order, preferring the starts of words (`tvm` finds `TabViewModel.cs`). Ties go to shallower, then shorter, paths. With nothing typed, the top of the folder is listed, folders first.
   - Picking a file inserts `@path/to/file ` relative to the working folder. Picking a folder inserts `@folder/` and lists what's in it. A path with spaces is quoted: `@"docs/my notes.md"`.
 - **Keys.** The list opens above the composer, and the text box keeps focus.
