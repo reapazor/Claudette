@@ -11,16 +11,23 @@ public sealed partial class TabViewModel
 {
     private IReadOnlyList<string> _spinnerVerbs = SpinnerVerbs.BuiltIn;
 
-    /// <summary>The glyph, verb, time and tokens of the turn in progress.</summary>
-    public WorkingLine Working => field ??= new WorkingLine(
-        _services.Time,
-        _services.Dispatcher,
-        () => _spinnerVerbs,
-        () => _services.Settings.Appearance.FunWorkingWords,
-        () => _callUsage.TurnTokens,
-        () => _services.Tips.Text(Core.Settings.KeyboardShortcuts.Stop),
-        _services.Random,
-        () => _services.Settings.Appearance.ShowToolInWorkingLine);
+    /// <summary>The glyph, verb, time and tokens of the turn in progress. It only ticks while this tab is selected.</summary>
+    public WorkingLine Working => field ??= CreateWorkingLine();
+
+    private WorkingLine CreateWorkingLine()
+    {
+        var line = new WorkingLine(
+            _services.Time,
+            _services.Dispatcher,
+            () => _spinnerVerbs,
+            () => _services.Settings.Appearance.FunWorkingWords,
+            () => _callUsage.TurnTokens,
+            () => _services.Tips.Text(Core.Settings.KeyboardShortcuts.Stop),
+            _services.Random,
+            () => _services.Settings.Appearance.ShowToolInWorkingLine);
+        line.SetShown(IsSelected);
+        return line;
+    }
 
     /// <summary>The main agent's tool calls that haven't had their result yet, oldest first.</summary>
     private readonly List<(string Id, string Name, JsonObject Input)> _runningTools = [];

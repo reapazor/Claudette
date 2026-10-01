@@ -49,19 +49,19 @@ public sealed partial class SettingsViewModel
 {
     private static IEnumerable<SettingsSearchResult> PerforceSearchEntries() =>
     [
-        new("Perforce", "Keep Perforce logins fresh"),
-        new("Perforce", "Password source"),
-        new("Perforce", "Renew the ticket when less than this is left (minutes)"),
-        new("Perforce", "Request tickets valid on all hosts"),
-        new("Perforce", "Show changelist on tabs"),
-        new("Perforce", "Save a Perforce password"),
-        new("Perforce", "Forget the Perforce password"),
-        new("Perforce", "Per-folder server and user"),
+        new(SettingsCategory.Perforce, "Keep Perforce logins fresh"),
+        new(SettingsCategory.Perforce, "Password source"),
+        new(SettingsCategory.Perforce, "Renew the ticket when less than this is left (minutes)"),
+        new(SettingsCategory.Perforce, "Request tickets valid on all hosts"),
+        new(SettingsCategory.Perforce, "Show changelist on tabs"),
+        new(SettingsCategory.Perforce, "Save a Perforce password"),
+        new(SettingsCategory.Perforce, "Forget the Perforce password"),
+        new(SettingsCategory.Perforce, "Per-folder server and user"),
     ];
 
     private PerforceSettings Perforce => _settings.Perforce;
 
-    public bool IsPerforce => SelectedCategory == "Perforce";
+    public bool IsPerforce => SelectedCategory == SettingsCategory.Perforce;
 
     public bool PerforceEnabled
     {

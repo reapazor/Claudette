@@ -11,7 +11,7 @@
           <TextBlock Text="History" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center" />
           <Button Grid.Column="1" Classes="flat" Content="Refresh" Command="{Binding RefreshCommand}" />
         </Grid>
-        <TextBox x:Name="SearchBox" Text="{Binding Search}" PlaceholderText="Search by title or prompt" />
+        <TextBox x:Name="SearchBox" Text="{Binding Search}" PlaceholderText="Search by title or prompt; Enter searches Claude's replies too" />
       </StackPanel>
 
       <ScrollViewer Grid.Row="1" Padding="8,0,8,8">
@@ -19,6 +19,12 @@
           <TextBlock Classes="muted" Margin="8" Text="Reading your sessions…" IsVisible="{Binding IsLoading}" />
           <TextBlock Classes="error" Margin="8" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
           <TextBlock Classes="muted" Margin="8" Text="No sessions found." IsVisible="{Binding IsEmpty}" />
+          <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0">
+            <Button Classes="flat" Content="Search Claude's replies too" Command="{Binding SearchRepliesCommand}"
+                    IsVisible="{Binding !IsSearchingReplies}" ToolTip.Tip="Reads each session's transcript, so it takes a moment" />
+            <TextBlock Classes="muted small" Text="{Binding ReplySearchText}" VerticalAlignment="Center" TextWrapping="Wrap"
+                       IsVisible="{Binding HasReplySearchText}" />
+          </StackPanel>
           <ItemsControl ItemsSource="{Binding Groups}">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
@@ -41,6 +47,10 @@
                           <StackPanel Spacing="1">
                             <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
                             <TextBlock Classes="muted small" Text="{Binding FirstPrompt}" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasFirstPrompt}" />
+                            <TextBlock Classes="small" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasMatchedReply}">
+                              <Run Classes="muted" Text="Claude: " />
+                              <Run Text="{Binding MatchedReply}" />
+                            </TextBlock>
                             <TextBlock Classes="muted small" Text="{Binding Details}" />
                           </StackPanel>
                         </Button>

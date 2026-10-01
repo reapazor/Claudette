@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Files;
+using Claudette.Core.Json;
 using Claudette.Core.Library;
 using Claudette.Core.Protocol;
 
@@ -118,37 +120,54 @@ public static class SettingsSync
     }
 
     /// <summary>Reads <c>settings-sync.json</c> leniently: a missing or unreadable file, or a bad entry, reads as nothing.</summary>
-    public static SyncedSettingsFile ReadFile(string path)
+    public static SyncedSettingsFile ReadFile(string path) => TryReadFile(path) ?? new SyncedSettingsFile();
+
+    /// <summary>
+    /// Reads <c>settings-sync.json</c> for a merge. A missing file, or a bad entry, reads as nothing. A file that's there
+    /// but can't be read (in use, or not JSON, as while a sync client is half way through writing it) reads as null:
+    /// merging with nothing and writing the result would drop the settings only other machines know, so skip this round.
+    /// </summary>
+    public static SyncedSettingsFile? TryReadFile(string path)
     {
         var file = new SyncedSettingsFile();
+        JsonObject? root;
         try
         {
-            if (!File.Exists(path) || JsonNode.Parse(File.ReadAllText(path)) is not JsonObject root)
+            if (!File.Exists(path))
             {
                 return file;
             }
-            if (root.GetDouble("version") is { } version)
-            {
-                file.Version = (int)version;
-            }
-            foreach (var (key, node) in root.GetObject("values") ?? new JsonObject())
-            {
-                if (node is JsonObject entry
-                    && entry.GetString("changedAt") is { } changedAt
-                    && DateTimeOffset.TryParse(changedAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var time))
-                {
-                    file.Values[key] = new SyncedSetting
-                    {
-                        Value = entry["value"]?.DeepClone(),
-                        ChangedAt = time,
-                        Machine = entry.GetString("machine") ?? "",
-                    };
-                }
-            }
+            root = JsonTree.ParseObject(AtomicFile.ReadAllText(path));
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return file;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
-            return new SyncedSettingsFile();
+            return null;
+        }
+        if (root is null)
+        {
+            return null;
+        }
+        if (root.GetDouble("version") is { } version)
+        {
+            file.Version = (int)version;
+        }
+        foreach (var (key, node) in root.GetObject("values") ?? new JsonObject())
+        {
+            if (node is JsonObject entry
+                && entry.GetString("changedAt") is { } changedAt
+                && DateTimeOffset.TryParse(changedAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var time))
+            {
+                file.Values[key] = new SyncedSetting
+                {
+                    Value = entry["value"]?.DeepClone(),
+                    ChangedAt = time,
+                    Machine = entry.GetString("machine") ?? "",
+                };
+            }
         }
         return file;
     }

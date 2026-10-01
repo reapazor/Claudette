@@ -29,6 +29,9 @@ internal sealed class FakeTransport : IClaudeTransport
         ["current_permission_mode"] = "default",
     };
 
+    /// <summary>While set, sends don't complete until it does: a write still under way as Claude Code answers.</summary>
+    public TaskCompletionSource? HoldSends { get; set; }
+
     public bool InputClosed { get; private set; }
 
     public bool Terminated { get; private set; }
@@ -86,7 +89,7 @@ internal sealed class FakeTransport : IClaudeTransport
                 EmitJson(OutgoingMessages.ControlSuccess(requestId, InitializeResponse));
             }
         }
-        return ValueTask.CompletedTask;
+        return HoldSends is { } hold ? new ValueTask(hold.Task) : ValueTask.CompletedTask;
     }
 
     /// <summary>Waits until Claudette sends a line matching <paramref name="match"/> (including one already sent).</summary>

@@ -83,6 +83,9 @@ public sealed partial class TabViewModel
     /// <summary>The Perforce workspace this tab's folder is in, while ticket handling is on for it.</summary>
     public PerforceWorkspace? PerforceWorkspace => _perforceKeeper?.Workspace;
 
+    /// <summary>For tests: the ticket keeper is checking or logging in.</summary>
+    internal bool IsCheckingPerforceTicket => _perforceKeeper?.IsBusy == true;
+
     /// <summary>The password prompt, while one is open.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPerforcePrompt))]
@@ -167,7 +170,7 @@ public sealed partial class TabViewModel
         OnPropertyChanged(nameof(HasChangelists));
         OnPropertyChanged(nameof(InfoRows));
         // A link can have {changelist} in it (DESIGN.md §18, "Links").
-        OnPropertyChanged(nameof(Links));
+        ProjectTools.OnLinkValuesChanged();
     }
 
     /// <summary>The Perforce rows of the tab info card (DESIGN.md §4).</summary>
@@ -385,7 +388,7 @@ public sealed partial class TabViewModel
             PerforcePrompt?.Abandon();
             PerforcePrompt = prompt;
             // It waits on the user like a permission prompt: "Needs input", the badge, and a notification.
-            _pendingPermissions++;
+            _waitingOnUser.Add(prompt);
             _checkIns.SetWaitingOnUser(true);
             UpdateStatus();
             _services.Notifications.Notify(NotificationKind.NeedsInput, DisplayName, $"Perforce needs your password to log in as {request.User} @ {request.Server}.", Id);
@@ -405,7 +408,7 @@ public sealed partial class TabViewModel
                 {
                     PerforcePrompt = null;
                 }
-                PermissionResolved();
+                PermissionResolved(prompt);
             });
         }
     }

@@ -11,6 +11,7 @@ using Claudette.App.ViewModels;
 using Claudette.App.Views;
 using Claudette.Core;
 using Claudette.Core.Development;
+using Claudette.Core.Logging;
 using Claudette.Core.Processes;
 using Claudette.Core.Settings;
 using Claudette.Platform.Credentials;
@@ -22,6 +23,7 @@ using Claudette.Platform.ProjectTools;
 using Claudette.Platform.Shell;
 using Claudette.Platform.Shell.Windows;
 using Claudette.Platform.Updates;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Claudette.App;
@@ -53,6 +55,8 @@ public partial class App : Application
             var launcher = new ProcessLauncher();
             var trees = TryCreateProcessTracker(launcher);
             var paths = AppPaths.ForCurrentUser();
+            var loggers = new FileLoggerFactory(paths.LogDirectory, TimeProvider.System);
+            CatchUnhandledExceptions(loggers.CreateLogger("Unhandled"));
             _services = new AppServices(
                 paths,
                 trees is null ? launcher : new TrackingProcessLauncher(launcher, trees),
@@ -67,7 +71,8 @@ public partial class App : Application
                 systemProcesses: new SystemProcesses(launcher, TimeProvider.System),
                 unrealRegistry: UnrealEngineRegistries.CreateForCurrentOS(),
                 sleepBlocker: SleepBlockers.CreateForCurrentOS(launcher),
-                loginItems: LoginLaunch.CreateItems(launcher, TimeProvider.System));
+                loginItems: LoginLaunch.CreateItems(launcher, TimeProvider.System),
+                loggerFactory: loggers);
             // In the background, so the window isn't held up; the first claude start waits for it (DESIGN.md §13).
             _services.UserEnvironment.Start();
             var services = _services;
@@ -112,6 +117,27 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Logs what nothing else caught, to <c>claudette.log</c> (DESIGN.md §13, "Diagnostics"). An exception on the UI
+    /// thread is logged and handled rather than ending the app, which would leave every tab's <c>claude</c> running
+    /// (the Job Objects deliberately don't end them, §4). A faulted task nobody awaited is logged and observed.
+    /// </summary>
+    private static void CatchUnhandledExceptions(ILogger logger)
+    {
+        Dispatcher.UIThread.UnhandledException += (_, e) =>
+        {
+            logger.LogError(e.Exception, "Unhandled exception on the UI thread; carrying on.");
+            e.Handled = true;
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            logger.LogError(e.Exception, "A background task failed and nothing was waiting for it.");
+            e.SetObserved();
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            logger.LogCritical(e.ExceptionObject as Exception, "Unhandled exception; Claudette is ending.");
     }
 
     // ---- Restarts: source builds (DESIGN.md §9, "Working on Claudette") and updates (§2, "Updating Claudette") -----
@@ -192,6 +218,9 @@ public partial class App : Application
 
     private const string DefaultMonoFonts = "Cascadia Mono, Consolas, Menlo, monospace";
 
+    /// <summary>The appearance settings last applied, so unchanged ones aren't applied again.</summary>
+    private object? _appliedAppearance;
+
     /// <summary>Applies Settings → Appearance: theme, style, fonts and font sizes (DESIGN.md §14).</summary>
     private void ApplyAppearance()
     {
@@ -200,6 +229,14 @@ public partial class App : Application
             return;
         }
         var appearance = _services.Settings.Appearance;
+        // Settings change often (every switch in Settings saves), and setting an application resource walks every
+        // window's whole tree, every tab's conversation included: only when something here changed.
+        var applied = (appearance.Theme, appearance.Style, appearance.ConversationFontSize, appearance.CodeFontSize, appearance.ConversationFont, appearance.CodeFont);
+        if (applied.Equals(_appliedAppearance))
+        {
+            return;
+        }
+        _appliedAppearance = applied;
         RequestedThemeVariant = appearance.Theme switch
         {
             ThemeChoice.Light => ThemeVariant.Light,

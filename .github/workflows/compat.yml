@@ -3,6 +3,10 @@ name: Claude Code compatibility check
 # Daily check for new Claude Code releases (DESIGN.md §16). When one appears, installs it, runs the free test suite
 # against it, and opens an issue with the changelog, Agent SDK type changes, docs and CLI help diffs, and every change
 # that mentions something in compat/surface.yaml.
+#
+# It also runs the RealCli tests against the oldest Claude Code Claudette supports (surface.yaml's `minimum`), on days
+# when main has changed, so a change that needs something newer is noticed without spending minutes on every pull
+# request.
 on:
   schedule:
     - cron: "17 7 * * *"
@@ -11,42 +15,69 @@ on:
       version:
         description: Claude Code version to check (defaults to npm's latest)
         required: false
+      minimum:
+        description: Also test the minimum supported version, whether or not main changed
+        type: boolean
+        default: false
 
 permissions:
   contents: read
-  issues: write
+
+# One check at a time: two at once could both open a report for the same version.
+concurrency:
+  group: compat
+  cancel-in-progress: false
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
 
+      # Inputs and outputs reach scripts through the environment, never pasted into them, and must look like a version.
       - name: Look for a new version
         id: detect
-        run: node compat/check.mjs detect ${{ inputs.version && format('--version {0}', inputs.version) || '' }}
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ -n "$INPUT_VERSION" && ! "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$INPUT_VERSION' isn't a version such as 2.1.290"
+            exit 1
+          fi
+          node compat/check.mjs detect ${INPUT_VERSION:+--version "$INPUT_VERSION"}
 
       - name: Skip versions that already have a report
         id: existing
         if: steps.detect.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.detect.outputs.version }}
         run: |
-          count=$(gh issue list --state all --search "\"Claude Code ${{ steps.detect.outputs.version }} compatibility report\" in:title" --json number --jq length)
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::npm's version '$VERSION' doesn't look like a version"
+            exit 1
+          fi
+          count=$(gh issue list --state all --search "\"Claude Code $VERSION compatibility report\" in:title" --json number --jq length)
           echo "count=$count" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
         with:
           global-json-file: global.json
 
       - name: Install Claude Code ${{ steps.detect.outputs.version }}
         if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
+        env:
+          VERSION: ${{ steps.detect.outputs.version }}
         run: |
-          curl -fsSL https://claude.ai/install.sh | bash -s "${{ steps.detect.outputs.version }}"
+          curl -fsSL https://claude.ai/install.sh | bash -s "$VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Capture CLI help
@@ -55,32 +86,79 @@ jobs:
           claude --version
           claude --help > cli-help-new.txt
 
-      # Everything except Live (real tokens). RealCli tests run the new version against the mock API.
+      # Everything except Live (real tokens). RealCli tests run the new version against the mock API. A test that hangs
+      # fails the run after 10 minutes and names itself.
       - name: Run the tests against it
         id: tests
         if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
         continue-on-error: true
+        timeout-minutes: 25
         run: |
           set -o pipefail
-          dotnet test Claudette.slnx --configuration Release --filter "Category!=Live" 2>&1 | tee test-output.txt
+          dotnet test Claudette.slnx --configuration Release --filter "Category!=Live" --blame-hang-timeout 10m --blame-hang-dump-type none 2>&1 | tee test-output.txt
 
       - name: Write the report
         if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
+        env:
+          VERSION: ${{ steps.detect.outputs.version }}
+          OUTCOME: ${{ steps.tests.outcome }}
         run: >
           node compat/check.mjs report
-          --version "${{ steps.detect.outputs.version }}"
+          --version "$VERSION"
           --help-file cli-help-new.txt
           --tests-file test-output.txt
-          --tests-outcome "${{ steps.tests.outcome }}"
+          --tests-outcome "$OUTCOME"
           --out report.md
 
       - name: Open an issue
         if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.detect.outputs.version }}
         run: |
-          version="${{ steps.detect.outputs.version }}"
           gh label create compat --color 5319E7 --description "Claude Code compatibility" --force
-          url=$(gh issue create --title "Claude Code $version compatibility report" --label compat --body-file report.md)
+          url=$(gh issue create --title "Claude Code $VERSION compatibility report" --label compat --body-file report.md)
           echo "Opened $url"
           if [ "$(jq -r .quiet compat-result.json)" = "true" ]; then
             gh issue close "$url" --comment "Nothing in compat/surface.yaml changed and all tests passed. Closed automatically and kept as a record."
           fi
+
+  # The oldest supported Claude Code (ClaudeLocator.MinimumVersion) against the mock API. Only on days main changed:
+  # Claudette's changes are what could stop it working with an older version.
+  minimum:
+    name: Minimum supported Claude Code
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 100
+      - id: versions
+        run: node compat/check.mjs versions
+      - name: Did main change since yesterday's check?
+        id: changed
+        env:
+          FORCE: ${{ inputs.minimum }}
+        run: |
+          if [[ "$FORCE" == "true" || -n "$(git log --since='25 hours ago' --format=%H -1)" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nothing new on main; skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        if: steps.changed.outputs.run == 'true'
+        with:
+          global-json-file: global.json
+      - name: Install Claude Code ${{ steps.versions.outputs.minimum }}
+        if: steps.changed.outputs.run == 'true'
+        env:
+          VERSION: ${{ steps.versions.outputs.minimum }}
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash -s "$VERSION"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Test
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          claude --version
+          dotnet test Claudette.slnx --configuration Release --filter "Category=RealCli" --blame-hang-timeout 10m --blame-hang-dump-type none

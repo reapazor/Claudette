@@ -243,7 +243,6 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
                     OnPropertyChanged(nameof(HasUsage));
                 }
             };
-            services.SettingsChanged += (_, _) => tracker.OnSettingsChanged();
             tracker.TurnRecorded += () => _shell?.OnTurnRecorded();
             _shell?.OnTurnRecorded();
             Usage = usage;
@@ -328,7 +327,7 @@ public sealed partial class MainWindowViewModel(AppServices services, string? in
                 // The tab's Project page, with the log of the run that finished (DESIGN.md §18, "Project tools").
                 if (target.TabId is { } jobTab && CurrentPage == _shell && _shell?.SelectTab(jobTab) == true)
                 {
-                    _shell.SelectedTab?.OpenNotifiedProjectRun();
+                    _shell.SelectedTab?.ProjectTools.OpenNotifiedRun();
                 }
                 break;
             default:

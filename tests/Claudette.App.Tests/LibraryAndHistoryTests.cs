@@ -67,6 +67,35 @@ public class LibraryAndHistoryTests
     }
 
     [Fact]
+    public async Task Searching_Claudes_replies_adds_sessions_only_a_reply_matches()
+    {
+        await using var h = new TabTestHarness();
+        h.WriteTranscript("s1", UserLine("s1", "Why does the build fail?", h.WorkFolder), ReplyLine("s1", "Set VULKAN_SDK before you build."));
+        h.WriteTranscript("s2", UserLine("s2", "Add Vulkan support", h.WorkFolder), ReplyLine("s2", "Done."));
+        h.WriteTranscript("s3", UserLine("s3", "Rename the parser", h.WorkFolder), ReplyLine("s3", "Renamed."));
+        h.Shell.OpenHistoryCommand.Execute(null);
+        var history = h.Shell.History!;
+        await TabTestHarness.Eventually(() => !history.IsLoading, "History to load");
+
+        history.Search = "vulkan";
+        Assert.Equal(["s2"], history.Groups.SelectMany(g => g.Entries).Select(e => e.SessionId));
+
+        await history.SearchRepliesCommand.ExecuteAsync(null);
+        await TabTestHarness.Eventually(() => history.Groups.SelectMany(g => g.Entries).Count() == 2, "the reply's session");
+
+        var fromReply = history.Groups.SelectMany(g => g.Entries).Single(e => e.SessionId == "s1");
+        Assert.Equal("Set VULKAN_SDK before you build.", fromReply.MatchedReply);
+        Assert.Null(history.Groups.SelectMany(g => g.Entries).Single(e => e.SessionId == "s2").MatchedReply);
+        Assert.Equal("Found 1 session more in Claude's replies.", history.ReplySearchText);
+
+        // A new search starts again from the prompts.
+        history.Search = "vulkan rename";
+        Assert.Empty(history.Groups);
+        Assert.Null(history.ReplySearchText);
+        Assert.Null(fromReply.MatchedReply);
+    }
+
+    [Fact]
     public async Task A_library_session_from_another_machine_resumes_from_a_local_copy()
     {
         await using var h = new TabTestHarness();
@@ -137,6 +166,40 @@ public class LibraryAndHistoryTests
         Assert.Equal("LAPTOP-02", tab.TakenOverBy);
         tab.ComposerText = "more";
         Assert.False(tab.SendCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task A_turn_that_ends_after_a_take_over_doesnt_copy_over_it()
+    {
+        // Leases are refreshed once a minute; the copy after a turn must not wait for that, or it would overwrite what
+        // the other machine wrote and take the session back.
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        tab.SetSyncToLibrary(true);
+        h.WriteTranscript("s1", UserLine("s1", "hello", h.WorkFolder));
+        h.Transport.EmitTurn();
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(TimeSpan.FromSeconds(1));
+            return h.Services.Library.Leases.HeldSessions.Contains("s1");
+        }, "the lease");
+        var library = h.Services.Library.Library.GetTranscriptPath("s1")!;
+        var copied = await File.ReadAllTextAsync(library, TestContext.Current.CancellationToken);
+        var lease = Path.Combine(h.Services.Library.Library.GetSessionFolder("s1"), LeaseManager.FileName);
+        var theirs = new JsonObject { ["machine"] = "LAPTOP-02", ["owner"] = "other", ["updatedAt"] = h.Time.GetUtcNow().ToString("O") }.ToJsonString();
+        await File.WriteAllTextAsync(lease, theirs, TestContext.Current.CancellationToken);
+
+        h.WriteTranscript("s1", UserLine("s1", "hello", h.WorkFolder), UserLine("s1", "written after the take-over", h.WorkFolder));
+        h.Transport.EmitTurn();
+
+        await TabTestHarness.Eventually(() =>
+        {
+            h.Time.Advance(TimeSpan.FromSeconds(1));
+            return tab.IsReadOnly;
+        }, "read-only");
+        Assert.Equal("LAPTOP-02", tab.TakenOverBy);
+        Assert.Equal(copied, await File.ReadAllTextAsync(library, TestContext.Current.CancellationToken));
+        Assert.Equal(theirs, await File.ReadAllTextAsync(lease, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -307,7 +370,7 @@ public class LibraryAndHistoryTests
         Assert.Empty(Record().ReviewedFiles ?? []);
         var path = Path.Combine(h.WorkFolder, "src", "auth.cs");
 
-        tab.ToggleFileReviewedCommand.Execute(new ChangedFileRow { Path = path, DisplayPath = "src/auth.cs", Status = "M", StatusText = "Modified", FromGit = true });
+        tab.ChangedFiles.ToggleFileReviewedCommand.Execute(new ChangedFileRow { Path = path, DisplayPath = "src/auth.cs", Status = "M", StatusText = "Modified", FromGit = true });
 
         // Relative to the folder, which has another path on another machine.
         await TabTestHarness.Eventually(() =>
@@ -406,7 +469,8 @@ public class LibraryAndHistoryTests
         tab.ToggleSyncToLibraryCommand.Execute(null);
 
         Assert.False(tab.SyncToLibrary);
-        Assert.IsType<LeaseStatus.Free>(h.Services.Library.CheckLease("s1"));
+        // Released in the background, off the UI thread.
+        await TabTestHarness.Eventually(() => h.Services.Library.CheckLease("s1") is LeaseStatus.Free, "the release");
         Assert.Empty(h.Services.Library.Leases.HeldSessions);
         // Later turns stay on this machine; other machines still see the copy as it was.
         h.Transport.EmitTurn();
@@ -708,6 +772,14 @@ public class LibraryAndHistoryTests
         };
         await h.Services.Library.Library.SaveAsync(record, source, subagentsDirectory: null);
     }
+
+    private static string ReplyLine(string sessionId, string text) => new JsonObject
+    {
+        ["type"] = "assistant",
+        ["message"] = new JsonObject { ["role"] = "assistant", ["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text }) },
+        ["sessionId"] = sessionId,
+        ["timestamp"] = "2026-09-28T10:01:00Z",
+    }.ToJsonString();
 
     private static string UserLine(string sessionId, string text, string cwd) => new JsonObject
     {

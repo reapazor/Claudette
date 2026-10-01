@@ -12,8 +12,8 @@ namespace Claudette.Platform.Processes.Unix;
 /// Activity Monitor: 100% is one core.
 /// </summary>
 [SupportedOSPlatform("macos")]
-internal sealed class MacProcessTree(int rootPid, IProcessLauncher launcher, TimeProvider time, ILogger logger)
-    : UnixProcessTree<PsEntry>(rootPid, time, logger)
+internal sealed class MacProcessTree(int rootPid, IProcessLauncher launcher, TimeProvider time, ILogger logger, ScanCache<PsEntry>? scans = null)
+    : UnixProcessTree<PsEntry>(rootPid, StartKeyOf(rootPid), time, logger, scans)
 {
     private const string PsPath = "/bin/ps";
     private static readonly TimeSpan PsTimeout = TimeSpan.FromSeconds(5);
@@ -72,11 +72,26 @@ internal sealed class MacProcessTree(int rootPid, IProcessLauncher launcher, Tim
             isDetached);
     }
 
-    /// <summary>kill(pid, 0): the process exists (EPERM means it exists but isn't ours).</summary>
-    protected override bool IsAlive(int pid, long startKey) =>
-        LibC.Kill(pid, 0) == 0 || Marshal.GetLastPInvokeError() == LibC.Eperm;
+    /// <summary>
+    /// The process with <paramref name="pid"/> is the one that started at <paramref name="startKey"/>. Without a start
+    /// time to compare, kill(pid, 0) says whether any process has the PID (EPERM: it exists but isn't ours).
+    /// </summary>
+    protected override bool IsAlive(int pid, long startKey)
+    {
+        if (startKey != 0 && StartKeyOf(pid) is { } current)
+        {
+            return current == startKey;
+        }
+        return LibC.Kill(pid, 0) == 0 || Marshal.GetLastPInvokeError() == LibC.Eperm;
+    }
 
-    /// <summary>This process's environment with the C locale, so <c>lstart</c> has English month names.</summary>
+    /// <summary>A process's start time in whole seconds, as <c>lstart</c> gives it (<see cref="PsEntry.StartKey"/>); null if it's gone.</summary>
+    private static long? StartKeyOf(int pid) => SystemProcesses.StartTimeOf(pid)?.ToUnixTimeSeconds();
+
+    /// <summary>
+    /// This process's environment with the C locale, so <c>lstart</c> has English month names, and in UTC
+    /// (<see cref="PsOutput.TimeZone"/>).
+    /// </summary>
     private static IReadOnlyDictionary<string, string> CEnvironment()
     {
         var environment = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -88,6 +103,7 @@ internal sealed class MacProcessTree(int rootPid, IProcessLauncher launcher, Tim
             }
         }
         environment["LC_ALL"] = "C";
+        environment["TZ"] = PsOutput.TimeZone;
         return environment;
     }
 }

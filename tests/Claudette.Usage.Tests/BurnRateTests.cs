@@ -20,6 +20,33 @@ public sealed class BurnRateTests
     }
 
     [Fact]
+    public void Another_machines_lagging_reading_doesnt_look_like_a_reset()
+    {
+        // 70 and 72 here, then another machine's cached 64 for the same window, then 74: taken as they were, the 64
+        // reads as a reset and the slope from it to 75 is about 130% an hour.
+        var resets = Now.AddHours(2);
+        UsageSample Sample(int minutes, double percent, DateTimeOffset? at = null) => new(Now.AddMinutes(minutes), percent, at ?? resets, null, null, []);
+        var history = BurnRate.SessionHistory([Sample(-24, 70), Sample(-18, 72), Sample(-12, 64), Sample(-6, 74)]);
+
+        Assert.Equal([70, 72, 72, 74], history.Select(p => p.Percent));
+        var projection = BurnRate.Project(history, 75, resets, Now);
+        Assert.InRange(projection.RatePerHour!.Value, 10, 15);
+        Assert.False(projection.HitsLimitBeforeReset);
+    }
+
+    [Fact]
+    public void A_new_window_starts_the_history_again_and_a_reading_for_an_old_one_is_left_out()
+    {
+        var first = Now.AddMinutes(-10);
+        var second = Now.AddHours(5);
+        UsageSample Sample(int minutes, double percent, DateTimeOffset at) => new(Now.AddMinutes(minutes), percent, at, null, null, []);
+
+        var history = BurnRate.SessionHistory([Sample(-30, 90, first), Sample(-8, 2, second), Sample(-6, 91, first), Sample(-4, 4, second)]);
+
+        Assert.Equal([90, 2, 4], history.Select(p => p.Percent));
+    }
+
+    [Fact]
     public void A_slow_burn_is_on_track()
     {
         // 10% an hour from 40%, 3 hours before the reset.

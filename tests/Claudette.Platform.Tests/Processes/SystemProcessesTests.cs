@@ -59,4 +59,48 @@ public sealed class SystemProcessesTests
         Assert.DoesNotContain(system.Find([self]), p => p.Pid == Environment.ProcessId);
         Assert.Empty(system.Find(["no-such-process-claudette-test"]));
     }
+
+    [Fact]
+    public void Kill_tree_ends_only_the_process_that_was_found_not_a_later_one_with_its_PID()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Uses sleep.");
+        var system = new SystemProcesses(new Core.Processes.ProcessLauncher(), TimeProvider.System);
+        using var sleeper = System.Diagnostics.Process.Start("sleep", ["30"])!;
+        try
+        {
+            var started = SystemProcesses.StartTimeOf(sleeper.Id);
+            Assert.NotNull(started);
+
+            // As if the editor found had exited and its PID gone to this process, which started at another time.
+            system.KillTree(new SystemProcess(sleeper.Id, "sleep", "sleep 30", started!.Value.AddMinutes(-5)));
+            Assert.False(sleeper.WaitForExit(500));
+
+            system.KillTree(new SystemProcess(sleeper.Id, "sleep", "sleep 30", started));
+            Assert.True(sleeper.WaitForExit(5000));
+        }
+        finally
+        {
+            if (!sleeper.HasExited)
+            {
+                sleeper.Kill();
+            }
+        }
+    }
+
+    [Fact]
+    public void Found_processes_carry_their_start_time()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Reading every process runs ps on macOS, and Windows has no sleep.");
+        var system = new SystemProcesses(new Core.Processes.ProcessLauncher(), TimeProvider.System);
+        using var sleeper = System.Diagnostics.Process.Start("sleep", ["30"])!;
+        try
+        {
+            var found = Assert.Single(system.Find(["sleep"]), p => p.Pid == sleeper.Id);
+            Assert.Equal(SystemProcesses.StartTimeOf(sleeper.Id), found.StartedAt);
+        }
+        finally
+        {
+            sleeper.Kill();
+        }
+    }
 }

@@ -236,7 +236,7 @@ public partial class ShellView : UserControl
     /// The project's menu opened: look at the project's files again, so what's enabled is current (a solution generated
     /// from a terminal, say). The menu updates in place when that's done (DESIGN.md §18).
     /// </summary>
-    private void OnProjectMenuOpened(object? sender, EventArgs e) => ViewModel?.SelectedTab?.RefreshProjectCommand.Execute(null);
+    private void OnProjectMenuOpened(object? sender, EventArgs e) => ViewModel?.SelectedTab?.ProjectTools.RefreshCommand.Execute(null);
 
     /// <summary>An entry of the project's menu was picked: the menu closes, as a menu does.</summary>
     /// <summary>Closes the menu once the item has run its command, which a button does after raising Click.</summary>
@@ -327,6 +327,17 @@ public partial class ShellView : UserControl
         var keyboard = shell.Keyboard;
         bool Is(string id) => Shortcuts.Matches(keyboard, id, e.Key, e.KeyModifiers);
 
+        if (shell.IsPaletteOpen)
+        {
+            // The palette has the keys while it's open; its shortcut closes it again.
+            if (Is(KeyboardShortcuts.CommandPalette))
+            {
+                shell.ClosePalette();
+                e.Handled = true;
+            }
+            return;
+        }
+
         if (Is(KeyboardShortcuts.NextTab))
         {
             shell.SelectNextCommand.Execute(null);
@@ -355,10 +366,22 @@ public partial class ShellView : UserControl
         {
             shell.ToggleSidebarCommand.Execute(null);
         }
+        else if (Is(KeyboardShortcuts.CommandPalette))
+        {
+            shell.OpenPaletteCommand.Execute(null);
+        }
+        else if (Is(KeyboardShortcuts.NextTabNeedingInput))
+        {
+            shell.SelectNextNeedingInputCommand.Execute(null);
+        }
+        else if (Is(KeyboardShortcuts.Find) && shell.SelectedTab is { } findTab)
+        {
+            findTab.OpenFindCommand.Execute(null);
+        }
         else if (Is(KeyboardShortcuts.RunProjectAction) && shell.SelectedTab is { } projectTab)
         {
             // Launch the editor, for Unreal (DESIGN.md §18, "Project tools").
-            projectTab.RunMainProjectActionCommand.Execute(null);
+            projectTab.ProjectTools.RunMainActionCommand.Execute(null);
         }
         else if (Is(KeyboardShortcuts.GoToTab) && Shortcuts.Digit(e.Key) is { } number)
         {
@@ -431,6 +454,15 @@ public partial class ShellView : UserControl
         if (ReferenceEquals(e.Source, sender))
         {
             ViewModel?.ClosePicker();
+        }
+    }
+
+    /// <summary>A click outside the command palette closes it.</summary>
+    private void OnPaletteOverlayPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (ReferenceEquals(e.Source, sender))
+        {
+            ViewModel?.ClosePalette();
         }
     }
 

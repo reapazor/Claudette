@@ -57,10 +57,33 @@ public sealed class UpdateDownloaderTests : IDisposable
     {
         var http = new FakeHttpHandler().OnBytes(Url, Package[..1000]);
 
-        var error = await Assert.ThrowsAsync<UpdateDownloadException>(() => Downloader(http).DownloadAsync(Asset(sha256: null), Version, cancellationToken: TestContext.Current.CancellationToken));
+        var error = await Assert.ThrowsAsync<UpdateDownloadException>(() => Downloader(http).DownloadAsync(Asset(), Version, cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.Equal($"The download was incomplete: 1,000 of {Package.Length:N0} bytes.", error.Message);
         Assert.Empty(Directory.EnumerateFiles(_temp.Path, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task A_package_without_a_checksum_is_not_downloaded()
+    {
+        var http = new FakeHttpHandler().OnBytes(Url, Package);
+
+        var error = await Assert.ThrowsAsync<UpdateDownloadException>(() => Downloader(http).DownloadAsync(Asset(sha256: null), Version, cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Equal(UpdateDownloader.NoChecksumMessage, error.Message);
+        Assert.Empty(http.Requests);
+        Assert.False(Directory.Exists(_temp.Path) && Directory.EnumerateFiles(_temp.Path, "*", SearchOption.AllDirectories).Any());
+    }
+
+    [Fact]
+    public async Task A_file_already_there_is_not_trusted_without_a_checksum()
+    {
+        var path = Path.Combine(_temp.Path, "1.3.0", "Claudette-1.3.0-x64.msix");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllBytesAsync(path, Package, TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<UpdateDownloadException>(() => new UpdateDownloader(new HttpClient(new FakeHttpHandler()), _temp.Path, "Claudette/1.2.0")
+            .DownloadAsync(Asset(sha256: null), Version, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]

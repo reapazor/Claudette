@@ -77,9 +77,26 @@ public static class MessageTimes
         TimeZoneInfo.ConvertTime(sent, clock.LocalTimeZone).ToString("f", CultureInfo.CurrentCulture);
 }
 
-public sealed class UserMessageItem(string text, string? suffixText = null, bool isCheckIn = false, bool isAutoContinue = false) : MessageItem
+public sealed partial class UserMessageItem(string text, string? suffixText = null, bool isCheckIn = false, bool isAutoContinue = false) : MessageItem
 {
     public string Text { get; } = text;
+
+    /// <summary>
+    /// The prompt's transcript id, once Claude Code has echoed it back (or from the transcript): the point its files can
+    /// be put back to (DESIGN.md §5, "Rewind and branch").
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRestoreFiles))]
+    public partial string? Uuid { get; set; }
+
+    /// <summary>
+    /// The conversation entry just before this prompt: resuming there leaves the prompt out. Null for the first prompt,
+    /// before which there's nothing to keep.
+    /// </summary>
+    public string? ResumeAt { get; set; }
+
+    /// <summary>Restore files to before this message: it has a checkpoint to go back to.</summary>
+    public bool CanRestoreFiles => Uuid is not null;
 
     /// <summary>Quick suffixes appended to the message, shown in a lighter style (DESIGN.md §5, "Quick suffixes").</summary>
     public string? SuffixText { get; } = suffixText;
@@ -123,9 +140,38 @@ public sealed partial class AssistantTextItem : MessageItem
 /// <summary>Claude's thinking, collapsed by default.</summary>
 public sealed partial class ThinkingItem : ConversationItem
 {
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasText))]
-    public partial string Text { get; set; } = "";
+    private readonly System.Text.StringBuilder _text = new();
+    private string? _textAsString = "";
+
+    /// <summary>
+    /// The thinking so far. It streams in small pieces, so it's kept in a builder and made into a string only when read
+    /// (by the view, while the row is expanded), rather than copied whole for every piece.
+    /// </summary>
+    public string Text
+    {
+        get => _textAsString ??= _text.ToString();
+        set
+        {
+            _text.Clear().Append(value);
+            TextChanged();
+        }
+    }
+
+    public void Append(string text)
+    {
+        if (text.Length > 0)
+        {
+            _text.Append(text);
+            TextChanged();
+        }
+    }
+
+    private void TextChanged()
+    {
+        _textAsString = null;
+        OnPropertyChanged(nameof(Text));
+        OnPropertyChanged(nameof(HasText));
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Header))]
@@ -134,7 +180,7 @@ public sealed partial class ThinkingItem : ConversationItem
     [ObservableProperty]
     public partial bool IsExpanded { get; set; }
 
-    public bool HasText => Text.Length > 0;
+    public bool HasText => _text.Length > 0;
 
     public string Header => IsStreaming ? "Thinking…" : "Thinking";
 
@@ -152,7 +198,8 @@ public partial class ToolUseItem : ConversationItem
     {
         ToolUseId = toolUseId;
         Name = name;
-        Input = input;
+        // A copy without its parent: the input is a node of the whole message, which it would otherwise keep alive.
+        Input = input.Parent is null ? input : input.DeepClone().AsObject();
         Summary = Summarize(name, input);
         Command = name == "Bash" ? Str(input, "command") : null;
         Detail = DetailText(name, input);
@@ -221,10 +268,32 @@ public partial class ToolUseItem : ConversationItem
     public string? DiffStats => Diff?.Stats;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasOutput))]
+    [NotifyPropertyChangedFor(nameof(HasOutput), nameof(ShownOutput), nameof(IsOutputCut), nameof(ShowAllOutputText))]
     public partial string? Output { get; set; }
 
     public bool HasOutput => !string.IsNullOrEmpty(Output);
+
+    /// <summary>How much of a long output the card shows until **Show all** (a whole file Read, a big Grep).</summary>
+    public const int ShownOutputLimit = 20_000;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShownOutput), nameof(IsOutputCut))]
+    public partial bool ShowsAllOutput { get; private set; }
+
+    /// <summary>
+    /// The output as the card shows it: the start of a long one, since laying out a hundred kilobytes of text in one block
+    /// is slow even while most of it is scrolled out of sight.
+    /// </summary>
+    public string? ShownOutput => IsOutputCut ? Output![..ShownOutputLimit] : Output;
+
+    public bool IsOutputCut => !ShowsAllOutput && Output is { Length: > ShownOutputLimit };
+
+    public string ShowAllOutputText => Output is { } output
+        ? $"Show all ({(output.Length + 1023) / 1024:N0} KB)"
+        : "Show all";
+
+    [RelayCommand]
+    private void ShowAllOutput() => ShowsAllOutput = true;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasResultSummary))]
@@ -259,7 +328,7 @@ public partial class ToolUseItem : ConversationItem
             {
                 Diff = DiffView.FromStructuredPatch(patch);
             }
-            else if (Name == "Write" && result["type"]?.GetValue<string>() == "create" && Str(result, "content") is { } content)
+            else if (Name == "Write" && Str(result, "type") == "create" && Str(result, "content") is { } content)
             {
                 Diff = DiffView.FromNewFile(content);
             }
@@ -268,7 +337,9 @@ public partial class ToolUseItem : ConversationItem
                 var stdout = Str(result, "stdout") ?? "";
                 var stderr = Str(result, "stderr") ?? "";
                 Output = string.Join('\n', new[] { stdout, stderr }.Where(s => s.Length > 0));
-                ResultSummary = result["interrupted"]?.GetValue<bool>() == true ? "Interrupted" : FirstLine(Output) ?? FirstLine(text);
+                ResultSummary = result["interrupted"] is JsonValue interrupted && interrupted.GetValueKind() == JsonValueKind.True
+                    ? "Interrupted"
+                    : FirstLine(Output) ?? FirstLine(text);
                 OnPropertyChanged(nameof(CanExpand));
                 return;
             }
@@ -456,6 +527,75 @@ public sealed partial class NoteItem(string text, NoteKind kind) : ConversationI
     public bool IsError => Kind == NoteKind.Error;
 
     public bool IsWarning => Kind == NoteKind.Warning;
+}
+
+/// <summary>How a hook run ended, or that it hasn't yet.</summary>
+public enum HookRunState
+{
+    Running,
+    Succeeded,
+    Failed,
+    Cancelled,
+}
+
+/// <summary>
+/// One run of a hook from the user's or project's settings (DESIGN.md §5, "Hook runs"): a compact row, which expands to
+/// what the hook printed. Hook names and output are the hook's own: untrusted text.
+/// </summary>
+public sealed partial class HookRunItem(string hookId, string hookName, string hookEvent) : ConversationItem
+{
+    /// <summary>Most of a hook's output kept for the row; a hook that prints more is cut, as a tool's output is.</summary>
+    public const int OutputLimit = 20_000;
+
+    public string HookId { get; } = hookId;
+
+    /// <summary>The hook's name, such as <c>UserPromptSubmit</c> or the matcher it runs for.</summary>
+    public string HookName { get; } = hookName;
+
+    /// <summary>The event that ran it, such as <c>PreToolUse</c>.</summary>
+    public string HookEvent { get; } = hookEvent;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFailed), nameof(Title), nameof(StatusText))]
+    public partial HookRunState State { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasOutput))]
+    public partial string Output { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusText))]
+    public partial int? ExitCode { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsExpanded { get; set; }
+
+    public bool IsRunning => State == HookRunState.Running;
+
+    public bool IsFailed => State == HookRunState.Failed;
+
+    public bool HasOutput => Output.Length > 0;
+
+    /// <summary>"PreToolUse hook" or "PreToolUse hook (Bash)", for the row.</summary>
+    public string Title => HookName.Length > 0 && HookName != HookEvent ? $"{HookEvent} hook ({HookName})" : $"{HookEvent} hook";
+
+    public string StatusText => State switch
+    {
+        HookRunState.Running => "running…",
+        HookRunState.Failed => ExitCode is { } code ? $"failed (exit code {code})" : "failed",
+        HookRunState.Cancelled => "cancelled",
+        _ => "done",
+    };
+
+    internal void Append(string text)
+    {
+        if (text.Length == 0 || Output.Length >= OutputLimit)
+        {
+            return;
+        }
+        var joined = Output + text;
+        Output = joined.Length > OutputLimit ? joined[..OutputLimit] + "\n…" : joined;
+    }
 }
 
 /// <summary>

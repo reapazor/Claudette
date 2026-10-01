@@ -273,7 +273,7 @@ items:
     status: documented
     usedIn: src/Claudette.Core/Protocol/MessageParser.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: none yet
+    test: MessageParserTests, AgentMapTests
   - id: "api_retry"
     kind: message
     status: documented
@@ -496,9 +496,114 @@ items:
   - id: "--fork-session"
     kind: flag
     status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.Rewind.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: ClaudeEnvironmentTests, RealCliTests, RewindAndBranchTests
+
+  # --- Rewind and branch, hook rows, MCP servers, fallback model (DESIGN.md §4, §5, §7) ------------------------
+  - id: "--resume-session-at"
+    kind: flag
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.cs, src/Claudette.App/ViewModels/TabViewModel.Rewind.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ClaudeEnvironmentTests, RealCliTests, RewindAndBranchTests
+    fallback: The Agent SDKs' resumeSessionAt option passes it. If it goes, branch from a message by forking the whole session and say the later turns are still in it.
+  - id: "--resume-drops-turn"
+    kind: flag
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.Rewind.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ClaudeEnvironmentTests, RewindAndBranchTests
+    fallback: The guard for editing and resending a prompt. Without it, resume at the reply before the prompt unguarded.
+  - id: "--replay-user-messages"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/file-checkpointing
+    test: RealCliTests, ClaudeSessionTests
+  - id: "isReplay"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests, ClaudeSessionTests
+  - id: "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"
+    kind: env
+    status: documented
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/file-checkpointing
+    test: RealCliTests
+  - id: "rewind_files"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/McpServers.cs, src/Claudette.App/ViewModels/TabViewModel.Rewind.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/file-checkpointing
+    test: RealCliTests, ClaudeSessionTests, RewindAndBranchTests
+    fallback: See control_request. The documented CLI form is claude -p --resume <id> --rewind-files <uuid> with checkpointing on.
+  - id: "--include-hook-events"
+    kind: flag
+    status: documented
     usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
     docs: https://code.claude.com/docs/en/cli-reference
-    test: ClaudeEnvironmentTests
+    test: RealCliTests
+  - id: "hook_started"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+  - id: "hook_progress"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: none yet (sent only while a hook runs over a second with output)
+  - id: "hook_response"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests
+  - id: "mcp_status"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/McpServers.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests, ClaudeSessionTests
+    fallback: See control_request. Without it, the MCP page lists the servers from system/init's mcp_servers.
+  - id: "mcp_reconnect"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ClaudeSessionTests
+    fallback: See control_request. Hide Reconnect; /mcp in the terminal does the same.
+  - id: "mcp_toggle"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: RealCliTests, ClaudeSessionTests
+    fallback: See control_request. Hide the switch.
+  - id: "elicitation"
+    kind: control
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.Core/Sessions/ElicitationRequest.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: ClaudeSessionTests
+    fallback: If the wire shape changes, follow the TypeScript SDK's SDKControlElicitationRequest. A request Claudette can't show is declined, as the SDKs do without an onElicitation handler.
+  - id: "elicitation_complete"
+    kind: message
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: none yet (needs an MCP server that asks through a URL)
+  - id: "--fallback-model"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: ClaudeEnvironmentTests, RealCliTests
   - id: "set_model"
     kind: control
     status: undocumented
@@ -602,13 +707,13 @@ items:
     kind: control
     status: undocumented
     usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.cs
-    test: none yet (one small model call; covered by spikes/scenarios/03)
+    test: RealCliTests (with nonessential traffic off it answers {"title": null} and makes no model call; a generated title is covered by spikes/scenarios/03)
     fallback: Name the tab from the first line of the first prompt (DESIGN.md §13, "Session naming").
   - id: "rename_session"
     kind: control
     status: undocumented
     usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
-    test: none yet (covered by spikes/scenarios/03)
+    test: RealCliTests
     fallback: Only used when "rename in Claude Code" is on; the name is kept in Claudette either way.
 
   # --- Composer: slash commands, @ mentions and attachments (DESIGN.md §5) --------------------------------
@@ -710,6 +815,18 @@ items:
     usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs, src/Claudette.Core/Diffs/BeforeContentStore.cs
     test: RealCliTests, BeforeContentStoreTests, SidePanelTests
     fallback: "In 2.1.284 the live tool_use_result carries the whole originalFile, but the transcript's toolUseResult has null when it's over 10,000 characters (DESIGN.md §8, \"Large files in transcripts\"). Claudette saves the first change's originalFile when it's over BeforeContentStore.TranscriptLimit and reads it back on replay. If the limit drops, files between the new limit and 10,000 characters replay with an unknown \"before\" (modified, without counts) until TranscriptLimit follows it. If transcripts keep it whole again, nothing breaks."
+  - id: "uuid and parentUuid"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/Transcripts/TranscriptReader.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
+    test: TranscriptReaderTests, RewindAndBranchTests
+    fallback: A restored prompt has no point to go back to (DESIGN.md §5, "Rewind and branch"); a later live prompt still gets one from its echo. Without them, Edit and resend and Branch from here on a restored prompt would start a new session, so the menu should offer only Duplicate tab.
+  - id: "fork keeps the copied entries' uuids"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.Rewind.cs
+    test: RewindAndBranchTests
+    fallback: "Checked with 2.1.286 (DESIGN.md §5, \"Rewind and branch\"). If a fork gives its entries new ids, going back again in a copy to a message from before the fork would name an entry the copy hasn't: read the copy's transcript again after its first turn to pick up the new ids."
   - id: "isSidechain"
     kind: file
     status: undocumented
@@ -1455,7 +1572,7 @@ items:
   - id: "remote_control"
     kind: control
     status: undocumented
-    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     docs: https://code.claude.com/docs/en/remote-control
     test: RemoteControlProtocolTests, RemoteControlTests, RealCliTests, RemoteControlRealCliTests
     fallback: "{subtype: remote_control, enabled: true, name} connects the session as SDK hosts (the VS Code extension) do, and {enabled: false} disconnects it; the wire names are from Claude Code 2.1.284's own handler, not the docs or the Agent SDK types. Claude Code runs its eligibility checks first and answers with the reason as an error (against the mock: \"Remote Control is only available when using Claude via api.anthropic.com…\"), which the tab shows. If it's rejected as unsupported, the tab sends the /remote-control command instead. If enabled: false fails, the tab's claude is restarted on the same session and doesn't connect again. Either way nothing else in the tab breaks."
@@ -1492,20 +1609,20 @@ items:
   - id: "bridge_state"
     kind: message
     status: undocumented
-    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     test: RemoteControlProtocolTests, RemoteControlTests, RealCliTests
     fallback: "system/bridge_state with state (ready, connected, reconnecting, failed, policy_disabled), detail and failure_kind: the connection's progress after remote_control. A state Claudette doesn't know is Unknown and changes nothing. Without the message the tab keeps what the answer to remote_control said until the session ends."
   - id: "worker_shutting_down"
     kind: message
     status: documented
-    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: RemoteControlProtocolTests, RemoteControlTests
     fallback: A connected tab reads Not connected, with the reason. One arriving while the tab isn't connected (replayed from a resumed session) is ignored.
   - id: "/remote-control"
     kind: command
     status: undocumented
-    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     docs: https://code.claude.com/docs/en/remote-control
     test: RemoteControlProtocolTests, RemoteControlTests, RealCliTests
     fallback: "Documented for the terminal, the Desktop app and the VS Code extension's prompt box; sent by an SDK host as a message it's undocumented. Only the fallback for a Claude Code that rejects remote_control, sent while Claude isn't working and hidden from the conversation, with its reply shown as a note. In -p mode 2.1.284 always answers it locally with \"/remote-control isn't available in this environment.\", so the fallback only says why the tab isn't connected; the tab stays unconnected and nothing else breaks."
@@ -1518,13 +1635,13 @@ items:
   - id: "unavailable_headless"
     kind: field
     status: undocumented
-    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    usedIn: src/Claudette.Core/RemoteControl/RemoteControlProtocol.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     test: RemoteControlProtocolTests, RealCliTests
     fallback: "local_command_outcome.kind on a local command's reply (marked internal in Claude Code's schema): the command can't run in a headless session. unknown, failed and restart_required mean it didn't run either. Without the field the reply's words decide."
   - id: "control_cancel_request for can_use_tool answered in the Claude app"
     kind: behavior
     status: undocumented
-    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.App/ViewModels/TabViewModel.RemoteControl.cs
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs, src/Claudette.App/ViewModels/RemoteControlViewModel.cs
     test: RemoteControlTests
     fallback: When a connected device answers a permission prompt, question or plan, 2.1.284 withdraws the host's copy with control_cancel_request (from its injectControlResponse). The card closes and reads "Answered in the Claude app" while the tab is connected and Claudette didn't stop the turn. Without it the card stays open until the turn moves on, as for any withdrawn request.
   - id: "CLAUDE_CLIENT_PRESENCE_FILE"

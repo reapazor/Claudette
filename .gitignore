@@ -490,3 +490,6 @@ $RECYCLE.BIN/
 
 # Verify (snapshot tests)
 *.received.*
+
+# Worktrees Claude Code makes for parallel work.
+.claude/worktrees/

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Json;
 
 namespace Claudette.Core.ProjectTools;
 
@@ -21,7 +22,7 @@ public static class LenientJson
         try
         {
             // A byte order mark, as some editors write.
-            return JsonNode.Parse(text.TrimStart('﻿'), documentOptions: Options);
+            return JsonTree.Parse(text.TrimStart('﻿'), Options);
         }
         catch (JsonException)
         {

@@ -1,6 +1,7 @@
 ﻿"clean up"
 "12:00"
 [button] Copy message
+[button] More for this message
 "Allow this command?"
 "$ rm -rf build"
 [button] Allow

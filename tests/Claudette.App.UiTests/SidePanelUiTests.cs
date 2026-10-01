@@ -93,15 +93,15 @@ public class SidePanelUiTests
         var list = view.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "ChangedFilesList");
         await UiText.SettleUntilAsync(window, () => Boxes(list).Count == 2, "the changed files");
         var opened = 0;
-        tab.DiffRequested += _ => opened++;
+        tab.ChangedFiles.DiffRequested += _ => opened++;
 
         Click(window, Boxes(list)[0]);
 
         Assert.Equal(0, opened);
         Assert.Null(list.SelectedItem);
-        Assert.True(tab.ChangedFiles[0].IsReviewed);
+        Assert.True(tab.ChangedFiles.Files[0].IsReviewed);
         Assert.Equal([true, false], Boxes(list).Select(b => b.IsChecked == true));
-        Assert.Equal("2 files changed · 1 reviewed", tab.ChangedFilesSummary);
+        Assert.Equal("2 files changed · 1 reviewed", tab.ChangedFiles.Summary);
         // A reviewed file is drawn faintly; its box isn't.
         var rows = list.GetVisualDescendants().OfType<Grid>().Where(g => g.Classes.Contains("changedfile")).ToList();
         Assert.Equal([0.5, 1.0], rows.Select(r => r.Children.OfType<StackPanel>().Single().Opacity));
@@ -109,8 +109,8 @@ public class SidePanelUiTests
 
         // Unticked by a click, then ticked from the view model, the box follows.
         Click(window, Boxes(list)[0]);
-        Assert.False(tab.ChangedFiles[0].IsReviewed);
-        tab.ToggleFileReviewedCommand.Execute(tab.ChangedFiles[0]);
+        Assert.False(tab.ChangedFiles.Files[0].IsReviewed);
+        tab.ChangedFiles.ToggleFileReviewedCommand.Execute(tab.ChangedFiles.Files[0]);
         UiText.Settle(window);
         Assert.True(Boxes(list)[0].IsChecked);
 
@@ -119,10 +119,51 @@ public class SidePanelUiTests
         var shown = UiText.Describe(panel);
         h.Transport.Emit(Edit("e3", first));
         h.Transport.Emit(EditResult("e3", first));
-        await UiText.SettleUntilAsync(window, () => tab.ChangedFiles is [{ LatestChange: "e3" }, _], "Claude's next change");
+        await UiText.SettleUntilAsync(window, () => tab.ChangedFiles.Files is [{ LatestChange: "e3" }, _], "Claude's next change");
         Assert.Equal([false, false], Boxes(list).Select(b => b.IsChecked == true));
 
         await Verify(shown);
+    }
+
+    [AvaloniaFact]
+    public async Task The_arrow_keys_move_through_changed_files_without_opening_them()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        tab.IsSidePanelOpen = true;
+        var (first, second) = (Path.Combine(h.WorkFolder, "auth.cs"), Path.Combine(h.WorkFolder, "login.cs"));
+        await File.WriteAllTextAsync(first, "b\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(second, "b\n", TestContext.Current.CancellationToken);
+        h.Transport.Emit(Edit("e1", first));
+        h.Transport.Emit(EditResult("e1", first));
+        h.Transport.Emit(Edit("e2", second));
+        h.Transport.Emit(EditResult("e2", second));
+        var view = window.GetVisualDescendants().OfType<TabView>().Single();
+        var list = view.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "ChangedFilesList");
+        await UiText.SettleUntilAsync(window, () => Boxes(list).Count == 2, "the changed files");
+        var opened = new List<string>();
+        tab.ChangedFiles.DiffRequested += source => opened.Add(Path.GetFileName(source.Path));
+
+        list.SelectedIndex = 0;
+        list.ContainerFromIndex(0)!.Focus();
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        UiText.Settle(window);
+
+        Assert.Equal(1, list.SelectedIndex);
+        Assert.Empty(opened);
+
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        UiText.Settle(window);
+        Assert.Equal(["login.cs"], opened);
+
+        // A click opens a file, the same one again too.
+        var name = list.ContainerFromIndex(0)!.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == "auth.cs");
+        Click(window, name);
+        Click(window, name);
+        Assert.Equal(["login.cs", "auth.cs", "auth.cs"], opened);
     }
 
     [AvaloniaFact]

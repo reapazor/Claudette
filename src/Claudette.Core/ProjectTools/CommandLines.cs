@@ -136,6 +136,30 @@ public static class CommandLines
         return $"'{argument.Replace("'", "'\\''", StringComparison.Ordinal)}'";
     }
 
-    private static string QuoteForWindows(string argument) =>
-        argument.Length == 0 || argument.Any(char.IsWhiteSpace) ? $"\"{argument}\"" : argument;
+    /// <summary>
+    /// Quotes one argument of a Windows command line so <c>CommandLineToArgvW</c> (and the C runtime, and .NET) read it
+    /// back as it was: in quotes when it's empty or has spaces or quotes, with a quote escaped and the backslashes before
+    /// a quote doubled. A folder such as <c>D:\</c> needs that: <c>"D:\"</c> would read as <c>D:"</c>.
+    /// </summary>
+    public static string QuoteForWindows(string argument)
+    {
+        if (argument.Length > 0 && !argument.Any(c => char.IsWhiteSpace(c) || c == '"'))
+        {
+            return argument;
+        }
+        var quoted = new System.Text.StringBuilder("\"");
+        var backslashes = 0;
+        foreach (var c in argument)
+        {
+            if (c == '\\')
+            {
+                backslashes++;
+                continue;
+            }
+            // Backslashes before a quote are escaped along with it; elsewhere they're literal.
+            quoted.Append('\\', c == '"' ? backslashes * 2 + 1 : backslashes).Append(c);
+            backslashes = 0;
+        }
+        return quoted.Append('\\', backslashes * 2).Append('"').ToString();
+    }
 }

@@ -496,7 +496,7 @@ public partial class ComposerTests
         var path = Path.Combine(h.WorkFolder, "auth.cs");
         await File.WriteAllTextAsync(path, "new line\n", TestContext.Current.CancellationToken);
         Diffs.DiffSource? requested = null;
-        tab.DiffRequested += source => requested = source;
+        tab.ChangedFiles.DiffRequested += source => requested = source;
 
         h.Transport.Emit(new JsonObject
         {
@@ -512,7 +512,7 @@ public partial class ComposerTests
         await TabTestHarness.Eventually(() => tab.Items.OfType<ToolUseItem>().Any(t => t.CanOpenDiff), "the finished edit");
         var card = InlineDispatcher.Read(() => tab.Items.OfType<ToolUseItem>().Single());
 
-        await tab.OpenToolDiffCommand.ExecuteAsync(card);
+        await tab.ChangedFiles.OpenToolDiffCommand.ExecuteAsync(card);
 
         Assert.NotNull(requested);
         Assert.Equal(path, requested.Path);

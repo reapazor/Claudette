@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Claudette.Core;
 using Claudette.Core.Auth;
 using Claudette.Core.Claude;
@@ -87,10 +88,12 @@ public sealed class AppServices : IAsyncDisposable
         LoginItems = loginItems ?? new NoLoginItems("Claudette can't start at login here.");
         ThisCopy = new ClaudetteCopy(AppInstallKind.Other, Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory), AppVersion.ToString());
         BuildCommit = AppBuild.CommitOf(InformationalVersion());
+#pragma warning disable RS0030 // This is AppServices.Http: the one client, whose handler tests replace.
         Http = new HttpClient(httpHandler ?? new SocketsHttpHandler { AutomaticDecompression = System.Net.DecompressionMethods.All }, disposeHandler: true)
         {
             Timeout = TimeSpan.FromSeconds(60),
         };
+#pragma warning restore RS0030
         Paths = paths;
         _launcher = launcher;
         Time = timeProvider;
@@ -368,8 +371,17 @@ public sealed class AppServices : IAsyncDisposable
     }
 
     /// <summary>Saves settings shortly, so a burst of changes (typing in a field) writes once.</summary>
+    /// <summary>
+    /// Settings → Project tools, as one string to compare: whether they changed since a tab last looked. Worked out
+    /// once per change for every tab, rather than by each.
+    /// </summary>
+    public string ProjectToolsSettingsKey => _projectToolsSettingsKey ??= JsonSerializer.Serialize(Settings.ProjectTools, JsonFileStore<AppSettings>.Options);
+
+    private string? _projectToolsSettingsKey;
+
     public void SaveSettings()
     {
+        _projectToolsSettingsKey = null;
         SettingsChanged?.Invoke(this, EventArgs.Empty);
         if (!SuspendSaving)
         {

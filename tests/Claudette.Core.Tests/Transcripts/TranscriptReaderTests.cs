@@ -10,6 +10,22 @@ public class TranscriptReaderTests
         TranscriptReader.Read(File.ReadLines(Path.Combine(AppContext.BaseDirectory, "Fixtures", "transcripts", "2.1.284", $"{name}.jsonl")));
 
     [Fact]
+    public void Each_item_keeps_its_entry_id_and_the_one_before_it()
+    {
+        // Where the conversation can be resumed to rewind or branch (DESIGN.md §5, "Rewind and branch").
+        var transcript = TranscriptReader.Read(
+        [
+            """{"type":"user","uuid":"u-1","parentUuid":null,"message":{"role":"user","content":"first"}}""",
+            """{"type":"assistant","uuid":"a-1","parentUuid":"u-1","message":{"content":[{"type":"text","text":"reply"}]}}""",
+            """{"type":"user","uuid":"u-2","parentUuid":"a-1","message":{"role":"user","content":"second"}}""",
+        ]);
+
+        Assert.Equal([("u-1", null), ("a-1", "u-1"), ("u-2", "a-1")], transcript.Items.Select(i => (i.Uuid, i.ParentUuid)));
+        var reply = Assert.IsType<TranscriptMessage>(transcript.Items[1]);
+        Assert.Equal("a-1", reply.Message.Raw.GetString("uuid"));
+    }
+
+    [Fact]
     public void Reads_prompts_assistant_messages_and_tool_results_in_order()
     {
         var transcript = Load();
@@ -174,6 +190,33 @@ public class TranscriptReaderTests
             "results@main",
             "assistant@main text",
         ], order);
+    }
+
+    [Fact]
+    public async Task Reading_up_to_an_entry_stops_there_with_its_subagents_but_keeps_the_title()
+    {
+        // As a resume with --resume-session-at keeps it (DESIGN.md §5, "Rewind and branch"). The point can be an entry
+        // that shows nothing, such as an attachment.
+        using var folder = new TempFolder();
+        var main = folder.Write("s1.jsonl", string.Join('\n',
+            """{"type":"user","uuid":"u1","parentUuid":null,"timestamp":"2026-09-29T05:00:00.000Z","message":{"role":"user","content":"first"}}""",
+            """{"type":"assistant","uuid":"a1","parentUuid":"u1","timestamp":"2026-09-29T05:00:01.000Z","message":{"content":[{"type":"tool_use","id":"toolu_a","name":"Agent","input":{"description":"Search"}}]}}""",
+            """{"type":"user","uuid":"r1","parentUuid":"a1","timestamp":"2026-09-29T05:00:05.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_a","content":"x"}]}}""",
+            """{"type":"attachment","uuid":"att1","parentUuid":"r1","isMeta":true,"timestamp":"2026-09-29T05:00:05.500Z"}""",
+            """{"type":"user","uuid":"u2","parentUuid":"att1","timestamp":"2026-09-29T05:00:06.000Z","message":{"role":"user","content":"second"}}""",
+            """{"type":"assistant","uuid":"a2","parentUuid":"u2","timestamp":"2026-09-29T05:00:07.000Z","message":{"content":[{"type":"text","text":"two"}]}}""",
+            """{"type":"ai-title","aiTitle":"Searching","sessionId":"s1"}"""));
+        folder.Write("s1/subagents/agent-a1.meta.json", """{"agentType":"Explore","description":"Search","toolUseId":"toolu_a","spawnDepth":1}""");
+        folder.Write("s1/subagents/agent-a1.jsonl", string.Join('\n',
+            """{"isSidechain":true,"type":"assistant","timestamp":"2026-09-29T05:00:02.000Z","message":{"content":[{"type":"text","text":"looking"}]}}""",
+            """{"isSidechain":true,"type":"assistant","timestamp":"2026-09-29T05:00:08.000Z","message":{"content":[{"type":"text","text":"later"}]}}"""));
+
+        var transcript = await TranscriptReader.ReadAsync(main, "att1", TestContext.Current.CancellationToken);
+
+        Assert.Equal(["u1", "a1", null, "r1"], transcript.Items.Select(i => i.Uuid));
+        Assert.Equal("Searching", transcript.Title);
+        // An entry it doesn't have reads it all.
+        Assert.Equal(7, (await TranscriptReader.ReadAsync(main, "gone", TestContext.Current.CancellationToken)).Items.Count);
     }
 
     [Fact]

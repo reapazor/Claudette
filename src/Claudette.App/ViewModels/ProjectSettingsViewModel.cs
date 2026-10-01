@@ -34,10 +34,10 @@ public sealed partial class ProjectSettingsViewModel : ViewModelBase, IDisposabl
         // The shared file first when it has actions, since that's where a project's are.
         SelectedProjectActionFile = ProjectActionFiles[_sharedRows.Count > 0 || _localRows.Count == 0 && _actionFileErrors.GetValueOrDefault(ProjectFileScope.Shared) is null ? 0 : 1];
         BuildToolChoices();
-        _tab.PropertyChanged += OnTabPropertyChanged;
+        _tab.ProjectTools.PropertyChanged += OnProjectToolsPropertyChanged;
     }
 
-    public void Dispose() => _tab.PropertyChanged -= OnTabPropertyChanged;
+    public void Dispose() => _tab.ProjectTools.PropertyChanged -= OnProjectToolsPropertyChanged;
 
     /// <summary>The tab the pages are for: the one selected when the window opened.</summary>
     internal TabViewModel Tab => _tab;
@@ -49,7 +49,7 @@ public sealed partial class ProjectSettingsViewModel : ViewModelBase, IDisposabl
     public string Heading => GroupName(_tab);
 
     /// <summary>"NightOwl" for a detected project, else the folder's name, as Settings' sidebar heads the tab's group.</summary>
-    public static string GroupName(TabViewModel tab) => tab.Project?.Name ?? tab.FolderName;
+    public static string GroupName(TabViewModel tab) => tab.ProjectTools.Project?.Name ?? tab.FolderName;
 
     /// <summary>The small line at the top of each page: which tab the window follows.</summary>
     public string ForTabText => $"For the tab in {_tab.Folder}";
@@ -76,9 +76,9 @@ public sealed partial class ProjectSettingsViewModel : ViewModelBase, IDisposabl
 
     private static bool IsSaveFailure(Exception ex) => ex is InvalidOperationException or IOException or UnauthorizedAccessException;
 
-    private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnProjectToolsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(TabViewModel.Project) or null or "")
+        if (e.PropertyName is nameof(ProjectToolsViewModel.Project) or null or "")
         {
             OnPropertyChanged(nameof(Heading));
             ToolsChanged();

@@ -1,4 +1,5 @@
 using System.Text;
+using Claudette.Core.Files;
 using Claudette.Core.LoginItems;
 using Claudette.Core.Processes;
 
@@ -56,9 +57,7 @@ public sealed class XdgAutostartLoginItems(IProcessLauncher launcher, string aut
     public void WriteEntry(ClaudetteCopy copy)
     {
         Directory.CreateDirectory(autostartDirectory);
-        var temp = FilePath + ".tmp";
-        File.WriteAllText(temp, DesktopEntry(Command(copy)));
-        File.Move(temp, FilePath, overwrite: true);
+        AtomicFile.WriteAllText(FilePath, DesktopEntry(Command(copy)));
     }
 
     public void DeleteEntry()

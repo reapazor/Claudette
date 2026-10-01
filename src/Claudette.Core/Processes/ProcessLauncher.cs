@@ -5,8 +5,19 @@ using System.Threading.Channels;
 namespace Claudette.Core.Processes;
 
 /// <summary>Starts real processes with redirected, UTF-8, line-based standard streams.</summary>
-public sealed class ProcessLauncher : IProcessLauncher
+/// <param name="timeProvider">The clock for <paramref name="outputDrainTime"/>. Null: the system clock.</param>
+/// <param name="outputDrainTime">
+/// How long a process's output is still read after it exits. What the process itself wrote is already in the pipes, so
+/// this is quick; a process it started that inherited them (a build server, a command left in the background) can
+/// keep them open much longer, and isn't waited for. Null: two seconds.
+/// </param>
+public sealed class ProcessLauncher(TimeProvider? timeProvider = null, TimeSpan? outputDrainTime = null) : IProcessLauncher
 {
+    public static readonly TimeSpan DefaultOutputDrainTime = TimeSpan.FromSeconds(2);
+
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+    private readonly TimeSpan _drain = outputDrainTime ?? DefaultOutputDrainTime;
+
     public IRunningProcess Start(ProcessStartSpec spec)
     {
         var redirect = !spec.Detached;
@@ -48,9 +59,11 @@ public sealed class ProcessLauncher : IProcessLauncher
             }
         }
 
+#pragma warning disable RS0030 // This is IProcessLauncher: every process starts here.
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Could not start '{spec.FileName}'.");
-        return new RunningProcess(process, redirect);
+#pragma warning restore RS0030
+        return new RunningProcess(process, redirect, _time, _drain);
     }
 
     private sealed class RunningProcess : IRunningProcess
@@ -62,11 +75,15 @@ public sealed class ProcessLauncher : IProcessLauncher
         private readonly Task<int> _exited;
 
         private readonly bool _redirected;
+        private readonly TimeProvider _time;
+        private readonly TimeSpan _drain;
 
-        public RunningProcess(Process process, bool redirected)
+        public RunningProcess(Process process, bool redirected, TimeProvider time, TimeSpan drain)
         {
             _process = process;
             _redirected = redirected;
+            _time = time;
+            _drain = drain;
             if (!redirected)
             {
                 _stdout.Writer.TryComplete();
@@ -159,9 +176,9 @@ public sealed class ProcessLauncher : IProcessLauncher
                     writer.TryWrite(line);
                 }
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
             {
-                // The pipe broke because the process ended.
+                // The pipe broke because the process ended, or the process was disposed while a descendant kept it open.
             }
             finally
             {
@@ -169,10 +186,22 @@ public sealed class ProcessLauncher : IProcessLauncher
             }
         }
 
+        /// <summary>
+        /// Completes when the process exits, once its output has been read. A descendant that inherited the pipes can keep
+        /// them open long after; their end isn't waited for beyond the drain time, and both streams end then.
+        /// </summary>
         private async Task<int> WaitForExitAsync(Task stdoutPump, Task stderrPump)
         {
             await _process.WaitForExitAsync().ConfigureAwait(false);
-            await Task.WhenAll(stdoutPump, stderrPump).ConfigureAwait(false);
+            try
+            {
+                await Task.WhenAll(stdoutPump, stderrPump).WaitAsync(_drain, _time).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                _stdout.Writer.TryComplete();
+                _stderr.Writer.TryComplete();
+            }
             return _process.ExitCode;
         }
     }

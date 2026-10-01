@@ -21,7 +21,7 @@ public partial class MainWindow : Window
             // Back from an editor, perhaps with claudette.json changed: the actions and links follow (DESIGN.md §18).
             if (_viewModel?.Shell?.SelectedTab is { } tab)
             {
-                _ = tab.RefreshProjectFileAsync();
+                _ = tab.ProjectTools.RefreshFileAsync();
             }
         };
         Deactivated += (_, _) => _viewModel?.Services.Notifications.SetAppActive(false);

@@ -59,7 +59,7 @@ public class ClaudeUpdateTests
         updater.Installed = New;
         await h.Services.ClaudeUpdates!.CheckNowAsync();
 
-        h.Shell.CloseTabCommand.Execute(tab);
+        await h.Shell.CloseTabCommand.ExecuteAsync(tab);
         await TabTestHarness.Eventually(() => !updates.HasBadge, "the badge to go");
 
         Assert.Empty(h.Shell.RunningVersions);
@@ -237,7 +237,8 @@ public class ClaudeUpdateTests
         h.Services.Settings.ClaudeCode.CheckForUpdates = false;
         h.Services.SaveSettings();
         h.Time.Advance(ClaudeUpdateService.CheckInterval * 2);
-        await Task.Delay(50, TestContext.Current.CancellationToken);
+        // A tick starts its check at once, so a check it started is the last one.
+        await service.LastCheck!;
 
         Assert.Equal(2, updater.Checks);
     }

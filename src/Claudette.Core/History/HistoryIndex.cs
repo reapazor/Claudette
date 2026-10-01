@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Json;
 using Claudette.Core.Protocol;
 using Claudette.Core.Transcripts;
 
@@ -330,7 +331,7 @@ public sealed class HistoryIndex(string projectsDirectory)
         {
             try
             {
-                return JsonNode.Parse(line) as JsonObject;
+                return JsonTree.ParseObject(line);
             }
             catch (JsonException)
             {

@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Claudette.App.Services;
@@ -31,6 +32,33 @@ public class SettingsWindowTests
         var page = window.GetVisualDescendants().OfType<ScrollViewer>().First(s => Grid.GetColumn(s) == 1);
 
         await Verify(UiText.Describe(page, (h.Root, "{root}"), (Environment.MachineName, "{machine}"))).UseParameters(category);
+    }
+
+    /// <summary>
+    /// Typing in a text setting doesn't save and apply it on every keystroke, which refreshed every tab each time; it
+    /// takes effect when the box loses focus.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_text_setting_takes_effect_when_the_box_loses_focus_not_on_each_keystroke()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var settings = new SettingsViewModel(h.Services, null) { SelectedCategory = "Advanced" };
+        var window = new SettingsWindow { DataContext = settings, Width = 900, Height = 700 };
+        window.Show();
+        UiText.Settle(window);
+        var changes = 0;
+        h.Services.SettingsChanged += (_, _) => changes++;
+        var box = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.PlaceholderText == "for example --add-dir ../shared");
+
+        box.Focus();
+        window.KeyTextInput("--verbose");
+        UiText.Settle(window);
+        Assert.Equal(0, changes);
+
+        window.GetVisualDescendants().OfType<TextBox>().First(t => t.PlaceholderText == "Search settings").Focus();
+        UiText.Settle(window);
+        Assert.Equal(1, changes);
+        Assert.Equal("--verbose", settings.ExtraArguments);
     }
 
     /// <summary>

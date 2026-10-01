@@ -36,6 +36,18 @@ public sealed record PermissionRequested(PermissionRequest Request) : SessionEve
 /// <summary>Claude Code withdrew a permission request (for example after an interrupt).</summary>
 public sealed record PermissionCancelled(string RequestId) : SessionEvent;
 
+/// <summary>An MCP server asks the user for input (DESIGN.md §7, "MCP servers asking for input").</summary>
+public sealed record ElicitationRequested(ElicitationRequest Request) : SessionEvent;
+
+/// <summary>Claude Code withdrew an <see cref="ElicitationRequested"/> before it was answered.</summary>
+public sealed record ElicitationCancelled(string RequestId) : SessionEvent;
+
+/// <summary>
+/// A prompt Claudette sent, echoed back with its <c>uuid</c> (<c>--replay-user-messages</c>): the point the conversation
+/// and its files can be rewound to (DESIGN.md §5, "Rewind and branch").
+/// </summary>
+public sealed record PromptReplayed(UserMessage Message) : SessionEvent;
+
 public sealed record RateLimitUpdated(RateLimitEventMessage Message) : SessionEvent;
 
 /// <summary>A tool call is still running, for example a subagent (a heartbeat, or waiting out an API error).</summary>

@@ -41,6 +41,37 @@ public class ClaudeSessionTests
     }
 
     [Fact]
+    public async Task A_reply_that_arrives_before_the_write_finishes_still_ends_the_turn()
+    {
+        // A local command such as /cost can be answered before the send's continuation runs.
+        await using var session = new ClaudeSession(_transport, _time);
+        await session.InitializeAsync(TestContext.Current.CancellationToken);
+        _transport.HoldSends = new TaskCompletionSource();
+
+        var send = session.SendUserMessageAsync("/cost", TestContext.Current.CancellationToken).AsTask();
+        Assert.Equal(SessionState.Working, session.State);
+        _transport.Emit("""{"type":"result","subtype":"success","is_error":false,"result":"Total cost: $0.00"}""");
+        await session.ReadUntilAsync<TurnCompleted>();
+        _transport.HoldSends.SetResult();
+        await send;
+
+        Assert.Equal(SessionState.Idle, session.State);
+    }
+
+    [Fact]
+    public async Task A_send_that_fails_leaves_the_session_idle()
+    {
+        await using var session = new ClaudeSession(_transport, _time);
+        await session.InitializeAsync(TestContext.Current.CancellationToken);
+        _transport.HoldSends = new TaskCompletionSource();
+        _transport.HoldSends.SetException(new IOException("The pipe is broken."));
+
+        await Assert.ThrowsAsync<IOException>(() => session.SendUserMessageAsync("hello", TestContext.Current.CancellationToken).AsTask());
+
+        Assert.Equal(SessionState.Idle, session.State);
+    }
+
+    [Fact]
     public async Task Sending_a_message_writes_a_user_line_and_starts_working()
     {
         await using var session = await StartAsync();
@@ -130,6 +161,121 @@ public class ClaudeSessionTests
         Assert.Equal("cli_3", cancelled.RequestId);
         Assert.True(requested.Request.IsCancelled);
         Assert.DoesNotContain(_transport.Sent, m => Type(m) == "control_response");
+    }
+
+    [Fact]
+    public async Task An_mcp_servers_form_is_answered_with_the_values_given()
+    {
+        await using var session = await StartAsync();
+        session.ShowsElicitations = true;
+        _transport.Emit("""{"type":"control_request","request_id":"cli_e1","request":{"subtype":"elicitation","mcp_server_name":"tickets","message":"Which project?","mode":"form","requested_schema":{"type":"object","properties":{"project":{"type":"string"}},"required":["project"]}}}""");
+
+        var (requested, _) = await session.ReadUntilAsync<ElicitationRequested>();
+        Assert.Equal("tickets", requested.Request.ServerName);
+        Assert.Equal("Which project?", requested.Request.Message);
+        Assert.False(requested.Request.IsUrl);
+        Assert.NotNull(requested.Request.Schema);
+        requested.Request.Accept(new JsonObject { ["project"] = "NEXUS" });
+
+        var answer = await _transport.WaitForSentAsync(m => Type(m) == "control_response");
+        Assert.Equal("cli_e1", answer["response"]!["request_id"]!.GetValue<string>());
+        Assert.Equal("accept", answer["response"]!["response"]!["action"]!.GetValue<string>());
+        Assert.Equal("NEXUS", answer["response"]!["response"]!["content"]!["project"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Without_anyone_to_show_it_an_mcp_servers_request_is_declined()
+    {
+        await using var session = await StartAsync();
+        _transport.Emit("""{"type":"control_request","request_id":"cli_e2","request":{"subtype":"elicitation","mcp_server_name":"auth","message":"Sign in","mode":"url","url":"https://example.com/login","elicitation_id":"el-1"}}""");
+
+        var answer = await _transport.WaitForSentAsync(m => Type(m) == "control_response");
+
+        Assert.Equal("decline", answer["response"]!["response"]!["action"]!.GetValue<string>());
+        Assert.Null(answer["response"]!["response"]!["content"]);
+    }
+
+    [Fact]
+    public async Task A_withdrawn_mcp_request_is_reported_and_never_answered()
+    {
+        await using var session = await StartAsync();
+        session.ShowsElicitations = true;
+        _transport.Emit("""{"type":"control_request","request_id":"cli_e3","request":{"subtype":"elicitation","mcp_server_name":"auth","message":"Sign in","mode":"url","url":"https://example.com/login"}}""");
+        var (requested, _) = await session.ReadUntilAsync<ElicitationRequested>();
+        Assert.True(requested.Request.IsUrl);
+        Assert.Equal("https://example.com/login", requested.Request.Url);
+
+        _transport.Emit("""{"type":"control_cancel_request","request_id":"cli_e3"}""");
+        await session.ReadUntilAsync<ElicitationCancelled>();
+        requested.Request.Accept();
+
+        Assert.True(requested.Request.IsCancelled);
+        Assert.DoesNotContain(_transport.Sent, m => Type(m) == "control_response");
+    }
+
+    [Fact]
+    public async Task A_replayed_prompt_is_its_own_event_and_tool_results_arent()
+    {
+        await using var session = await StartAsync();
+        _transport.Emit("""{"type":"user","uuid":"u-1","isReplay":true,"session_id":"s","parent_tool_use_id":null,"message":{"role":"user","content":"Fix the build"}}""");
+        _transport.Emit("""{"type":"user","uuid":"u-2","session_id":"s","parent_tool_use_id":null,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}""");
+
+        var (replayed, _) = await session.ReadUntilAsync<PromptReplayed>();
+        var (results, _) = await session.ReadUntilAsync<ToolResultsReceived>();
+
+        Assert.Equal("u-1", replayed.Message.Uuid);
+        Assert.Equal("u-2", results.Message.Uuid);
+        Assert.False(results.Message.IsReplay);
+    }
+
+    [Fact]
+    public async Task Rewinding_files_names_the_prompt_and_reads_what_changed()
+    {
+        await using var session = await StartAsync();
+        JsonObject? sent = null;
+        _transport.AutoRespond["rewind_files"] = request =>
+        {
+            sent = request;
+            return new JsonObject { ["canRewind"] = true, ["filesChanged"] = new JsonArray("src/a.cs", "src/b.cs"), ["insertions"] = 3, ["deletions"] = 12 };
+        };
+
+        var result = await session.RewindFilesAsync("u-1", dryRun: true, TestContext.Current.CancellationToken);
+
+        Assert.Equal("u-1", sent!["user_message_id"]!.GetValue<string>());
+        Assert.True(sent["dry_run"]!.GetValue<bool>());
+        Assert.True(result.CanRewind);
+        Assert.Null(result.Error);
+        Assert.Equal(["src/a.cs", "src/b.cs"], result.FilesChanged);
+        Assert.Equal((3, 12, 0), (result.Insertions, result.Deletions, result.SkippedLinks));
+    }
+
+    [Fact]
+    public async Task Mcp_servers_are_listed_reconnected_and_toggled()
+    {
+        await using var session = await StartAsync();
+        _transport.AutoRespond["mcp_status"] = _ => JsonNode.Parse("""
+            {"mcpServers":[
+              {"name":"tickets","status":"connected","serverInfo":{"name":"tickets","version":"1.2.0"},"scope":"project","tools":[{"name":"a"},{"name":"b"}]},
+              {"name":"auth","status":"needs-auth"},
+              {"name":"odd","status":"sleeping","error":"?"},
+              {"status":"connected"}
+            ]}
+            """)!.AsObject();
+        _transport.AutoRespond["mcp_reconnect"] = _ => [];
+        _transport.AutoRespond["mcp_toggle"] = _ => [];
+
+        var servers = await session.GetMcpStatusAsync(TestContext.Current.CancellationToken);
+        await session.ReconnectMcpServerAsync("auth", TestContext.Current.CancellationToken);
+        await session.SetMcpServerEnabledAsync("tickets", false, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [new McpServerStatus("tickets", McpServerState.Connected, null, "1.2.0", "project", 2), new McpServerStatus("auth", McpServerState.NeedsAuth, null, null, null, 0),
+             new McpServerStatus("odd", McpServerState.Unknown, "?", null, null, 0)],
+            servers);
+        var reconnect = _transport.Sent.Single(m => m["request"]?["subtype"]?.GetValue<string>() == "mcp_reconnect");
+        Assert.Equal("auth", reconnect["request"]!["serverName"]!.GetValue<string>());
+        var toggle = _transport.Sent.Single(m => m["request"]?["subtype"]?.GetValue<string>() == "mcp_toggle");
+        Assert.False(toggle["request"]!["enabled"]!.GetValue<bool>());
     }
 
     [Fact]

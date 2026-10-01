@@ -229,6 +229,32 @@ public sealed class FakeClaudeTests : IDisposable
     }
 
     [Fact]
+    public async Task Stopping_doesnt_wait_for_a_child_that_holds_the_output_open()
+    {
+        // The child inherits fake-claude's standard streams, as a build server or a backgrounded command does.
+        var session = await StartAsync();
+        await session.SendUserMessageAsync("SPAWN 60", TestContext.Current.CancellationToken);
+        var (done, _) = await session.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(10));
+        var pid = int.Parse(done.Result.Result!["started child ".Length..], System.Globalization.CultureInfo.InvariantCulture);
+        using var child = System.Diagnostics.Process.GetProcessById(pid);
+        try
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            await session.StopAsync(TimeSpan.FromSeconds(3));
+            await session.Completion.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
+
+            Assert.True(watch.Elapsed < TimeSpan.FromSeconds(20), $"Stopping took {watch.Elapsed}.");
+            Assert.Equal(SessionState.Exited, session.State);
+            Assert.False(child.HasExited);
+        }
+        finally
+        {
+            child.Kill();
+            await session.DisposeAsync();
+        }
+    }
+
+    [Fact]
     public async Task A_crash_is_reported_with_its_exit_code_and_stderr()
     {
         await using var session = await StartAsync();

@@ -24,7 +24,12 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 
 echo "Publishing Claudette $version for osx-$arch"
 dotnet publish "$root/src/Claudette.App/Claudette.App.csproj" -c Release -r "osx-$arch" --self-contained \
-  -p:Version="$version" -p:DebugType=none -o "$app/Contents/MacOS"
+  -p:Version="$version" -p:DebugType=portable -o "$app/Contents/MacOS"
+# The symbols stay out of the bundle (and its signature), kept beside it to read crash reports' stack traces with.
+symbols="$output/symbols-osx-$arch"
+rm -rf "$symbols"
+mkdir -p "$symbols"
+find "$app/Contents/MacOS" -maxdepth 1 -name '*.pdb' -exec mv {} "$symbols/" \;
 sed "s/[$]VERSION[$]/$version/g" "$here/Info.plist" > "$app/Contents/Info.plist"
 
 if ! command -v iconutil >/dev/null; then

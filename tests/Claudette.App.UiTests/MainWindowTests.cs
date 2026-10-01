@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Arc = Avalonia.Controls.Shapes.Arc;
 using Avalonia.Headless;
@@ -483,11 +484,13 @@ public class MainWindowTests
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
         await UiText.SettleUntilAsync(window, () => UiText.Describe(window).Contains("Done.", StringComparison.Ordinal), "the reply");
         var row = window.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("tabrow"));
-        var items = window.GetVisualDescendants().OfType<StackPanel>().Single(p => p.Classes.Contains("conversation"));
+        // The conversation is virtualized; each item keeps its distance from the next with its margin.
+        var items = window.GetVisualDescendants().OfType<VirtualizingStackPanel>().Single(p => p.Classes.Contains("conversation"));
+        Thickness Gap() => items.Children.OfType<ContentPresenter>().First().Margin;
         var composer = window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "ComposerBox");
         var comfortable = (Row: row.Bounds.Height, Composer: composer.Bounds.Height);
         Assert.Equal(new Thickness(6, 5, 4, 5), row.Padding);
-        Assert.Equal(8, items.Spacing);
+        Assert.Equal(new Thickness(0, 0, 0, 8), Gap());
 
         h.Services.Settings.Appearance.Density = Density.Compact;
         h.Services.SaveSettings();
@@ -496,7 +499,7 @@ public class MainWindowTests
         Assert.Contains("compact", window.GetVisualDescendants().OfType<ShellView>().Single().Classes);
         Assert.Equal(new Thickness(6, 2, 4, 2), row.Padding);
         Assert.Equal(comfortable.Row - 6, row.Bounds.Height, precision: 3);
-        Assert.Equal(3, items.Spacing);
+        Assert.Equal(new Thickness(0, 0, 0, 3), Gap());
         Assert.True(composer.Bounds.Height < comfortable.Composer, $"The composer is {composer.Bounds.Height} px high, as before.");
 
         // Back to Comfortable, as it was.

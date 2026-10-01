@@ -109,14 +109,20 @@ internal static class PsOutput
         return TimeSpan.FromDays(days) + TimeSpan.FromHours(hours) + TimeSpan.FromMinutes(minutes) + TimeSpan.FromSeconds(seconds);
     }
 
-    /// <summary><c>lstart</c> without its weekday, in local time: <c>Sep 28 10:15:30 2026</c>.</summary>
+    /// <summary>
+    /// The time zone <c>ps</c> runs in, so <c>lstart</c> is in UTC: in local time, the hour that repeats when the clocks
+    /// go back would be ambiguous, and a child started in it could seem to start before its parent.
+    /// </summary>
+    public const string TimeZone = "UTC0";
+
+    /// <summary><c>lstart</c> without its weekday, in UTC (<see cref="TimeZone"/>): <c>Sep 28 10:15:30 2026</c>.</summary>
     public static DateTimeOffset? ParseStartTime(string month, string day, string time, string year) =>
         DateTime.TryParseExact(
             $"{month} {day} {time} {year}",
             "MMM d HH:mm:ss yyyy",
             CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeLocal,
-            out var local)
-            ? new DateTimeOffset(local)
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out var utc)
+            ? new DateTimeOffset(utc, TimeSpan.Zero)
             : null;
 }

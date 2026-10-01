@@ -42,6 +42,29 @@ public partial class CompatibilitySurfaceTests
         Assert.Empty(withoutFallback);
     }
 
+    [Fact]
+    public void Every_test_named_exists()
+    {
+        // "test: A, B (a note)" names test classes; "none yet …" names none.
+        var classes = Directory.EnumerateFiles(Path.Combine(RepoRoot, "tests"), "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .SelectMany(f => ClassPattern().Matches(File.ReadAllText(f)).Select(m => m.Groups[1].Value))
+            .ToHashSet(StringComparer.Ordinal);
+        var named = TestPattern().Matches(Surface)
+            .Select(m => m.Groups[1].Value.Trim())
+            .Where(value => !value.StartsWith("none yet", StringComparison.Ordinal))
+            .SelectMany(value => value.Split('(')[0].Split(','))
+            .Select(name => name.Trim())
+            .Where(name => name.Length > 0)
+            .Distinct()
+            .ToArray();
+
+        Assert.NotEmpty(named);
+        var missing = named.Where(name => !classes.Contains(name)).ToArray();
+        Assert.Empty(missing);
+    }
+
     private static string Field(string name) =>
         Regex.Match(Surface, $@"^\s*{name}:\s*([0-9.]+)", RegexOptions.Multiline).Groups[1].Value;
 
@@ -60,4 +83,10 @@ public partial class CompatibilitySurfaceTests
 
     [GeneratedRegex(@"^\s*status:\s*(\w+)", RegexOptions.Multiline)]
     private static partial Regex StatusPattern();
+
+    [GeneratedRegex(@"^\s*test:\s*(.+)$", RegexOptions.Multiline)]
+    private static partial Regex TestPattern();
+
+    [GeneratedRegex(@"\bclass\s+(\w+)")]
+    private static partial Regex ClassPattern();
 }

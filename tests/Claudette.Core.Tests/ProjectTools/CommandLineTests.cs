@@ -68,4 +68,17 @@ public sealed class CommandLineTests
         Assert.Equal(@"""C:\Program Files\UE\UnrealEditor.exe"" ""D:\My Game\a.uproject""",
             CommandLines.Display(new Claudette.Core.Processes.ProcessStartSpec(@"C:\Program Files\UE\UnrealEditor.exe", [@"D:\My Game\a.uproject"])));
     }
+
+    [Theory]
+    [InlineData(@"D:\", @"D:\")]
+    [InlineData(@"D:\My Games\", @"""D:\My Games\\""")]
+    [InlineData(@"C:\Program Files\Claudette", @"""C:\Program Files\Claudette""")]
+    [InlineData("", "\"\"")]
+    [InlineData("say \"hi\"", "\"say \\\"hi\\\"\"")]
+    [InlineData(@"a\""b c", @"""a\\\""b c""")]
+    public void Windows_arguments_are_quoted_as_Windows_reads_them_back(string argument, string expected)
+    {
+        // A folder ending in a backslash, quoted naively as "D:\My Games\", reads back as D:\My Games".
+        Assert.Equal(expected, CommandLines.QuoteForWindows(argument));
+    }
 }

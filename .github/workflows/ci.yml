@@ -5,9 +5,16 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # The package workflow runs it before a tag's packages become a release.
+  workflow_call:
 
 permissions:
   contents: read
+
+# A newer push to the same pull request or branch makes a running check pointless.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-and-test:
@@ -19,35 +26,73 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      # Packages are cached by the lock files, and restored exactly as they say.
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
       - name: Restore
-        run: dotnet restore Claudette.slnx
+        run: dotnet restore Claudette.slnx --locked-mode
       - name: Build
         run: dotnet build Claudette.slnx --no-restore --configuration Release
       # RealCli tests need Claude Code (next job); Live tests use real tokens and never run in CI.
       # A test that hangs fails the run after 10 minutes and names itself, rather than holding the runner for hours.
       - name: Test
-        run: dotnet test Claudette.slnx --no-build --configuration Release --filter "Category!=RealCli&Category!=Live" --blame-hang-timeout 10m --blame-hang-dump-type none
+        run: dotnet test Claudette.slnx --no-build --configuration Release --filter "Category!=RealCli&Category!=Live" --blame-hang-timeout 10m --blame-hang-dump-type none --logger trx --results-directory TestResults
+      - name: Summary
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node .github/scripts/test-summary.mjs TestResults "Tests (${{ matrix.os }})" >> "$GITHUB_STEP_SUMMARY"
+      # What a failure needs to be read without running it again: the results, which test hung, and a changed view's
+      # snapshot (*.received.txt, DESIGN.md §15).
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: test-results-${{ matrix.os }}
+          path: |
+            TestResults/
+            tests/**/*.received.*
+          retention-days: 7
+          if-no-files-found: ignore
 
   real-cli:
     name: Real Claude Code against the mock API
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      # The version Claudette was last tested with (compat/surface.yaml), so a new Claude Code release can't turn a pull
+      # request red; the daily compatibility check tries each new release (DESIGN.md §16).
       - name: Install Claude Code
         run: |
-          curl -fsSL https://claude.ai/install.sh | bash
+          version=$(sed -n 's/^[[:space:]]*lastTested:[[:space:]]*\([0-9.]*\).*/\1/p' compat/surface.yaml)
+          echo "Installing Claude Code $version"
+          curl -fsSL https://claude.ai/install.sh | bash -s "$version"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Claude Code version
         run: claude --version
-      # The tests point claude at an in-process mock Messages API with a dummy key and a throwaway
-      # CLAUDE_CONFIG_DIR, so no account or tokens are involved (DESIGN.md §15).
+      - name: Restore
+        run: dotnet restore Claudette.slnx --locked-mode
+      - name: Build
+        run: dotnet build Claudette.slnx --no-restore --configuration Release
+      # Every RealCli test, in any project. They point claude at an in-process mock Messages API with a dummy key and a
+      # throwaway CLAUDE_CONFIG_DIR, so no account or tokens are involved (DESIGN.md §15).
       - name: Test
-        run: dotnet test tests/Claudette.IntegrationTests --configuration Release --filter "Category=RealCli" --blame-hang-timeout 10m --blame-hang-dump-type none
+        run: dotnet test Claudette.slnx --no-build --configuration Release --filter "Category=RealCli" --blame-hang-timeout 10m --blame-hang-dump-type none --logger trx --results-directory TestResults
+      - name: Summary
+        if: ${{ !cancelled() }}
+        run: node .github/scripts/test-summary.mjs TestResults "Real Claude Code" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: test-results-real-cli
+          path: TestResults/
+          retention-days: 7
+          if-no-files-found: ignore

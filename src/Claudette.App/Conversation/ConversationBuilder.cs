@@ -14,6 +14,8 @@ public sealed class ConversationBuilder
 {
     private readonly Dictionary<string, ToolUseItem> _toolUses = [];
     private readonly Dictionary<string, PromptItem> _permissions = [];
+    private readonly Dictionary<string, HookRunItem> _hookRuns = [];
+    private readonly Dictionary<string, McpInputItem> _mcpInputs = [];
     private readonly Dictionary<string, ConversationBuilder> _subagents = [];
     private readonly HashSet<string> _todoToolUses = [];
     private readonly TodoList? _todoList;
@@ -21,6 +23,10 @@ public sealed class ConversationBuilder
     private AssistantTextItem? _openText;
     private ThinkingItem? _openThinking;
     private NoteItem? _retryNote;
+
+    // The last entry of the main conversation Claude Code gave an id: where a resume would stop to leave out what comes
+    // next (DESIGN.md §5, "Rewind and branch").
+    private string? _lastEntryUuid;
     private AgentMap? _agents;
     private RunningTasks? _tasks;
 
@@ -44,6 +50,10 @@ public sealed class ConversationBuilder
     {
         Items = items;
         _todoList = todoList;
+        if (todoList is not null)
+        {
+            todoList.Clock = Now;
+        }
         _modelName = modelName ?? (m => m);
     }
 
@@ -60,6 +70,15 @@ public sealed class ConversationBuilder
 
     /// <summary>Show messages Claudette skipped as rows with their JSON: protocol logging is on (DESIGN.md §16).</summary>
     public bool ShowUnsupportedMessages { get; set; }
+
+    /// <summary>Opens an MCP server's link in the browser, for its requests that ask the user to finish something there.</summary>
+    public Func<string, Task>? OpenUrl { get; set; }
+
+    /// <summary>
+    /// Show a row for every hook run (Settings → Sessions). Off, only runs that fail, or print something while they
+    /// work, get one (DESIGN.md §5, "Hook runs").
+    /// </summary>
+    public bool ShowAllHookRuns { get; set; }
 
     /// <summary>
     /// What a prompt Claude Code withdraws says: "Answered in the Claude app" while the tab is connected to it (DESIGN.md
@@ -91,11 +110,18 @@ public sealed class ConversationBuilder
     }
 
     public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null, bool isAutoContinue = false) =>
-        AddUser(new UserMessageItem(text, suffixText, isCheckIn, isAutoContinue) { Images = images ?? [] }, Now());
+        AddUser(new UserMessageItem(text, suffixText, isCheckIn, isAutoContinue) { Images = images ?? [], ResumeAt = _lastEntryUuid }, Now());
 
-    /// <summary>A prompt from a transcript, sent at <paramref name="sentAt"/>: null when its entry has no time.</summary>
-    public UserMessageItem ReplayUserMessage(string text, IReadOnlyList<MessageImage> images, DateTimeOffset? sentAt) =>
-        AddUser(new UserMessageItem(text) { Images = images }, sentAt);
+    /// <summary>
+    /// A prompt from a transcript, sent at <paramref name="sentAt"/>: null when its entry has no time. Its entry's
+    /// <paramref name="uuid"/> and <paramref name="parentUuid"/> are where to rewind or branch from it.
+    /// </summary>
+    public UserMessageItem ReplayUserMessage(string text, IReadOnlyList<MessageImage> images, DateTimeOffset? sentAt, string? uuid = null, string? parentUuid = null)
+    {
+        var item = AddUser(new UserMessageItem(text) { Images = images, Uuid = uuid, ResumeAt = parentUuid ?? _lastEntryUuid }, sentAt);
+        _lastEntryUuid = uuid ?? _lastEntryUuid;
+        return item;
+    }
 
     private UserMessageItem AddUser(UserMessageItem item, DateTimeOffset? sentAt)
     {
@@ -152,6 +178,7 @@ public sealed class ConversationBuilder
         Items.Clear();
         _toolUses.Clear();
         _permissions.Clear();
+        _hookRuns.Clear();
         _subagents.Clear();
         _todoToolUses.Clear();
         _todoList?.Clear();
@@ -160,6 +187,8 @@ public sealed class ConversationBuilder
         _openText = null;
         _openThinking = null;
         _retryNote = null;
+        // A cleared conversation is a new one: nothing before it to go back to.
+        _lastEntryUuid = null;
     }
 
     public void Apply(SessionEvent sessionEvent)
@@ -188,10 +217,32 @@ public sealed class ConversationBuilder
 
             case AssistantMessageReceived assistant:
                 ApplyAssistant(assistant.Message);
+                _lastEntryUuid = assistant.Message.Raw.GetString("uuid") ?? _lastEntryUuid;
                 break;
 
             case ToolResultsReceived results:
                 ApplyToolResults(results.Message);
+                _lastEntryUuid = results.Message.Uuid ?? _lastEntryUuid;
+                break;
+
+            case PromptReplayed replayed when replayed.Message.Uuid is { } uuid:
+                // A prompt that was sent, echoed back with its id. Prompts sent while Claude worked wait their turn, so
+                // it's the earliest still without one that reads the same, else the earliest still without one.
+                var waiting = Items.OfType<UserMessageItem>().Where(m => m.Uuid is null).ToArray();
+                var sent = replayed.Message.Raw.GetObject("message")?["content"] switch
+                {
+                    JsonValue value when value.GetValueKind() == JsonValueKind.String => value.GetValue<string>(),
+                    JsonArray blocks => string.Join("\n", blocks.OfType<JsonObject>().Where(b => b.GetString("type") == "text").Select(b => b.GetString("text"))),
+                    _ => null,
+                };
+                if ((waiting.FirstOrDefault(m => sent is not null && m.CopyText.Trim() == sent.Trim()) ?? waiting.FirstOrDefault()) is { } prompt)
+                {
+                    prompt.Uuid = uuid;
+                    // One sent while Claude worked joined the conversation later than it was sent: it follows what came
+                    // before it now.
+                    prompt.ResumeAt = _lastEntryUuid ?? prompt.ResumeAt;
+                }
+                _lastEntryUuid = uuid;
                 break;
 
             case LocalCommandOutputReceived local:
@@ -215,11 +266,38 @@ public sealed class ConversationBuilder
                 _agents?.OnToolProgress(progress.Message);
                 break;
 
+            case ElicitationRequested elicitation:
+                CloseOpen();
+                var input = new McpInputItem(elicitation.Request, OpenUrl);
+                _mcpInputs[elicitation.Request.RequestId] = input;
+                Items.Add(input);
+                break;
+
+            case ElicitationCancelled withdrawn:
+                if (_mcpInputs.Remove(withdrawn.RequestId, out var withdrawnInput))
+                {
+                    withdrawnInput.Withdraw(WithdrawnOutcome?.Invoke());
+                }
+                break;
+
+            case SystemNotice { Message.Subtype: "elicitation_complete" } complete:
+                // A URL request the server says is done: the user finished in the browser.
+                var elicitationId = complete.Message.Raw.GetString("elicitation_id");
+                if (_mcpInputs.Values.FirstOrDefault(i => i.IsUrl && i.Request.ElicitationId == elicitationId && elicitationId is not null) is { } done)
+                {
+                    done.Complete();
+                }
+                break;
+
             case PermissionCancelled cancelled:
                 if (_permissions.TryGetValue(cancelled.RequestId, out var cancelledItem))
                 {
                     cancelledItem.Cancel(WithdrawnOutcome?.Invoke());
                 }
+                break;
+
+            case SystemNotice { Message.Subtype: "hook_started" or "hook_progress" or "hook_response" } hook:
+                ApplyHook(hook.Message);
                 break;
 
             case SystemNotice { Message.Subtype: "api_retry" } retry:
@@ -266,12 +344,77 @@ public sealed class ConversationBuilder
                 {
                     pending.Cancel();
                 }
+                foreach (var pending in _mcpInputs.Values)
+                {
+                    pending.Withdraw();
+                }
+                _mcpInputs.Clear();
                 var code = exited.Exit.ExitCode?.ToString() ?? "unknown";
                 var detail = string.IsNullOrWhiteSpace(exited.Exit.StandardErrorTail) ? "" : $"\n{LastLines(exited.Exit.StandardErrorTail, 5)}";
                 AddNote($"Claude Code exited (code {code}).{detail}", exited.Exit.ExitCode == 0 ? NoteKind.Info : NoteKind.Error);
                 _agents?.OnSessionExited();
                 _tasks?.Clear();
                 break;
+        }
+    }
+
+    /// <summary>
+    /// A hook's run (DESIGN.md §5, "Hook runs"): a row from its start when every run shows, else from the moment it fails
+    /// or prints something. Its output and how it ended fill in as they come.
+    /// </summary>
+    private void ApplyHook(SystemMessage message)
+    {
+        var raw = message.Raw;
+        if (raw.GetString("hook_id") is not { Length: > 0 } id)
+        {
+            return;
+        }
+        if (!_hookRuns.TryGetValue(id, out var item))
+        {
+            var failed = message.Subtype == "hook_response" && raw.GetString("outcome") is "error";
+            var printed = message.Subtype == "hook_progress" && !string.IsNullOrEmpty(raw.GetString("output") ?? raw.GetString("stdout"));
+            if (!ShowAllHookRuns && !failed && !printed)
+            {
+                return;
+            }
+            CloseOpen();
+            item = new HookRunItem(id, raw.GetString("hook_name") ?? "", raw.GetString("hook_event") ?? "Hook");
+            _hookRuns[id] = item;
+            Items.Add(item);
+        }
+        switch (message.Subtype)
+        {
+            case "hook_progress":
+                // Each progress message has the output so far.
+                item.Output = "";
+                item.Append(HookOutput(raw));
+                break;
+            case "hook_response":
+                item.Output = "";
+                item.Append(HookOutput(raw));
+                item.ExitCode = raw.GetDouble("exit_code") is { } code ? (int)code : null;
+                item.State = raw.GetString("outcome") switch
+                {
+                    "error" => HookRunState.Failed,
+                    "cancelled" => HookRunState.Cancelled,
+                    _ => HookRunState.Succeeded,
+                };
+                // A failure opens, so what went wrong is in view.
+                item.IsExpanded = item.IsFailed && item.HasOutput;
+                _hookRuns.Remove(id);
+                break;
+        }
+
+        static string HookOutput(JsonObject raw)
+        {
+            var output = raw.GetString("output");
+            if (!string.IsNullOrEmpty(output))
+            {
+                return output.TrimEnd();
+            }
+            var stdout = raw.GetString("stdout") ?? "";
+            var stderr = raw.GetString("stderr") ?? "";
+            return string.Join('\n', new[] { stdout.TrimEnd(), stderr.TrimEnd() }.Where(s => s.Length > 0));
         }
     }
 
@@ -295,6 +438,17 @@ public sealed class ConversationBuilder
         _permissions[request.RequestId] = item;
         Items.Add(item);
         _agents?.OnPrompt(item);
+        if (item is PlanItem plan && _todoList is { } todos)
+        {
+            // An approved plan heads the Tasks page (DESIGN.md §5, "Tasks").
+            plan.Answered += (_, _) =>
+            {
+                if (plan.State == PermissionState.Allowed && plan.HasPlan)
+                {
+                    todos.SetPlan(plan.Plan.ToString());
+                }
+            };
+        }
     }
 
     private void ApplyAssistant(AssistantMessage message)
@@ -535,7 +689,7 @@ public sealed class ConversationBuilder
             _openThinking = new ThinkingItem { IsExpanded = ExpandThinking };
             Items.Add(_openThinking);
         }
-        _openThinking.Text += text;
+        _openThinking.Append(text);
     }
 
     private void CloseText()

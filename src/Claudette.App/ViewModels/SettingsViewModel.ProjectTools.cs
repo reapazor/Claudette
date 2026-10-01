@@ -14,18 +14,18 @@ public sealed record SettingChoice<T>(T Value, string Label)
 /// <summary>Settings → Project tools (DESIGN.md §18, "Project tools"), and its search entries.</summary>
 public sealed partial class SettingsViewModel
 {
-    public bool IsProjectTools => SelectedCategory == "Project tools";
+    public bool IsProjectTools => SelectedCategory == SettingsCategory.ProjectTools;
 
     private static IEnumerable<SettingsSearchResult> ProjectToolsSearchEntries() =>
     [
-        new("Project tools", "Unreal: default editor configuration"),
-        new("Project tools", "Project files for"),
-        new("Project tools", "Open solutions with"),
-        new("Project tools", "Tell Claude about Unreal projects"),
-        new("Project tools", "Unity: default code optimization"),
-        new("Project tools", "Tell Claude about Unity projects"),
-        new("Project tools", "Godot executable"),
-        new("Project tools", "Tell Claude about Godot projects"),
+        new(SettingsCategory.ProjectTools, "Unreal: default editor configuration"),
+        new(SettingsCategory.ProjectTools, "Project files for"),
+        new(SettingsCategory.ProjectTools, "Open solutions with"),
+        new(SettingsCategory.ProjectTools, "Tell Claude about Unreal projects"),
+        new(SettingsCategory.ProjectTools, "Unity: default code optimization"),
+        new(SettingsCategory.ProjectTools, "Tell Claude about Unity projects"),
+        new(SettingsCategory.ProjectTools, "Godot executable"),
+        new(SettingsCategory.ProjectTools, "Tell Claude about Godot projects"),
     ];
 
     public IReadOnlyList<SettingChoice<UnrealConfiguration>> UnrealConfigurationChoices { get; } =

@@ -244,6 +244,56 @@ public sealed class UsageStoreTests : IDisposable
     }
 
     [Fact]
+    public void Tokens_by_project_add_up_every_tab_in_the_folder()
+    {
+        var store = Open();
+        store.AddTurns(
+        [
+            new TurnRecord(Start.AddDays(-8), "tab-old", null, "fable", 1_000_000, 0, 0, 0, 9, "/work/api"),
+            new TurnRecord(Start, "tab-1", "s1", "fable", 100, 10, 0, 1000, 0.1, "/work/api"),
+            new TurnRecord(Start, "tab-1", "s1", "haiku", 50, 5, 0, 0, 0.01, "/work/api"),
+            new TurnRecord(Start, "tab-2", "s2", "fable", 100, 0, 0, 0, 0.05, "/work/api"),
+            new TurnRecord(Start.AddMinutes(1), "tab-3", "s3", "fable", 10_000, 500, 200, 90_000, 1.5, "/work/web"),
+            new TurnRecord(Start.AddMinutes(2), "tab-4", "s4", "fable", 7, 0, 0, 0, 0),
+        ]);
+        store.Dispose();
+        // Read back after reopening: the project is stored, not only kept in memory.
+        store = Open();
+
+        var sums = store.GetTokensByProject(Start.AddDays(-7));
+
+        Assert.Equal(["/work/web", "/work/api", null], sums.Select(s => s.Project));
+        var api = sums[1];
+        // tab-1's two records are one turn, and tab-2's turn at the same moment is another.
+        Assert.Equal(new ProjectTokenSum("/work/api", 250, 15, 0, 1000, 0.16, 2), api with { CostUsd = Math.Round(api.CostUsd, 6) });
+        Assert.Equal("/work/api", store.GetTurns(Start, Start, "tab-1")[0].Project);
+    }
+
+    [Fact]
+    public void A_history_from_before_projects_is_upgraded_and_its_turns_have_none()
+    {
+        var store = Open();
+        store.AddTurns([new TurnRecord(Start, "tab-1", null, "fable", 1, 1, 1, 1, 0)]);
+        store.Dispose();
+        // Version 3 had no project column.
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = DatabasePath, Pooling = false }.ToString()))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE old_turns AS SELECT id, timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd FROM turns;
+                DROP TABLE turns; ALTER TABLE old_turns RENAME TO turns; PRAGMA user_version = 3;
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        var upgraded = Open();
+        upgraded.AddTurns([new TurnRecord(Start.AddMinutes(1), "tab-2", null, "fable", 1, 0, 0, 0, 0, "/work/api")]);
+
+        Assert.Equal([null, "/work/api"], upgraded.GetTokensByProject(DateTimeOffset.MinValue).Select(s => s.Project).Order());
+    }
+
+    [Fact]
     public void Tokens_by_tab_carry_each_tabs_last_known_name()
     {
         var store = Open();
@@ -328,6 +378,34 @@ public sealed class UsageStoreTests : IDisposable
 
         // Newer readings come in; older ones it already had don't.
         Assert.Equal(1, store.ImportSamples("machine-2", [.. theirs, Shared(Start.AddMinutes(5), 15)]));
+    }
+
+    [Fact]
+    public void Samples_from_the_future_wait_until_their_time_has_come()
+    {
+        // A machine whose clock runs ahead: imported now, its sample would move the mark past everything it sends once
+        // its clock is put right, and stand as the newest reading.
+        var store = Open();
+        var ahead = Shared(Start.AddHours(1), 50);
+
+        Assert.Equal(0, store.ImportSamples("machine-2", [ahead]));
+        Assert.Equal(1, store.ImportSamples("machine-2", [Shared(Start.AddMinutes(-1), 20), ahead]));
+        Assert.Equal(20, store.GetLatestSample()?.SessionPercent);
+
+        _time.Advance(TimeSpan.FromHours(1));
+        Assert.Equal(1, store.ImportSamples("machine-2", [ahead]));
+    }
+
+    [Fact]
+    public void A_clock_set_back_doesnt_stop_samples_being_written()
+    {
+        var store = Open();
+        Assert.True(store.AddSample(Snapshot(10)));
+
+        _time.AdjustTime(Start.AddHours(-3));
+        _time.Advance(TimeSpan.FromMinutes(1));
+
+        Assert.True(store.AddSample(Snapshot(12)));
     }
 
     [Fact]
@@ -424,6 +502,32 @@ public sealed class UsageStoreTests : IDisposable
 
         Assert.True(store.AddSample(Snapshot(10)));
         Assert.Single(Directory.GetFiles(Path.GetDirectoryName(DatabasePath)!, "usage.db.*.bad"));
+    }
+
+    [Fact]
+    public void A_database_damaged_past_its_header_is_found_when_opened_and_kept_aside()
+    {
+        // Opening reads only the header; without a check, every later write would fail and the history quietly stop.
+        var store = Open();
+        store.AddTurns(Enumerable.Range(0, 400).Select(i => new TurnRecord(Start.AddSeconds(i), $"tab-{i}", "s1", "claude-fable-5", 1, 2, 3, 4, 0.5)));
+        store.Dispose();
+        _stores.Remove(store);
+        using (var file = new FileStream(DatabasePath, FileMode.Open, FileAccess.Write))
+        {
+            Assert.True(file.Length > 4096 * 3);
+            // The page headers of the tables' pages: their structure, not just their contents.
+            for (var page = 1; page * 4096 < file.Length; page++)
+            {
+                file.Position = page * 4096;
+                file.Write(Enumerable.Repeat((byte)0xA5, 16).ToArray());
+            }
+        }
+
+        var reopened = Open();
+
+        Assert.Single(Directory.GetFiles(Path.GetDirectoryName(DatabasePath)!, "usage.db.*.bad"));
+        Assert.Empty(reopened.GetTurns(DateTimeOffset.MinValue, DateTimeOffset.MaxValue));
+        Assert.True(reopened.AddSample(Snapshot(10)));
     }
 
     [Fact]

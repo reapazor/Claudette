@@ -6,7 +6,9 @@ name: Package
 # - "Run workflow" builds them for a version you give, without a release.
 # - Pull requests that change packaging build unsigned packages, to check the scripts.
 #
-# Signing uses these repository secrets; without them the packages are built unsigned:
+# Signing uses these secrets, kept in the "release" environment (Settings → Environments), whose protection rules should
+# allow only v* tags: then only a tag, not a branch's run of a changed workflow, can reach them. Pull requests build
+# unsigned and use no environment. Without the secrets the packages are built unsigned:
 #   Windows: WINDOWS_CERTIFICATE_PFX (base64 .pfx), WINDOWS_CERTIFICATE_PASSWORD, MSIX_PUBLISHER (the certificate's subject)
 #   macOS:   MACOS_CERTIFICATE_P12 (base64 Developer ID Application .p12), MACOS_CERTIFICATE_PASSWORD, MACOS_SIGNING_IDENTITY,
 #            and for notarization APPLE_API_KEY_P8 (base64 .p8), APPLE_API_KEY_ID, APPLE_API_ISSUER
@@ -33,28 +35,44 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
+      # The version reaches every later step through the environment, never pasted into a script, and must look like a
+      # version: "Run workflow" takes it as free text.
       - id: version
         shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             version="${GITHUB_REF#refs/tags/v}"
-          elif [[ -n "${{ inputs.version }}" ]]; then
-            version="${{ inputs.version }}"
+          elif [[ -n "$INPUT_VERSION" ]]; then
+            version="$INPUT_VERSION"
           else
-            version="0.1.${{ github.run_number }}"
+            version="0.1.$RUN_NUMBER"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "::error::'$version' isn't a version such as 1.2.3 or 1.2.3-beta.1"
+            exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  # The tests, before a tag's packages become a release (ci.yml, called as a reusable workflow). Pull requests and
+  # "Run workflow" leave them to the CI workflow.
+  tests:
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/ci.yml
 
   windows:
     needs: version
     runs-on: windows-latest
+    environment: ${{ github.event_name != 'pull_request' && 'release' || '' }}
     strategy:
       fail-fast: false
       matrix:
         arch: [x64, arm64]
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           global-json-file: global.json
       - name: Certificate
@@ -73,23 +91,32 @@ jobs:
         env:
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
           MSIX_PUBLISHER: ${{ secrets.MSIX_PUBLISHER }}
-        run: ./packaging/windows/build-msix.ps1 -Version ${{ needs.version.outputs.version }} -Architecture ${{ matrix.arch }}
-      - uses: actions/upload-artifact@v4
+          VERSION: ${{ needs.version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: ./packaging/windows/build-msix.ps1 -Version $env:VERSION -Architecture $env:ARCH
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: claudette-windows-${{ matrix.arch }}
           path: artifacts/*.msix
           if-no-files-found: error
+      # Kept out of the package, for reading crash reports' stack traces.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: symbols-windows-${{ matrix.arch }}
+          path: artifacts/symbols-win-${{ matrix.arch }}/
+          if-no-files-found: warn
 
   macos:
     needs: version
     runs-on: macos-latest
+    environment: ${{ github.event_name != 'pull_request' && 'release' || '' }}
     strategy:
       fail-fast: false
       matrix:
         arch: [arm64, x64]
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           global-json-file: global.json
       - name: Certificate and notarization key
@@ -120,25 +147,36 @@ jobs:
         env:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-        run: packaging/macos/build-dmg.sh ${{ needs.version.outputs.version }} ${{ matrix.arch }}
-      - uses: actions/upload-artifact@v4
+          VERSION: ${{ needs.version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: packaging/macos/build-dmg.sh "$VERSION" "$ARCH"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: claudette-macos-${{ matrix.arch }}
           path: artifacts/*.dmg
           if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: symbols-macos-${{ matrix.arch }}
+          path: artifacts/symbols-osx-${{ matrix.arch }}/
+          if-no-files-found: warn
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [version, windows, macos]
+    needs: [version, tests, windows, macos]
+    environment: release
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      # The packages only: the symbols stay workflow artifacts.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: artifacts
+          pattern: claudette-*
           merge-multiple: true
       - name: Draft release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF#refs/tags/}" artifacts/* --repo "$GITHUB_REPOSITORY" --draft --generate-notes --title "Claudette ${{ needs.version.outputs.version }}"
+          VERSION: ${{ needs.version.outputs.version }}
+        run: gh release create "${GITHUB_REF#refs/tags/}" artifacts/* --repo "$GITHUB_REPOSITORY" --draft --generate-notes --title "Claudette $VERSION"

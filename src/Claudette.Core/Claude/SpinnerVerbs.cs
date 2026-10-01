@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Json;
 
 namespace Claudette.Core.Claude;
 
@@ -73,7 +74,7 @@ public static class SpinnerVerbs
         try
         {
             if (!File.Exists(file)
-                || JsonNode.Parse(File.ReadAllText(file), documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true })
+                || JsonTree.Parse(File.ReadAllText(file), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true })
                     is not JsonObject root
                 || root["spinnerVerbs"] is not JsonObject setting)
             {

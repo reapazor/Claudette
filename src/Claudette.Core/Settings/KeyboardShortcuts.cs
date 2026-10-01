@@ -174,6 +174,9 @@ public static class KeyboardShortcuts
     public const string DenyPrompt = "prompt.deny";
     public const string ToggleSidebar = "sidebar.toggle";
     public const string RunProjectAction = "project.runMain";
+    public const string NextTabNeedingInput = "tabs.nextNeedingInput";
+    public const string CommandPalette = "palette.open";
+    public const string Find = "conversation.find";
 
     /// <summary>Every rebindable command, in the order Settings lists them.</summary>
     public static IReadOnlyList<ShortcutCommand> All { get; } =
@@ -191,9 +194,12 @@ public static class KeyboardShortcuts
         new(AllowPrompt, "Allow the waiting prompt", Chord("Primary+Enter")),
         new(DenyPrompt, "Deny the waiting prompt", Chord("Primary+Back")),
         new(RunProjectAction, "Run the project's main action", Chord("Primary+Shift+E")),
+        new(NextTabNeedingInput, "Go to the next tab waiting for you", Chord("Primary+J")),
+        new(CommandPalette, "Command palette", Chord("Primary+Shift+P")),
+        new(Find, "Find in the conversation", Chord("Primary+F")),
     ];
 
-    public static ShortcutCommand Find(string id) => All.First(c => c.Id == id);
+    public static ShortcutCommand Command(string id) => All.First(c => c.Id == id);
 
     /// <summary>The chord in effect for <paramref name="id"/>, or null when the user removed it.</summary>
     public static KeyChord? Resolve(KeyboardSettings settings, string id)
@@ -202,7 +208,7 @@ public static class KeyboardShortcuts
         {
             return KeyChord.TryParse(bound, out var chord) ? chord : null;
         }
-        return Find(id).Default;
+        return Command(id).Default;
     }
 
     /// <summary>The command or quick suffix already using <paramref name="chord"/>, other than <paramref name="exceptId"/>.</summary>

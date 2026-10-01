@@ -99,6 +99,7 @@ public class UsageHeaderTests
         }
 
         var panel = new UsagePanelViewModel(h.Services, tracker, header, _ => null);
+        await panel.RefreshAsync();
 
         Assert.Equal(UsagePanelViewModel.SessionsPage, panel.PastSessions.Count);
         Assert.Equal("Show 30 more (40 left)", panel.MoreSessionsText);
@@ -106,6 +107,41 @@ public class UsageHeaderTests
         panel.ShowMoreSessionsCommand.Execute(null);
         Assert.Equal(70, panel.PastSessions.Count);
         Assert.False(panel.HasMoreSessions);
+    }
+
+    [Fact]
+    public async Task The_usage_panel_lists_projects_for_the_period_picked()
+    {
+        await using var h = new TabTestHarness();
+        await using var tracker = new UsageTracker(h.Services, new UsageStore(Path.Combine(h.Root, "usage.db"), h.Time));
+        using var header = new UsageViewModel(h.Services, tracker);
+        var now = h.Time.GetUtcNow();
+        var api = Path.Combine(h.Root, "work", "api");
+        var otherApi = Path.Combine(h.Root, "play", "api");
+        tracker.Store.AddTurns(
+        [
+            new TurnRecord(now.AddDays(-20), "tab-1", null, "fable", 5_000, 0, 0, 0, 2, api),
+            new TurnRecord(now.AddDays(-2), "tab-2", null, "fable", 1_000, 0, 0, 0, 0.5, api),
+            new TurnRecord(now.AddHours(-1), "tab-3", null, "fable", 3_000, 0, 0, 0, 1, otherApi),
+            new TurnRecord(now.AddHours(-1), "tab-4", null, "fable", 10, 0, 0, 0, 0),
+        ]);
+
+        var panel = new UsagePanelViewModel(h.Services, tracker, header, _ => null);
+        await panel.RefreshAsync();
+
+        // The week, by default: two folders named api, told apart by their parents, and the turns from before projects.
+        Assert.Equal(["api (play)", "api (work)", "Earlier turns"], panel.Projects.Select(p => p.Name));
+        Assert.Equal(otherApi, panel.Projects[0].Tooltip);
+        Assert.Equal("1 turn", panel.Projects[1].Turns);
+
+        panel.SelectedProjectPeriod = new ProjectPeriodChoice(ProjectPeriod.Month);
+        await panel.RefreshAsync();
+        Assert.Equal(api, panel.Projects[0].Folder);
+        Assert.Equal("2 turns", panel.Projects[0].Turns);
+
+        panel.SelectedProjectPeriod = new ProjectPeriodChoice(ProjectPeriod.SessionWindow);
+        await panel.RefreshAsync();
+        Assert.Equal(["api", "Earlier turns"], panel.Projects.Select(p => p.Name));
     }
 
     // ---- Sharing across machines (DESIGN.md §6) --------------------------------------------------------------------
@@ -212,12 +248,13 @@ public class UsageHeaderTests
         var recorded = new TaskCompletionSource();
         tracker.TurnRecorded += () => recorded.TrySetResult();
 
-        tracker.OnTurnCompleted("tab-1", "api", Result(100, 20));
+        tracker.OnTurnCompleted("tab-1", "api", Result(100, 20), "/work/api");
         await recorded.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         var sum = Assert.Single(tracker.Store.GetTokensByTab(h.Time.GetUtcNow().AddHours(-1)));
         Assert.Equal(("tab-1", "api"), (sum.TabId, sum.Name));
         Assert.Equal(120, sum.Total);
+        Assert.Equal("/work/api", Assert.Single(tracker.Store.GetTokensByProject(h.Time.GetUtcNow().AddHours(-1))).Project);
     }
 
     [Fact]
@@ -256,7 +293,7 @@ public class UsageHeaderTests
         tab.StartRenameCommand.Execute(null);
         tab.RenameText = "refactor auth";
         await tab.CommitRenameCommand.ExecuteAsync(null);
-        h.Shell.CloseTabCommand.Execute(tab);
+        await h.Shell.CloseTabCommand.ExecuteAsync(tab);
         await TabTestHarness.Eventually(() => !h.Shell.AllTabs.Any(), "the tab to close");
 
         await Row("refactor auth", "the closed tab's last name");

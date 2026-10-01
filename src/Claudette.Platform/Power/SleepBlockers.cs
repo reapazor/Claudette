@@ -27,7 +27,7 @@ public static class SleepBlockers
             }
             if (OperatingSystem.IsLinux())
             {
-                return ProcessSleepBlocker.SystemdInhibit(launcher);
+                return ProcessSleepBlocker.SystemdInhibit(launcher, Environment.ProcessId);
             }
         }
         catch (Exception ex)

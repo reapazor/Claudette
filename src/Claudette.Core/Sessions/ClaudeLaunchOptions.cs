@@ -17,6 +17,30 @@ public sealed record ClaudeLaunchOptions
     /// <summary>With <see cref="Resume"/>: continue as a new session (a copy) instead of the original (DESIGN.md §9, "One machine at a time").</summary>
     public bool ForkSession { get; init; }
 
+    /// <summary>
+    /// With <see cref="Resume"/>: resume only up to and including this transcript entry (its <c>uuid</c>), dropping what
+    /// came after, to rewind the conversation or branch from a message (DESIGN.md §5, "Rewind and branch").
+    /// </summary>
+    public string? ResumeSessionAt { get; init; }
+
+    /// <summary>
+    /// With <see cref="ResumeSessionAt"/>: the prompt <c>uuid</c> of the turn the truncated resume means to drop. Claude
+    /// Code refuses the resume, rather than drop more, when anything else is after the point.
+    /// </summary>
+    public string? ResumeDropsTurn { get; init; }
+
+    /// <summary>
+    /// Echo each prompt back with its <c>uuid</c> (<c>--replay-user-messages</c>): the points the conversation and its files
+    /// can be rewound to.
+    /// </summary>
+    public bool ReplayUserMessages { get; init; }
+
+    /// <summary>Hook runs as <c>system/hook_*</c> messages (<c>--include-hook-events</c>), for the conversation's hook rows (DESIGN.md §5).</summary>
+    public bool IncludeHookEvents { get; init; }
+
+    /// <summary>The model to fall back to when the chosen one is overloaded (<c>--fallback-model</c>). Null: none.</summary>
+    public string? FallbackModel { get; init; }
+
     /// <summary>False adds <c>--no-session-persistence</c>, as the utility session does.</summary>
     public bool PersistSession { get; init; } = true;
 
@@ -72,10 +96,27 @@ public static class ClaudeArguments
         AddOption(args, "--model", options.Model);
         AddOption(args, "--effort", options.Effort);
         AddOption(args, "--permission-mode", options.PermissionMode);
+        AddOption(args, "--fallback-model", options.FallbackModel);
         AddOption(args, "--resume", options.Resume);
         if (options.ForkSession && options.Resume is not null)
         {
             args.Add("--fork-session");
+        }
+        if (options.Resume is not null)
+        {
+            AddOption(args, "--resume-session-at", options.ResumeSessionAt);
+            if (options.ResumeSessionAt is not null)
+            {
+                AddOption(args, "--resume-drops-turn", options.ResumeDropsTurn);
+            }
+        }
+        if (options.ReplayUserMessages)
+        {
+            args.Add("--replay-user-messages");
+        }
+        if (options.IncludeHookEvents)
+        {
+            args.Add("--include-hook-events");
         }
         if (!options.PersistSession)
         {

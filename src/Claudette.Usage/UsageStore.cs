@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Claudette.Core.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -18,7 +19,7 @@ namespace Claudette.Usage;
 /// </summary>
 public sealed class UsageStore : IDisposable
 {
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
 
     /// <summary>The <c>imports</c> row that holds back every machine's samples up to a time: the last Clear.</summary>
     private const string EveryMachine = "*";
@@ -32,10 +33,13 @@ public sealed class UsageStore : IDisposable
     private readonly TimeProvider _time;
     private readonly ILogger _logger;
     private readonly Lock _lock = new();
-    private readonly SqliteConnection _connection;
+    private SqliteConnection _connection;
     private SampleValues? _lastSaved;
     private DateTimeOffset? _lastWrite;
     private bool _disposed;
+
+    /// <summary>How far ahead of this machine's clock another machine's sample may be and still be imported.</summary>
+    public static readonly TimeSpan FutureAllowance = TimeSpan.FromMinutes(5);
 
     /// <summary>Opens the file, creating it, its folder and the schema as needed.</summary>
     /// <remarks>A file that isn't a readable database is kept aside as <c>*.bad</c> and a new one is started.</remarks>
@@ -73,32 +77,41 @@ public sealed class UsageStore : IDisposable
         var values = SampleValues.From(snapshot);
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            if (values == _lastSaved)
+            try
             {
-                return false;
-            }
-            var now = _time.GetUtcNow();
-            if (_lastWrite is { } last && now - last < MinimumSampleInterval)
-            {
-                return false;
-            }
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (values == _lastSaved)
+                {
+                    return false;
+                }
+                var now = _time.GetUtcNow();
+                // A last write in the future means the clock was set back since: don't wait for it to catch up.
+                if (_lastWrite is { } last && now >= last && now - last < MinimumSampleInterval)
+                {
+                    return false;
+                }
 
-            using var command = _connection.CreateCommand();
-            command.CommandText = """
-                INSERT INTO samples (timestamp, session_percent, session_resets_at, weekly_percent, weekly_resets_at, models)
-                VALUES ($timestamp, $sessionPercent, $sessionResetsAt, $weeklyPercent, $weeklyResetsAt, $models)
-                """;
-            Add(command, "$timestamp", now.ToUnixTimeMilliseconds());
-            Add(command, "$sessionPercent", values.SessionPercent);
-            Add(command, "$sessionResetsAt", values.SessionResetsAt);
-            Add(command, "$weeklyPercent", values.WeeklyPercent);
-            Add(command, "$weeklyResetsAt", values.WeeklyResetsAt);
-            Add(command, "$models", values.Models);
-            command.ExecuteNonQuery();
-            _lastSaved = values;
-            _lastWrite = now;
-            return true;
+                using var command = _connection.CreateCommand();
+                command.CommandText = """
+                    INSERT INTO samples (timestamp, session_percent, session_resets_at, weekly_percent, weekly_resets_at, models)
+                    VALUES ($timestamp, $sessionPercent, $sessionResetsAt, $weeklyPercent, $weeklyResetsAt, $models)
+                    """;
+                Add(command, "$timestamp", now.ToUnixTimeMilliseconds());
+                Add(command, "$sessionPercent", values.SessionPercent);
+                Add(command, "$sessionResetsAt", values.SessionResetsAt);
+                Add(command, "$weeklyPercent", values.WeeklyPercent);
+                Add(command, "$weeklyResetsAt", values.WeeklyResetsAt);
+                Add(command, "$models", values.Models);
+                command.ExecuteNonQuery();
+                _lastSaved = values;
+                _lastWrite = now;
+                return true;
+            }
+            catch (SqliteException ex) when (IsCorrupt(ex))
+            {
+                StartAfresh(ex);
+                throw;
+            }
         }
     }
 
@@ -107,8 +120,16 @@ public sealed class UsageStore : IDisposable
     {
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            return ReadLatestSample(ownOnly: false);
+            try
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return ReadLatestSample(ownOnly: false);
+            }
+            catch (SqliteException ex) when (IsCorrupt(ex))
+            {
+                StartAfresh(ex);
+                throw;
+            }
         }
     }
 
@@ -117,11 +138,19 @@ public sealed class UsageStore : IDisposable
     {
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            using var command = _connection.CreateCommand();
-            command.CommandText = $"{SelectSamples} WHERE machine IS NULL AND timestamp >= $from ORDER BY timestamp, id";
-            Add(command, "$from", from.ToUnixTimeMilliseconds());
-            return ReadSamples(command);
+            try
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                using var command = _connection.CreateCommand();
+                command.CommandText = $"{SelectSamples} WHERE machine IS NULL AND timestamp >= $from ORDER BY timestamp, id";
+                Add(command, "$from", from.ToUnixTimeMilliseconds());
+                return ReadSamples(command);
+            }
+            catch (SqliteException ex) when (IsCorrupt(ex))
+            {
+                StartAfresh(ex);
+                throw;
+            }
         }
     }
 
@@ -134,54 +163,65 @@ public sealed class UsageStore : IDisposable
         ArgumentException.ThrowIfNullOrEmpty(machine);
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            using var transaction = _connection.BeginTransaction();
-            using var watermark = _connection.CreateCommand();
-            watermark.Transaction = transaction;
-            watermark.CommandText = "SELECT MAX(through) FROM imports WHERE machine IN ($machine, $every)";
-            Add(watermark, "$machine", machine);
-            Add(watermark, "$every", EveryMachine);
-            var through = watermark.ExecuteScalar() is long stored ? stored : long.MinValue;
+            try
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                using var transaction = _connection.BeginTransaction();
+                using var watermark = _connection.CreateCommand();
+                watermark.Transaction = transaction;
+                watermark.CommandText = "SELECT MAX(through) FROM imports WHERE machine IN ($machine, $every)";
+                Add(watermark, "$machine", machine);
+                Add(watermark, "$every", EveryMachine);
+                var through = watermark.ExecuteScalar() is long stored ? stored : long.MinValue;
 
-            using var insert = _connection.CreateCommand();
-            insert.Transaction = transaction;
-            insert.CommandText = """
-                INSERT INTO samples (timestamp, session_percent, session_resets_at, weekly_percent, weekly_resets_at, models, machine)
-                VALUES ($timestamp, $sessionPercent, $sessionResetsAt, $weeklyPercent, $weeklyResetsAt, $models, $machine)
-                """;
-            var added = 0;
-            var newest = through;
-            foreach (var sample in samples)
-            {
-                var timestamp = sample.Timestamp.ToUnixTimeMilliseconds();
-                if (timestamp <= through)
+                using var insert = _connection.CreateCommand();
+                insert.Transaction = transaction;
+                insert.CommandText = """
+                    INSERT INTO samples (timestamp, session_percent, session_resets_at, weekly_percent, weekly_resets_at, models, machine)
+                    VALUES ($timestamp, $sessionPercent, $sessionResetsAt, $weeklyPercent, $weeklyResetsAt, $models, $machine)
+                    """;
+                var added = 0;
+                var newest = through;
+                // A machine whose clock is ahead shares samples from the future. Imported, they'd move its mark ahead and
+                // stand as the newest reading; left for now, they come in once their time has come.
+                var latest = (_time.GetUtcNow() + FutureAllowance).ToUnixTimeMilliseconds();
+                foreach (var sample in samples)
                 {
-                    continue;
+                    var timestamp = sample.Timestamp.ToUnixTimeMilliseconds();
+                    if (timestamp <= through || timestamp > latest)
+                    {
+                        continue;
+                    }
+                    var values = SampleValues.From(sample);
+                    insert.Parameters.Clear();
+                    Add(insert, "$timestamp", timestamp);
+                    Add(insert, "$sessionPercent", values.SessionPercent);
+                    Add(insert, "$sessionResetsAt", values.SessionResetsAt);
+                    Add(insert, "$weeklyPercent", values.WeeklyPercent);
+                    Add(insert, "$weeklyResetsAt", values.WeeklyResetsAt);
+                    Add(insert, "$models", values.Models);
+                    Add(insert, "$machine", machine);
+                    insert.ExecuteNonQuery();
+                    added++;
+                    newest = Math.Max(newest, timestamp);
                 }
-                var values = SampleValues.From(sample);
-                insert.Parameters.Clear();
-                Add(insert, "$timestamp", timestamp);
-                Add(insert, "$sessionPercent", values.SessionPercent);
-                Add(insert, "$sessionResetsAt", values.SessionResetsAt);
-                Add(insert, "$weeklyPercent", values.WeeklyPercent);
-                Add(insert, "$weeklyResetsAt", values.WeeklyResetsAt);
-                Add(insert, "$models", values.Models);
-                Add(insert, "$machine", machine);
-                insert.ExecuteNonQuery();
-                added++;
-                newest = Math.Max(newest, timestamp);
+                if (newest > through)
+                {
+                    using var mark = _connection.CreateCommand();
+                    mark.Transaction = transaction;
+                    mark.CommandText = "INSERT INTO imports (machine, through) VALUES ($machine, $through) ON CONFLICT (machine) DO UPDATE SET through = excluded.through";
+                    Add(mark, "$machine", machine);
+                    Add(mark, "$through", newest);
+                    mark.ExecuteNonQuery();
+                }
+                transaction.Commit();
+                return added;
             }
-            if (newest > through)
+            catch (SqliteException ex) when (IsCorrupt(ex))
             {
-                using var mark = _connection.CreateCommand();
-                mark.Transaction = transaction;
-                mark.CommandText = "INSERT INTO imports (machine, through) VALUES ($machine, $through) ON CONFLICT (machine) DO UPDATE SET through = excluded.through";
-                Add(mark, "$machine", machine);
-                Add(mark, "$through", newest);
-                mark.ExecuteNonQuery();
+                StartAfresh(ex);
+                throw;
             }
-            transaction.Commit();
-            return added;
         }
     }
 
@@ -190,12 +230,20 @@ public sealed class UsageStore : IDisposable
     {
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            using var command = _connection.CreateCommand();
-            command.CommandText = $"{SelectSamples} WHERE timestamp >= $from AND timestamp <= $to ORDER BY timestamp, id";
-            Add(command, "$from", from.ToUnixTimeMilliseconds());
-            Add(command, "$to", to.ToUnixTimeMilliseconds());
-            return ReadSamples(command);
+            try
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                using var command = _connection.CreateCommand();
+                command.CommandText = $"{SelectSamples} WHERE timestamp >= $from AND timestamp <= $to ORDER BY timestamp, id";
+                Add(command, "$from", from.ToUnixTimeMilliseconds());
+                Add(command, "$to", to.ToUnixTimeMilliseconds());
+                return ReadSamples(command);
+            }
+            catch (SqliteException ex) when (IsCorrupt(ex))
+            {
+                StartAfresh(ex);
+                throw;
+            }
         }
     }
 
@@ -209,22 +257,30 @@ public sealed class UsageStore : IDisposable
         var (percent, resetsAt) = window == UsageWindow.Session ? ("session_percent", "session_resets_at") : ("weekly_percent", "weekly_resets_at");
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            using var command = _connection.CreateCommand();
-            command.CommandText = $"""
-                SELECT ({resetsAt} + 500) / 1000, MAX({percent}) FROM samples
-                WHERE {resetsAt} IS NOT NULL AND {percent} IS NOT NULL AND {resetsAt} <= $now
-                GROUP BY ({resetsAt} + 500) / 1000
-                ORDER BY 1 DESC
-                """;
-            Add(command, "$now", now.ToUnixTimeMilliseconds());
-            using var reader = command.ExecuteReader();
-            var peaks = new List<WindowPeak>();
-            while (reader.Read())
+            try
             {
-                peaks.Add(new WindowPeak(DateTimeOffset.FromUnixTimeSeconds(reader.GetInt64(0)), reader.GetDouble(1)));
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                using var command = _connection.CreateCommand();
+                command.CommandText = $"""
+                    SELECT ({resetsAt} + 500) / 1000, MAX({percent}) FROM samples
+                    WHERE {resetsAt} IS NOT NULL AND {percent} IS NOT NULL AND {resetsAt} <= $now
+                    GROUP BY ({resetsAt} + 500) / 1000
+                    ORDER BY 1 DESC
+                    """;
+                Add(command, "$now", now.ToUnixTimeMilliseconds());
+                using var reader = command.ExecuteReader();
+                var peaks = new List<WindowPeak>();
+                while (reader.Read())
+                {
+                    peaks.Add(new WindowPeak(DateTimeOffset.FromUnixTimeSeconds(reader.GetInt64(0)), reader.GetDouble(1)));
+                }
+                return peaks;
             }
-            return peaks;
+            catch (SqliteException ex) when (IsCorrupt(ex))
+            {
+                StartAfresh(ex);
+                throw;
+            }
         }
     }
 
@@ -232,29 +288,38 @@ public sealed class UsageStore : IDisposable
     {
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            using var transaction = _connection.BeginTransaction();
-            using var command = _connection.CreateCommand();
-            command.Transaction = transaction;
-            command.CommandText = """
-                INSERT INTO turns (timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd)
-                VALUES ($timestamp, $tabId, $sessionId, $model, $input, $output, $cacheWrite, $cacheRead, $costUsd)
-                """;
-            foreach (var turn in turns)
+            try
             {
-                command.Parameters.Clear();
-                Add(command, "$timestamp", turn.Timestamp.ToUnixTimeMilliseconds());
-                Add(command, "$tabId", turn.TabId);
-                Add(command, "$sessionId", turn.SessionId);
-                Add(command, "$model", turn.Model);
-                Add(command, "$input", turn.Input);
-                Add(command, "$output", turn.Output);
-                Add(command, "$cacheWrite", turn.CacheWrite);
-                Add(command, "$cacheRead", turn.CacheRead);
-                Add(command, "$costUsd", turn.CostUsd);
-                command.ExecuteNonQuery();
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                using var transaction = _connection.BeginTransaction();
+                using var command = _connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = """
+                    INSERT INTO turns (timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd, project)
+                    VALUES ($timestamp, $tabId, $sessionId, $model, $input, $output, $cacheWrite, $cacheRead, $costUsd, $project)
+                    """;
+                foreach (var turn in turns)
+                {
+                    command.Parameters.Clear();
+                    Add(command, "$timestamp", turn.Timestamp.ToUnixTimeMilliseconds());
+                    Add(command, "$tabId", turn.TabId);
+                    Add(command, "$sessionId", turn.SessionId);
+                    Add(command, "$model", turn.Model);
+                    Add(command, "$input", turn.Input);
+                    Add(command, "$output", turn.Output);
+                    Add(command, "$cacheWrite", turn.CacheWrite);
+                    Add(command, "$cacheRead", turn.CacheRead);
+                    Add(command, "$costUsd", turn.CostUsd);
+                    Add(command, "$project", turn.Project);
+                    command.ExecuteNonQuery();
+                }
+                transaction.Commit();
             }
-            transaction.Commit();
+            catch (SqliteException ex) when (IsCorrupt(ex))
+            {
+                StartAfresh(ex);
+                throw;
+            }
         }
     }
 
@@ -263,32 +328,41 @@ public sealed class UsageStore : IDisposable
     {
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            using var command = _connection.CreateCommand();
-            command.CommandText = """
-                SELECT timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd FROM turns
-                WHERE timestamp >= $from AND timestamp <= $to AND ($tabId IS NULL OR tab_id = $tabId)
-                ORDER BY timestamp, id
-                """;
-            Add(command, "$from", from.ToUnixTimeMilliseconds());
-            Add(command, "$to", to.ToUnixTimeMilliseconds());
-            Add(command, "$tabId", tabId);
-            using var reader = command.ExecuteReader();
-            var turns = new List<TurnRecord>();
-            while (reader.Read())
+            try
             {
-                turns.Add(new TurnRecord(
-                    DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)),
-                    reader.GetString(1),
-                    reader.IsDBNull(2) ? null : reader.GetString(2),
-                    reader.GetString(3),
-                    reader.GetInt64(4),
-                    reader.GetInt64(5),
-                    reader.GetInt64(6),
-                    reader.GetInt64(7),
-                    reader.GetDouble(8)));
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                using var command = _connection.CreateCommand();
+                command.CommandText = """
+                    SELECT timestamp, tab_id, session_id, model, input, output, cache_write, cache_read, cost_usd, project FROM turns
+                    WHERE timestamp >= $from AND timestamp <= $to AND ($tabId IS NULL OR tab_id = $tabId)
+                    ORDER BY timestamp, id
+                    """;
+                Add(command, "$from", from.ToUnixTimeMilliseconds());
+                Add(command, "$to", to.ToUnixTimeMilliseconds());
+                Add(command, "$tabId", tabId);
+                using var reader = command.ExecuteReader();
+                var turns = new List<TurnRecord>();
+                while (reader.Read())
+                {
+                    turns.Add(new TurnRecord(
+                        DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)),
+                        reader.GetString(1),
+                        reader.IsDBNull(2) ? null : reader.GetString(2),
+                        reader.GetString(3),
+                        reader.GetInt64(4),
+                        reader.GetInt64(5),
+                        reader.GetInt64(6),
+                        reader.GetInt64(7),
+                        reader.GetDouble(8),
+                        reader.IsDBNull(9) ? null : reader.GetString(9)));
+                }
+                return turns;
             }
-            return turns;
+            catch (SqliteException ex) when (IsCorrupt(ex))
+            {
+                StartAfresh(ex);
+                throw;
+            }
         }
     }
 
@@ -300,15 +374,64 @@ public sealed class UsageStore : IDisposable
     {
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            using var command = _connection.CreateCommand();
-            command.CommandText = """
-                INSERT INTO tabs (tab_id, name) SELECT $tabId, $name WHERE EXISTS (SELECT 1 FROM turns WHERE tab_id = $tabId)
-                ON CONFLICT (tab_id) DO UPDATE SET name = excluded.name
-                """;
-            Add(command, "$tabId", tabId);
-            Add(command, "$name", name);
-            command.ExecuteNonQuery();
+            try
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                using var command = _connection.CreateCommand();
+                command.CommandText = """
+                    INSERT INTO tabs (tab_id, name) SELECT $tabId, $name WHERE EXISTS (SELECT 1 FROM turns WHERE tab_id = $tabId)
+                    ON CONFLICT (tab_id) DO UPDATE SET name = excluded.name
+                    """;
+                Add(command, "$tabId", tabId);
+                Add(command, "$name", name);
+                command.ExecuteNonQuery();
+            }
+            catch (SqliteException ex) when (IsCorrupt(ex))
+            {
+                StartAfresh(ex);
+                throw;
+            }
+        }
+    }
+
+    /// <summary>Tokens per project since <paramref name="from"/>, the heaviest first; turns without a project together.</summary>
+    public IReadOnlyList<ProjectTokenSum> GetTokensByProject(DateTimeOffset from)
+    {
+        lock (_lock)
+        {
+            try
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                using var command = _connection.CreateCommand();
+                // A turn's records (one per model) share its timestamp and tab.
+                command.CommandText = """
+                    SELECT project, SUM(input), SUM(output), SUM(cache_write), SUM(cache_read), SUM(cost_usd), COUNT(DISTINCT tab_id || '|' || timestamp)
+                    FROM turns
+                    WHERE timestamp >= $from
+                    GROUP BY project
+                    ORDER BY SUM(input + output + cache_write + cache_read) DESC, project
+                    """;
+                Add(command, "$from", from.ToUnixTimeMilliseconds());
+                using var reader = command.ExecuteReader();
+                var sums = new List<ProjectTokenSum>();
+                while (reader.Read())
+                {
+                    sums.Add(new ProjectTokenSum(
+                        reader.IsDBNull(0) ? null : reader.GetString(0),
+                        reader.GetInt64(1),
+                        reader.GetInt64(2),
+                        reader.GetInt64(3),
+                        reader.GetInt64(4),
+                        reader.GetDouble(5),
+                        reader.GetInt32(6)));
+                }
+                return sums;
+            }
+            catch (SqliteException ex) when (IsCorrupt(ex))
+            {
+                StartAfresh(ex);
+                throw;
+            }
         }
     }
 
@@ -317,32 +440,40 @@ public sealed class UsageStore : IDisposable
     {
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            using var command = _connection.CreateCommand();
-            // A turn's records (one per model) share its timestamp.
-            command.CommandText = """
-                SELECT turns.tab_id, SUM(input), SUM(output), SUM(cache_write), SUM(cache_read), SUM(cost_usd), COUNT(DISTINCT timestamp), tabs.name
-                FROM turns LEFT JOIN tabs ON tabs.tab_id = turns.tab_id
-                WHERE timestamp >= $from
-                GROUP BY turns.tab_id
-                ORDER BY SUM(input + output + cache_write + cache_read) DESC, turns.tab_id
-                """;
-            Add(command, "$from", from.ToUnixTimeMilliseconds());
-            using var reader = command.ExecuteReader();
-            var sums = new List<TabTokenSum>();
-            while (reader.Read())
+            try
             {
-                sums.Add(new TabTokenSum(
-                    reader.GetString(0),
-                    reader.GetInt64(1),
-                    reader.GetInt64(2),
-                    reader.GetInt64(3),
-                    reader.GetInt64(4),
-                    reader.GetDouble(5),
-                    reader.GetInt32(6),
-                    reader.IsDBNull(7) ? null : reader.GetString(7)));
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                using var command = _connection.CreateCommand();
+                // A turn's records (one per model) share its timestamp.
+                command.CommandText = """
+                    SELECT turns.tab_id, SUM(input), SUM(output), SUM(cache_write), SUM(cache_read), SUM(cost_usd), COUNT(DISTINCT timestamp), tabs.name
+                    FROM turns LEFT JOIN tabs ON tabs.tab_id = turns.tab_id
+                    WHERE timestamp >= $from
+                    GROUP BY turns.tab_id
+                    ORDER BY SUM(input + output + cache_write + cache_read) DESC, turns.tab_id
+                    """;
+                Add(command, "$from", from.ToUnixTimeMilliseconds());
+                using var reader = command.ExecuteReader();
+                var sums = new List<TabTokenSum>();
+                while (reader.Read())
+                {
+                    sums.Add(new TabTokenSum(
+                        reader.GetString(0),
+                        reader.GetInt64(1),
+                        reader.GetInt64(2),
+                        reader.GetInt64(3),
+                        reader.GetInt64(4),
+                        reader.GetDouble(5),
+                        reader.GetInt32(6),
+                        reader.IsDBNull(7) ? null : reader.GetString(7)));
+                }
+                return sums;
             }
-            return sums;
+            catch (SqliteException ex) when (IsCorrupt(ex))
+            {
+                StartAfresh(ex);
+                throw;
+            }
         }
     }
 
@@ -358,14 +489,22 @@ public sealed class UsageStore : IDisposable
         }
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            var cutoff = (_time.GetUtcNow() - keep).ToUnixTimeMilliseconds();
-            using var transaction = _connection.BeginTransaction();
-            var deleted = Execute(transaction, "DELETE FROM samples WHERE timestamp < $cutoff", cutoff)
-                + Execute(transaction, "DELETE FROM turns WHERE timestamp < $cutoff", cutoff);
-            Execute(transaction, "DELETE FROM tabs WHERE tab_id NOT IN (SELECT tab_id FROM turns)", null);
-            transaction.Commit();
-            return deleted;
+            try
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                var cutoff = (_time.GetUtcNow() - keep).ToUnixTimeMilliseconds();
+                using var transaction = _connection.BeginTransaction();
+                var deleted = Execute(transaction, "DELETE FROM samples WHERE timestamp < $cutoff", cutoff)
+                    + Execute(transaction, "DELETE FROM turns WHERE timestamp < $cutoff", cutoff);
+                Execute(transaction, "DELETE FROM tabs WHERE tab_id NOT IN (SELECT tab_id FROM turns)", null);
+                transaction.Commit();
+                return deleted;
+            }
+            catch (SqliteException ex) when (IsCorrupt(ex))
+            {
+                StartAfresh(ex);
+                throw;
+            }
         }
     }
 
@@ -377,25 +516,33 @@ public sealed class UsageStore : IDisposable
     {
         lock (_lock)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            using (var transaction = _connection.BeginTransaction())
+            try
             {
-                Execute(transaction, "DELETE FROM samples", null);
-                Execute(transaction, "DELETE FROM turns", null);
-                Execute(transaction, "DELETE FROM tabs", null);
-                Execute(transaction, "DELETE FROM imports", null);
-                using var floor = _connection.CreateCommand();
-                floor.Transaction = transaction;
-                floor.CommandText = "INSERT INTO imports (machine, through) VALUES ($every, $now)";
-                Add(floor, "$every", EveryMachine);
-                Add(floor, "$now", _time.GetUtcNow().ToUnixTimeMilliseconds());
-                floor.ExecuteNonQuery();
-                transaction.Commit();
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                using (var transaction = _connection.BeginTransaction())
+                {
+                    Execute(transaction, "DELETE FROM samples", null);
+                    Execute(transaction, "DELETE FROM turns", null);
+                    Execute(transaction, "DELETE FROM tabs", null);
+                    Execute(transaction, "DELETE FROM imports", null);
+                    using var floor = _connection.CreateCommand();
+                    floor.Transaction = transaction;
+                    floor.CommandText = "INSERT INTO imports (machine, through) VALUES ($every, $now)";
+                    Add(floor, "$every", EveryMachine);
+                    Add(floor, "$now", _time.GetUtcNow().ToUnixTimeMilliseconds());
+                    floor.ExecuteNonQuery();
+                    transaction.Commit();
+                }
+                // Give the space back and leave nothing of the old rows in the file.
+                Execute(null, "VACUUM", null);
+                _lastSaved = null;
+                _lastWrite = null;
             }
-            // Give the space back and leave nothing of the old rows in the file.
-            Execute(null, "VACUUM", null);
-            _lastSaved = null;
-            _lastWrite = null;
+            catch (SqliteException ex) when (IsCorrupt(ex))
+            {
+                StartAfresh(ex);
+                throw;
+            }
         }
     }
 
@@ -418,12 +565,40 @@ public sealed class UsageStore : IDisposable
         {
             return Open();
         }
-        catch (SqliteException ex) when (ex.SqliteErrorCode is SqliteCorrupt or SqliteNotADatabase)
+        catch (SqliteException ex) when (IsCorrupt(ex))
         {
-            var backup = $"{Path}.{_time.GetUtcNow():yyyyMMddHHmmss}.bad";
-            _logger.LogWarning(ex, "Couldn't read the usage history {Path}; keeping it as {Backup} and starting a new one.", Path, backup);
-            File.Move(Path, backup, overwrite: true);
+            SetAside(ex);
             return Open();
+        }
+    }
+
+    private static bool IsCorrupt(SqliteException ex) => ex.SqliteErrorCode is SqliteCorrupt or SqliteNotADatabase;
+
+    /// <summary>
+    /// The file turned out damaged after it was opened: every later write would fail too, and the history would quietly
+    /// stop. Keep it aside and carry on with a new one; the operation that found it still fails. Called under the lock.
+    /// </summary>
+    private void StartAfresh(SqliteException ex)
+    {
+        _connection.Dispose();
+        SetAside(ex);
+        _connection = Open();
+        _lastSaved = default;
+        _lastWrite = null;
+    }
+
+    /// <summary>Keeps a damaged file as <c>*.bad</c>, with its journal and write-ahead log, so none of them is rolled into the new one.</summary>
+    private void SetAside(SqliteException ex)
+    {
+        var backup = $"{Path}.{_time.GetUtcNow():yyyyMMddHHmmss}.bad";
+        _logger.LogWarning(ex, "Couldn't read the usage history {Path}; keeping it as {Backup} and starting a new one.", Path, backup);
+        File.Move(Path, backup, overwrite: true);
+        foreach (var suffix in (string[])["-journal", "-wal", "-shm"])
+        {
+            if (File.Exists(Path + suffix))
+            {
+                File.Move(Path + suffix, backup + suffix, overwrite: true);
+            }
         }
     }
 
@@ -487,9 +662,23 @@ public sealed class UsageStore : IDisposable
                     create.CommandText = "ALTER TABLE samples ADD COLUMN machine TEXT";
                     create.ExecuteNonQuery();
                 }
+                // Version 4: the tab's folder, for usage by project; null for turns recorded before.
+                if (!HasColumn(connection, transaction, "turns", "project"))
+                {
+                    create.CommandText = "ALTER TABLE turns ADD COLUMN project TEXT";
+                    create.ExecuteNonQuery();
+                }
                 create.CommandText = $"PRAGMA user_version = {SchemaVersion}";
                 create.ExecuteNonQuery();
                 transaction.Commit();
+            }
+            // Opening reads only the header: damage further in would fail every later write instead. The history is
+            // small (it's pruned), so checking all of it once is quick.
+            using var check = connection.CreateCommand();
+            check.CommandText = "PRAGMA quick_check";
+            if (check.ExecuteScalar() is not "ok" and var result)
+            {
+                throw new SqliteException($"The usage history is damaged: {result}", SqliteCorrupt);
             }
             return connection;
         }
@@ -571,7 +760,7 @@ public sealed class UsageStore : IDisposable
     {
         try
         {
-            return JsonNode.Parse(json) is JsonArray array
+            return JsonTree.Parse(json) is JsonArray array
                 ? [.. array.OfType<JsonObject>()
                     .Where(m => m.GetString("label") is not null && m.GetDouble("percent") is not null)
                     .Select(m => new ModelSample(

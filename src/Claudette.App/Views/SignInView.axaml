@@ -31,7 +31,7 @@
       <StackPanel Spacing="12" IsVisible="{Binding IsWaiting}">
         <ProgressBar IsIndeterminate="True" IsVisible="{Binding !ShowCodeEntry}" />
         <StackPanel Spacing="8" IsVisible="{Binding ShowCodeEntry}">
-          <TextBox Text="{Binding Code}" PlaceholderText="Paste the code from the browser" FontFamily="{StaticResource MonoFont}"
+          <TextBox Text="{Binding Code}" PlaceholderText="Paste the code from the browser" FontFamily="{DynamicResource MonoFont}"
                    AutomationProperties.Name="Code from the browser" />
           <Button Classes="accent" Content="Submit code" Command="{Binding SubmitCodeCommand}" />
         </StackPanel>

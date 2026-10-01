@@ -34,16 +34,16 @@ public class ProjectToolsTests
     private static async Task<TabViewModel> OpenWithProjectAsync(TabTestHarness h)
     {
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.Project is not null, "the project");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.Project is not null, "the project");
         return tab;
     }
 
-    private static ProjectAction Action(TabViewModel tab, string id) => InlineDispatcher.Read(() => tab.ProjectActions.Single(a => a.Id == id));
+    private static ProjectAction Action(TabViewModel tab, string id) => InlineDispatcher.Read(() => tab.ProjectTools.Actions.Single(a => a.Id == id));
 
-    private static ProjectMenuEntry Entry(TabViewModel tab, string label) => InlineDispatcher.Read(() => tab.ProjectMenu.Single(e => e.Label == label));
+    private static ProjectMenuEntry Entry(TabViewModel tab, string label) => InlineDispatcher.Read(() => tab.ProjectTools.Menu.Single(e => e.Label == label));
 
     /// <summary>The newest run: the one the last job made.</summary>
-    internal static ProjectRunViewModel? LastRun(TabViewModel tab) => InlineDispatcher.Read(() => tab.ProjectRuns.LastOrDefault());
+    internal static ProjectRunViewModel? LastRun(TabViewModel tab) => InlineDispatcher.Read(() => tab.ProjectTools.Runs.LastOrDefault());
 
     // ---- The chip and its menu --------------------------------------------------------------------------------------------
 
@@ -55,12 +55,12 @@ public class ProjectToolsTests
 
         var tab = await OpenWithProjectAsync(h);
 
-        Assert.True(tab.HasProjectTools);
-        Assert.Equal("NightOwl · UE 5.4", tab.ProjectButtonText);
-        Assert.Equal("NightOwl · Unreal Engine", tab.ProjectHeaderTitle);
-        Assert.Equal(["Unreal Engine 5.4.2 · engine in a parent folder", h.Root], tab.ProjectHeaderLines);
-        Assert.Contains(tab.ProjectDetails, d => d.Label == "Project" && d.Value == uproject);
-        Assert.Contains("Ctrl+Shift+E: Launch editor", tab.ProjectButtonTip.Replace("⇧⌘E", "Ctrl+Shift+E"), StringComparison.Ordinal);
+        Assert.True(tab.ProjectTools.HasTools);
+        Assert.Equal("NightOwl · UE 5.4", tab.ProjectTools.ButtonText);
+        Assert.Equal("NightOwl · Unreal Engine", tab.ProjectTools.HeaderTitle);
+        Assert.Equal(["Unreal Engine 5.4.2 · engine in a parent folder", h.Root], tab.ProjectTools.HeaderLines);
+        Assert.Contains(tab.ProjectTools.Details, d => d.Label == "Project" && d.Value == uproject);
+        Assert.Contains("Ctrl+Shift+E: Launch editor", tab.ProjectTools.ButtonTip.Replace("⇧⌘E", "Ctrl+Shift+E"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -70,16 +70,16 @@ public class ProjectToolsTests
 
         var tab = await h.OpenTabAsync();
 
-        Assert.False(tab.HasProjectTools);
-        Assert.Null(tab.Project);
+        Assert.False(tab.ProjectTools.HasTools);
+        Assert.Null(tab.ProjectTools.Project);
         Assert.DoesNotContain(tab.InfoRows, r => r.Label == "Project");
         // The sidebar's row is there all the same, for adding actions and links: named after the folder, which it shows.
-        Assert.Equal(tab.FolderName, tab.ProjectButtonText);
-        Assert.StartsWith(tab.Folder, tab.ProjectButtonTip, StringComparison.Ordinal);
-        Assert.Equal(tab.FolderName, tab.ProjectHeaderTitle);
-        Assert.Equal([tab.Folder], tab.ProjectHeaderLines);
+        Assert.Equal(tab.FolderName, tab.ProjectTools.ButtonText);
+        Assert.StartsWith(tab.Folder, tab.ProjectTools.ButtonTip, StringComparison.Ordinal);
+        Assert.Equal(tab.FolderName, tab.ProjectTools.HeaderTitle);
+        Assert.Equal([tab.Folder], tab.ProjectTools.HeaderLines);
         // No Show output…: without project tools there's no Project page.
-        Assert.Equal(["Add an action…", "Add a link…", "Refresh"], InlineDispatcher.Read(() => tab.ProjectMenu.Select(e => e.Label).ToArray()));
+        Assert.Equal(["Add an action…", "Add a link…", "Refresh"], InlineDispatcher.Read(() => tab.ProjectTools.Menu.Select(e => e.Label).ToArray()));
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public class ProjectToolsTests
         await using var _h = h;
         var tab = await OpenWithProjectAsync(h);
 
-        var menu = InlineDispatcher.Read(() => tab.ProjectMenu.Select(e => e.IsSeparator ? "-" : e.Label).ToArray());
+        var menu = InlineDispatcher.Read(() => tab.ProjectTools.Menu.Select(e => e.IsSeparator ? "-" : e.Label).ToArray());
 
         Assert.Equal(
         [
@@ -115,10 +115,10 @@ public class ProjectToolsTests
         Assert.Equal("Generate project files first", Entry(tab, "Open solution").Tip);
 
         File.WriteAllText(Path.Combine(h.WorkFolder, "NightOwl.sln"), "");
-        await tab.RefreshProjectCommand.ExecuteAsync(null);
+        await tab.ProjectTools.RefreshCommand.ExecuteAsync(null);
 
         Assert.True(Entry(tab, "Open solution").IsEnabled);
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "open-solution"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "open-solution"));
         Assert.Equal([Path.Combine(h.WorkFolder, "NightOwl.sln")], h.Platform.OpenedFiles);
     }
 
@@ -132,8 +132,8 @@ public class ProjectToolsTests
         var tab = await OpenWithProjectAsync(h);
 
         Assert.True(Entry(tab, "Open in Rider").IsEnabled);
-        Assert.DoesNotContain(tab.ProjectMenu, e => e.Label == "Open solution");
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "open-solution"));
+        Assert.DoesNotContain(tab.ProjectTools.Menu, e => e.Label == "Open solution");
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "open-solution"));
 
         Assert.Contains(uproject, launcher.Started.Last().Arguments);
         Assert.Empty(h.Platform.OpenedFiles);
@@ -152,7 +152,7 @@ public class ProjectToolsTests
         var tab = await OpenWithProjectAsync(h);
         var started = launcher.Started.Count;
 
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "open-solution"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "open-solution"));
 
         Assert.Empty(h.Platform.OpenedFiles);
         Assert.Equal(started, launcher.Started.Count);
@@ -177,12 +177,12 @@ public class ProjectToolsTests
         await using var _h = h;
         var tab = await OpenWithProjectAsync(h);
 
-        await tab.ChooseProjectOptionCommand.ExecuteAsync(new ProjectChoiceOption("DebugGame", "DebugGame"));
+        await tab.ProjectTools.ChooseOptionCommand.ExecuteAsync(new ProjectChoiceOption("DebugGame", "DebugGame"));
 
         Assert.Equal("DebugGame", h.Services.State.ProjectTools.Get(uproject, UnrealProvider.ConfigurationKey));
         Assert.True(Entry(tab, "DebugGame").IsChecked);
         Assert.Equal("Launch editor (DebugGame)", Action(tab, "launch-editor").Label);
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "launch-editor"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "launch-editor"));
         var launch = launcher.Started.Last();
         Assert.Equal(UnrealCommands.EditorPath(h.Root, "UnrealEditor", ToolOSExtensions.Current), launch.FileName);
         Assert.Equal([uproject, "-debug"], launch.Arguments);
@@ -191,8 +191,8 @@ public class ProjectToolsTests
 
         // Another tab in the same folder uses the project's choice; Settings' default is only for projects without one.
         var other = new TabViewModel(h.Services, h.Shell, new TabState { Folder = h.WorkFolder }, isRestored: false);
-        await other.RefreshProjectAsync();
-        Assert.Equal("DebugGame", other.Project!.Choice!.Selected);
+        await other.ProjectTools.RefreshAsync();
+        Assert.Equal("DebugGame", other.ProjectTools.Project!.Choice!.Selected);
         Assert.Equal(UnrealConfiguration.Development, h.Services.Settings.ProjectTools.UnrealConfiguration);
     }
 
@@ -204,7 +204,7 @@ public class ProjectToolsTests
         var tab = await OpenWithProjectAsync(h);
 
         Assert.Equal("Primary+Shift+E", KeyboardShortcuts.Resolve(h.Services.Settings.Keyboard, KeyboardShortcuts.RunProjectAction)!.ToString());
-        await tab.RunMainProjectActionCommand.ExecuteAsync(null);
+        await tab.ProjectTools.RunMainActionCommand.ExecuteAsync(null);
 
         Assert.Equal([uproject], launcher.Started.Last().Arguments);
     }
@@ -267,32 +267,32 @@ public class ProjectToolsTests
         await using var _h = h;
         var tab = await OpenWithProjectAsync(h);
 
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-editor"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "build-editor"));
         var spec = launcher.Started.Last();
         var process = launcher.Processes.Last();
 
         Assert.True(spec.TrackProcessTree);
         Assert.False(spec.Detached);
         Assert.NotNull(spec.Environment);
-        Assert.True(tab.IsProjectJobRunning);
-        Assert.Equal("Build editor…", tab.ProjectButtonText);
+        Assert.True(tab.ProjectTools.IsJobRunning);
+        Assert.Equal("Build editor…", tab.ProjectTools.ButtonText);
         Assert.False(Entry(tab, "Generate project files").IsEnabled);
         Assert.Contains("Stop it first", Entry(tab, "Generate project files").Tip, StringComparison.Ordinal);
         var build = LastRun(tab)!;
-        Assert.Same(build, tab.SelectedProjectRun);
+        Assert.Same(build, tab.ProjectTools.SelectedRun);
         process.WriteOutput("Building NightOwlEditor...");
         process.WriteError("warning: deprecated");
         await TabTestHarness.Eventually(() => build.Output.Contains("warning: deprecated"), "the output");
         Assert.StartsWith("$ ", build.Output[0], StringComparison.Ordinal);
 
         process.Exit(0);
-        await TabTestHarness.Eventually(() => !tab.IsProjectJobRunning, "the end");
+        await TabTestHarness.Eventually(() => !tab.ProjectTools.IsJobRunning, "the end");
 
         Assert.Equal("Build editor succeeded.", build.Status);
         Assert.False(build.Failed);
-        Assert.Equal("NightOwl · UE 5.4", tab.ProjectButtonText);
+        Assert.Equal("NightOwl · UE 5.4", tab.ProjectTools.ButtonText);
 
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "generate-project-files"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "generate-project-files"));
         launcher.Processes.Last().Exit(6);
         var generate = LastRun(tab)!;
         await TabTestHarness.Eventually(() => generate.State == ProjectJobState.Failed, "the failure");
@@ -308,10 +308,10 @@ public class ProjectToolsTests
         var (h, launcher, _) = UnrealHarness();
         await using var _h = h;
         var tab = await OpenWithProjectAsync(h);
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-editor"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "build-editor"));
         var process = launcher.Processes.Last();
 
-        var run = tab.SelectedProjectRun!;
+        var run = tab.ProjectTools.SelectedRun!;
 
         Assert.True(run.StopCommand.CanExecute(null));
         run.StopCommand.Execute(null);
@@ -333,7 +333,7 @@ public class ProjectToolsTests
         NotificationTarget? clicked = null;
         h.Services.Notifications.Activated += target => clicked = target;
 
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-editor"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "build-editor"));
         launcher.Processes.Last().Exit(1);
         await TabTestHarness.Eventually(() => h.Notifier.Last("ProjectAction:") is not null, "the notification");
 
@@ -345,7 +345,7 @@ public class ProjectToolsTests
         // In front, on another tab even: the chip says it, so no notification.
         h.Services.Notifications.SetAppActive(true);
         var count = h.Notifier.Shown.Count;
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-editor"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "build-editor"));
         launcher.Processes.Last().Exit(0);
         await TabTestHarness.Eventually(() => LastRun(tab)!.Succeeded, "the end");
         Assert.Equal(count, h.Notifier.Shown.Count);
@@ -363,13 +363,12 @@ public class ProjectToolsTests
         var tab = await OpenWithProjectAsync(h);
         var editor = UnrealCommands.EditorPath(h.Root, "UnrealEditor", ToolOSExtensions.Current);
 
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-and-launch"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "build-and-launch"));
         launcher.Processes.Last().Exit(2);
         await TabTestHarness.Eventually(() => LastRun(tab)!.Failed, "the failed build");
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        Assert.DoesNotContain(launcher.Started, s => s.FileName == editor);
+        await Waiting.NeverAsync(() => launcher.Started.Any(s => s.FileName == editor), "the editor launched after a failed build");
 
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-and-launch"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "build-and-launch"));
         launcher.Processes.Last().Exit(0);
         await TabTestHarness.Eventually(() => launcher.Started.Any(s => s.FileName == editor), "the launch");
         Assert.Equal([uproject], launcher.Started.Single(s => s.FileName == editor).Arguments);
@@ -381,21 +380,21 @@ public class ProjectToolsTests
         var (h, launcher, _) = UnrealHarness();
         await using var _h = h;
         var tab = await OpenWithProjectAsync(h);
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "build-editor"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "build-editor"));
         var process = launcher.Processes.Last();
 
         for (var i = 1; i <= 5200; i++)
         {
             process.WriteOutput($"line {i}");
         }
-        var run = tab.SelectedProjectRun!;
+        var run = tab.ProjectTools.SelectedRun!;
         await TabTestHarness.Eventually(() => run.Output.LastOrDefault() == "line 5200", "the output");
 
         Assert.Equal(ProjectRunViewModel.MaxOutputLines, run.Output.Count);
         Assert.Equal("line 201", run.Output[0]);
         Assert.Equal(201, run.OutputDropped);
         Assert.Contains("5,000", run.OutputNote!.Replace(".", ",", StringComparison.Ordinal).Replace(" ", ",", StringComparison.Ordinal), StringComparison.Ordinal);
-        await tab.CopyProjectOutputCommand.ExecuteAsync(null);
+        await tab.ProjectTools.CopyOutputCommand.ExecuteAsync(null);
         Assert.EndsWith("line 5200", h.Platform.Clipboard, StringComparison.Ordinal);
     }
 
@@ -432,7 +431,7 @@ public class ProjectToolsTests
         Write(Path.Combine(h.WorkFolder, "Saved", "Logs", "NightOwl.log"), "keep");
         var tab = await OpenWithProjectAsync(h);
 
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "clean"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "clean"));
 
         var confirmation = h.Shell.Confirmation!;
         Assert.Equal("Clean intermediates?", confirmation.Title);
@@ -465,7 +464,7 @@ public class ProjectToolsTests
         Directory.CreateDirectory(Path.Combine(h.WorkFolder, "Binaries"));
         var tab = await OpenWithProjectAsync(h);
 
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "clean"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "clean"));
 
         Assert.Contains("The editor seems to have this project open.", h.Shell.Confirmation!.Message, StringComparison.Ordinal);
         h.Shell.Confirmation.CancelCommand.Execute(null);
@@ -484,9 +483,9 @@ public class ProjectToolsTests
 
         processes.Running.Add(new SystemProcess(501, "UnrealEditor", $"UnrealEditor \"{uproject}\""));
         processes.Running.Add(new SystemProcess(502, "UnrealEditor-Cmd", "UnrealEditor-Cmd /g/Other.uproject -run=cook"));
-        await tab.RefreshProjectCommand.ExecuteAsync(null);
+        await tab.ProjectTools.RefreshCommand.ExecuteAsync(null);
         Assert.True(Entry(tab, "Kill all Unreal editors…").IsEnabled);
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "kill-editors"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "kill-editors"));
 
         var confirmation = h.Shell.Confirmation!;
         Assert.Equal("End 2 Unreal editors?", confirmation.Title);
@@ -519,9 +518,9 @@ public class ProjectToolsTests
 
         var tab = await OpenWithProjectAsync(h);
 
-        Assert.Equal("work · Unity 2022.3", tab.ProjectButtonText);
+        Assert.Equal("work · Unity 2022.3", tab.ProjectTools.ButtonText);
         Assert.StartsWith("This is a Unity 2022.3.20f1 project, work, at ", h.Factory.Launches.Single().AppendSystemPrompt, StringComparison.Ordinal);
-        await tab.RunProjectActionCommand.ExecuteAsync(Action(tab, "run-editmode-tests"));
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "run-editmode-tests"));
         var spec = launcher.Started.Last();
         Assert.Equal(editor, spec.FileName);
         var results = Action(tab, "run-editmode-tests").ResultFile!;
@@ -545,16 +544,16 @@ public class ProjectToolsTests
         Write(Path.Combine(h.WorkFolder, ProjectFile.LocalName), """{ "actions": [ { "name": "Run tests", "command": "make test", "folder": "tests" } ] }""");
 
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.HasProjectTools, "the actions");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.HasTools, "the actions");
 
-        Assert.Null(tab.Project);
-        Assert.Equal(tab.FolderName, tab.ProjectButtonText);
-        Assert.Equal(tab.FolderName, tab.ProjectHeaderTitle);
-        Assert.Equal(["Run tests", "-", "Show output…", "Add an action…", "Add a link…", "Refresh"], tab.ProjectMenu.Select(e => e.IsSeparator ? "-" : e.Label));
-        Assert.Equal("Run tests", tab.MainProjectAction!.Label);
+        Assert.Null(tab.ProjectTools.Project);
+        Assert.Equal(tab.FolderName, tab.ProjectTools.ButtonText);
+        Assert.Equal(tab.FolderName, tab.ProjectTools.HeaderTitle);
+        Assert.Equal(["Run tests", "-", "Show output…", "Add an action…", "Add a link…", "Refresh"], tab.ProjectTools.Menu.Select(e => e.IsSeparator ? "-" : e.Label));
+        Assert.Equal("Run tests", tab.ProjectTools.MainAction!.Label);
 
         // The local file is the user's own: it runs without asking.
-        await tab.RunProjectActionCommand.ExecuteAsync(tab.ProjectActions.Single());
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(tab.ProjectTools.Actions.Single());
 
         Assert.Null(h.Shell.Confirmation);
         var spec = launcher.Started.Last();
@@ -579,15 +578,15 @@ public class ProjectToolsTests
     {
         await using var h = new TabTestHarness(launcher: new FakeLauncher());
         var tab = await h.OpenTabAsync();
-        Assert.False(tab.HasProjectTools);
+        Assert.False(tab.ProjectTools.HasTools);
 
         Write(Path.Combine(h.WorkFolder, ProjectFile.SharedName), """{ "actions": [ { "name": "Lint", "command": "npm run lint" }, { "command": "nameless" } ] }""");
         tab.IsSelected = false;
         tab.IsSelected = true;
-        await TabTestHarness.Eventually(() => tab.HasProjectTools, "the new action");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.HasTools, "the new action");
 
-        Assert.Equal(["Lint"], tab.ProjectActions.Select(a => a.Label));
-        Assert.Equal(["claudette.json: actions[1] has no name, so it was skipped."], tab.ProjectFileProblems);
+        Assert.Equal(["Lint"], tab.ProjectTools.Actions.Select(a => a.Label));
+        Assert.Equal(["claudette.json: actions[1] has no name, so it was skipped."], tab.ProjectTools.FileProblems);
     }
 
     [Fact]
@@ -597,16 +596,16 @@ public class ProjectToolsTests
         await using var h = new TabTestHarness(launcher: launcher);
         Write(Path.Combine(h.WorkFolder, ProjectFile.SharedName), """{ "actions": [ { "name": "Run tests", "command": "make test" } ] }""");
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.HasProjectTools, "the actions");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.HasTools, "the actions");
         var started = launcher.Started.Count;
 
-        await tab.RunProjectActionCommand.ExecuteAsync(tab.ProjectActions[0]);
+        await tab.ProjectTools.RunActionCommand.ExecuteAsync(tab.ProjectTools.Actions[0]);
 
         // The user's choice (DESIGN.md §18): claudette.json's actions run like the local file's, with no confirmation.
         Assert.Null(h.Shell.Confirmation);
         Assert.Equal(started + 1, launcher.Started.Count);
         launcher.Processes.Last().Exit(0);
-        await TabTestHarness.Eventually(() => !tab.IsProjectJobRunning, "the end");
+        await TabTestHarness.Eventually(() => !tab.ProjectTools.IsJobRunning, "the end");
     }
 
     // ---- Links --------------------------------------------------------------------------------------------------------------
@@ -625,12 +624,12 @@ public class ProjectToolsTests
             ] }
             """);
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => tab.HasLinks, "the links");
+        await TabTestHarness.Eventually(() => tab.ProjectTools.HasLinks, "the links");
 
         // Links alone aren't project tools, but the row is there for every tab, named after the folder.
-        Assert.False(tab.HasProjectTools);
-        Assert.Equal(tab.FolderName, tab.ProjectButtonText);
-        var menu = InlineDispatcher.Read(() => tab.ProjectMenu.ToArray());
+        Assert.False(tab.ProjectTools.HasTools);
+        Assert.Equal(tab.FolderName, tab.ProjectTools.ButtonText);
+        var menu = InlineDispatcher.Read(() => tab.ProjectTools.Menu.ToArray());
         Assert.Equal(["Links", "Pull request", "Changelist", "Local file", "-", "Add an action…", "Add a link…", "Refresh"], menu.Select(e => e.IsSeparator ? "-" : e.Label));
         var links = menu.Where(e => e.IsLink).ToArray();
         Assert.Equal("https://github.com/org/repo/compare/owl%2Feyes?expand=1", Assert.IsType<ResolvedLink>(links[0].Parameter).Url);
@@ -639,8 +638,8 @@ public class ProjectToolsTests
         Assert.False(links[1].IsEnabled);
         Assert.False(links[2].IsEnabled);
 
-        await tab.OpenProjectLinkCommand.ExecuteAsync(links[0].Parameter);
-        await tab.OpenProjectLinkCommand.ExecuteAsync(links[2].Parameter);
+        await tab.ProjectTools.OpenLinkCommand.ExecuteAsync(links[0].Parameter);
+        await tab.ProjectTools.OpenLinkCommand.ExecuteAsync(links[2].Parameter);
         Assert.Equal(["https://github.com/org/repo/compare/owl%2Feyes?expand=1"], h.Platform.OpenedUrls);
     }
 
@@ -654,23 +653,23 @@ public class ProjectToolsTests
         var uproject = Path.Combine(h.WorkFolder, "Game.uproject");
         File.WriteAllText(uproject, """{ "EngineAssociation": "5.9" }""");
         var tab = await OpenWithProjectAsync(h);
-        Assert.Equal("Choose engine folder…", tab.Project!.Fix!.Label);
+        Assert.Equal("Choose engine folder…", tab.ProjectTools.Project!.Fix!.Label);
         Assert.False(Action(tab, "launch-editor").IsEnabled);
 
         h.Platform.FolderToPick = h.WorkFolder;
-        await tab.FixProjectCommand.ExecuteAsync(null);
+        await tab.ProjectTools.FixCommand.ExecuteAsync(null);
         Assert.Null(h.Services.State.ProjectTools.Get(uproject, UnrealEngineLocator.EngineKey));
         Assert.Contains(tab.Items, i => i is Conversation.NoteItem note && note.Text.Contains("isn't an Unreal Engine folder", StringComparison.Ordinal));
 
         var engine = Path.Combine(h.Root, "Engines", "UE_5.9");
         WriteUnrealProject(engine, Path.Combine(h.Root, "unused"));
         h.Platform.FolderToPick = Path.Combine(engine, "Engine");
-        await tab.FixProjectCommand.ExecuteAsync(null);
+        await tab.ProjectTools.FixCommand.ExecuteAsync(null);
 
         Assert.Equal(engine, h.Services.State.ProjectTools.Get(uproject, UnrealEngineLocator.EngineKey));
         Assert.True(Action(tab, "launch-editor").IsEnabled);
-        Assert.Null(tab.ProjectProblem);
-        Assert.Contains("chosen by you", tab.ProjectHeaderLines[0], StringComparison.Ordinal);
+        Assert.Null(tab.ProjectTools.Problem);
+        Assert.Contains("chosen by you", tab.ProjectTools.HeaderLines[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -682,12 +681,12 @@ public class ProjectToolsTests
         File.Move(Path.Combine(h.WorkFolder, "Alpha", "NightOwl.uproject"), Path.Combine(h.WorkFolder, "Alpha", "Alpha.uproject"));
         File.WriteAllText(Path.Combine(h.WorkFolder, "Beta.uproject"), """{ "EngineAssociation": "" }""");
         var tab = await OpenWithProjectAsync(h);
-        Assert.Equal("Beta", tab.Project!.Name);
+        Assert.Equal("Beta", tab.ProjectTools.Project!.Name);
         Assert.True(Entry(tab, "Projects in this folder").IsHeader);
 
-        await tab.ChooseProjectCommand.ExecuteAsync(Entry(tab, "Alpha").Parameter);
+        await tab.ProjectTools.ChooseProjectCommand.ExecuteAsync(Entry(tab, "Alpha").Parameter);
 
-        Assert.Equal("Alpha", tab.Project!.Name);
+        Assert.Equal("Alpha", tab.ProjectTools.Project!.Name);
         Assert.True(Entry(tab, "Alpha").IsChecked);
         Assert.Equal(Path.Combine(h.WorkFolder, "Alpha", "Alpha.uproject"), h.Services.State.ProjectTools.ChosenProjectFor(h.WorkFolder));
     }
@@ -706,12 +705,12 @@ public class ProjectToolsTests
             }
         }
 
-        public void KillTree(int pid)
+        public void KillTree(SystemProcess process)
         {
             lock (Running)
             {
-                Killed.Add(pid);
-                Running.RemoveAll(p => p.Pid == pid);
+                Killed.Add(process.Pid);
+                Running.RemoveAll(p => p.Pid == process.Pid);
             }
         }
     }

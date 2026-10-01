@@ -1,4 +1,5 @@
 using System.Security;
+using Claudette.Core.Files;
 using Claudette.Core.LoginItems;
 using Claudette.Core.Processes;
 
@@ -32,9 +33,7 @@ public sealed class LaunchAgentLoginItems(IProcessLauncher launcher, string laun
     public void WriteEntry(ClaudetteCopy copy)
     {
         Directory.CreateDirectory(launchAgentsDirectory);
-        var temp = AgentPath + ".tmp";
-        File.WriteAllText(temp, Plist(Command(copy)));
-        File.Move(temp, AgentPath, overwrite: true);
+        AtomicFile.WriteAllText(AgentPath, Plist(Command(copy)));
     }
 
     public void DeleteEntry()

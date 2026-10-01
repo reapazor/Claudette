@@ -20,7 +20,14 @@ public sealed class UtilitySession : IAsyncDisposable
     private readonly ClaudeSession _session;
     private readonly Task _drain;
     private readonly SemaphoreSlim _commandLock = new(1, 1);
+    private readonly Lock _turnLock = new();
     private TaskCompletionSource<ResultMessage>? _pendingCommand;
+
+    /// <summary>
+    /// Commands that timed out or were cancelled before their result came. Claude Code answers messages in order, so
+    /// the next results are theirs and are skipped, rather than taken as the answer to a later command.
+    /// </summary>
+    private int _abandonedTurns;
 
     private UtilitySession(ClaudeSession session)
     {
@@ -32,10 +39,23 @@ public sealed class UtilitySession : IAsyncDisposable
             {
                 if (sessionEvent is TurnCompleted completed)
                 {
-                    Volatile.Read(ref _pendingCommand)?.TrySetResult(completed.Result);
+                    lock (_turnLock)
+                    {
+                        if (_abandonedTurns > 0)
+                        {
+                            _abandonedTurns--;
+                        }
+                        else
+                        {
+                            _pendingCommand?.TrySetResult(completed.Result);
+                        }
+                    }
                 }
             }
-            Volatile.Read(ref _pendingCommand)?.TrySetCanceled();
+            lock (_turnLock)
+            {
+                _pendingCommand?.TrySetCanceled();
+            }
         });
     }
 
@@ -74,17 +94,31 @@ public sealed class UtilitySession : IAsyncDisposable
     public async Task<string?> RunLocalCommandAsync(string command, TimeSpan timeout, CancellationToken cancellationToken = default)
     {
         await _commandLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var pending = new TaskCompletionSource<ResultMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sent = false;
         try
         {
-            var pending = new TaskCompletionSource<ResultMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
-            Volatile.Write(ref _pendingCommand, pending);
+            lock (_turnLock)
+            {
+                _pendingCommand = pending;
+            }
             await _session.SendUserMessageAsync(command, cancellationToken).ConfigureAwait(false);
-            var result = await pending.Task.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
+            sent = true;
+            var result = await pending.Task.WaitAsync(timeout, _session.Time, cancellationToken).ConfigureAwait(false);
             return result.IsError ? null : result.Result;
         }
         finally
         {
-            Volatile.Write(ref _pendingCommand, null);
+            lock (_turnLock)
+            {
+                if (sent && !pending.Task.IsCompleted)
+                {
+                    // Its result is still to come: it isn't the next command's.
+                    _abandonedTurns++;
+                    pending.TrySetCanceled();
+                }
+                _pendingCommand = null;
+            }
             _commandLock.Release();
         }
     }

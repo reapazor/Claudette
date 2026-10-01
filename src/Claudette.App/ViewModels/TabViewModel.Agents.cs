@@ -15,20 +15,6 @@ public sealed partial class TabViewModel
     /// <summary>Kept by the conversation builder from the same routing as the subagent groups.</summary>
     public AgentMap Agents { get; }
 
-    /// <summary>The Agents page of the side panel is showing.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsFilesPage))]
-    public partial bool IsAgentsPage { get; set; }
-
-    partial void OnIsAgentsPageChanged(bool value)
-    {
-        if (value)
-        {
-            IsProcessesPage = false;
-            IsProjectPage = false;
-        }
-    }
-
     [RelayCommand]
     private void ShowAgentsPage() => IsAgentsPage = true;
 
@@ -116,7 +102,7 @@ public sealed partial class TabViewModel
                 async () =>
                 {
                     // A prompt of its that Claude Code withdraws now wasn't answered in the Claude app (DESIGN.md §18).
-                    _stoppedHere = true;
+                    RemoteControl.OnStoppedHere();
                     try
                     {
                         await session.StopTaskAsync(taskId);

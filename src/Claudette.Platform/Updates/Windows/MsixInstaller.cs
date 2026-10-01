@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Claudette.Core.ProjectTools;
 using Claudette.Core.Updates;
 using Claudette.Platform.Notifications.Windows;
 using Microsoft.Extensions.Logging;
@@ -101,6 +102,5 @@ public sealed class MsixInstaller(TimeProvider timeProvider, ILogger logger) : I
     }
 
     /// <summary>Quotes an argument for a Windows command line.</summary>
-    private static string Quote(string argument) =>
-        argument.Length > 0 && !argument.Any(c => char.IsWhiteSpace(c) || c == '"') ? argument : $"\"{argument.Replace("\"", "\\\"")}\"";
+    private static string Quote(string argument) => CommandLines.QuoteForWindows(argument);
 }

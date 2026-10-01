@@ -7,7 +7,7 @@ namespace Claudette.Core.Protocol;
 /// <summary>
 /// A session's raw protocol traffic, one line per message with its time and direction (DESIGN.md §13, "Logging"):
 /// <c>&lt;</c> from Claude Code, <c>&gt;</c> to it. Off by default (Settings → Advanced), because it holds everything
-/// the session sees, file contents included.
+/// the session sees, file contents included. Sign-in secrets are taken out first (<see cref="ProtocolRedaction"/>).
 /// </summary>
 public sealed class ProtocolLog : IDisposable
 {
@@ -19,12 +19,30 @@ public sealed class ProtocolLog : IDisposable
     private readonly Lock _lock = new();
     private bool _disposed;
 
+    /// <param name="path">
+    /// Where to write. When another log already has the name (two tabs in the same folder starting in the same second),
+    /// this one gets <c>-2</c>, <c>-3</c> and so on before the extension; <see cref="Path"/> says which.
+    /// </param>
     public ProtocolLog(string path, TimeProvider time)
     {
-        Path = path;
         _time = time;
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
-        _writer = new StreamWriter(new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read), new UTF8Encoding(false)) { AutoFlush = true };
+        for (var attempt = 1; ; attempt++)
+        {
+            var candidate = attempt == 1
+                ? path
+                : System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path)!, $"{System.IO.Path.GetFileNameWithoutExtension(path)}-{attempt}{System.IO.Path.GetExtension(path)}");
+            try
+            {
+                _writer = new StreamWriter(new FileStream(candidate, FileMode.CreateNew, FileAccess.Write, FileShare.Read), new UTF8Encoding(false)) { AutoFlush = true };
+                Path = candidate;
+                return;
+            }
+            catch (IOException) when (attempt < 100 && File.Exists(candidate))
+            {
+                // Taken: try the next name.
+            }
+        }
     }
 
     public string Path { get; }
@@ -42,6 +60,7 @@ public sealed class ProtocolLog : IDisposable
 
     private void Write(char direction, string line)
     {
+        line = ProtocolRedaction.Redact(line);
         var stamp = _time.GetUtcNow().UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
         lock (_lock)
         {

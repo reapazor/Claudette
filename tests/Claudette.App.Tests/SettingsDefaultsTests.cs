@@ -63,6 +63,24 @@ public class SettingsDefaultsTests
     }
 
     [Fact]
+    public async Task The_fallback_model_checkpoints_and_hook_rows_are_settings_with_defaults()
+    {
+        await using var h = new TabTestHarness();
+        using var settings = new SettingsViewModel(h.Services, null);
+        Assert.Equal("None", settings.FallbackModel.Label);
+        Assert.True(settings.KeepFileCheckpoints);
+        Assert.False(settings.ShowAllHookRuns);
+
+        settings.FallbackModel = settings.FallbackModelChoices.Single(c => c.Value == "sonnet");
+        settings.KeepFileCheckpoints = false;
+        settings.ShowAllHookRuns = true;
+
+        Assert.Equal(("sonnet", false, true), (h.Services.Settings.ClaudeCode.FallbackModel, h.Services.Settings.ClaudeCode.KeepFileCheckpoints, h.Services.Settings.ClaudeCode.ShowAllHookRuns));
+        settings.ResetClaudeCodeCommand.Execute(null);
+        Assert.Equal((null, true, false), (h.Services.Settings.ClaudeCode.FallbackModel, h.Services.Settings.ClaudeCode.KeepFileCheckpoints, h.Services.Settings.ClaudeCode.ShowAllHookRuns));
+    }
+
+    [Fact]
     public async Task Density_applies_at_once()
     {
         await using var h = new TabTestHarness();

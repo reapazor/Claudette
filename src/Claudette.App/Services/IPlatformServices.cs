@@ -34,7 +34,16 @@ public interface IPlatformServices
 
     /// <summary>The font families installed on this machine, for Settings → Appearance. Empty when unknown.</summary>
     IReadOnlyList<string> InstalledFonts() => [];
+
+    /// <summary>
+    /// The OS's save dialog, offering <paramref name="types"/> (the first is the default) and starting from
+    /// <paramref name="suggestedName"/>. Returns the chosen path, or null for Cancel.
+    /// </summary>
+    Task<string?> PickSaveFileAsync(string title, string suggestedName, IReadOnlyList<SaveFileType> types);
 }
+
+/// <summary>A kind of file the save dialog offers, such as Markdown (<c>md</c>).</summary>
+public sealed record SaveFileType(string Name, string Extension);
 
 /// <summary>Runs work on the UI thread.</summary>
 public interface IUiDispatcher

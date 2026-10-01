@@ -13,11 +13,14 @@
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="LiveMarkdown.Avalonia" Version="2.4.3" />
     <!-- Also what LiveMarkdown uses; the diff view highlights code with it. -->
-    <PackageVersion Include="TextMateSharp" Version="2.0.0" />
-    <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.0" />
+    <PackageVersion Include="TextMateSharp" Version="2.0.4" />
+    <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.4" />
+  </ItemGroup>
+  <ItemGroup Label="Analyzers">
+    <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
   </ItemGroup>
   <ItemGroup Label="Core">
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
   </ItemGroup>
   <ItemGroup Label="Usage">
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />

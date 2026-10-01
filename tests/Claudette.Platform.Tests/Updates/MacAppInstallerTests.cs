@@ -52,7 +52,13 @@ public sealed class MacAppInstallerTests : IDisposable
 
         public string? ImageTeam { get; set; } = "TEAM123456";
 
+        /// <summary>codesign -dv on the running app fails (a timeout, say) with this message.</summary>
+        public string? RunningTeamError { get; set; }
+
         public List<string> Commands { get; } = [];
+
+        /// <summary>The code requirement each signature check asked for, or null for none.</summary>
+        public List<string?> Requirements { get; } = [];
     }
 
     private MacAppInstaller Installer(Tools tools, string? app = null) =>
@@ -74,8 +80,23 @@ public sealed class MacAppInstallerTests : IDisposable
                 CopyDirectory(args[0], args[1]);
                 return (0, "", "");
             case ("codesign", "--verify"):
-                return (tools.SignatureExitCode, "", tools.SignatureExitCode == 0 ? "" : $"{args[^1]}: a sealed resource is missing or invalid");
+                tools.Requirements.Add(args.FirstOrDefault(a => a.StartsWith("-R=", StringComparison.Ordinal)));
+                if (tools.SignatureExitCode != 0)
+                {
+                    return (tools.SignatureExitCode, "", $"{args[^1]}: a sealed resource is missing or invalid");
+                }
+                // A requirement naming a team holds only for an app signed by that team.
+                if (args.FirstOrDefault(a => a.StartsWith("-R=", StringComparison.Ordinal)) is { } requirement
+                    && !requirement.EndsWith($"= \"{tools.ImageTeam}\"", StringComparison.Ordinal))
+                {
+                    return (3, "", $"{args[^1]}: test-requirement: code failed to satisfy specified code requirement(s)");
+                }
+                return (0, "", "");
             case ("codesign", "-dv"):
+                if (args[^1] == App && tools.RunningTeamError is { } failure)
+                {
+                    return (1, "", failure);
+                }
                 var team = args[^1] == App ? tools.RunningTeam : tools.ImageTeam;
                 return (0, "", $"Executable={args[^1]}/Contents/MacOS/Claudette\nTeamIdentifier={team ?? "not set"}\n");
             case ("plutil", "-extract"):
@@ -128,6 +149,37 @@ public sealed class MacAppInstallerTests : IDisposable
 
         Assert.Equal("The new version is signed by a different developer (OTHERTEAM1) than this one (TEAM123456), so it wasn't installed.", error.Message);
         Assert.False(Directory.Exists(Staged));
+    }
+
+    [Fact]
+    public async Task The_new_version_must_be_signed_by_this_ones_team_with_an_Apple_certificate()
+    {
+        var tools = new Tools();
+
+        await Installer(tools).PrepareAsync("/downloads/x.dmg", Version, TestContext.Current.CancellationToken);
+
+        Assert.Equal(["-R=anchor apple generic and certificate leaf[subject.OU] = \"TEAM123456\""], tools.Requirements);
+    }
+
+    [Fact]
+    public async Task An_update_isnt_installed_when_this_ones_signature_cant_be_read()
+    {
+        // Before, a codesign that failed or timed out gave no team, and the comparison was skipped.
+        var error = await Assert.ThrowsAsync<AppInstallException>(() =>
+            Installer(new Tools { RunningTeamError = "codesign timed out" }).PrepareAsync("/downloads/x.dmg", Version, TestContext.Current.CancellationToken));
+
+        Assert.StartsWith("This Claudette's own signature couldn't be read", error.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Staged));
+    }
+
+    [Fact]
+    public async Task An_unsigned_build_checks_only_that_the_new_version_is_intact()
+    {
+        var tools = new Tools { RunningTeam = null, ImageTeam = null };
+
+        await Installer(tools).PrepareAsync("/downloads/x.dmg", Version, TestContext.Current.CancellationToken);
+
+        Assert.Equal([null], tools.Requirements);
     }
 
     [Fact]
@@ -200,7 +252,8 @@ public sealed class MacAppInstallerTests : IDisposable
         }
     }
 
-    private async Task<(int ExitCode, string Log)> RunHelperAsync(int readyTicks)
+    /// <param name="launches">How many launches the log should hold once the helper is done.</param>
+    private async Task<(int ExitCode, string Log)> RunHelperAsync(int readyTicks, int launches)
     {
         var script = Path.Combine(Updates, "update-helper.sh");
         File.WriteAllText(script, MacAppInstaller.HelperScript());
@@ -215,10 +268,11 @@ public sealed class MacAppInstallerTests : IDisposable
         using var helper = Process.Start(start)!;
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         await helper.WaitForExitAsync(timeout.Token);
-        // Let the last launch write its line.
-        await Task.Delay(300, TestContext.Current.CancellationToken);
+        // The last launch may still be writing its line.
         var log = Path.Combine(_root, "launches.log");
-        return (helper.ExitCode, File.Exists(log) ? File.ReadAllText(log) : "");
+        string Read() => File.Exists(log) ? File.ReadAllText(log) : "";
+        await Waiting.UntilAsync(() => Read().Count(c => c == '\n') >= launches, $"{launches} launches");
+        return (helper.ExitCode, Read());
     }
 
     [Fact]
@@ -229,7 +283,7 @@ public sealed class MacAppInstallerTests : IDisposable
         MakeExecutable(App, "old", signalsReady: true);
         MakeExecutable(Staged, "new", signalsReady: true);
 
-        var (exitCode, log) = await RunHelperAsync(readyTicks: 40);
+        var (exitCode, log) = await RunHelperAsync(readyTicks: 40, launches: 1);
 
         Assert.Equal(0, exitCode);
         Assert.Equal("new --restore n1\n", log);
@@ -246,7 +300,7 @@ public sealed class MacAppInstallerTests : IDisposable
         MakeExecutable(App, "old", signalsReady: true);
         MakeExecutable(Staged, "new", signalsReady: false);
 
-        var (exitCode, log) = await RunHelperAsync(readyTicks: 4);
+        var (exitCode, log) = await RunHelperAsync(readyTicks: 4, launches: 2);
 
         Assert.Equal(1, exitCode);
         Assert.Equal("new --restore n1\nold --restore n1\n", log);

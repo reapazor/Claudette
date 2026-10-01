@@ -1,0 +1,41 @@
+# APIs the app's code doesn't call (CLAUDE.md, "Rules that keep the code testable"; DESIGN.md §15).
+# The few places that must, such as the composition root and ProcessLauncher, say why with #pragma warning disable RS0030.
+
+# Time comes from the injected TimeProvider.
+P:System.DateTime.Now;Use the injected TimeProvider
+P:System.DateTime.UtcNow;Use the injected TimeProvider
+P:System.DateTime.Today;Use the injected TimeProvider
+P:System.DateTimeOffset.Now;Use the injected TimeProvider
+P:System.DateTimeOffset.UtcNow;Use the injected TimeProvider
+M:System.Threading.Thread.Sleep(System.Int32);Wait with Task.Delay(TimeSpan, TimeProvider)
+M:System.Threading.Thread.Sleep(System.TimeSpan);Wait with Task.Delay(TimeSpan, TimeProvider)
+M:System.Threading.Tasks.Task.Delay(System.Int32);Use Task.Delay(TimeSpan, TimeProvider)
+M:System.Threading.Tasks.Task.Delay(System.Int32,System.Threading.CancellationToken);Use Task.Delay(TimeSpan, TimeProvider, CancellationToken)
+M:System.Threading.Tasks.Task.Delay(System.TimeSpan);Use Task.Delay(TimeSpan, TimeProvider)
+M:System.Threading.Tasks.Task.Delay(System.TimeSpan,System.Threading.CancellationToken);Use Task.Delay(TimeSpan, TimeProvider, CancellationToken)
+M:System.Threading.Tasks.Task.WaitAsync(System.TimeSpan);Use WaitAsync(TimeSpan, TimeProvider)
+M:System.Threading.Tasks.Task.WaitAsync(System.TimeSpan,System.Threading.CancellationToken);Use WaitAsync(TimeSpan, TimeProvider, CancellationToken)
+M:System.Threading.Tasks.Task`1.WaitAsync(System.TimeSpan);Use WaitAsync(TimeSpan, TimeProvider)
+M:System.Threading.Tasks.Task`1.WaitAsync(System.TimeSpan,System.Threading.CancellationToken);Use WaitAsync(TimeSpan, TimeProvider, CancellationToken)
+M:System.Threading.CancellationTokenSource.#ctor(System.Int32);Use new CancellationTokenSource(TimeSpan, TimeProvider)
+M:System.Threading.CancellationTokenSource.#ctor(System.TimeSpan);Use new CancellationTokenSource(TimeSpan, TimeProvider)
+M:System.Threading.CancellationTokenSource.CancelAfter(System.Int32);Use new CancellationTokenSource(TimeSpan, TimeProvider)
+M:System.Threading.CancellationTokenSource.CancelAfter(System.TimeSpan);Use new CancellationTokenSource(TimeSpan, TimeProvider)
+T:System.Threading.Timer;Use TimeProvider.CreateTimer
+T:System.Timers.Timer;Use TimeProvider.CreateTimer
+
+# Processes start through IProcessLauncher (or ProcessRunner, which uses it).
+M:System.Diagnostics.Process.Start;Start processes through IProcessLauncher
+M:System.Diagnostics.Process.Start(System.String);Start processes through IProcessLauncher
+M:System.Diagnostics.Process.Start(System.String,System.String);Start processes through IProcessLauncher
+M:System.Diagnostics.Process.Start(System.String,System.Collections.Generic.IEnumerable{System.String});Start processes through IProcessLauncher
+M:System.Diagnostics.Process.Start(System.Diagnostics.ProcessStartInfo);Start processes through IProcessLauncher
+
+# Claudette's own requests go through AppServices.Http, which tests replace.
+M:System.Net.Http.HttpClient.#ctor;Use AppServices.Http
+M:System.Net.Http.HttpClient.#ctor(System.Net.Http.HttpMessageHandler);Use AppServices.Http
+M:System.Net.Http.HttpClient.#ctor(System.Net.Http.HttpMessageHandler,System.Boolean);Use AppServices.Http
+
+# Child processes get their environment from ClaudeEnvironment or UserEnvironment, never from Claudette's own.
+M:System.Environment.SetEnvironmentVariable(System.String,System.String);Pass an environment to the process instead
+M:System.Environment.SetEnvironmentVariable(System.String,System.String,System.EnvironmentVariableTarget);Pass an environment to the process instead

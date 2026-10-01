@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Claudette.Core.Diffs;
+using Claudette.Core.Json;
 using Claudette.Core.Processes;
 
 namespace Claudette.Core.Installation;
@@ -171,7 +172,7 @@ public static partial class ClaudeUpdateOutput
     {
         try
         {
-            if (JsonNode.Parse(json)?["casks"] is JsonArray casks)
+            if (JsonTree.Parse(json)?["casks"] is JsonArray casks)
             {
                 foreach (var entry in casks.OfType<JsonObject>())
                 {

@@ -29,6 +29,100 @@ public class ConversationBuilderTests
         Assert.Equal(2, _items.Count);
     }
 
+    // ---- Rewind and branch points (DESIGN.md §5) ------------------------------------------------------------------
+
+    [Fact]
+    public void A_prompt_gets_its_id_when_echoed_and_knows_where_to_resume_before_it()
+    {
+        var first = _builder.AddUserMessage("one");
+        Apply("""{"type":"user","uuid":"u-1","isReplay":true,"message":{"role":"user","content":"one"}}""");
+        Apply("""{"type":"assistant","uuid":"a-1","message":{"content":[{"type":"text","text":"done one"}]}}""");
+        var second = _builder.AddUserMessage("two");
+        var third = _builder.AddUserMessage("three");
+        // Queued prompts are echoed in the order they're taken.
+        Apply("""{"type":"user","uuid":"u-2","isReplay":true,"message":{"role":"user","content":[{"type":"text","text":"two"}]}}""");
+        Apply("""{"type":"user","uuid":"u-3","isReplay":true,"message":{"role":"user","content":"three"}}""");
+
+        Assert.Equal(("u-1", (string?)null), (first.Uuid, first.ResumeAt));
+        Assert.Equal(("u-2", "a-1"), (second.Uuid, second.ResumeAt));
+        // Taken after "two", so it follows it, whatever was last when it was sent.
+        Assert.Equal(("u-3", "u-2"), (third.Uuid, third.ResumeAt));
+        Assert.True(second.CanRestoreFiles);
+    }
+
+    [Fact]
+    public void A_cleared_conversation_starts_without_a_resume_point()
+    {
+        Apply("""{"type":"assistant","uuid":"a-1","message":{"content":[{"type":"text","text":"before"}]}}""");
+        _builder.Clear();
+
+        Assert.Null(_builder.AddUserMessage("after").ResumeAt);
+    }
+
+    // ---- Hook runs (DESIGN.md §5) -------------------------------------------------------------------------------
+
+    private static string Hook(string subtype, string id, string? outcome = null, int? exitCode = null, string? output = null, string? stdout = null, string? stderr = null)
+    {
+        var message = new System.Text.Json.Nodes.JsonObject
+        {
+            ["type"] = "system", ["subtype"] = subtype, ["hook_id"] = id, ["hook_name"] = "PreToolUse:Bash", ["hook_event"] = "PreToolUse",
+            ["session_id"] = "s", ["uuid"] = "x",
+        };
+        if (outcome is not null)
+        {
+            message["outcome"] = outcome;
+        }
+        if (exitCode is not null)
+        {
+            message["exit_code"] = exitCode;
+        }
+        message["output"] = output;
+        message["stdout"] = stdout;
+        message["stderr"] = stderr;
+        return message.ToJsonString();
+    }
+
+    [Fact]
+    public void A_hook_that_succeeds_quietly_shows_nothing_by_default()
+    {
+        Apply(Hook("hook_started", "h1"));
+        Apply(Hook("hook_response", "h1", "success", 0, "", "", ""));
+
+        Assert.Empty(_items);
+    }
+
+    [Fact]
+    public void A_hook_that_fails_shows_its_output_open()
+    {
+        Apply(Hook("hook_started", "h1"));
+        Apply(Hook("hook_response", "h1", "error", 2, stdout: "", stderr: "lint failed: 3 errors\n"));
+
+        var run = Assert.IsType<HookRunItem>(Assert.Single(_items));
+        Assert.Equal("PreToolUse hook (PreToolUse:Bash)", run.Title);
+        Assert.True(run.IsFailed);
+        Assert.Equal("failed (exit code 2)", run.StatusText);
+        Assert.Equal("lint failed: 3 errors", run.Output);
+        Assert.True(run.IsExpanded);
+    }
+
+    [Fact]
+    public void Every_run_shows_when_asked_and_progress_fills_it_in()
+    {
+        _builder.ShowAllHookRuns = true;
+        Apply(Hook("hook_started", "h1"));
+        var run = Assert.IsType<HookRunItem>(Assert.Single(_items));
+        Assert.True(run.IsRunning);
+
+        Apply(Hook("hook_progress", "h1", output: "step 1", stdout: "step 1\n", stderr: ""));
+        Assert.Equal("step 1", run.Output);
+        Apply(Hook("hook_response", "h1", "success", 0, "step 1\nstep 2", "", ""));
+
+        Assert.Single(_items);
+        Assert.Equal(HookRunState.Succeeded, run.State);
+        Assert.Equal("step 1\nstep 2", run.Output);
+        Assert.False(run.IsExpanded);
+    }
+
     [Fact]
     public void Text_without_deltas_comes_from_the_complete_message()
     {
@@ -107,6 +201,52 @@ public class ConversationBuilderTests
     }
 
     [Fact]
+    public void Long_thinking_streams_in_without_copying_it_for_every_piece()
+    {
+        _builder.Apply(new ThinkingDelta("a", null));
+        var thinking = Assert.IsType<ThinkingItem>(_items[0]);
+        var changes = 0;
+        thinking.PropertyChanged += (_, e) => changes += e.PropertyName == nameof(ThinkingItem.Text) ? 1 : 0;
+
+        for (var i = 0; i < 2000; i++)
+        {
+            _builder.Apply(new ThinkingDelta("bc", null));
+        }
+
+        Assert.Equal(2000, changes);
+        Assert.Equal(4001, thinking.Text.Length);
+        Assert.Same(thinking.Text, thinking.Text);
+        Assert.True(thinking.HasText);
+    }
+
+    [Fact]
+    public void A_tool_card_keeps_its_input_but_not_the_message_it_came_in()
+    {
+        Apply("""{"type":"assistant","message":{"content":[{"type":"text","text":"big reply"},{"type":"tool_use","id":"r1","name":"Read","input":{"file_path":"a.cs"}}]}}""");
+
+        var read = Assert.IsType<ToolUseItem>(_items[1]);
+        Assert.Null(read.Input.Parent);
+        Assert.Equal("a.cs", read.Input["file_path"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void A_long_output_shows_its_start_until_Show_all()
+    {
+        Apply("""{"type":"assistant","message":{"content":[{"type":"tool_use","id":"g1","name":"Grep","input":{"pattern":"x"}}]}}""");
+        var grep = Assert.IsType<ToolUseItem>(Assert.Single(_items));
+        var output = new string('x', ToolUseItem.ShownOutputLimit + 5000);
+
+        grep.ApplyResult(output, isError: false, toolUseResult: null);
+
+        Assert.True(grep.IsOutputCut);
+        Assert.Equal(ToolUseItem.ShownOutputLimit, grep.ShownOutput!.Length);
+        Assert.Equal("Show all (25 KB)", grep.ShowAllOutputText);
+        grep.ShowAllOutputCommand.Execute(null);
+        Assert.False(grep.IsOutputCut);
+        Assert.Equal(output, grep.ShownOutput);
+    }
+
+    [Fact]
     public void Todo_write_fills_the_pinned_list_instead_of_a_card()
     {
         var todos = new TodoList();
@@ -168,6 +308,19 @@ public class ConversationBuilderTests
         Assert.Equal("dotnet test", bash.Command);
         Assert.Equal("Passed!\nTotal 8", bash.Output);
         Assert.Equal("Passed!", bash.ResultSummary);
+    }
+
+    [Fact]
+    public void Structured_results_with_unexpected_types_are_read_leniently()
+    {
+        // Claude Code changing a field's type must not throw out of the event (CLAUDE.md, "Parse tolerantly").
+        Apply("""{"type":"assistant","message":{"content":[{"type":"tool_use","id":"b1","name":"Bash","input":{"command":"sleep 5"}},{"type":"tool_use","id":"w1","name":"Write","input":{"file_path":"a.cs","content":"x"}}]}}""");
+        Apply("""{"type":"user","tool_use_result":{"stdout":"done","stderr":"","interrupted":"yes"},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"b1","content":"done"}]}}""");
+        Apply("""{"type":"user","tool_use_result":{"type":7,"content":"x"},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"w1","content":"File created"}]}}""");
+
+        var tools = _items.OfType<ToolUseItem>().ToList();
+        Assert.Equal("done", tools[0].ResultSummary);
+        Assert.True(tools[1].IsComplete);
     }
 
     [Fact]
@@ -243,6 +396,7 @@ public class ConversationBuilderTests
             StreamEventMessage { TextDelta: { } text } s => new TextDelta(text, s.ParentToolUseId),
             AssistantMessage a => new AssistantMessageReceived(a),
             UserMessage { LocalCommandOutput: { } output } => new LocalCommandOutputReceived(output),
+            UserMessage { IsReplay: true } u => new PromptReplayed(u),
             UserMessage u => new ToolResultsReceived(u),
             ResultMessage r => new TurnCompleted(r),
             SystemMessage s => new SystemNotice(s),

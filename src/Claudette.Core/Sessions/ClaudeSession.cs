@@ -27,23 +27,27 @@ public sealed class ClaudeSession : IAsyncDisposable
     public static readonly TimeSpan InitializeTimeout = TimeSpan.FromSeconds(90);
 
     private readonly IClaudeTransport _transport;
+    private readonly TimeProvider _time;
     private readonly ControlChannel _control;
     private readonly ILogger _logger;
     private readonly ProtocolDiagnostics? _diagnostics;
     private readonly Channel<SessionEvent> _events = Channel.CreateUnbounded<SessionEvent>(new UnboundedChannelOptions { SingleWriter = false, SingleReader = false });
     private readonly ConcurrentDictionary<string, PermissionRequest> _pendingPermissions = new();
+    private readonly ConcurrentDictionary<string, ElicitationRequest> _pendingElicitations = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _pendingHooks = new();
     private HookCallbackRegistry _hooks = new([]);
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Task _readLoop;
     private int _unknownMessageCount;
     private int _protocolErrorCount;
-    private SessionState _state = SessionState.Starting;
+    private readonly Lock _stateLock = new();
+    private volatile SessionState _state = SessionState.Starting;
 
     /// <param name="diagnostics">Counts what Claude Code sends that Claudette doesn't know yet (DESIGN.md §16).</param>
     public ClaudeSession(IClaudeTransport transport, TimeProvider timeProvider, ILogger<ClaudeSession>? logger = null, ProtocolDiagnostics? diagnostics = null)
     {
         _transport = transport;
+        _time = timeProvider;
         _logger = logger ?? NullLogger<ClaudeSession>.Instance;
         _diagnostics = diagnostics;
         _control = new ControlChannel(transport.SendAsync, timeProvider);
@@ -53,7 +57,16 @@ public sealed class ClaudeSession : IAsyncDisposable
     /// <summary>Everything the session reports, in order. Completes after <see cref="SessionExited"/>.</summary>
     public ChannelReader<SessionEvent> Events => _events.Reader;
 
+    /// <summary>
+    /// The host shows MCP servers' requests for input (<see cref="ElicitationRequested"/>). Off, they're declined at
+    /// once, as the Agent SDKs do without a handler: the utility session has nobody to ask.
+    /// </summary>
+    public bool ShowsElicitations { get; set; }
+
     public SessionState State => _state;
+
+    /// <summary>The clock the session times its requests and its stop by.</summary>
+    public TimeProvider Time => _time;
 
     public InitializeResult? Initialization { get; private set; }
 
@@ -92,10 +105,7 @@ public sealed class ClaudeSession : IAsyncDisposable
             .ConfigureAwait(false);
         Initialization = InitializeResult.Parse(response);
         PermissionMode ??= Initialization.CurrentPermissionMode;
-        if (_state == SessionState.Starting)
-        {
-            SetState(SessionState.Idle);
-        }
+        TrySetState(SessionState.Starting, SessionState.Idle);
         return Initialization;
     }
 
@@ -109,10 +119,20 @@ public sealed class ClaudeSession : IAsyncDisposable
     /// <summary>Sends a message with attached images and quick suffixes (DESIGN.md §5, "Quick suffixes").</summary>
     public async ValueTask SendUserMessageAsync(string text, IReadOnlyList<MessageImage> images, string? suffix, CancellationToken cancellationToken = default)
     {
-        await _transport.SendAsync(OutgoingMessages.UserMessage(text, images, suffix).ToJsonString(), cancellationToken).ConfigureAwait(false);
-        if (_state == SessionState.Idle)
+        // Working before the message goes, not after: a local command can be answered before the write's continuation
+        // runs, and a Working set then would never be cleared.
+        var started = TrySetState(SessionState.Idle, SessionState.Working);
+        try
         {
-            SetState(SessionState.Working);
+            await _transport.SendAsync(OutgoingMessages.UserMessage(text, images, suffix).ToJsonString(), cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            if (started)
+            {
+                TrySetState(SessionState.Working, SessionState.Idle);
+            }
+            throw;
         }
     }
 
@@ -172,6 +192,34 @@ public sealed class ClaudeSession : IAsyncDisposable
         ContextUsage.Parse(await SendControlRequestAsync(new JsonObject { ["subtype"] = "get_context_usage" }, cancellationToken: cancellationToken)
             .ConfigureAwait(false));
 
+    /// <summary>
+    /// Puts the files Claude changed back as they were when <paramref name="userMessageId"/> was sent (a prompt's
+    /// <c>uuid</c>, from <see cref="PromptReplayed"/>), or with <paramref name="dryRun"/> says what that would change.
+    /// Needs <c>CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING</c> in the session's environment (DESIGN.md §5, "Rewind and branch").
+    /// </summary>
+    public async Task<RewindResult> RewindFilesAsync(string userMessageId, bool dryRun = false, CancellationToken cancellationToken = default)
+    {
+        var request = new JsonObject { ["subtype"] = "rewind_files", ["user_message_id"] = userMessageId };
+        if (dryRun)
+        {
+            request["dry_run"] = true;
+        }
+        return RewindResult.Parse(await SendControlRequestAsync(request, cancellationToken: cancellationToken).ConfigureAwait(false));
+    }
+
+    /// <summary>The session's MCP servers and how each is connected (DESIGN.md §4, "MCP servers").</summary>
+    public async Task<IReadOnlyList<McpServerStatus>> GetMcpStatusAsync(CancellationToken cancellationToken = default) =>
+        McpServerStatus.ParseList(await SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_status" }, cancellationToken: cancellationToken)
+            .ConfigureAwait(false));
+
+    /// <summary>Connects an MCP server again, such as one that failed or needs signing in.</summary>
+    public Task ReconnectMcpServerAsync(string serverName, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_reconnect", ["serverName"] = serverName }, TimeSpan.FromSeconds(60), cancellationToken);
+
+    /// <summary>Turns an MCP server on or off for this session; off disconnects it and removes its tools.</summary>
+    public Task SetMcpServerEnabledAsync(string serverName, bool enabled, CancellationToken cancellationToken = default) =>
+        SendControlRequestAsync(new JsonObject { ["subtype"] = "mcp_toggle", ["serverName"] = serverName, ["enabled"] = enabled }, TimeSpan.FromSeconds(60), cancellationToken);
+
     /// <summary>Stops a background task (for example a <c>run_in_background</c> command) so Claude knows it ended.</summary>
     public Task StopTaskAsync(string taskId, CancellationToken cancellationToken = default) =>
         SendControlRequestAsync(new JsonObject { ["subtype"] = "stop_task", ["task_id"] = taskId }, cancellationToken: cancellationToken);
@@ -180,20 +228,31 @@ public sealed class ClaudeSession : IAsyncDisposable
     public Task<JsonObject> SendControlRequestAsync(JsonObject request, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
         _control.RequestAsync(request, timeout ?? DefaultControlTimeout, cancellationToken);
 
-    /// <summary>Asks Claude Code to exit by closing its input, and ends it if it hasn't exited within <paramref name="grace"/>.</summary>
+    /// <summary>
+    /// Asks Claude Code to exit by closing its input, and ends it if it hasn't exited within <paramref name="grace"/>.
+    /// Waits at most another <paramref name="grace"/> for the rest of its output, so closing a tab can't hang on it.
+    /// </summary>
     public async Task StopAsync(TimeSpan grace)
     {
         _transport.CloseInput();
         try
         {
-            await _transport.Completion.WaitAsync(grace).ConfigureAwait(false);
+            await _transport.Completion.WaitAsync(grace, _time).ConfigureAwait(false);
         }
         catch (TimeoutException)
         {
             _logger.LogWarning("Claude Code didn't exit within {Grace}; ending it.", grace);
             _transport.Terminate();
         }
-        await _readLoop.ConfigureAwait(false);
+        try
+        {
+            await _readLoop.WaitAsync(grace, _time).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            _logger.LogWarning("Claude Code's output didn't end within {Grace} of ending it; not waiting for the rest.", grace);
+            await _lifetime.CancelAsync().ConfigureAwait(false);
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -217,16 +276,17 @@ public sealed class ClaudeSession : IAsyncDisposable
                 {
                     continue;
                 }
-                if (!MessageParser.TryParse(line, out var message, out var error))
-                {
-                    Interlocked.Increment(ref _protocolErrorCount);
-                    _diagnostics?.RecordParseError();
-                    _logger.LogWarning("Skipped a line from Claude Code: {Error}", error);
-                    Publish(new ProtocolError(line, error));
-                    continue;
-                }
+                ClaudeMessage? message = null;
                 try
                 {
+                    if (!MessageParser.TryParse(line, out message, out var error))
+                    {
+                        Interlocked.Increment(ref _protocolErrorCount);
+                        _diagnostics?.RecordParseError();
+                        _logger.LogWarning("Skipped a line from Claude Code: {Error}", error);
+                        Publish(new ProtocolError(line, error));
+                        continue;
+                    }
                     _diagnostics?.RecordFields(message);
                     Handle(message);
                 }
@@ -235,7 +295,7 @@ public sealed class ClaudeSession : IAsyncDisposable
                     // One bad message must never end the session (DESIGN.md §16).
                     Interlocked.Increment(ref _protocolErrorCount);
                     _diagnostics?.RecordParseError();
-                    _logger.LogError(ex, "Failed to handle a '{Type}' message.", message.Type);
+                    _logger.LogError(ex, "Failed to handle a '{Type}' message.", message?.Type ?? "unreadable");
                     Publish(new ProtocolError(line, ex.Message));
                 }
             }
@@ -252,6 +312,11 @@ public sealed class ClaudeSession : IAsyncDisposable
             request.Cancel();
         }
         _pendingPermissions.Clear();
+        foreach (var request in _pendingElicitations.Values)
+        {
+            request.Withdraw();
+        }
+        _pendingElicitations.Clear();
         foreach (var requestId in _pendingHooks.Keys)
         {
             if (_pendingHooks.TryRemove(requestId, out var hook))
@@ -285,6 +350,11 @@ public sealed class ClaudeSession : IAsyncDisposable
                     cancelled.Cancel();
                     Publish(new PermissionCancelled(cancel.RequestId));
                 }
+                else if (_pendingElicitations.TryRemove(cancel.RequestId, out var withdrawn))
+                {
+                    withdrawn.Withdraw();
+                    Publish(new ElicitationCancelled(cancel.RequestId));
+                }
                 else if (_pendingHooks.TryRemove(cancel.RequestId, out var hook))
                 {
                     CancelHook(hook);
@@ -298,10 +368,7 @@ public sealed class ClaudeSession : IAsyncDisposable
                 ClaudeCodeVersion = init.ClaudeCodeVersion ?? ClaudeCodeVersion;
                 Capabilities = init.Capabilities;
                 Publish(new TurnStarted(init));
-                if (_state == SessionState.Idle)
-                {
-                    SetState(SessionState.Working);
-                }
+                TrySetState(SessionState.Idle, SessionState.Working);
                 break;
 
             case SystemMessage system:
@@ -335,6 +402,10 @@ public sealed class ClaudeSession : IAsyncDisposable
                 if (user.LocalCommandOutput is { } output)
                 {
                     Publish(new LocalCommandOutputReceived(output));
+                }
+                else if (user.IsReplay && user.ParentToolUseId is null && !user.Content.OfType<ToolResultBlock>().Any())
+                {
+                    Publish(new PromptReplayed(user));
                 }
                 else
                 {
@@ -390,6 +461,22 @@ public sealed class ClaudeSession : IAsyncDisposable
         if (request.Subtype == "hook_callback")
         {
             HandleHookCallback(request);
+            return;
+        }
+        if (request.Subtype == "elicitation")
+        {
+            var elicitation = new ElicitationRequest(request);
+            _pendingElicitations[request.RequestId] = elicitation;
+            if (!ShowsElicitations)
+            {
+                // Nobody shows it: decline, as the SDKs do without an onElicitation handler.
+                elicitation.Decline();
+            }
+            else
+            {
+                Publish(new ElicitationRequested(elicitation));
+            }
+            _ = AnswerElicitationAsync(elicitation);
             return;
         }
         if (request.Subtype != "can_use_tool")
@@ -470,6 +557,23 @@ public sealed class ClaudeSession : IAsyncDisposable
         }
     }
 
+    private async Task AnswerElicitationAsync(ElicitationRequest elicitation)
+    {
+        JsonObject answer;
+        try
+        {
+            answer = await elicitation.Answer.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        if (_pendingElicitations.TryRemove(elicitation.RequestId, out _))
+        {
+            await RespondSafelyAsync(() => _control.RespondAsync(elicitation.RequestId, answer, _lifetime.Token)).ConfigureAwait(false);
+        }
+    }
+
     private async Task AnswerPermissionAsync(PermissionRequest permission)
     {
         PermissionDecision decision;
@@ -499,14 +603,33 @@ public sealed class ClaudeSession : IAsyncDisposable
         }
     }
 
+    /// <summary>Changes the state and says so. The read loop and senders run on different threads, hence the lock.</summary>
     private void SetState(SessionState state)
     {
-        if (_state == state || _state == SessionState.Exited)
+        lock (_stateLock)
         {
-            return;
+            if (_state == state || _state == SessionState.Exited)
+            {
+                return;
+            }
+            _state = state;
+            Publish(new StateChanged(state));
         }
-        _state = state;
-        Publish(new StateChanged(state));
+    }
+
+    /// <summary>Changes the state only from <paramref name="from"/>, as one step. Returns whether it changed.</summary>
+    private bool TrySetState(SessionState from, SessionState to)
+    {
+        lock (_stateLock)
+        {
+            if (_state != from)
+            {
+                return false;
+            }
+            _state = to;
+            Publish(new StateChanged(to));
+            return true;
+        }
     }
 
     private void Publish(SessionEvent sessionEvent) => _events.Writer.TryWrite(sessionEvent);

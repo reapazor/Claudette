@@ -93,7 +93,8 @@ public class PerforceTabTests
         store.Secrets["perforce/other:1666/build"] = "s3cret";
 
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => p4.Logins.Count == 1, "the login");
+        // The run is recorded as it starts; its password is written to standard input just after.
+        await TabTestHarness.Eventually(() => p4.Logins is [{ Input.Count: > 0 }], "the login");
 
         Assert.Equal(("other:1666", "build"), (p4.Runs.First(r => r.Command == "info").Port, p4.Runs.First(r => r.Command == "info").User));
         Assert.Equal(["-p", "other:1666", "-u", "build", "login"], p4.Logins.Single().Spec.Arguments);
@@ -110,7 +111,8 @@ public class PerforceTabTests
         store.Secrets[StoredKey] = "s3cret";
 
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => p4.Logins.Count == 1, "the login");
+        // The run is recorded as it starts; its password is written to standard input just after.
+        await TabTestHarness.Eventually(() => p4.Logins is [{ Input.Count: > 0 }], "the login");
 
         var login = p4.Logins.Single();
         Assert.Equal(["s3cret"], login.Input);
@@ -126,7 +128,9 @@ public class PerforceTabTests
         p4.TicketExpires = h.Time.GetUtcNow().AddHours(11);
         store.Secrets[StoredKey] = "s3cret";
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => p4.StatusChecks == 1 && tab.PerforceStatusText?.Contains("11h", StringComparison.Ordinal) == true, "the first check");
+        // Finished, too: a hook arriving while the first check is still under way would share its answer.
+        await TabTestHarness.Eventually(() => p4.StatusChecks == 1 && tab.PerforceStatusText?.Contains("11h", StringComparison.Ordinal) == true && !tab.IsCheckingPerforceTicket,
+            "the first check");
         // Later, the ticket has gone (for example p4 logout in a terminal).
         h.Time.Advance(TimeSpan.FromMinutes(6));
         p4.TicketExpires = h.Time.GetUtcNow().AddMinutes(-1);
@@ -171,7 +175,8 @@ public class PerforceTabTests
         EmitBash(h, "b1", "p4 sync //depot/...", "Your session has expired, please login again.", isError: true);
         await TabTestHarness.Eventually(() => h.Transport.SentUserTexts.Contains(TabViewModel.PerforceRetryMessage), "the retry message");
         EmitBash(h, "b2", "p4 sync //depot/...", "Your session has expired, please login again.", isError: true);
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await Waiting.NeverAsync(() => p4.Logins.Count > 1 || h.Transport.SentUserTexts.Count(t => t == TabViewModel.PerforceRetryMessage) > 1,
+            "a second login or retry message");
 
         Assert.Single(p4.Logins);
         Assert.Single(h.Transport.SentUserTexts, t => t == TabViewModel.PerforceRetryMessage);
@@ -200,7 +205,8 @@ public class PerforceTabTests
             return 0;
         });
         await TabTestHarness.Eventually(() => tab.PerforcePrompt is null && tab.Status == TabStatus.Idle, "the prompt to close");
-        await TabTestHarness.Eventually(() => p4.Logins.Count == 1, "the login");
+        // The run is recorded as it starts; its password is written to standard input just after.
+        await TabTestHarness.Eventually(() => p4.Logins is [{ Input.Count: > 0 }], "the login");
 
         Assert.Equal(["s3cret"], p4.Logins.Single().Input);
         Assert.Empty(store.Secrets);
@@ -273,7 +279,8 @@ public class PerforceTabTests
         p4.ConfiguredPassword = "s3cret";
 
         var tab = await h.OpenTabAsync();
-        await TabTestHarness.Eventually(() => p4.Logins.Count == 1, "the login");
+        // The run is recorded as it starts; its password is written to standard input just after.
+        await TabTestHarness.Eventually(() => p4.Logins is [{ Input.Count: > 0 }], "the login");
 
         Assert.Contains(p4.Runs, r => r.Command == "set" && r.Arguments.SequenceEqual(["-q", "P4PASSWD"]));
         Assert.Equal(["s3cret"], p4.Logins.Single().Input);

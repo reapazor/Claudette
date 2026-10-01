@@ -13,13 +13,19 @@ public interface IRunningProcess : IAsyncDisposable
 {
     int Id { get; }
 
-    /// <summary>Lines from standard output, in order. Completes when the stream closes.</summary>
+    /// <summary>
+    /// Lines from standard output, in order. Completes when the stream closes, or shortly after the process exits if
+    /// a process it started keeps the stream open.
+    /// </summary>
     ChannelReader<string> StandardOutput { get; }
 
-    /// <summary>Lines from standard error, in order. Completes when the stream closes.</summary>
+    /// <summary>Lines from standard error, in order. Completes as <see cref="StandardOutput"/> does.</summary>
     ChannelReader<string> StandardError { get; }
 
-    /// <summary>Completes with the exit code when the process exits.</summary>
+    /// <summary>
+    /// Completes with the exit code when the process exits and its output has been read, without waiting for processes
+    /// it started that still hold its output open.
+    /// </summary>
     Task<int> Exited { get; }
 
     ValueTask WriteLineAsync(string line, CancellationToken cancellationToken = default);

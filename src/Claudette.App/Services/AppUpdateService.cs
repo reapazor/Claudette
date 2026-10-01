@@ -262,7 +262,7 @@ public sealed class AppUpdateService : IDisposable
     /// </summary>
     public async Task<bool> InstallAsync()
     {
-        if (IsInstalling || !CanInstall || Available is not { Asset: not null } update)
+        if (IsInstalling || !CanInstall || Available is not { Asset.Sha256: not null } update)
         {
             return false;
         }

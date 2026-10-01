@@ -1,6 +1,8 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Files;
+using Claudette.Core.Json;
 
 namespace Claudette.Core.ProjectTools;
 
@@ -154,7 +156,7 @@ public static class ProjectFile
     {
         var root = ReadRoot(folder, scope) ?? [];
         root[key] = new JsonArray([.. entries.Select(e => e?.DeepClone())]);
-        File.WriteAllText(PathFor(folder, scope), root.ToJsonString(WriteOptions) + Environment.NewLine);
+        AtomicFile.WriteAllText(PathFor(folder, scope), root.ToJsonString(WriteOptions) + Environment.NewLine);
     }
 
     /// <summary>One file's root object, to edit; null when there's no file.</summary>
@@ -348,7 +350,7 @@ public static class ProjectFile
         }
         try
         {
-            var node = JsonNode.Parse(text.TrimStart('﻿'), documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            var node = JsonTree.Parse(text.TrimStart('﻿'), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
             if (node is JsonObject obj)
             {
                 root = obj;

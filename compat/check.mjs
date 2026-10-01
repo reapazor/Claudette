@@ -11,6 +11,11 @@
 //
 //   node compat/check.mjs update-snapshots [--help-file F]
 //       Refreshes compat/docs/*.md (and compat/cli-help.txt from F) after a report has been handled.
+//
+//   node compat/check.mjs versions
+//       Prints surface.yaml's minimum and lastTested versions as JSON and, on GitHub Actions, sets them as step outputs.
+//
+// A tracked docs page that's gone (404 or 410) counts as a change: its snapshot becomes a note saying so.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -33,6 +38,7 @@ switch (mode) {
   case 'detect': await detect(); break;
   case 'report': await report(); break;
   case 'update-snapshots': await updateSnapshots(); break;
+  case 'versions': versions(); break;
   default:
     console.error('Usage: node compat/check.mjs detect|report|update-snapshots [options]');
     process.exit(2);
@@ -48,6 +54,14 @@ async function detect() {
   console.log(JSON.stringify(result, null, 2));
   if (process.env.GITHUB_OUTPUT) {
     fs.appendFileSync(process.env.GITHUB_OUTPUT, `new=${isNew}\nversion=${version}\n`);
+  }
+}
+
+function versions() {
+  const result = { minimum: surface.minimum, lastTested: surface.lastTested };
+  console.log(JSON.stringify(result, null, 2));
+  if (process.env.GITHUB_OUTPUT) {
+    fs.appendFileSync(process.env.GITHUB_OUTPUT, `minimum=${surface.minimum}\nlastTested=${surface.lastTested}\n`);
   }
 }
 
@@ -165,6 +179,7 @@ function readSurface() {
   const field = (name) => yaml.match(new RegExp(`^\\s*${name}:\\s*([0-9.]+)`, 'm'))?.[1];
   const unquote = (s) => s.trim().replace(/^"(.*)"$/, '$1');
   return {
+    minimum: field('minimum') ?? fail('surface.yaml has no minimum'),
     lastTested: field('lastTested') ?? fail('surface.yaml has no lastTested'),
     ids: [...yaml.matchAll(/^\s*- id:\s*(.+)$/gm)].map((m) => unquote(m[1])),
     docs: [...new Set([...yaml.matchAll(/^\s*docs:\s*(\S+)/gm)].map((m) => m[1]))],
@@ -207,10 +222,15 @@ function docSlug(url) {
   return url.replace(/^https?:\/\/[^/]+\/docs\/(en\/)?/, '').replace(/[^a-zA-Z0-9-]+/g, '__') + '.md';
 }
 
+/** The page's Markdown; a note when it's gone, which differs from any snapshot of it; null when it couldn't be fetched. */
 async function fetchDocPage(url) {
   try {
     return await text(url + '.md');
   } catch (e) {
+    if (e.status === 404 || e.status === 410) {
+      console.warn(`${url}.md is gone (${e.status}).`);
+      return `This page answered ${e.status}: it was removed or moved. Find where its content went and update surface.yaml's docs links.\n`;
+    }
     console.warn(`Couldn't fetch ${url}.md: ${e.message}`);
     return null;
   }
@@ -235,7 +255,7 @@ function truncate(s) {
 
 async function text(url) {
   const res = await fetch(url, { headers: { 'user-agent': 'claudette-compat-check' } });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
+  if (!res.ok) throw Object.assign(new Error(`${res.status} ${res.statusText} for ${url}`), { status: res.status });
   return res.text();
 }
 

@@ -167,11 +167,7 @@ public class CredentialStoreTests
     /// <summary>The <paramref name="index"/>th process, once it has had its input.</summary>
     private async Task<FakeRunningProcess> Started(int index)
     {
-        for (var i = 0; i < 500 && !(_launcher.Started.Count > index && _launcher.Started[index].InputClosed); i++)
-        {
-            await Task.Delay(10, TestContext.Current.CancellationToken);
-        }
-        Assert.True(_launcher.Started.Count > index, "The process wasn't started.");
+        await Waiting.UntilAsync(() => _launcher.Started.Count > index && _launcher.Started[index].InputClosed, $"process {index} to have its input");
         return _launcher.Started[index];
     }
 

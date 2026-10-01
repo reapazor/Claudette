@@ -38,16 +38,25 @@ public sealed class ProcessSleepBlocker : ISleepBlocker
         new(launcher, new ProcessStartSpec(path, ["-i", "-w", claudetteProcessId.ToString(CultureInfo.InvariantCulture)]), "caffeinate");
 
     /// <summary>
-    /// <c>systemd-inhibit --what=sleep … sleep infinity</c>, which holds a logind inhibitor lock until it's ended. None
-    /// without <c>systemd-inhibit</c> on the <c>PATH</c>.
+    /// <c>systemd-inhibit --what=sleep …</c>, which holds a logind inhibitor lock while its command runs: a shell loop that
+    /// ends when Claudette does, as <c>caffeinate -w</c> does on macOS, so a Claudette that crashed or was killed doesn't
+    /// keep the computer awake. None without <c>systemd-inhibit</c> on the <c>PATH</c>.
     /// </summary>
-    public static ISleepBlocker SystemdInhibit(IProcessLauncher launcher, IFileProbe? probe = null) =>
+    public static ISleepBlocker SystemdInhibit(IProcessLauncher launcher, int claudetteProcessId, IFileProbe? probe = null) =>
         (probe ?? FileProbe.Instance).FindOnPath("systemd-inhibit") is { } path
-            ? new ProcessSleepBlocker(launcher, new ProcessStartSpec(path, SystemdInhibitArguments), "systemd-inhibit")
+            ? new ProcessSleepBlocker(launcher, new ProcessStartSpec(path, SystemdInhibitArguments(claudetteProcessId)), "systemd-inhibit")
             : new NoSleepBlocker(SystemdInhibitMissing);
 
-    public static IReadOnlyList<string> SystemdInhibitArguments { get; } =
-        ["--what=sleep", "--who=Claudette", "--why=Tabs are connected to the Claude app", "--mode=block", "sleep", "infinity"];
+    /// <summary>
+    /// The inhibitor's command waits while Claudette's process is there (<c>kill -0</c> checks without signalling),
+    /// checking every 10 seconds. POSIX <c>sh</c>, rather than GNU <c>tail --pid</c>, which not every distribution has.
+    /// </summary>
+    public static IReadOnlyList<string> SystemdInhibitArguments(int claudetteProcessId) =>
+    [
+        "--what=sleep", "--who=Claudette", "--why=Tabs are connected to the Claude app", "--mode=block",
+        "/bin/sh", "-c", "while kill -0 \"$1\" 2>/dev/null; do sleep 10; done", "claudette-awake",
+        claudetteProcessId.ToString(CultureInfo.InvariantCulture),
+    ];
 
     public string? UnavailableReason => null;
 

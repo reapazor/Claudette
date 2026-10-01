@@ -116,6 +116,18 @@ public sealed class PerforceTicketKeeper : IDisposable
 
     public event Action<PerforceKeeperEvent>? Changed;
 
+    /// <summary>The check under way (shared by everyone who asks meanwhile), or a completed task: for tests to wait on.</summary>
+    internal Task CurrentCheck
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _running ?? Task.CompletedTask;
+            }
+        }
+    }
+
     /// <summary>Checks now, and every 15 minutes from now.</summary>
     public void Start()
     {
@@ -150,6 +162,18 @@ public sealed class PerforceTicketKeeper : IDisposable
         _lifetime.Cancel();
         _timer?.Dispose();
         _userLoginTimer?.Dispose();
+    }
+
+    /// <summary>A check or login is under way, which an <see cref="EnsureFreshAsync"/> call now would share.</summary>
+    public bool IsBusy
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _running is { IsCompleted: false };
+            }
+        }
     }
 
     private bool IsRecentlyValid()

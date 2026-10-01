@@ -185,12 +185,12 @@
                                     </Border>
                                     <!-- Connected to the Claude app (DESIGN.md §18, "Remote Control"); dimmed while it connects or reconnects,
                                          and more once it's switched off and waiting to disconnect -->
-                                    <Border x:Name="RemoteIcon" DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding ShowRemoteIcon}" VerticalAlignment="Center" Margin="0,0,5,0"
-                                            Classes.settling="{Binding IsRemoteSettling}" Classes.leaving="{Binding IsRemoteLeaving}"
-                                            ToolTip.Tip="{Binding RemoteTip}" AutomationProperties.Name="{Binding RemoteTip}">
+                                    <Border x:Name="RemoteIcon" DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding RemoteControl.ShowIcon}" VerticalAlignment="Center" Margin="0,0,5,0"
+                                            Classes.settling="{Binding RemoteControl.IsSettling}" Classes.leaving="{Binding RemoteControl.IsLeaving}"
+                                            ToolTip.Tip="{Binding RemoteControl.StatusTip}" AutomationProperties.Name="{Binding RemoteControl.StatusTip}">
                                       <Path Data="{StaticResource IconPhone}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="7" Height="10" Stretch="Uniform" />
                                     </Border>
-                                    <TextBlock DockPanel.Dock="Left" Classes="status busy small" Text="⚙" IsVisible="{Binding HasBusyProcesses}" VerticalAlignment="Center" Margin="0,0,5,0"
+                                    <TextBlock DockPanel.Dock="Left" Classes="status busy small" Text="⚙" IsVisible="{Binding ProcessMonitor.HasBusyProcesses}" VerticalAlignment="Center" Margin="0,0,5,0"
                                                ToolTip.Tip="A process this tab started is using CPU" />
                                     <!-- Tasks still running once the turn is over (DESIGN.md §4, "Sidebar"; §5, "Running tasks") -->
                                     <Border x:Name="TaskBadge" DockPanel.Dock="Left" Classes="taskbadge" IsVisible="{Binding ShowTaskBadge}" VerticalAlignment="Center" Margin="0,0,5,0"
@@ -254,15 +254,19 @@
                                   <MenuItem Header="Sync now" Command="{Binding SyncNowCommand}" IsVisible="{Binding SyncToLibrary}"
                                             ToolTip.Tip="{Binding SyncNowTip}" ToolTip.ShowOnDisabled="True" />
                                   <!-- Remote Control (DESIGN.md §18): disabled, with the reason as its tip, when the account can't use it -->
-                                  <MenuItem Header="Connect to the Claude app" ToggleType="CheckBox" IsChecked="{Binding RemoteControl, Mode=OneWay}"
-                                            Command="{Binding ToggleRemoteControlCommand}" ToolTip.Tip="{Binding RemoteControlTip}" ToolTip.ShowOnDisabled="True" />
-                                  <MenuItem Header="Open in the Claude app" Command="{Binding OpenInClaudeAppCommand}" IsVisible="{Binding HasRemoteUrl}" />
+                                  <MenuItem Header="Connect to the Claude app" ToggleType="CheckBox" IsChecked="{Binding RemoteControl.IsOn, Mode=OneWay}"
+                                            Command="{Binding RemoteControl.ToggleCommand}" ToolTip.Tip="{Binding RemoteControl.ToggleTip}" ToolTip.ShowOnDisabled="True" />
+                                  <MenuItem Header="Open in the Claude app" Command="{Binding RemoteControl.OpenInClaudeAppCommand}" IsVisible="{Binding RemoteControl.HasUrl}" />
                                   <MenuItem Header="Tab settings…" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).OpenTabSettingsCommand}" CommandParameter="{Binding}">
                                     <MenuItem.Icon>
                                       <Ellipse Width="6" Height="6" Fill="{DynamicResource AccentStatusBrush}" IsVisible="{Binding HasOverrides}"
                                                ToolTip.Tip="This tab has its own settings" />
                                     </MenuItem.Icon>
                                   </MenuItem>
+                                  <MenuItem Header="Duplicate tab" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).DuplicateTabCommand}" CommandParameter="{Binding}"
+                                            ToolTip.Tip="A new tab that carries this session on as a copy" />
+                                  <MenuItem Header="Export conversation…" Command="{Binding ExportConversationCommand}"
+                                            ToolTip.Tip="Save the conversation as a Markdown file or a web page" />
                                   <Separator />
                                   <MenuItem Header="Move up" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MoveTabUpCommand}" CommandParameter="{Binding}" />
                                   <MenuItem Header="Move down" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MoveTabDownCommand}" CommandParameter="{Binding}" />
@@ -274,7 +278,7 @@
                             </Button>
                             <!-- The tab's project runs, newest last, each with its log (DESIGN.md §4, §18). They stay until
                                  closed: × on a finished one, and Stop in its place while one runs. -->
-                            <ItemsControl Classes="runs" ItemsSource="{Binding ProjectRuns}" IsVisible="{Binding HasProjectRuns}">
+                            <ItemsControl Classes="runs" ItemsSource="{Binding ProjectTools.Runs}" IsVisible="{Binding ProjectTools.HasRuns}">
                               <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                   <StackPanel Spacing="1" />
@@ -371,15 +375,19 @@
                                         Command="{Binding ToggleSyncToLibraryCommand}" />
                               <MenuItem Header="Sync now" Command="{Binding SyncNowCommand}" IsVisible="{Binding SyncToLibrary}"
                                         ToolTip.Tip="{Binding SyncNowTip}" ToolTip.ShowOnDisabled="True" />
-                              <MenuItem Header="Connect to the Claude app" ToggleType="CheckBox" IsChecked="{Binding RemoteControl, Mode=OneWay}"
-                                        Command="{Binding ToggleRemoteControlCommand}" ToolTip.Tip="{Binding RemoteControlTip}" ToolTip.ShowOnDisabled="True" />
-                              <MenuItem Header="Open in the Claude app" Command="{Binding OpenInClaudeAppCommand}" IsVisible="{Binding HasRemoteUrl}" />
+                              <MenuItem Header="Connect to the Claude app" ToggleType="CheckBox" IsChecked="{Binding RemoteControl.IsOn, Mode=OneWay}"
+                                        Command="{Binding RemoteControl.ToggleCommand}" ToolTip.Tip="{Binding RemoteControl.ToggleTip}" ToolTip.ShowOnDisabled="True" />
+                              <MenuItem Header="Open in the Claude app" Command="{Binding RemoteControl.OpenInClaudeAppCommand}" IsVisible="{Binding RemoteControl.HasUrl}" />
                               <MenuItem Header="Tab settings…" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).OpenTabSettingsCommand}" CommandParameter="{Binding}">
                                   <MenuItem.Icon>
                                     <Ellipse Width="6" Height="6" Fill="{DynamicResource AccentStatusBrush}" IsVisible="{Binding HasOverrides}"
                                              ToolTip.Tip="This tab has its own settings" />
                                   </MenuItem.Icon>
                                 </MenuItem>
+                              <MenuItem Header="Duplicate tab" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).DuplicateTabCommand}" CommandParameter="{Binding}"
+                                        ToolTip.Tip="A new tab that carries this session on as a copy" />
+                              <MenuItem Header="Export conversation…" Command="{Binding ExportConversationCommand}"
+                                        ToolTip.Tip="Save the conversation as a Markdown file or a web page" />
                               <Separator />
                               <MenuItem Header="Close" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).CloseTabCommand}" CommandParameter="{Binding}" />
                             </ContextMenu>
@@ -401,24 +409,24 @@
                  else the folder's name, or while a job runs, its name; a click opens the project's menu -->
             <Button x:Name="ProjectButton" Classes="flat side" HorizontalContentAlignment="Stretch"
                     IsVisible="{Binding SelectedTab, Converter={x:Static ObjectConverters.IsNotNull}}"
-                    ToolTip.Tip="{Binding SelectedTab.ProjectButtonTip}" ToolTip.Placement="Right" AutomationProperties.Name="Project tools">
+                    ToolTip.Tip="{Binding SelectedTab.ProjectTools.ButtonTip}" ToolTip.Placement="Right" AutomationProperties.Name="Project tools">
               <DockPanel>
                 <!-- As wide as the other icons, so the busy dot lines up with them -->
                 <Panel DockPanel.Dock="Left" Width="13" VerticalAlignment="Center">
-                  <Path Classes="icon" Data="{StaticResource IconProject}" IsVisible="{Binding !SelectedTab.IsProjectJobRunning, FallbackValue=True}" />
+                  <Path Classes="icon" Data="{StaticResource IconProject}" IsVisible="{Binding !SelectedTab.ProjectTools.IsJobRunning, FallbackValue=True}" />
                   <TextBlock Classes="status busy" Text="●" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center"
-                             IsVisible="{Binding SelectedTab.IsProjectJobRunning, FallbackValue=False}" />
+                             IsVisible="{Binding SelectedTab.ProjectTools.IsJobRunning, FallbackValue=False}" />
                 </Panel>
                 <Path DockPanel.Dock="Right" Data="{StaticResource IconChevronRight}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="9" Height="9"
                       Stretch="Uniform" VerticalAlignment="Center" Margin="6,0,0,0" IsVisible="{Binding IsSidebarExpanded}" />
-                <TextBlock Margin="10,0,0,0" Text="{Binding SelectedTab.ProjectButtonText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                <TextBlock Margin="10,0,0,0" Text="{Binding SelectedTab.ProjectTools.ButtonText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                            IsVisible="{Binding IsSidebarExpanded}" />
               </DockPanel>
               <Button.Flyout>
                 <Flyout Placement="RightEdgeAlignedBottom" Opened="OnProjectMenuOpened">
                   <StackPanel x:Name="ProjectMenu" MinWidth="300" MaxWidth="440" Spacing="1" DataContext="{Binding SelectedTab}" x:DataType="vm:TabViewModel">
-                    <TextBlock Text="{Binding ProjectHeaderTitle}" FontWeight="SemiBold" Margin="8,2,8,0" />
-                    <ItemsControl ItemsSource="{Binding ProjectHeaderLines}" Margin="8,0,8,2">
+                    <TextBlock Text="{Binding ProjectTools.HeaderTitle}" FontWeight="SemiBold" Margin="8,2,8,0" />
+                    <ItemsControl ItemsSource="{Binding ProjectTools.HeaderLines}" Margin="8,0,8,2">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="x:String">
                           <TextBlock Classes="muted small" Text="{Binding}" TextWrapping="Wrap" />
@@ -426,7 +434,7 @@
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
                     <!-- Entries of claudette.json that were skipped, and why (DESIGN.md §18) -->
-                    <ItemsControl ItemsSource="{Binding ProjectFileProblems}" Margin="8,0,8,2" IsVisible="{Binding HasProjectFileProblems}">
+                    <ItemsControl ItemsSource="{Binding ProjectTools.FileProblems}" Margin="8,0,8,2" IsVisible="{Binding ProjectTools.HasFileProblems}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="x:String">
                           <TextBlock Classes="small warning" Text="{Binding}" TextWrapping="Wrap" />
@@ -434,7 +442,7 @@
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
                     <Separator Margin="0,2" />
-                    <ItemsControl ItemsSource="{Binding ProjectMenu}">
+                    <ItemsControl ItemsSource="{Binding ProjectTools.Menu}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="vm:ProjectMenuEntry">
                           <Panel>
@@ -482,7 +490,7 @@
                         <TextBlock Classes="small" Text="Run this in a terminal to update:" />
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                           <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6">
-                            <SelectableTextBlock Text="{Binding ManualCommand}" FontFamily="{StaticResource MonoFont}" TextWrapping="Wrap" />
+                            <SelectableTextBlock Text="{Binding ManualCommand}" FontFamily="{DynamicResource MonoFont}" TextWrapping="Wrap" />
                           </Border>
                           <Button Grid.Column="1" Content="Copy" Command="{Binding CopyManualCommandCommand}" VerticalAlignment="Center" />
                         </Grid>
@@ -497,7 +505,7 @@
                       <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
                       <Border Background="{DynamicResource SubtleBrush}" CornerRadius="6" Padding="8,6" MaxHeight="180" IsVisible="{Binding HasOutput}">
                         <ScrollViewer>
-                          <SelectableTextBlock Text="{Binding Output}" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
+                          <SelectableTextBlock Text="{Binding Output}" FontFamily="{DynamicResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
                         </ScrollViewer>
                       </Border>
                       <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" IsVisible="{Binding ResultText, Converter={x:Static ObjectConverters.IsNotNull}}" />
@@ -628,6 +636,17 @@
         <ContentControl.DataTemplates>
           <DataTemplate DataType="vm:NewTabPickerViewModel">
             <views:NewTabPickerView />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+    </Border>
+
+    <!-- Command palette (DESIGN.md §4, "Command palette") -->
+    <Border Grid.ColumnSpan="2" Classes="overlay" IsVisible="{Binding IsPaletteOpen}" PointerPressed="OnPaletteOverlayPressed">
+      <ContentControl Content="{Binding Palette}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,70,0,0">
+        <ContentControl.DataTemplates>
+          <DataTemplate DataType="vm:CommandPaletteViewModel">
+            <views:CommandPaletteView />
           </DataTemplate>
         </ContentControl.DataTemplates>
       </ContentControl>

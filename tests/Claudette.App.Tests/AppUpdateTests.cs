@@ -21,14 +21,14 @@ public class AppUpdateTests
 
     private static readonly AppVersion Current = new(1, 2, 0);
 
-    private static string Release(string version, bool prerelease = false, string arch = "x64") => $$"""
+    private static string Release(string version, bool prerelease = false, string arch = "x64", bool digest = true) => $$"""
         {
           "tag_name": "v{{version}}", "name": "Claudette {{version}}", "draft": false, "prerelease": {{(prerelease ? "true" : "false")}},
           "html_url": "https://github.com/reapazor/Claudette/releases/tag/v{{version}}", "published_at": "2026-09-20T09:30:00Z",
           "body": "- Better things",
           "assets": [ {
             "name": "Claudette-{{version}}-{{arch}}.msix", "browser_download_url": "https://example.test/{{version}}.msix", "size": {{Package.Length}},
-            "digest": "sha256:{{Convert.ToHexStringLower(SHA256.HashData(Package))}}"
+            "digest": {{(digest ? $"\"sha256:{Convert.ToHexStringLower(SHA256.HashData(Package))}\"" : "null")}}
           } ]
         }
         """;
@@ -366,6 +366,21 @@ public class AppUpdateTests
         Assert.True(s.Badge.HasBadge);
         Assert.False(s.Badge.CanRestartToUpdate);
         Assert.Equal("This release has no package for this computer yet. See its release page.", s.Badge.ManualText);
+    }
+
+    [Fact]
+    public async Task A_package_without_a_checksum_is_announced_but_not_downloaded()
+    {
+        await using var s = Create(releases: [Release("1.3.0", digest: false)]);
+
+        await s.Updates.CheckNowAsync();
+
+        Assert.True(s.Badge.HasBadge);
+        Assert.False(s.Badge.CanRestartToUpdate);
+        Assert.False(s.Badge.CanDownload);
+        Assert.Equal("GitHub published no checksum for this release's package, so Claudette can't check it. Download it from its release page.", s.Badge.ManualText);
+        Assert.False(await s.Updates.InstallAsync());
+        Assert.DoesNotContain(s.GitHub.Requests, r => r.StartsWith("https://example.test/", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -49,13 +49,20 @@ public static class ProcessTreeTracker
     private static ProcessTreeRegistry Windows(TimeProvider time, ILogger logger) =>
         new(pid => WindowsProcessTree.Create(pid, time, logger));
 
+    /// <summary>The tabs' trees share their scans for sampling (<see cref="ScanCache{TProcess}"/>).</summary>
     [SupportedOSPlatform("linux")]
-    private static ProcessTreeRegistry Linux(TimeProvider time, ILogger logger) =>
-        new(pid => new LinuxProcessTree(pid, time, logger));
+    private static ProcessTreeRegistry Linux(TimeProvider time, ILogger logger)
+    {
+        var scans = new ScanCache<LinuxStat>(time, ScanCache<LinuxStat>.DefaultFreshFor);
+        return new(pid => new LinuxProcessTree(pid, time, logger, scans));
+    }
 
     [SupportedOSPlatform("macos")]
-    private static ProcessTreeRegistry MacOS(IProcessLauncher launcher, TimeProvider time, ILogger logger) =>
-        new(pid => new MacProcessTree(pid, launcher, time, logger));
+    private static ProcessTreeRegistry MacOS(IProcessLauncher launcher, TimeProvider time, ILogger logger)
+    {
+        var scans = new ScanCache<PsEntry>(time, ScanCache<PsEntry>.DefaultFreshFor);
+        return new(pid => new MacProcessTree(pid, launcher, time, logger, scans));
+    }
 }
 
 /// <summary>The trees being tracked, one per root PID. A tree is forgotten when it's disposed.</summary>

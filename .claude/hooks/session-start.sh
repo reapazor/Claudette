@@ -12,8 +12,9 @@ cd "$CLAUDE_PROJECT_DIR"
 DOTNET_ROOT="$HOME/.dotnet"
 export DOTNET_ROOT PATH="$DOTNET_ROOT:$PATH" DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
 
-# The installer is idempotent: it skips the download when the SDK global.json asks for is present.
-if ! dotnet --list-sdks 2>/dev/null | grep -q '^10\.'; then
+# `dotnet --version` here resolves global.json, so it fails unless an SDK it accepts (10.0.4xx or later) is installed:
+# any other 10.0 SDK doesn't count. The installer is idempotent too.
+if ! dotnet --version >/dev/null 2>&1; then
   curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
   bash /tmp/dotnet-install.sh --jsonfile global.json --install-dir "$DOTNET_ROOT"
 fi

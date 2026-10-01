@@ -56,20 +56,51 @@ public sealed class SystemProcesses : ISystemProcesses
         return [];
     }
 
-    public void KillTree(int pid)
+    public void KillTree(SystemProcess target)
     {
-        if (pid == _self)
+        if (target.Pid == _self)
         {
             return;
         }
         try
         {
-            using var process = Process.GetProcessById(pid);
+            using var process = Process.GetProcessById(target.Pid);
+            // The one found may have exited while the user decided, and its PID gone to another program.
+            if (target.StartedAt is { } started && StartTimeOf(process) != started)
+            {
+                return;
+            }
             process.Kill(entireProcessTree: true);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception or NotSupportedException)
         {
             // Already exited, or not ours to end.
+        }
+    }
+
+    /// <summary>When the process with <paramref name="pid"/> started, or null if it can't be read.</summary>
+    internal static DateTimeOffset? StartTimeOf(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return StartTimeOf(process);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private static DateTimeOffset? StartTimeOf(Process process)
+    {
+        try
+        {
+            return new DateTimeOffset(process.StartTime.ToUniversalTime());
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or NotSupportedException)
+        {
+            return null;
         }
     }
 
@@ -99,7 +130,7 @@ public sealed class SystemProcesses : ISystemProcesses
                     commandLine = WindowsProcessTree.CommandLine(handle);
                 }
             }
-            found.Add(new SystemProcess(pid, Bare(name), commandLine));
+            found.Add(new SystemProcess(pid, Bare(name), commandLine, StartTimeOf(pid)));
         }
         return found;
     }
@@ -127,7 +158,7 @@ public sealed class SystemProcesses : ISystemProcesses
             {
                 continue;
             }
-            found.Add(new SystemProcess(pid, name, arguments.Count > 0 ? string.Join(' ', arguments) : null));
+            found.Add(new SystemProcess(pid, name, arguments.Count > 0 ? string.Join(' ', arguments) : null, StartTimeOf(pid)));
         }
         return found;
     }
@@ -144,6 +175,7 @@ public sealed class SystemProcesses : ISystemProcesses
             }
         }
         environment["LC_ALL"] = "C";
+        environment["TZ"] = PsOutput.TimeZone;
         var result = ProcessRunner.RunAsync(_launcher, new ProcessStartSpec("/bin/ps", PsOutput.Arguments) { Environment = environment }, PsTimeout, _time)
             .GetAwaiter()
             .GetResult();
@@ -179,7 +211,7 @@ public sealed class SystemProcesses : ISystemProcesses
             var name = Path.GetFileName(program);
             if (SystemProcessNames.Matches(name, names))
             {
-                found.Add(new SystemProcess(entry.Pid, name, entry.Args));
+                found.Add(new SystemProcess(entry.Pid, name, entry.Args, entry.StartTime is null ? null : StartTimeOf(entry.Pid)));
             }
         }
         return found;

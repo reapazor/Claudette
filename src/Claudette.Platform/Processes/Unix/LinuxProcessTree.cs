@@ -10,8 +10,8 @@ namespace Claudette.Platform.Processes.Unix;
 /// <c>exe</c> link. CPU % follows <c>top</c>: 100% is one core.
 /// </summary>
 [SupportedOSPlatform("linux")]
-internal sealed class LinuxProcessTree(int rootPid, TimeProvider time, ILogger logger)
-    : UnixProcessTree<LinuxStat>(rootPid, time, logger)
+internal sealed class LinuxProcessTree(int rootPid, TimeProvider time, ILogger logger, ScanCache<LinuxStat>? scans = null)
+    : UnixProcessTree<LinuxStat>(rootPid, ReadStat(rootPid) is { IsZombie: false } root ? root.StartKey : null, time, logger, scans)
 {
     private const int ScClkTck = 2;
     private const long DefaultClockTicks = 100;

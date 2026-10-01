@@ -3,7 +3,11 @@ namespace Claudette.Core.ProjectTools;
 /// <summary>A running process on this machine.</summary>
 /// <param name="Name">The executable's name without <c>.exe</c>, such as <c>UnrealEditor</c>.</param>
 /// <param name="CommandLine">Null when it can't be read (another user's process, say).</param>
-public sealed record SystemProcess(int Pid, string Name, string? CommandLine);
+/// <param name="StartedAt">
+/// When it started, if that could be read: with the PID, it tells this process apart from a later one that reuses the
+/// PID after it exits.
+/// </param>
+public sealed record SystemProcess(int Pid, string Name, string? CommandLine, DateTimeOffset? StartedAt = null);
 
 /// <summary>
 /// Every running process by name, for project tools (DESIGN.md §18): whether an editor has a project open, and
@@ -17,8 +21,12 @@ public interface ISystemProcesses
     /// </summary>
     IReadOnlyList<SystemProcess> Find(IReadOnlyCollection<string> names);
 
-    /// <summary>Ends a process and everything it started. Does nothing if it has already exited.</summary>
-    void KillTree(int pid);
+    /// <summary>
+    /// Ends a process found by <see cref="Find"/> and everything it started. Does nothing if it has already exited, or
+    /// if its PID now belongs to a process that started at another time: the one found exited while the user decided,
+    /// and its PID was reused.
+    /// </summary>
+    void KillTree(SystemProcess process);
 }
 
 public static class SystemProcessNames

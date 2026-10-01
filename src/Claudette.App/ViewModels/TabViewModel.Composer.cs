@@ -26,6 +26,44 @@ public sealed partial class TabViewModel
     private ProjectFileIndex? _fileIndex;
     private ComposerCompletions? _completions;
 
+    /// <summary>The tab's earlier prompts, for Up and Down in the composer (DESIGN.md §5, "Composer").</summary>
+    private readonly PromptRecall _recall = new();
+
+    /// <summary>The composer's text is being set to a recalled prompt, which isn't the user typing.</summary>
+    private bool _recalling;
+
+    /// <summary>Up on the composer's first line: the prompt before, keeping what was typed. False when there's none.</summary>
+    internal bool RecallOlderPrompt() => _recall.Older(ComposerText) is { } prompt && ShowRecalled(prompt);
+
+    /// <summary>Down on its last line, while going back through them: the prompt after, then what was typed.</summary>
+    internal bool RecallNewerPrompt() => _recall.Newer() is { } prompt && ShowRecalled(prompt);
+
+    /// <summary>Going back through earlier prompts: Down moves through them rather than the text.</summary>
+    internal bool IsRecallingPrompt => _recall.IsRecalling;
+
+    private bool ShowRecalled(string prompt)
+    {
+        _recalling = true;
+        try
+        {
+            ComposerText = prompt;
+        }
+        finally
+        {
+            _recalling = false;
+        }
+        return true;
+    }
+
+    partial void OnComposerTextChanged(string value)
+    {
+        if (!_recalling)
+        {
+            // Typing, or sending: the next Up starts from the newest again.
+            _recall.Reset();
+        }
+    }
+
     /// <summary>The <c>/</c> and <c>@</c> popup.</summary>
     public ComposerCompletions Completions => _completions ??= new ComposerCompletions(() => SlashCommands, () => FileIndex, _services.Dispatcher);
 

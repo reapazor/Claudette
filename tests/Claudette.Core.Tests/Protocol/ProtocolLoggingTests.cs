@@ -53,6 +53,23 @@ public class ProtocolLoggingTests
     }
 
     [Fact]
+    public void Two_logs_with_the_same_name_dont_collide()
+    {
+        // Two tabs in the same folder restored in the same second: the second used to fail to open its log.
+        using var temp = new TempFolder();
+        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-29T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
+        var path = temp.Combine("logs", ProtocolLog.FileName(time.GetUtcNow(), "api"));
+
+        using var first = new ProtocolLog(path, time);
+        using var second = new ProtocolLog(path, time);
+        using var third = new ProtocolLog(path, time);
+
+        Assert.Equal(path, first.Path);
+        Assert.EndsWith("20260929-100000-api-2.log", second.Path, StringComparison.Ordinal);
+        Assert.EndsWith("20260929-100000-api-3.log", third.Path, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Old_logs_are_deleted()
     {
         using var temp = new TempFolder();

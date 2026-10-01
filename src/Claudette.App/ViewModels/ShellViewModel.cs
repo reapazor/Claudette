@@ -6,6 +6,7 @@ using Claudette.Core.Development;
 using Claudette.Core.Diffs;
 using Claudette.Core.Git;
 using Claudette.Core.Library;
+using Claudette.Core.Protocol;
 using Claudette.Core.Settings;
 using Claudette.Platform.Processes;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -63,7 +64,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         {
             foreach (var tab in AllTabs)
             {
-                tab.OnRemoteControlAvailabilityChanged();
+                tab.RemoteControl.OnAvailabilityChanged();
             }
         };
         _services.UsageHistoryCleared += (_, resetTabTotals) =>
@@ -140,19 +141,19 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     internal void OnTabProcessesSampled()
     {
         var all = AllTabs.ToArray();
-        var sampled = all.Where(t => t.LatestProcessSummary is not null).ToArray();
+        var sampled = all.Where(t => t.ProcessMonitor.LatestSummary is not null).ToArray();
         if (sampled.Length == 0)
         {
             ProcessTotalsText = null;
             ProcessTotalsTip = null;
             return;
         }
-        ProcessTotalsText = ProcessSummary.Sum(sampled.Select(t => t.LatestProcessSummary!)).UsageText;
+        ProcessTotalsText = ProcessSummary.Sum(sampled.Select(t => t.ProcessMonitor.LatestSummary!)).UsageText;
         var others = all.Length - sampled.Length;
         ProcessTotalsTip = string.Join("\n",
         [
             "Processes of every tab, Claude Code included",
-            .. sampled.Select(t => $"{t.DisplayName}: {t.LatestProcessSummary}"),
+            .. sampled.Select(t => $"{t.DisplayName}: {t.ProcessMonitor.LatestSummary}"),
             .. others == 0 ? Array.Empty<string>()
                 : [$"Not counted: {(others == 1 ? "1 tab" : $"{others} tabs")} not started, or with the process monitor off"],
         ]);
@@ -423,7 +424,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         if (takeOver)
         {
-            _services.Library.Leases.Acquire(entry.SessionId, _services.Library.Library.GetSessionFolder(entry.SessionId));
+            var library = _services.Library;
+            await Task.Run(() => library.Leases.TakeOver(entry.SessionId, library.Library.GetSessionFolder(entry.SessionId)));
         }
         OpenSession(NewState(entry, folder, transcriptPath: null, fork, _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp));
     }
@@ -484,7 +486,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         if (takeOver)
         {
-            library.Leases.Acquire(entry.SessionId, library.Library.GetSessionFolder(entry.SessionId));
+            await Task.Run(() => library.Leases.TakeOver(entry.SessionId, library.Library.GetSessionFolder(entry.SessionId)));
         }
         OpenSession(NewState(entry, folder, transcript, fork, _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp));
     }
@@ -556,6 +558,28 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         return state;
     }
 
+    /// <summary>
+    /// <b>Duplicate tab</b> (DESIGN.md §5, "Rewind and branch"): a new tab in its group carrying its session on as a copy,
+    /// or a new session in the same folder when it hasn't one yet.
+    /// </summary>
+    [RelayCommand]
+    private Task DuplicateTabAsync(TabViewModel? tab) =>
+        tab is null ? Task.CompletedTask : OpenCopyAsync(tab.CopyState(CopyPoint.Whole), text: null, images: []);
+
+    /// <summary>Opens a tab copying another (<see cref="TabViewModel.CopyState"/>), with a message in its composer.</summary>
+    internal Task OpenCopyAsync(TabState state, string? text, IReadOnlyList<MessageImage> images)
+    {
+        var tab = new TabViewModel(_services, this, state, isRestored: state.SessionId is not null);
+        AddTab(tab);
+        SelectedTab = tab;
+        SaveTabs();
+        if (text is not null)
+        {
+            tab.PutInComposer(text, images);
+        }
+        return tab.EnsureStartedAsync();
+    }
+
     private void OpenSession(TabState state)
     {
         FolderHistory.Touch(_services.State, state.Folder, _services.Time.GetUtcNow(), _services.Settings.NewTabs.RecentFolderLimit);
@@ -567,8 +591,9 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     // ---- Closing tabs -----------------------------------------------------------------------------------
 
-    [RelayCommand]
-    private void CloseTab(TabViewModel? tab)
+    /// <summary>Several tabs can be closing at once: each waits up to a few seconds for its claude to finish.</summary>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task CloseTabAsync(TabViewModel? tab)
     {
         if (tab is null)
         {
@@ -584,7 +609,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             reasons.Add("Claude is still working in it and will be stopped.");
         }
         // Processes the tab started, such as dev servers, are stopped with it unless the user keeps them (DESIGN.md §4).
-        var running = tab.RunningChildProcesses();
+        // Listing them scans every process (ps on macOS): not on the UI thread.
+        var running = await Task.Run(tab.ProcessMonitor.RunningChildProcesses);
         if (running.Count > 0)
         {
             var names = string.Join(", ", running.Take(5).Select(p => $"{p.Name} ({p.Pid})")) + (running.Count > 5 ? $" and {running.Count - 5} more" : "");
@@ -596,7 +622,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         if (reasons.Count == 0)
         {
-            _ = RemoveTabAsync(tab);
+            await RemoveTabAsync(tab);
             return;
         }
         Confirmation = new ConfirmationViewModel($"Close \"{tab.DisplayName}\"?", string.Join(" ", reasons), "Close", () => RemoveTabAsync(tab), () => Confirmation = null);
@@ -615,26 +641,24 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     internal void Confirm(string title, string message, string confirmText, Func<Task> onConfirm) =>
         Confirmation = new ConfirmationViewModel(title, message, confirmText, onConfirm, () => Confirmation = null);
 
+    /// <summary>A confirmation with a second choice besides the main one.</summary>
+    internal void Confirm(string title, string message, string confirmText, Func<Task> onConfirm, string secondaryText, Func<Task> onSecondary) =>
+        Confirmation = new ConfirmationViewModel(title, message, confirmText, onConfirm, () => Confirmation = null, secondaryText, onSecondary);
+
+    /// <summary>
+    /// Closes them together: each tab leaves the sidebar at once, then they wait for their claude processes side by
+    /// side rather than one after another (a few seconds each for a working tab).
+    /// </summary>
     [RelayCommand]
-    private async Task CloseOtherTabsAsync(TabViewModel? keep)
-    {
-        foreach (var tab in AllTabs.Where(t => t != keep && !t.IsPinned).ToArray())
-        {
-            await RemoveTabAsync(tab);
-        }
-    }
+    private Task CloseOtherTabsAsync(TabViewModel? keep) =>
+        Task.WhenAll(AllTabs.Where(t => t != keep && !t.IsPinned).ToArray().Select(tab => RemoveTabAsync(tab)));
 
     [RelayCommand]
-    private async Task CloseGroupAsync(TabGroupViewModel? group)
-    {
-        foreach (var tab in group?.Tabs.Where(t => !t.IsPinned).ToArray() ?? [])
-        {
-            await RemoveTabAsync(tab);
-        }
-    }
+    private Task CloseGroupAsync(TabGroupViewModel? group) =>
+        Task.WhenAll((group?.Tabs.Where(t => !t.IsPinned).ToArray() ?? []).Select(tab => RemoveTabAsync(tab)));
 
-    [RelayCommand]
-    private void CloseSelectedTab() => CloseTab(SelectedTab);
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private Task CloseSelectedTabAsync() => CloseTabAsync(SelectedTab);
 
     private async Task RemoveTabAsync(TabViewModel tab, bool killProcesses = true)
     {
@@ -1034,7 +1058,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     {
         foreach (var tab in AllTabs.Where(t => FolderHistory.SamePath(t.Folder, folder)))
         {
-            tab.ReloadCustomActions();
+            tab.ProjectTools.ReloadCustomActions();
         }
     }
 

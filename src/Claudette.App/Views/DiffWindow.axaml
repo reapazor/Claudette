@@ -48,7 +48,21 @@
           <ToggleButton Content="Whole file" IsChecked="{Binding ShowWholeFile}" />
           <Button Content="Open in diff tool" Command="{Binding OpenInDiffToolCommand}" IsVisible="{Binding CanOpenInDiffTool}" />
           <Button Content="Open in editor" Command="{Binding OpenInEditorCommand}" />
-          <Button Content="…">
+          <!-- DESIGN.md §8, "Reverting": asks first, in place -->
+          <Button Content="Revert file" Command="{Binding AskToRevertFileCommand}" ToolTip.Tip="Put the whole file back as it was before Claude changed it">
+            <Button.IsVisible>
+              <MultiBinding Converter="{x:Static BoolConverters.And}">
+                <Binding Path="CanRevert" />
+                <Binding Path="!IsConfirmingRevert" />
+              </MultiBinding>
+            </Button.IsVisible>
+          </Button>
+          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsConfirmingRevert}">
+            <TextBlock Classes="small" Text="Put the whole file back?" VerticalAlignment="Center" />
+            <Button Classes="accent" Content="Revert" Command="{Binding RevertFileCommand}" />
+            <Button Content="Cancel" Command="{Binding CancelRevertCommand}" />
+          </StackPanel>
+          <Button Content="…" ToolTip.Tip="More" AutomationProperties.Name="More actions">
             <Button.Flyout>
               <MenuFlyout>
                 <MenuItem Header="Reveal in folder" Command="{Binding RevealCommand}" />
@@ -85,13 +99,16 @@
           <ListBox.ItemTemplate>
             <DataTemplate DataType="diffs:InlineDiffRow">
               <Border Classes="line" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}" Padding="6,0">
-                <Grid ColumnDefinitions="48,48,16,*">
+                <Grid ColumnDefinitions="48,48,16,*,Auto">
                   <TextBlock Classes="mono muted small" Text="{Binding OldNumber}" HorizontalAlignment="Right" Margin="0,0,8,0" />
                   <TextBlock Grid.Column="1" Classes="mono muted small" Text="{Binding NewNumber}" HorizontalAlignment="Right" Margin="0,0,8,0" />
                   <TextBlock Grid.Column="2" Classes="mono" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Text="{Binding Marker}" />
                   <controls:ScrollingLine Grid.Column="3">
                     <controls:ColoredTextBlock Classes="mono" Code="{Binding Text}" Runs="{Binding Runs}" />
                   </controls:ScrollingLine>
+                  <Button Grid.Column="4" Classes="flat" Padding="6,0" FontSize="11" Content="Revert" IsVisible="{Binding CanRevert}"
+                          ToolTip.Tip="Undo just this change"
+                          Command="{Binding $parent[Window].((diffs:DiffWindowViewModel)DataContext).RevertHunkCommand}" CommandParameter="{Binding Hunk}" />
                 </Grid>
               </Border>
             </DataTemplate>
@@ -106,7 +123,12 @@
             <DataTemplate DataType="diffs:SideBySideDiffRow">
               <Panel>
                 <Border Classes="line header" Padding="6,0" IsVisible="{Binding IsHeader}">
-                  <TextBlock Classes="mono muted small" Text="{Binding HeaderText}" />
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Classes="mono muted small" Text="{Binding HeaderText}" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Classes="flat" Padding="6,0" FontSize="11" Content="Revert" IsVisible="{Binding CanRevert}"
+                            ToolTip.Tip="Undo just this change"
+                            Command="{Binding $parent[Window].((diffs:DiffWindowViewModel)DataContext).RevertHunkCommand}" CommandParameter="{Binding Hunk}" />
+                  </Grid>
                 </Border>
                 <Grid ColumnDefinitions="*,1,*" IsVisible="{Binding !IsHeader}">
                   <Border Classes="line" Classes.removed="{Binding Left.IsRemoved, FallbackValue=False}" Classes.empty="{Binding !HasLeft}" Padding="6,0">

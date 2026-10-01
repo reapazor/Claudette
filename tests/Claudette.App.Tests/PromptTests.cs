@@ -202,6 +202,23 @@ public class PromptTests
     }
 
     [Fact]
+    public async Task A_prompt_resolved_twice_is_only_counted_off_once()
+    {
+        // Answered here as the Claude app answers it: Claude Code withdraws the request Claudette already answered. The
+        // other prompt still waits.
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        var first = await PromptAsync<PermissionItem>(h, tab, BashRequest);
+        await PromptAsync<PermissionItem>(h, tab, BashRequest.Replace("\"p1\"", "\"p2\"", StringComparison.Ordinal).Replace("\"t1\"", "\"t2\"", StringComparison.Ordinal));
+
+        first.AllowCommand.Execute(null);
+        h.Transport.Emit("""{"type":"control_cancel_request","request_id":"p1"}""");
+        await TabTestHarness.Eventually(() => !first.IsPending, "the answer");
+
+        Assert.Equal(TabStatus.NeedsInput, tab.Status);
+    }
+
+    [Fact]
     public async Task Bypass_mode_needs_confirmation()
     {
         await using var h = new TabTestHarness();

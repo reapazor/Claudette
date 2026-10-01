@@ -31,7 +31,10 @@ public partial class TabView : UserControl
         // Tunnel, so these are seen before the multi-line TextBox turns Enter into a new line.
         AddHandler(KeyDownEvent, OnPromptKeyDown, RoutingStrategies.Tunnel);
         Composer.AddHandler(KeyDownEvent, OnComposerKeyDown, RoutingStrategies.Tunnel);
+        // Tunnel too: the list's items take Enter for themselves.
+        ChangedFilesList.AddHandler(KeyDownEvent, OnChangedFileKeyDown, RoutingStrategies.Tunnel);
         ConversationScroll.ScrollChanged += OnConversationScrollChanged;
+        ConversationItems.ContainerPrepared += OnConversationContainerPrepared;
         // Copy on a code block goes through the tab and says "Copied" (DESIGN.md §5, "Copy and times").
         CodeBlockCopy.Attach(this);
         WireComposerAssist();
@@ -139,6 +142,10 @@ public partial class TabView : UserControl
         {
             return;
         }
+        if (HandleRecallKey(e))
+        {
+            return;
+        }
         if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift) && ViewModel is { } tab)
         {
             e.Handled = true;
@@ -148,6 +155,30 @@ public partial class TabView : UserControl
                 _stickToBottom = true;
             }
         }
+    }
+
+    /// <summary>
+    /// Up on the composer's first line goes back through the tab's earlier prompts, as a terminal's history does, and Down
+    /// on its last line comes forward again, back to what was typed (DESIGN.md §5, "Composer").
+    /// </summary>
+    private bool HandleRecallKey(KeyEventArgs e)
+    {
+        if (ViewModel is not { } tab || e.KeyModifiers != KeyModifiers.None || e.Key is not (Key.Up or Key.Down))
+        {
+            return false;
+        }
+        var text = Composer.Text ?? "";
+        var caret = Math.Clamp(Composer.CaretIndex, 0, text.Length);
+        var recalled = e.Key == Key.Up
+            ? (caret == 0 || text.LastIndexOf('\n', caret - 1) < 0) && tab.RecallOlderPrompt()
+            : tab.IsRecallingPrompt && text.IndexOf('\n', caret) < 0 && tab.RecallNewerPrompt();
+        if (!recalled)
+        {
+            return false;
+        }
+        Composer.CaretIndex = Composer.Text?.Length ?? 0;
+        e.Handled = true;
+        return true;
     }
 
     /// <summary>Follows new output unless the user has scrolled up; then offers "Jump to latest" (DESIGN.md §5).</summary>
@@ -187,10 +218,14 @@ public partial class TabView : UserControl
         base.OnDataContextChanged(e);
         if (_tab is not null)
         {
-            _tab.DiffRequested -= OnDiffRequested;
+            _tab.ChangedFiles.DiffRequested -= OnDiffRequested;
             _tab.ScrollToRequested -= OnScrollToRequested;
             _tab.AgentWindowRequested -= OnAgentWindowRequested;
+            _tab.ComposerFocusRequested -= OnComposerFocusRequested;
+            _tab.FindFocusRequested -= OnFindFocusRequested;
+            _tab.Find.PropertyChanged -= OnFindPropertyChanged;
             _tab.PropertyChanged -= OnTabPropertyChanged;
+            _tab.ProjectTools.PropertyChanged -= OnProjectToolsPropertyChanged;
             // The list belonged to that tab.
             TasksChip.Flyout?.Hide();
             _tab.IsTaskListOpen = false;
@@ -198,32 +233,121 @@ public partial class TabView : UserControl
         _tab = ViewModel;
         if (_tab is not null)
         {
-            _tab.DiffRequested += OnDiffRequested;
+            _tab.ChangedFiles.DiffRequested += OnDiffRequested;
             _tab.ScrollToRequested += OnScrollToRequested;
             _tab.AgentWindowRequested += OnAgentWindowRequested;
+            _tab.ComposerFocusRequested += OnComposerFocusRequested;
+            _tab.FindFocusRequested += OnFindFocusRequested;
+            _tab.Find.PropertyChanged += OnFindPropertyChanged;
             _tab.PropertyChanged += OnTabPropertyChanged;
+            _tab.ProjectTools.PropertyChanged += OnProjectToolsPropertyChanged;
         }
         WatchProjectOutput();
+        MarkFindCurrent();
     }
 
     private TabViewModel? _tab;
 
+    // ---- Find in the conversation (DESIGN.md §5, "Find") ---------------------------------------------------------
+
+    /// <summary>The item marked as the current match, whose container has the <c>findcurrent</c> class.</summary>
+    private ConversationItem? _findMarked;
+
+    private void OnFindFocusRequested() => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+    {
+        FindBox.Focus();
+        FindBox.SelectAll();
+    });
+
+    private void OnFindPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ConversationSearch.Current))
+        {
+            MarkFindCurrent();
+        }
+    }
+
+    /// <summary>Marks the current match's container; the conversation is virtualized, so a new container is marked as it's made.</summary>
+    private void MarkFindCurrent()
+    {
+        if (_findMarked is not null && ConversationItems.ContainerFromItem(_findMarked) is { } old)
+        {
+            old.Classes.Remove("findcurrent");
+        }
+        _findMarked = _tab?.Find.Current;
+        if (_findMarked is not null && ConversationItems.ContainerFromItem(_findMarked) is { } current)
+        {
+            current.Classes.Add("findcurrent");
+        }
+    }
+
+    private void OnConversationContainerPrepared(object? sender, ContainerPreparedEventArgs e) =>
+        e.Container.Classes.Set("findcurrent", _findMarked is not null && ReferenceEquals(ConversationItems.ItemFromContainer(e.Container), _findMarked));
+
+    /// <summary>Enter goes to the next match, Shift+Enter the one before, Esc closes the bar.</summary>
+    private void OnFindKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (ViewModel is not { } tab)
+        {
+            return;
+        }
+        switch (e.Key)
+        {
+            case Key.Enter when e.KeyModifiers == KeyModifiers.Shift:
+                tab.Find.PreviousCommand.Execute(null);
+                break;
+            case Key.Enter when e.KeyModifiers == KeyModifiers.None:
+                tab.Find.NextCommand.Execute(null);
+                break;
+            case Key.Escape when e.KeyModifiers == KeyModifiers.None:
+                CloseFind(tab);
+                break;
+            default:
+                return;
+        }
+        e.Handled = true;
+    }
+
+    private void OnCloseFind(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } tab)
+        {
+            CloseFind(tab);
+        }
+    }
+
+    /// <summary>Closes the bar, and the focus goes back to the composer.</summary>
+    private void CloseFind(TabViewModel tab)
+    {
+        tab.Find.CloseCommand.Execute(null);
+        Composer.Focus();
+    }
+
+    /// <summary>A message is back in the composer to edit (DESIGN.md §5, "Rewind and branch"): the caret goes after it.</summary>
+    private void OnComposerFocusRequested() => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+    {
+        Composer.Focus();
+        Composer.CaretIndex = Composer.Text?.Length ?? 0;
+    });
+
     /// <summary>The output of the run the Project page shows, which it follows.</summary>
     private System.Collections.ObjectModel.ObservableCollection<string>? _projectOutput;
 
-    /// <summary>
-    /// The Project page shows another run, or the last running task ended while its list was open: the list goes with
-    /// the chip.
-    /// </summary>
+    /// <summary>The last running task ended while its list was open: the list goes with the chip.</summary>
     private void OnTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(TabViewModel.SelectedProjectRun))
-        {
-            WatchProjectOutput();
-        }
-        else if (e.PropertyName == nameof(TabViewModel.HasRunningTasks) && _tab is { HasRunningTasks: false })
+        if (e.PropertyName == nameof(TabViewModel.HasRunningTasks) && _tab is { HasRunningTasks: false })
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(() => TasksChip.Flyout?.Hide());
+        }
+    }
+
+    /// <summary>The Project page shows another run.</summary>
+    private void OnProjectToolsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ProjectToolsViewModel.SelectedRun))
+        {
+            WatchProjectOutput();
         }
     }
 
@@ -251,7 +375,7 @@ public partial class TabView : UserControl
         {
             _projectOutput.CollectionChanged -= OnProjectOutputChanged;
         }
-        _projectOutput = _tab?.SelectedProjectRun?.Output;
+        _projectOutput = _tab?.ProjectTools.SelectedRun?.Output;
         if (_projectOutput is not null)
         {
             _projectOutput.CollectionChanged += OnProjectOutputChanged;
@@ -290,9 +414,23 @@ public partial class TabView : UserControl
             BringTopIntoView(container);
             return;
         }
+        // The conversation is virtualized: bring the top-level item that holds it into view first, so it has controls.
+        if (ViewModel?.TopLevelItemOf(item) is { } outer)
+        {
+            ConversationItems.ScrollIntoView(outer);
+            if (ReferenceEquals(outer, item) && ConversationItems.ContainerFromItem(item) is { } realized)
+            {
+                BringTopIntoView(realized);
+                return;
+            }
+        }
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            if (ConversationItems.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().FirstOrDefault(p => ReferenceEquals(p.Content, item)) is { } nested)
+            if (ConversationItems.ContainerFromItem(item) is { } top)
+            {
+                BringTopIntoView(top);
+            }
+            else if (ConversationItems.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().FirstOrDefault(p => ReferenceEquals(p.Content, item)) is { } nested)
             {
                 BringTopIntoView(nested);
             }
@@ -338,36 +476,61 @@ public partial class TabView : UserControl
         _agentWindow?.Close();
     }
 
-    /// <summary>Without a diff tool, selecting a file opens the built-in diff view; with one, double-click opens the tool (DESIGN.md §8).</summary>
-    private void OnChangedFileSelected(object? sender, SelectionChangedEventArgs e)
+    /// <summary>
+    /// A click opens the built-in diff view (DESIGN.md §8). Not on selection, so the arrow keys move through the list
+    /// without opening a window for each file; Enter opens the selected one.
+    /// </summary>
+    private void OnChangedFileTapped(object? sender, TappedEventArgs e)
     {
-        if (ChangedFilesList.SelectedItem is ChangedFileRow row && ViewModel is { HasDiffTool: false } tab)
+        if (ChangedFileAt(e) is { } row && ViewModel?.ChangedFiles is { HasDiffTool: false } files)
         {
-            tab.OpenFileDiffCommand.Execute(row);
-            // Clear it, so clicking the same file again opens it again.
-            ChangedFilesList.SelectedItem = null;
+            files.OpenFileDiffCommand.Execute(row);
         }
     }
 
+    /// <summary>
+    /// A double click opens the diff tool when one is set. Without one, the second click of it opens the built-in view
+    /// again, as a single click would (a double click raises no second tap).
+    /// </summary>
     private void OnChangedFileDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (ChangedFileAt(e) is { } row && ViewModel is { HasDiffTool: true } tab)
+        if (ChangedFileAt(e) is not { } row || ViewModel?.ChangedFiles is not { } files)
         {
-            tab.OpenFileInDiffToolCommand.Execute(row);
+            return;
+        }
+        if (files.HasDiffTool)
+        {
+            files.OpenFileInDiffToolCommand.Execute(row);
+        }
+        else
+        {
+            files.OpenFileDiffCommand.Execute(row);
         }
     }
 
+    /// <summary>Enter opens the selected file as a click (or, with a diff tool, a double click) would.</summary>
     private void OnChangedFileKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && ChangedFilesList.SelectedItem is ChangedFileRow row && ViewModel is { } tab)
         {
-            tab.OpenFileCommand.Execute(row);
+            if (tab.ChangedFiles.HasDiffTool)
+            {
+                tab.ChangedFiles.OpenFileInDiffToolCommand.Execute(row);
+            }
+            else
+            {
+                tab.ChangedFiles.OpenFileDiffCommand.Execute(row);
+            }
             e.Handled = true;
         }
     }
 
+    /// <summary>The row under a tap, unless it was on one of the row's own controls (the Reviewed box, a button).</summary>
     private static ChangedFileRow? ChangedFileAt(TappedEventArgs e) =>
-        (e.Source as Control)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as ChangedFileRow;
+        e.Source is Control source && source.FindAncestorOfType<Avalonia.Controls.Primitives.ToggleButton>(includeSelf: true) is null
+            && source.FindAncestorOfType<Button>(includeSelf: true) is null
+            ? source.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as ChangedFileRow
+            : null;
 
     private void OnShowProcesses(object? sender, RoutedEventArgs e)
     {
@@ -381,7 +544,8 @@ public partial class TabView : UserControl
     /// <summary>A project job's output follows its newest line, as a terminal does.</summary>
     private void OnProjectOutputChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
-        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
+        // A batch of lines is one Add, or a Reset when the start was trimmed to keep to the limit.
+        if (e.Action is System.Collections.Specialized.NotifyCollectionChangedAction.Add or System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
         {
             ScrollProjectOutputToEnd();
         }

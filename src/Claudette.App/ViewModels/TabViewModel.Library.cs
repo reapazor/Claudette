@@ -114,6 +114,9 @@ public sealed partial class TabViewModel
             case LibraryCopyResult.Failed failed:
                 _conversation.AddNote($"Couldn't copy this session to the session library: {failed.Reason}", NoteKind.Warning);
                 break;
+            case LibraryCopyResult.NotHeld when !IsReadOnly:
+                _conversation.AddNote("Didn't copy this session to the session library: its lease there couldn't be read, or another machine has it open. Try again in a moment.", NoteKind.Warning);
+                break;
         }
     }
 
@@ -195,19 +198,24 @@ public sealed partial class TabViewModel
         var library = _services.Library;
         try
         {
-            if (library.Library.GetTranscriptPath(sessionId) is null)
+            // File reads on the library folder, which may be a slow or offline drive: not on the UI thread.
+            var status = await Task.Run(() => library.Library.GetTranscriptPath(sessionId) is null ? null : library.CheckLease(sessionId));
+            if (status is null)
             {
                 return true;
             }
-            switch (library.CheckLease(sessionId))
+            switch (status)
             {
                 case LeaseStatus.HeldByOther other:
                     await OnTakenOverAsync(other.Machine);
                     return false;
                 case LeaseStatus.Mine:
+                case LeaseStatus.Unreadable:
+                    // Unreadable: perhaps a lease mid-sync. The session still works here; the copy after the next turn
+                    // takes the lease if it's free by then, and refuses if another machine has it.
                     return true;
                 default:
-                    library.Leases.Acquire(sessionId, library.Library.GetSessionFolder(sessionId));
+                    await Task.Run(() => library.Leases.TakeOver(sessionId, library.Library.GetSessionFolder(sessionId)));
                     return true;
             }
         }
@@ -224,7 +232,9 @@ public sealed partial class TabViewModel
     {
         if (State.SessionId is { } sessionId && TakenOverBy is null)
         {
-            _services.Library.Leases.Release(sessionId);
+            // Deleting a file in the library folder: not on the UI thread.
+            var leases = _services.Library.Leases;
+            _ = Task.Run(() => leases.Release(sessionId));
         }
     }
 }
