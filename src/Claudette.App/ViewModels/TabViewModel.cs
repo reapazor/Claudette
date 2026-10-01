@@ -151,7 +151,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     public string FolderName => Path.GetFileName(Folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) is { Length: > 0 } name ? name : Folder;
 
-    public ObservableCollection<ConversationItem> Items { get; } = [];
+    public BatchedCollection<ConversationItem> Items { get; } = [];
 
     public TodoList TodoList { get; } = new();
 
@@ -1539,6 +1539,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             Agents.IsReplaying = true;
             // Read again after going back (DESIGN.md §5, "Rewind and branch"), the prompts are already there to recall.
             var recallPrompts = _recall.Count == 0;
+            // The view hears of the earlier conversation once, as a whole, rather than once per item.
+            using var deferred = Items.DeferNotifications();
             foreach (var item in transcript.Items)
             {
                 switch (item)
