@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Claudette.Core.Protocol;
 using Claudette.Core.Settings;
+using Claudette.Core.Json;
 
 namespace Claudette.Core.Library;
 
@@ -180,7 +181,7 @@ public sealed class LeaseManager : IDisposable
         try
         {
             var path = Path.Combine(sessionFolder, FileName);
-            if (!File.Exists(path) || JsonNode.Parse(LibraryFiles.ReadText(path)) is not JsonObject lease)
+            if (!File.Exists(path) || JsonTree.Parse(LibraryFiles.ReadText(path)) is not JsonObject lease)
             {
                 return null;
             }

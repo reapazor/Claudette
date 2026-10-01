@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Claudette.Core.Library;
 using Claudette.Core.Protocol;
+using Claudette.Core.Json;
 
 namespace Claudette.Core.Settings;
 
@@ -123,7 +124,7 @@ public static class SettingsSync
         var file = new SyncedSettingsFile();
         try
         {
-            if (!File.Exists(path) || JsonNode.Parse(File.ReadAllText(path)) is not JsonObject root)
+            if (!File.Exists(path) || JsonTree.Parse(File.ReadAllText(path)) is not JsonObject root)
             {
                 return file;
             }

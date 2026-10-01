@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Json;
 
 namespace Claudette.Core.ProjectTools;
 
@@ -348,7 +349,7 @@ public static class ProjectFile
         }
         try
         {
-            var node = JsonNode.Parse(text.TrimStart('﻿'), documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            var node = JsonTree.Parse(text.TrimStart('﻿'), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
             if (node is JsonObject obj)
             {
                 root = obj;

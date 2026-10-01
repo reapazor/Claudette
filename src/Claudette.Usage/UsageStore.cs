@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Claudette.Core.Json;
 
 namespace Claudette.Usage;
 
@@ -571,7 +572,7 @@ public sealed class UsageStore : IDisposable
     {
         try
         {
-            return JsonNode.Parse(json) is JsonArray array
+            return JsonTree.Parse(json) is JsonArray array
                 ? [.. array.OfType<JsonObject>()
                     .Where(m => m.GetString("label") is not null && m.GetDouble("percent") is not null)
                     .Select(m => new ModelSample(

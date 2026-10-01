@@ -36,6 +36,18 @@ public sealed class StartingPermissionModeTests : IDisposable
     }
 
     [Fact]
+    public void A_settings_file_with_a_repeated_key_is_read_as_Claude_Code_reads_it()
+    {
+        // Claude Code's JSON.parse keeps the last value; .NET's JsonNode would throw on the first read.
+        _temp.Write("config/settings.json", """{ "permissions": { "defaultMode": "plan" }, "permissions": { "defaultMode": "acceptEdits", "defaultMode": "auto" } }""");
+
+        var starting = Read();
+
+        Assert.Equal("auto", starting.Expected);
+        Assert.Equal("auto", starting.LaunchMode);
+    }
+
+    [Fact]
     public void Manual_is_the_default_modes_other_name()
     {
         Set("config/settings.json", "manual");

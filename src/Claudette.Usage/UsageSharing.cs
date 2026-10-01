@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using Claudette.Core.Json;
 
 namespace Claudette.Usage;
 
@@ -97,7 +98,7 @@ public static class UsageSharing
         JsonObject? file;
         try
         {
-            file = JsonNode.Parse(json) as JsonObject;
+            file = JsonTree.ParseObject(json);
         }
         catch (Exception)
         {

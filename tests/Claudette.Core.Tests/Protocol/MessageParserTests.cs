@@ -178,6 +178,15 @@ public class MessageParserTests
         Assert.Null(result.Result);
     }
 
+    [Fact]
+    public void A_repeated_key_reads_as_its_last_value()
+    {
+        Assert.True(MessageParser.TryParse("""{"type":"result","subtype":"error","subtype":"success","result":"a","result":"b"}""", out var message, out var error), error);
+
+        var result = Assert.IsType<ResultMessage>(message);
+        Assert.Equal("b", result.Result);
+    }
+
     [Theory]
     [InlineData("not json")]
     [InlineData("[1,2,3]")]

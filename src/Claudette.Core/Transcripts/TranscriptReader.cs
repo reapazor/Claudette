@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Claudette.Core.Protocol;
+using Claudette.Core.Json;
 
 namespace Claudette.Core.Transcripts;
 
@@ -130,7 +131,7 @@ public static class TranscriptReader
             JsonObject? entry;
             try
             {
-                entry = JsonNode.Parse(line) as JsonObject;
+                entry = JsonTree.ParseObject(line);
             }
             catch (JsonException)
             {
@@ -294,7 +295,7 @@ public static class TranscriptReader
             {
                 var meta = Path.ChangeExtension(file, ".meta.json");
                 if (!File.Exists(meta)
-                    || JsonNode.Parse(await File.ReadAllTextAsync(meta, cancellationToken).ConfigureAwait(false)) is not JsonObject metadata
+                    || JsonTree.Parse(await File.ReadAllTextAsync(meta, cancellationToken).ConfigureAwait(false)) is not JsonObject metadata
                     || metadata.GetString("toolUseId") is not { Length: > 0 } toolUseId)
                 {
                     continue;

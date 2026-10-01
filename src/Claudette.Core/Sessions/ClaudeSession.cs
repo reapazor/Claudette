@@ -230,16 +230,17 @@ public sealed class ClaudeSession : IAsyncDisposable
                 {
                     continue;
                 }
-                if (!MessageParser.TryParse(line, out var message, out var error))
-                {
-                    Interlocked.Increment(ref _protocolErrorCount);
-                    _diagnostics?.RecordParseError();
-                    _logger.LogWarning("Skipped a line from Claude Code: {Error}", error);
-                    Publish(new ProtocolError(line, error));
-                    continue;
-                }
+                ClaudeMessage? message = null;
                 try
                 {
+                    if (!MessageParser.TryParse(line, out message, out var error))
+                    {
+                        Interlocked.Increment(ref _protocolErrorCount);
+                        _diagnostics?.RecordParseError();
+                        _logger.LogWarning("Skipped a line from Claude Code: {Error}", error);
+                        Publish(new ProtocolError(line, error));
+                        continue;
+                    }
                     _diagnostics?.RecordFields(message);
                     Handle(message);
                 }
@@ -248,7 +249,7 @@ public sealed class ClaudeSession : IAsyncDisposable
                     // One bad message must never end the session (DESIGN.md §16).
                     Interlocked.Increment(ref _protocolErrorCount);
                     _diagnostics?.RecordParseError();
-                    _logger.LogError(ex, "Failed to handle a '{Type}' message.", message.Type);
+                    _logger.LogError(ex, "Failed to handle a '{Type}' message.", message?.Type ?? "unreadable");
                     Publish(new ProtocolError(line, ex.Message));
                 }
             }

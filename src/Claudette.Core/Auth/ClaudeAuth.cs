@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Claudette.Core.Claude;
 using Claudette.Core.Processes;
 using Claudette.Core.Protocol;
+using Claudette.Core.Json;
 
 namespace Claudette.Core.Auth;
 
@@ -68,7 +69,7 @@ public sealed class ClaudeAuth(
         JsonObject? obj;
         try
         {
-            obj = JsonNode.Parse(json) as JsonObject;
+            obj = JsonTree.ParseObject(json);
         }
         catch (JsonException)
         {

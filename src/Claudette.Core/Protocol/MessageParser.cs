@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Json;
 
 namespace Claudette.Core.Protocol;
 
@@ -13,7 +14,7 @@ public static class MessageParser
         JsonObject? obj;
         try
         {
-            obj = JsonNode.Parse(line) as JsonObject;
+            obj = JsonTree.ParseObject(line);
         }
         catch (JsonException ex)
         {
@@ -32,8 +33,9 @@ public static class MessageParser
             error = null;
             return true;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or FormatException or JsonException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            // Never let one line's shape throw out of here (CLAUDE.md, "Parse tolerantly").
             error = $"Unexpected shape: {ex.Message}";
             return false;
         }

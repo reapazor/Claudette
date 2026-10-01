@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Json;
 
 namespace Claudette.Core.Claude;
 
@@ -140,7 +141,7 @@ public sealed record StartingPermissionMode(string? DefaultMode, bool AutoModeDi
         try
         {
             return File.Exists(file)
-                ? JsonNode.Parse(File.ReadAllText(file), documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true }) as JsonObject
+                ? JsonTree.Parse(File.ReadAllText(file), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true }) as JsonObject
                 : null;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
