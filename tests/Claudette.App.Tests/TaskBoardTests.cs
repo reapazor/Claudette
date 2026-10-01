@@ -1,5 +1,7 @@
 using System.Text.Json.Nodes;
 using Claudette.App.Conversation;
+using Claudette.Core.Protocol;
+using Claudette.Core.Sessions;
 using Microsoft.Extensions.Time.Testing;
 
 namespace Claudette.App.Tests;
@@ -23,6 +25,19 @@ public class TaskBoardTests
         }
         _list.ApplyToolUse(toolUseId, "TaskCreate", input);
         _list.ApplyToolResult(toolUseId, $"Task #{id} created", new JsonObject { ["task"] = new JsonObject { ["id"] = id, ["subject"] = subject } });
+    }
+
+    [Fact]
+    public void A_restored_tab_dates_its_tasks_by_the_transcript_not_the_restore()
+    {
+        var builder = new ConversationBuilder([], _list) { Time = _time };
+        var written = DateTimeOffset.Parse("2026-09-30T16:20:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        Assert.True(MessageParser.TryParse("""{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"TodoWrite","input":{"todos":[{"content":"Fix it","status":"in_progress","activeForm":"Fixing it"}]}}]}}""", out var message, out _));
+
+        builder.Replay(new AssistantMessageReceived((AssistantMessage)message!), written);
+
+        Assert.Equal(written, _list.Items.Single().CreatedAt);
+        Assert.Equal(written, _list.Items.Single().StartedAt);
     }
 
     [Fact]

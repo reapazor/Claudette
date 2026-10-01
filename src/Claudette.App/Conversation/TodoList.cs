@@ -137,7 +137,7 @@ public sealed partial class TodoList : ObservableObject
     public void SetPlan(string plan)
     {
         Plan = plan.Trim();
-        PlanApprovedAt = Time?.GetUtcNow();
+        PlanApprovedAt = Now();
     }
 
     [ObservableProperty]
@@ -305,7 +305,13 @@ public sealed partial class TodoList : ObservableObject
         item.Status = status;
     }
 
-    private DateTimeOffset? Now() => Time?.GetUtcNow();
+    /// <summary>
+    /// When a change happens, set by the conversation builder: its clock live, and the transcript entry's time while a
+    /// restored tab replays, so a restored task isn't dated by the restore. When it has no time, <see cref="Time"/>.
+    /// </summary>
+    internal Func<DateTimeOffset?>? Clock { get; set; }
+
+    private DateTimeOffset? Now() => Clock?.Invoke() ?? Time?.GetUtcNow();
 
     private void Changed()
     {

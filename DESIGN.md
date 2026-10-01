@@ -144,7 +144,7 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
 1. **Usage header**, across the top. Always visible. Session usage is the most prominent item; weekly limits are smaller. A chevron at its right draws it taller, with charts ([Detailed header](#detailed-header)). See [§6](#6-token-burn-awareness). At its right, before the account name, the CPU and memory of every tab's processes while the process monitor is on ([§4](#process-monitor)), then a dot that shows Claude's service status; while Claude has an incident a banner runs across the top under it ([§18](#service-status)).
 2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder, and under a tab's row, the runs of its project actions ([§18](#project-tools)). **New tab** is at its top; the selected tab's project, with its actions and links ([§18](#project-tools)), **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
 3. **Conversation.** The selected tab's conversation. See [§5](#5-conversation-view).
-4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), its project's tools and their output when it has any ([§18](#project-tools)), and optionally its running processes ([§4](#process-monitor)).
+4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), its project's tools and their output when it has any ([§18](#project-tools)), optionally its running processes ([§4](#process-monitor)), its plan and tasks while Claude keeps a list ([§5](#tasks)), and its MCP servers when the session has any ([§4](#mcp-servers)).
    - Its pages are tabs along its top, over a divider, as in VS Code's panel: the page showing is in full text with an accent line under it, the others muted. A page's tab shows a busy dot while it has something running.
    - **Resizing.** Drag its left edge to make it wider or narrower (260 to 900 pixels; 340 by default), leaving the conversation at least 360. Double-click the edge for the default width. The width is the same for every tab, and remembered.
 5. **Composer.** Where you type to the selected tab, plus the Stop button and per-tab controls.
@@ -349,6 +349,16 @@ An optional view of the processes each tab has started, such as test runs, dev s
   - Claudette lets `claude` exit on its own first, so it finishes its transcript, then ends whatever it left behind.
   - Quitting Claudette stops every tab's processes.
 
+### MCP servers
+
+The **MCP** page of the side panel lists the session's MCP servers, for a tab whose session has any (`mcp_servers` on `system/init`).
+
+- Each server shows its name, how it's connected (*Connected · 12 tools*, *Connecting…*, *Needs signing in*, *Failed*, *Off*), where it's configured and its version when Claude Code says, and the error for one that failed.
+- **Reconnect**, on a server that isn't connected, asks Claude Code to connect it again (`mcp_reconnect`), for example after starting the program it talks to or signing in.
+- **Turn off** and **Turn on** take a server out of the session, and its tools with it, or put it back (`mcp_toggle`). It's for this session only: the user's and project's MCP settings aren't changed.
+- The list is read from Claude Code (`mcp_status`) when the page opens and after each change, and **Refresh** reads it again. A failed server puts a warning dot on the page's tab, with *"1 needs attention"* as its tip.
+- The server's name and its error are the server's own text, shown as text.
+
 ## 5. Conversation View
 
 The conversation is drawn from Claude Code's structured output stream, not from terminal text.
@@ -456,6 +466,24 @@ While Claude works, a line above the composer says so, the way Claude Code's ter
   - It's read as the tab's session starts, so a change shows from the next session.
 - **Turning it off.** **Show fun words while Claude works** (Settings → Appearance, on by default). Off, the line says *"✻ Working…"* with a still glyph, and still shows the time, tokens and Stop shortcut.
 - Claude Code's spinner tips (`spinnerTipsEnabled`, `spinnerTipsOverride`) aren't shown.
+
+### Tasks
+
+When Claude keeps a task list (`TodoWrite`, or `TaskCreate` and `TaskUpdate`), the side panel gets a **Tasks** page, with *"2 of 5"* done on its tab. The pinned list at the top of the conversation stays as it was; the page has room for more.
+
+- **The plan** the user approved last (`ExitPlanMode`), as Markdown, with when it was approved. The tasks Claude makes from it follow.
+- **Each task:** its state (to do, in progress, done), its number as Claude refers to it (*#3*, for `TaskCreate` tasks), its subject and its description, who's working on it when Claude says (a subagent or teammate), *"Waiting on #1, #2"* while a task it depends on isn't done, and its times: *Took 4m*, *Started 14:05* or *Added 14:02*.
+- The one in progress shows its active form (*"Running the tests"*) in bold.
+- A `TaskList` result fills in what the tool calls didn't show. A restored tab's tasks are dated by their transcript entries.
+- The command palette's **Show tasks** opens the side panel on this page. `/clear` empties it, as it does the pinned list.
+
+### Hook runs
+
+The user's and project's hooks ([Claude Code hooks](https://code.claude.com/docs/en/hooks)) run inside Claude Code, which reports each run (`--include-hook-events`: `system/hook_started`, `hook_progress` and `hook_response`).
+
+- A hook that fails, or prints something while it runs, gets a compact row in the conversation: *"PreToolUse hook (Bash) · failed (exit code 2)"*. Expanding it shows what it printed, its output or else its standard output and error, up to 20,000 characters. A failed one opens by itself.
+- The rest run quietly. **Show every hook run in the conversation** (Settings → Claude Code, off by default) gives every run a row, from its start (*running…*) to how it ended (*done*, *failed*, *cancelled*).
+- Hook names and output are the hook's own text, shown as text. Find looks through them, and an export keeps the failed ones.
 
 ### Running tasks
 
@@ -820,6 +848,13 @@ The plan's limits are the account's, so every machine signed in to it sees the s
   - Bypass needs a confirmation and gives the tab a visible warning style: a red border on the tab and the composer, and a warning line above the composer.
   - Claude Code only allows switching into Bypass in a session that was started with bypass allowed. Claudette doesn't start sessions that way, so the switch is refused unless the tab started in Bypass mode, and the tab says how to do that. Launching every session with `--allow-dangerously-skip-permissions` would lift this, but that's left to a deliberate decision.
 - Claude Code's own allow/deny rules in settings still apply; Claudette only shows prompts that Claude Code actually asks for. When a rule or the mode denies a tool without asking (a `permission_denied` message), the conversation shows a note.
+
+**MCP servers asking for input.** An MCP server can ask the user something mid-turn (MCP *elicitation*): Claude Code sends an `elicitation` control request, and the tab shows a card for it, as it does for a permission. The tab waits on the user ("Needs input", with a notification), and `Ctrl/Cmd+Enter` and `Ctrl/Cmd+Backspace` answer it as they do a prompt.
+
+- **A form.** The card shows *"tickets asks"* (or the server's own title), its message, and a field for each property of its schema: a text box for text and numbers, a check box for a yes/no, a list for a choice (`enum`, with `enumNames`, or `oneOf` with titles). Required fields say so; defaults fill them in. **Send** checks each value as the schema says (numbers, ranges, lengths, required) and says what's wrong under the field, or sends `{ "action": "accept", "content": {…} }`.
+- **A link** (`mode: "url"`): the card has **Open link**, which opens it in the browser, then **Done**. When the server says it's finished (`system/elicitation_complete`), the card closes by itself.
+- **Decline** sends `decline`, and **Dismiss** `cancel`. The card then reads what happened (*Sent*, *Done*, *Declined*, *Dismissed*), and one Claude Code withdrew, or that the session's end left unanswered, reads as withdrawn.
+- The server's name, message and fields are its own text, shown as text. The utility session (§13) has nobody to ask, so it declines them at once, as the Agent SDKs do without a handler.
 
 **Questions and plans.** Two tools reach Claudette through the same `can_use_tool` request and get their own cards:
 
@@ -1907,7 +1942,15 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **The icon while a usage limit waits ([§10](#10-notifications)).** While a usage limit has stopped a tab's task and hasn't reset, the Windows taskbar overlay shows an hourglass whose sand runs down and turns over, and the macOS Dock icon shows Claudette by it. It goes after the count of tabs needing input (waving, on macOS) and before tabs working. The setting became **Animate the Dock or taskbar icon while tabs are working or waiting**. ✅ Built 2026-09-30.
       - **Still to verify on real machines:** the hourglass on the Windows taskbar at 100%, 150% and 200%, on light and dark taskbars; the Dock frames on macOS.
     - **The Project page drops its action buttons ([§18](#project-tools)).** The project's menu at the sidebar's foot has the actions, so the side panel's Project page keeps the project's details and the runs' logs. ✅ Built 2026-09-30.
-16. **Later.** New features go in [§18](#18-future-features) first.
+16. **Hardening and the conversation's tools.** ✅ Built 2026-10-01, in one change: bug fixes, then speed, security, guard rails and maintenance, then features.
+    - **Fixes.** A process's exit no longer waits on pipes a child inherited; a repeated JSON key reads as its last value; the library copy after a turn checks the lease first; files are written atomically, and one that couldn't be read is never saved over; a closed tab's working line stops; an exception on the UI thread is logged rather than ending the app; the Linux sleep inhibitor ends with Claudette; a reused PID is never signalled; and a batch of smaller races, quoting and usage-sharing fixes.
+    - **Speed.** The conversation and inline diffs are virtualized ([§5](#5-conversation-view)); a keystroke in Settings no longer refreshes the whole app; Changed files inspects only the files that changed, and only for the tab in view; blocking work is off the UI thread; one process scan serves every tab; streaming text and project logs cost less.
+    - **Security.** The release workflow is hardened ([§2](#packaging-and-signing)); a macOS update's signer is checked with a code requirement; the single-instance pipe is the user's own and the first launch claims the data folder with a lock; sign-in secrets are kept out of protocol logs, and no update installs without a checksum.
+    - **Guard rails.** The compiler enforces the testability rules (banned APIs, code style in the build); the daily compatibility check also tests the oldest supported Claude Code; CI cancels superseded runs and caches locked packages, at no extra cost in minutes; Dependabot opens one grouped update a month for NuGet and one for Actions; tests wait by the clock instead of by loop counts.
+    - **Maintenance.** `TabViewModel` lost four areas to child view models (processes, changed files, project tools, Remote Control); Settings' categories are named once.
+    - **Features:** [Rewind and branch](#rewind-and-branch) (Edit and resend, Branch from here, Restore files, Duplicate tab), [Find](#find), [Export](#export), the [Tasks](#tasks) and [MCP servers](#mcp-servers) pages, [hook runs](#hook-runs), [MCP servers asking for input](#7-permission-prompts), [Reverting](#reverting) a hunk or file, the Usage panel's **Projects** ([§6](#usage-history)), searching Claude's replies in [History](#history), the [command palette](#command-palette), going to the next tab waiting, earlier prompts in the [composer](#composer), and a [fallback model](#model--effort).
+    - **Still to verify:** the new pages, cards, find bar and palette on real Windows, macOS and Linux desktops, in both styles and themes (so far rendered headlessly); Edit and resend with file restore against a real session with checkpoints; an MCP server's form and URL requests from a real server.
+17. **Later.** New features go in [§18](#18-future-features) first.
 
 ## 18. Future Features
 

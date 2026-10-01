@@ -50,6 +50,10 @@ public sealed class ConversationBuilder
     {
         Items = items;
         _todoList = todoList;
+        if (todoList is not null)
+        {
+            todoList.Clock = Now;
+        }
         _modelName = modelName ?? (m => m);
     }
 
