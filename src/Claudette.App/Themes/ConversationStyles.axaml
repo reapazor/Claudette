@@ -1,7 +1,8 @@
 <!-- A tab's styles (DESIGN.md §3, §5): the conversation, the side panel and the composer. TabView includes them, so
      they apply inside each tab, and the "compact" and "claude" classes on the shell change them. -->
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Claudette.App.Controls">
   <!-- The chip with a message's time and Copy button: quiet until the message is hovered or focused. -->
   <Style Selector="ContentControl.messagetools">
     <Setter Property="HorizontalAlignment" Value="Right" />
@@ -90,7 +91,7 @@
     <Setter Property="Spacing" Value="1" />
   </Style>
   <!-- Tool, thinking and subagent rows -->
-  <Style Selector=".compact VirtualizingStackPanel.conversation Button.row">
+  <Style Selector=".compact controls|ConversationPanel.conversation Button.row">
     <Setter Property="Padding" Value="4,0" />
   </Style>
   <Style Selector="StackPanel.composerarea">
@@ -226,13 +227,16 @@
     <Setter Property="BorderThickness" Value="0,0,0,1" />
     <Setter Property="Padding" Value="6,4,6,0" />
   </Style>
+  <!-- The row clips the tabs that don't fit, so it reaches over the divider for the accent line. -->
+  <Style Selector="controls|PageTabsPanel">
+    <Setter Property="Margin" Value="0,0,0,-1" />
+  </Style>
   <Style Selector="Button.pagetab">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderBrush" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0,0,0,2" />
     <Setter Property="CornerRadius" Value="4,4,0,0" />
     <Setter Property="Padding" Value="8,6,8,6" />
-    <Setter Property="Margin" Value="0,0,0,-1" />
     <Setter Property="MinHeight" Value="0" />
   </Style>
   <Style Selector=".compact Button.pagetab">

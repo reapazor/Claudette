@@ -485,7 +485,7 @@ public class MainWindowTests
         await UiText.SettleUntilAsync(window, () => UiText.Describe(window).Contains("Done.", StringComparison.Ordinal), "the reply");
         var row = window.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("tabrow"));
         // The conversation is virtualized; each item keeps its distance from the next with its margin.
-        var items = window.GetVisualDescendants().OfType<VirtualizingStackPanel>().Single(p => p.Classes.Contains("conversation"));
+        var items = window.GetVisualDescendants().OfType<ConversationPanel>().Single(p => p.Classes.Contains("conversation"));
         Thickness Gap() => items.Children.OfType<ContentPresenter>().First().Margin;
         var composer = window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "ComposerBox");
         var comfortable = (Row: row.Bounds.Height, Composer: composer.Bounds.Height);

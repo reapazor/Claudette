@@ -101,7 +101,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         Find.CurrentChanged += OnFindCurrentChanged;
         _conversation = new ConversationBuilder(Items, TodoList, ModelDisplayName)
         {
-            ExpandThinking = services.Settings.Appearance.ExpandThinking,
+            ExpandThinking = state.ExpandThinking ?? services.Settings.Appearance.ExpandThinking,
             ShowUnsupportedMessages = services.Settings.Advanced.LogProtocol,
             ShowAllHookRuns = services.Settings.ClaudeCode.ShowAllHookRuns,
             OpenUrl = services.Platform.OpenUrlAsync,
@@ -767,7 +767,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     {
         OnPropertyChanged(nameof(AvailableSuffixes));
         OnPropertyChanged(nameof(SuffixMenu));
-        _conversation.ExpandThinking = _services.Settings.Appearance.ExpandThinking;
+        _conversation.ExpandThinking = State.ExpandThinking ?? _services.Settings.Appearance.ExpandThinking;
         _conversation.ShowAllHookRuns = _services.Settings.ClaudeCode.ShowAllHookRuns;
         _conversation.ShowUnsupportedMessages = _services.Settings.Advanced.LogProtocol;
         Context.OnSettingsChanged();
@@ -775,6 +775,24 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _autoContinue.SettingsChanged();
         Perforce.OnSettingsChanged();
         ProjectTools.OnSettingsChanged();
+    }
+
+    /// <summary>
+    /// The thinking row's menu (DESIGN.md §5): collapses every thinking row in the tab, and new ones start collapsed,
+    /// whatever Settings → Appearance says.
+    /// </summary>
+    [RelayCommand]
+    private void CollapseAllThinking() => SetAllThinking(false);
+
+    /// <summary>The thinking row's menu: expands every thinking row in the tab, and new ones start expanded.</summary>
+    [RelayCommand]
+    private void ExpandAllThinking() => SetAllThinking(true);
+
+    private void SetAllThinking(bool expanded)
+    {
+        _conversation.ExpandAllThinking(expanded);
+        State.ExpandThinking = expanded;
+        _services.SaveState();
     }
 
     // ---- Restarting into a new build (DESIGN.md §9, "Working on Claudette") -------------------------------

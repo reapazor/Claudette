@@ -259,6 +259,37 @@ public class ConversationBuilderTests
     }
 
     [Fact]
+    public void Collapse_all_thinking_reaches_subagents_groups_and_the_rows_to_come()
+    {
+        _builder.ExpandThinking = true;
+        Apply("""{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"Plan it."}]}}""");
+        Apply("""{"type":"assistant","message":{"content":[{"type":"tool_use","id":"a1","name":"Agent","input":{"description":"Look"}}]}}""");
+        _builder.Apply(new ThinkingDelta("Inside.", "a1"));
+        var main = Assert.IsType<ThinkingItem>(_items[0]);
+        var agent = Assert.IsType<SubagentItem>(_items[1]);
+        var inside = Assert.IsType<ThinkingItem>(Assert.Single(agent.Items));
+        Assert.True(main.IsExpanded);
+        Assert.True(inside.IsExpanded);
+
+        _builder.ExpandAllThinking(false);
+
+        Assert.False(main.IsExpanded);
+        Assert.False(inside.IsExpanded);
+        Assert.False(_builder.ExpandThinking);
+        // New thinking starts collapsed, in the group already running as well as in the conversation.
+        Apply("""{"type":"assistant","parent_tool_use_id":"a1","message":{"content":[{"type":"text","text":"Found it."}]}}""");
+        _builder.Apply(new ThinkingDelta("More.", "a1"));
+        Apply("""{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"a1","content":"Done."}]}}""");
+        _builder.Apply(new ThinkingDelta("Next.", null));
+        Assert.False(Assert.IsType<ThinkingItem>(agent.Items[^1]).IsExpanded);
+        Assert.False(Assert.IsType<ThinkingItem>(_items[^1]).IsExpanded);
+
+        _builder.ExpandAllThinking(true);
+
+        Assert.All(_items.OfType<ThinkingItem>().Concat(agent.Items.OfType<ThinkingItem>()), t => Assert.True(t.IsExpanded));
+    }
+
+    [Fact]
     public void Long_thinking_streams_in_without_copying_it_for_every_piece()
     {
         _builder.Apply(new ThinkingDelta("a", null));

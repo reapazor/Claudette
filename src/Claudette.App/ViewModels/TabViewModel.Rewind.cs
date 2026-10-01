@@ -331,6 +331,7 @@ public sealed partial class TabViewModel
             RemoteControl = _services.Settings.ClaudeCode.ConnectNewTabsToClaudeApp,
             Overrides = Copy(State.Overrides) ?? new TabOverrides(),
             KeptSuffixes = [.. State.KeptSuffixes],
+            ExpandThinking = State.ExpandThinking,
             // A copy has the same changes, so keeps their marks (DESIGN.md §8, "Reviewed").
             ReviewedFiles = sessionId is null ? [] : Copy(State.ReviewedFiles) ?? [],
             // In the same worktree, with the same extra folders (DESIGN.md §4, "Worktree tabs").

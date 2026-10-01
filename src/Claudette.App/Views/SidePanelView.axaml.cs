@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Claudette.App.ViewModels;
@@ -12,8 +13,8 @@ using Claudette.App.ViewModels;
 namespace Claudette.App.Views;
 
 /// <summary>
-/// A tab's side panel (DESIGN.md §3): what its pages need beyond bindings, which is opening a changed file and
-/// following a project job's output.
+/// A tab's side panel (DESIGN.md §3): what its pages need beyond bindings, which is the menu of the pages that don't
+/// fit, opening a changed file and following a project job's output.
 /// </summary>
 public partial class SidePanelView : UserControl
 {
@@ -48,6 +49,48 @@ public partial class SidePanelView : UserControl
         }
         WatchProjectOutput();
     }
+
+    // ---- The pages that don't fit (DESIGN.md §3, "Side panel") ------------------------------------------------------
+
+    /// <summary>The menu lists the tabs left out of the row, each with its badge and dot.</summary>
+    private void OnMorePagesOpening(object? sender, EventArgs e)
+    {
+        if (sender is not MenuFlyout menu)
+        {
+            return;
+        }
+        menu.Items.Clear();
+        foreach (var tab in PageTabs.Overflow.OfType<Button>())
+        {
+            var dot = StatusDot(tab);
+            var texts = tab.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsVisible && t != dot).Select(t => t.Text);
+            menu.Items.Add(new MenuItem { Header = string.Join(" · ", texts), Command = tab.Command, Icon = dot is null ? null : DotLike(dot) });
+        }
+    }
+
+    private static TextBlock DotLike(TextBlock dot)
+    {
+        var copy = new TextBlock { Text = dot.Text, FontSize = dot.FontSize, VerticalAlignment = VerticalAlignment.Center };
+        copy.Classes.AddRange(StyleClasses(dot));
+        return copy;
+    }
+
+    /// <summary>The button after the row shows a dot while a tab left out of it shows one.</summary>
+    private void OnPageTabsLayoutUpdated(object? sender, EventArgs e)
+    {
+        var dot = PageTabs.Overflow.Select(StatusDot).FirstOrDefault(d => d is not null);
+        MorePagesDot.IsVisible = dot is not null;
+        if (dot is not null && !StyleClasses(MorePagesDot).SequenceEqual(StyleClasses(dot)))
+        {
+            MorePagesDot.Classes.Replace(StyleClasses(dot));
+        }
+    }
+
+    private static TextBlock? StatusDot(Control tab) =>
+        tab.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault(t => t.IsVisible && t.Classes.Contains("status"));
+
+    /// <summary>A control's classes without its pseudo-classes, which only the control sets.</summary>
+    private static List<string> StyleClasses(Control control) => [.. control.Classes.Where(c => !c.StartsWith(':'))];
 
     // ---- Changed files (DESIGN.md §8) ------------------------------------------------------------------------------
 

@@ -164,6 +164,54 @@ public class TabViewModelTests
     }
 
     [Fact]
+    public async Task Collapse_all_thinking_holds_for_the_tab_alone_and_leaves_Settings_as_they_are()
+    {
+        await using var h = new TabTestHarness(s => s.Appearance.ExpandThinking = true);
+        var tab = await h.OpenTabAsync();
+        tab.ComposerText = "go";
+        await tab.SendCommand.ExecuteAsync(null);
+        h.Transport.Emit("""{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"First."}]}}""");
+        await TabTestHarness.Eventually(() => tab.Items.OfType<ThinkingItem>().Any(), "the thinking");
+        var first = tab.Items.OfType<ThinkingItem>().Single();
+        Assert.True(first.IsExpanded);
+
+        tab.CollapseAllThinkingCommand.Execute(null);
+
+        Assert.False(first.IsExpanded);
+        Assert.False(tab.State.ExpandThinking);
+        Assert.True(h.Services.Settings.Appearance.ExpandThinking);
+        // A change in Settings doesn't undo the tab's choice: new thinking starts collapsed.
+        tab.OnSettingsChanged();
+        h.Transport.Emit("""{"type":"assistant","message":{"content":[{"type":"text","text":"Then"}]}}""");
+        h.Transport.Emit("""{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"Second."}]}}""");
+        await TabTestHarness.Eventually(() => tab.Items.OfType<ThinkingItem>().Count() == 2, "more thinking");
+        Assert.False(tab.Items.OfType<ThinkingItem>().Last().IsExpanded);
+        // A copy of the tab keeps it.
+        Assert.False(tab.CopyState(CopyPoint.Whole).ExpandThinking);
+
+        tab.ExpandAllThinkingCommand.Execute(null);
+
+        Assert.All(tab.Items.OfType<ThinkingItem>(), t => Assert.True(t.IsExpanded));
+        Assert.True(tab.State.ExpandThinking);
+    }
+
+    [Fact]
+    public async Task A_restored_tab_shows_its_thinking_as_it_was_left()
+    {
+        await using var h = new TabTestHarness(s => s.Appearance.ExpandThinking = true);
+        h.WriteTranscript("s1",
+            """{"type":"user","uuid":"u1","sessionId":"s1","message":{"role":"user","content":"go"}}""",
+            """{"type":"assistant","uuid":"a1","parentUuid":"u1","sessionId":"s1","message":{"role":"assistant","content":[{"type":"thinking","thinking":"Hmm."},{"type":"text","text":"ok"}]}}""");
+        h.Services.State.Tabs = [new TabState { Folder = h.WorkFolder, IsPinned = true, SessionId = "s1", ExpandThinking = false }];
+
+        h.Shell.Restore(null);
+
+        var tab = h.Shell.AllTabs.Single();
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle && tab.IsSettled, "the restored tab");
+        Assert.False(tab.Items.OfType<ThinkingItem>().Single().IsExpanded);
+    }
+
+    [Fact]
     public async Task A_permission_prompt_marks_the_tab_as_needing_input_until_answered()
     {
         await using var h = new TabTestHarness();

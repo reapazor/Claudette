@@ -162,6 +162,12 @@ public sealed class TabState
     /// <summary>Quick suffixes kept on this tab, by suffix id.</summary>
     public List<string> KeptSuffixes { get; set; } = [];
 
+    /// <summary>
+    /// Whether new thinking rows in this tab start expanded, as <b>Collapse all thinking</b> or <b>Expand all thinking</b>
+    /// last left it (DESIGN.md §5), or null for Settings → Appearance. The tab's own state, not an override.
+    /// </summary>
+    public bool? ExpandThinking { get; set; }
+
     public TokenTotals Tokens { get; set; } = new();
 
     /// <summary>

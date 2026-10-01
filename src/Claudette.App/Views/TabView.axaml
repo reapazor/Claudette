@@ -122,6 +122,15 @@
             <TextBlock Classes="muted" Text="✻" />
             <TextBlock Classes="muted" FontStyle="Italic" Text="{Binding Header}" />
           </StackPanel>
+          <!-- Every thinking row in the tab, and the ones to come, without changing Settings (DESIGN.md §5). -->
+          <Button.ContextMenu>
+            <ContextMenu>
+              <MenuItem Header="Collapse all thinking" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CollapseAllThinkingCommand}"
+                        ToolTip.Tip="Collapse every thinking row in this tab, and start new ones collapsed" />
+              <MenuItem Header="Expand all thinking" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ExpandAllThinkingCommand}"
+                        ToolTip.Tip="Expand every thinking row in this tab, and start new ones expanded" />
+            </ContextMenu>
+          </Button.ContextMenu>
         </Button>
         <SelectableTextBlock Classes="muted" FontStyle="Italic" TextWrapping="Wrap" Margin="22,0,0,4"
                              Text="{Binding ShownText}" IsVisible="{Binding IsExpanded}" />
@@ -147,7 +156,7 @@
             <ItemsControl Classes="subagentitems" ItemsSource="{Binding Items}" ClipToBounds="False">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
-                  <VirtualizingStackPanel />
+                  <controls:ConversationPanel />
                 </ItemsPanelTemplate>
               </ItemsControl.ItemsPanel>
             </ItemsControl>
@@ -555,10 +564,10 @@
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
                 <!-- The messages a screen above and below the view stay built (CacheLength), not only those in it. A
-                     reply's Markdown lays out in the background, so a reply built again starts one line tall: following
-                     the newest output, the list then measured shorter, then taller, from frame to frame, and the view
-                     jumped with it (DESIGN.md §5). -->
-                <VirtualizingStackPanel Classes="conversation" CacheLength="1" />
+                     reply's Markdown lays out in the background, so a reply built again starts one line tall: built
+                     a screen ahead, it has its height before it comes into view. The panel remembers each message's
+                     height, so one changing height, as a reply streams in, moves only those after it (DESIGN.md §5). -->
+                <controls:ConversationPanel Classes="conversation" CacheLength="1" />
               </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
           </ItemsControl>

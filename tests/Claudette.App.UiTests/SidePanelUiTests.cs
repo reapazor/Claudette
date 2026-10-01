@@ -1,12 +1,15 @@
 using System.Text.Json.Nodes;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.VisualTree;
+using Claudette.App.Controls;
 using Claudette.App.Diffs;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
@@ -16,8 +19,8 @@ using Claudette.App.Views;
 namespace Claudette.App.UiTests;
 
 /// <summary>
-/// The side panel rendered (DESIGN.md §3): its pages as tabs, dragging its edge to resize it, and ticking changed files as
-/// reviewed (DESIGN.md §8).
+/// The side panel rendered (DESIGN.md §3): its pages as tabs, with a menu for those that don't fit, dragging its edge to
+/// resize it, and ticking changed files as reviewed (DESIGN.md §8).
 /// </summary>
 public class SidePanelUiTests
 {
@@ -46,6 +49,128 @@ public class SidePanelUiTests
         Assert.Contains("muted", Label(files).Classes);
         Assert.DoesNotContain("muted", Label(agents).Classes);
     }
+
+    [AvaloniaFact]
+    public async Task The_close_button_comes_after_the_last_page_rather_than_over_it()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var (tab, window, view) = await ShowWithTasksAndMcpAsync(h);
+        tab.ResizeSidePanel(600);
+        UiText.Settle(window);
+        var row = view.GetVisualDescendants().OfType<PageTabsPanel>().Single();
+        var close = view.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Close side panel");
+
+        Assert.Empty(row.Overflow);
+        Assert.Equal(["Changed Files", "Agents", "Tasks", "MCP"], PageTabs(row).Select(p => Label(p).Text));
+        AssertLaidOut(row);
+        var mcp = PageTabs(row)[^1];
+        Assert.True(InView(mcp, view).Right <= InView(close, view).Left, $"MCP ends at {InView(mcp, view).Right}, the close button starts at {InView(close, view).Left}");
+    }
+
+    [AvaloniaFact]
+    public async Task The_pages_that_dont_fit_are_in_a_menu_and_the_page_showing_keeps_a_place_in_the_row()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var (tab, window, view) = await ShowWithTasksAndMcpAsync(h);
+        var row = view.GetVisualDescendants().OfType<PageTabsPanel>().Single();
+        var more = MorePages(row);
+
+        // At the default width the last tabs are left out, and the button after the row lists them.
+        Assert.Equal(ShellLayout.DefaultSidePanelWidth, tab.SidePanelWidth);
+        Assert.Contains(PageTabs(row)[^1], row.Overflow);
+        AssertLaidOut(row);
+        var menu = await OpenAsync(window, more);
+        Assert.Equal(row.Overflow.Select(t => Label((Button)t).Text), menu.Items.OfType<MenuItem>().Select(m => (m.Header as string)?.Split(" · ")[0]));
+        Assert.Contains("Tasks · 0 of 1", menu.Items.OfType<MenuItem>().Select(m => m.Header as string));
+
+        // Picking one shows its page, which takes a place in the row.
+        var mcpItem = menu.Items.OfType<MenuItem>().Single(m => m.Header as string == "MCP");
+        mcpItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        menu.Hide();
+        UiText.Settle(window);
+        Assert.True(tab.IsMcpPage);
+        Assert.DoesNotContain(PageTabs(row)[^1], row.Overflow);
+        Assert.NotEmpty(row.Overflow);
+        AssertLaidOut(row);
+
+        // With room for them all, the button goes.
+        tab.ResizeSidePanel(700);
+        UiText.Settle(window);
+        Assert.Empty(row.Overflow);
+        AssertLaidOut(row);
+    }
+
+    [AvaloniaFact]
+    public async Task The_button_for_the_pages_left_out_shows_a_dot_while_one_of_them_does()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var (tab, window, view) = await ShowWithTasksAndMcpAsync(h, mcpStatus: "failed");
+        var row = view.GetVisualDescendants().OfType<PageTabsPanel>().Single();
+        var dot = MorePages(row).GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "MorePagesDot");
+
+        // MCP, left out of the row, has its warning dot: the button shows one like it, and so does MCP's entry.
+        Assert.Contains(PageTabs(row)[^1], row.Overflow);
+        Assert.True(dot.IsEffectivelyVisible);
+        Assert.Contains("warning", dot.Classes);
+        var menu = await OpenAsync(window, MorePages(row));
+        var mcpItem = menu.Items.OfType<MenuItem>().Single(m => m.Header as string == "MCP");
+        Assert.Contains("warning", Assert.IsType<TextBlock>(mcpItem.Icon).Classes);
+        menu.Hide();
+
+        // Once the server is fixed, it goes.
+        h.Transport.Answers["mcp_status"] = _ => new JsonObject { ["mcpServers"] = new JsonArray(new JsonObject { ["name"] = "tickets", ["status"] = "connected" }) };
+        await tab.McpServers.RefreshAsync();
+        await UiText.SettleUntilAsync(window, () => !dot.IsVisible, "the dot to go");
+    }
+
+    /// <summary>A tab with the Tasks and MCP pages beside Changed Files and Agents, its side panel open at its width.</summary>
+    private static async Task<(TabViewModel Tab, Window Window, TabView View)> ShowWithTasksAndMcpAsync(TabTestHarness h, string mcpStatus = "connected")
+    {
+        h.Transport.Answers["mcp_status"] = _ => new JsonObject { ["mcpServers"] = new JsonArray(new JsonObject { ["name"] = "tickets", ["status"] = mcpStatus }) };
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        h.Transport.Emit($$"""{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-5-5","permissionMode":"default","mcp_servers":[{"name":"tickets","status":"{{mcpStatus}}"}]}""");
+        h.Transport.Emit(new JsonObject
+        {
+            ["type"] = "assistant",
+            ["message"] = new JsonObject { ["content"] = new JsonArray(new JsonObject { ["type"] = "tool_use", ["id"] = "t1", ["name"] = "TodoWrite", ["input"] = JsonNode.Parse("""{"todos":[{"content":"Write the migration","status":"pending","activeForm":"Writing the migration"}]}""") }) },
+        });
+        await UiText.SettleUntilAsync(window, () => tab.HasMcpServers && tab.TodoList.HasAnything, "the MCP and Tasks pages");
+        await tab.McpServers.RefreshAsync();
+        tab.IsSidePanelOpen = true;
+        UiText.Settle(window);
+        return (tab, window, window.GetVisualDescendants().OfType<TabView>().Single());
+    }
+
+    private static List<Button> PageTabs(PageTabsPanel row) => [.. row.Children.OfType<Button>().Where(b => b.Classes.Contains("pagetab") && b.IsVisible)];
+
+    private static Button MorePages(PageTabsPanel row) => Assert.IsType<Button>(row.Children[^1]);
+
+    /// <summary>
+    /// The tabs in the row, then the button for the rest when some are left out (and only then), side by side within it;
+    /// the tabs left out past its end and out of the Tab order.
+    /// </summary>
+    private static void AssertLaidOut(PageTabsPanel row)
+    {
+        var more = MorePages(row);
+        Assert.Equal(row.Overflow.Count > 0, more.IsVisible);
+        List<Control> inRow = [.. PageTabs(row).Except(row.Overflow), .. row.Overflow.Count > 0 ? [more] : Array.Empty<Control>()];
+        Assert.All(inRow.Zip(inRow.Skip(1)), pair => Assert.True(pair.First.Bounds.Right <= pair.Second.Bounds.Left));
+        Assert.True(inRow[^1].Bounds.Right <= row.Bounds.Width, $"The row ends at {inRow[^1].Bounds.Right}, past its width of {row.Bounds.Width}");
+        Assert.All(inRow.Except([more]), c => Assert.True(KeyboardNavigation.GetIsTabStop(c)));
+        Assert.All(row.Overflow, c => Assert.True(c.Bounds.Left >= row.Bounds.Width));
+        Assert.All(row.Overflow, c => Assert.False(KeyboardNavigation.GetIsTabStop(c)));
+    }
+
+    private static async Task<MenuFlyout> OpenAsync(Window window, Button button)
+    {
+        var menu = Assert.IsType<MenuFlyout>(button.Flyout);
+        menu.ShowAt(button);
+        await UiText.SettleUntilAsync(window, () => menu.IsOpen, "the menu");
+        return menu;
+    }
+
+    private static Rect InView(Control control, Visual view) => new(control.TranslatePoint(default, view)!.Value, control.Bounds.Size);
 
     [AvaloniaFact]
     public async Task Dragging_the_edge_resizes_the_panel_and_leaves_the_conversation_room()

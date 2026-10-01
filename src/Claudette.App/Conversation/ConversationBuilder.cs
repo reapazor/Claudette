@@ -56,8 +56,43 @@ public sealed class ConversationBuilder
 
     public ObservableCollection<ConversationItem> Items { get; }
 
-    /// <summary>Show thinking expanded rather than collapsed (Settings → Appearance).</summary>
-    public bool ExpandThinking { get; set; }
+    /// <summary>
+    /// Start new thinking rows expanded rather than collapsed (Settings → Appearance, or the tab's own choice). A
+    /// subagent's builder asks the builder that made it, so a group already running follows a change.
+    /// </summary>
+    public bool ExpandThinking
+    {
+        get => _parent?.ExpandThinking ?? _expandThinking;
+        set => _expandThinking = value;
+    }
+
+    private bool _expandThinking;
+
+    /// <summary>
+    /// <b>Collapse all thinking</b> or <b>Expand all thinking</b> (DESIGN.md §5): every thinking row, subagents' groups'
+    /// too, and the ones still to come.
+    /// </summary>
+    public void ExpandAllThinking(bool expanded)
+    {
+        ExpandThinking = expanded;
+        Expand(Items);
+
+        void Expand(IEnumerable<ConversationItem> items)
+        {
+            foreach (var item in items)
+            {
+                switch (item)
+                {
+                    case ThinkingItem thinking:
+                        thinking.IsExpanded = expanded;
+                        break;
+                    case SubagentItem subagent:
+                        Expand(subagent.Items);
+                        break;
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// The clock that says when a message was sent, and what "today" is when its time is shown (DESIGN.md §5). Without
@@ -441,7 +476,7 @@ public sealed class ConversationBuilder
                     if (toolUse.Name is "Agent" or "Task")
                     {
                         var subagent = new SubagentItem(toolUse.Id, toolUse.Name, toolUse.Input);
-                        var child = new ConversationBuilder(subagent.Items, todoList: null, _modelName) { ExpandThinking = ExpandThinking, _parent = this, _todoList = _todoList };
+                        var child = new ConversationBuilder(subagent.Items, todoList: null, _modelName) { _parent = this, _todoList = _todoList };
                         // Its traffic fills its group and its node in the agent map, under this agent.
                         child._agents = _agents;
                         child._tasks = _tasks;

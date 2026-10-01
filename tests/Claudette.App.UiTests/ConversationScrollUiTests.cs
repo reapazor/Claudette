@@ -9,6 +9,7 @@ using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 using Claudette.App.Views;
+using LiveMarkdown.Avalonia;
 
 namespace Claudette.App.UiTests;
 
@@ -72,6 +73,76 @@ public class ConversationScrollUiTests
             await UiText.SettleUntilAsync(window, () => tab.IsSettled && Rendered($"Streaming piece {i} ", 1) && FromBottom() <= 1, $"piece {i} at the bottom");
             AssertStill($"after piece {i}");
         }
+    }
+
+    /// <summary>
+    /// A reply streaming in below a long conversation leaves every message above it as it was: none is built again, and
+    /// no reply renders its Markdown again, which blanked it for a moment. The rows differ in height as a real
+    /// session's do (replies, Bash calls, thinking), which is what made Avalonia's own panel lose its place.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Streaming_a_reply_builds_none_of_the_messages_above_it_again()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell }, 1100, 700);
+        var scroll = window.GetVisualDescendants().OfType<ScrollViewer>().Single(s => s.Name == "ConversationScroll");
+        var items = window.GetVisualDescendants().OfType<ItemsControl>().Single(c => c.Name == "ConversationItems");
+        double FromBottom() => scroll.Extent.Height - scroll.Viewport.Height - scroll.Offset.Y;
+        bool Rendered() => items.GetRealizedContainers().SelectMany(c => c.GetVisualDescendants().OfType<MarkdownRenderer>())
+            .All(r => r.MarkdownBuilder is null || r.DocumentUpdate?.Version == r.MarkdownBuilder.Version);
+
+        for (var i = 0; i < 30; i++)
+        {
+            var reply = new AssistantTextItem();
+            reply.Append(string.Join("\n\n", Enumerable.Repeat($"Reply {i}: some text that wraps over a line or two in the conversation view.", 1 + (i % 4))));
+            reply.IsStreaming = false;
+            tab.Items.Add(reply);
+            tab.Items.Add(new ToolUseItem($"tool{i}", "Bash", new JsonObject { ["command"] = $"ls docs/{i}" }) { IsComplete = true, ResultSummary = "ok" });
+            var thinking = new ThinkingItem();
+            thinking.Append("Thinking it over.");
+            thinking.IsStreaming = false;
+            tab.Items.Add(thinking);
+        }
+        var history = tab.Items.ToHashSet();
+        await UiText.SettleUntilAsync(window, () => Rendered() && FromBottom() <= 1, "the conversation rendered at the bottom");
+
+        var rebuilt = new List<string>();
+        items.ContainerPrepared += (_, e) =>
+        {
+            if (history.Contains(tab.Items[e.Index]))
+            {
+                rebuilt.Add($"item {e.Index}");
+            }
+        };
+        var rendered = new List<string>();
+        using var renders = MarkdownRenderer.DocumentUpdateProperty.Changed.AddClassHandler<MarkdownRenderer>((renderer, _) =>
+        {
+            if (renderer.DataContext is AssistantTextItem reply && history.Contains(reply))
+            {
+                rendered.Add(reply.Text[..12]);
+            }
+        });
+
+        tab.ComposerText = "one more";
+        await tab.SendCommand.ExecuteAsync(null);
+        for (var i = 0; i < 20; i++)
+        {
+            h.Transport.Emit(new JsonObject
+            {
+                ["type"] = "stream_event",
+                ["event"] = new JsonObject
+                {
+                    ["type"] = "content_block_delta",
+                    ["index"] = 0,
+                    ["delta"] = new JsonObject { ["type"] = "text_delta", ["text"] = i % 5 == 4 ? "\n\n" : $"Streaming piece {i} with enough words to wrap now and then. " },
+                },
+            });
+            await UiText.SettleUntilAsync(window, () => tab.IsSettled && Rendered() && FromBottom() <= 1, $"piece {i} at the bottom");
+        }
+
+        Assert.True(rebuilt.Count == 0, $"Built again: {string.Join(", ", rebuilt)}");
+        Assert.True(rendered.Count == 0, $"Rendered again: {string.Join(", ", rendered)}");
     }
 
     private static Point Center(Window window, ScrollViewer scroll) =>
