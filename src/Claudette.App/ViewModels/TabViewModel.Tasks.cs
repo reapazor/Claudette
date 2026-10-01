@@ -11,7 +11,8 @@ namespace Claudette.App.ViewModels;
 /// </summary>
 public sealed partial class TabViewModel
 {
-    private ITimer? _taskTicker;
+    /// <summary>A running task's time ticks every second while the list shows.</summary>
+    private UiTicker TaskTicker => field ??= new(_services.Time, _services.Dispatcher, TimeSpan.FromSeconds(1), Tasks.Tick);
 
     /// <summary>Kept by the conversation builder from Claude Code's task messages.</summary>
     public RunningTasks Tasks { get; }
@@ -112,21 +113,5 @@ public sealed partial class TabViewModel
         UpdateTaskTicker();
     }
 
-    private void UpdateTaskTicker()
-    {
-        if (IsTaskListOpen && HasRunningTasks)
-        {
-            _taskTicker ??= _services.Time.CreateTimer(_ => _services.Dispatcher.Post(Tasks.Tick), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
-        }
-        else
-        {
-            StopTaskTicker();
-        }
-    }
-
-    private void StopTaskTicker()
-    {
-        _taskTicker?.Dispose();
-        _taskTicker = null;
-    }
+    private void UpdateTaskTicker() => TaskTicker.Run(IsTaskListOpen && HasRunningTasks);
 }

@@ -1,3 +1,4 @@
+using Claudette.Core;
 using System.Collections.ObjectModel;
 using Claudette.App.Services;
 using Claudette.Core.History;
@@ -97,7 +98,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
     /// <summary>How long typing pauses before History filters: a long one is thousands of sessions' prompts.</summary>
     public static readonly TimeSpan SearchDelay = TimeSpan.FromMilliseconds(150);
 
-    private ITimer? _searchTimer;
+    private UiTimeout SearchWait => field ??= new(_services.Time, _services.Dispatcher);
     private int _filterVersion;
     private bool _replyFilterQueued;
 
@@ -105,19 +106,13 @@ public sealed partial class HistoryViewModel : ViewModelBase
     internal Task Filtering { get; private set; } = Task.CompletedTask;
 
     /// <summary>A search is waiting for typing to pause, or being filtered.</summary>
-    internal bool IsFilterPending => _searchTimer is not null || !Filtering.IsCompleted;
+    internal bool IsFilterPending => SearchWait.IsPending || !Filtering.IsCompleted;
 
     partial void OnSearchChanged(string value)
     {
         // A new search: the replies' matches were for the old one.
         StopSearchingReplies();
-        _searchTimer?.Dispose();
-        _searchTimer = _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() =>
-        {
-            _searchTimer?.Dispose();
-            _searchTimer = null;
-            Filtering = FilterAsync();
-        }), null, SearchDelay, Timeout.InfiniteTimeSpan);
+        SearchWait.Restart(SearchDelay, () => Filtering = FilterAsync());
     }
 
     /// <summary>Filters again once, however many replies were found meanwhile.</summary>
@@ -310,8 +305,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
             _all = [];
         }
         // Fill the list before saying it's loaded, so nothing sees "loaded" with an empty list.
-        _searchTimer?.Dispose();
-        _searchTimer = null;
+        SearchWait.Cancel();
         await (Filtering = FilterAsync());
         IsLoading = false;
     }
@@ -357,7 +351,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
             string? prompts = null)
         {
             var who = lastMachine == machine ? "This machine" : lastMachine;
-            var details = new List<string> { who, Ago(now - last) };
+            var details = new List<string> { who, Formats.Ago(now - last) };
             if (messages > 0)
             {
                 details.Add($"{messages} message{(messages == 1 ? "" : "s")}");
@@ -438,7 +432,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
                      .OrderByDescending(g => g.Max(e => e.LastActivity)))
         {
             var folder = group.First().Folder;
-            var label = folder is null ? "Unknown folder" : Path.GetFileName(folder.TrimEnd('/', '\\')) is { Length: > 0 } name ? name : folder;
+            var label = folder is null ? "Unknown folder" : Formats.FolderName(folder);
             groups.Add(new HistoryGroup(label, folder, group.ToArray()));
         }
         return (groups, matched);
@@ -449,13 +443,4 @@ public sealed partial class HistoryViewModel : ViewModelBase
         || (e.FirstPrompt?.Contains(w, StringComparison.OrdinalIgnoreCase) ?? false)
         || (e.Prompts?.Contains(w, StringComparison.OrdinalIgnoreCase) ?? false)
         || (e.Folder?.Contains(w, StringComparison.OrdinalIgnoreCase) ?? false));
-
-    private static string Ago(TimeSpan span) => span switch
-    {
-        { TotalMinutes: < 1 } => "just now",
-        { TotalHours: < 1 } => $"{(int)span.TotalMinutes} min ago",
-        { TotalDays: < 1 } => $"{(int)span.TotalHours} h ago",
-        { TotalDays: < 2 } => "yesterday",
-        _ => $"{(int)span.TotalDays} days ago",
-    };
 }

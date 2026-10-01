@@ -1,3 +1,4 @@
+using Claudette.Core;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using Claudette.App.Conversation;
@@ -72,7 +73,7 @@ public sealed partial class ProjectRunViewModel : ObservableObject
     /// <summary>The sidebar entry's tip: the status line, and when it started and how long it took.</summary>
     public string Tip => State == ProjectJobState.Running ? $"{Status}\nStarted {MessageTimes.Short(Started, _time)}."
         : _couldntStart ? Status
-        : $"{Status}\nStarted {MessageTimes.Short(Started, _time)} and took {WorkingLine.Elapsed((Ended ?? Started) - Started)}.";
+        : $"{Status}\nStarted {MessageTimes.Short(Started, _time)} and took {Formats.Elapsed((Ended ?? Started) - Started)}.";
 
     /// <summary>The sidebar entry's state: busy while running, then ✓, ✕ or ■.</summary>
     public string Glyph => State switch
@@ -88,7 +89,7 @@ public sealed partial class ProjectRunViewModel : ObservableObject
     /// "Failed · exit code 6 · 14:32".
     /// </summary>
     public string Detail => State == ProjectJobState.Running
-        ? $"Running · {WorkingLine.Elapsed(_time.GetUtcNow() - Started)}"
+        ? $"Running · {Formats.Elapsed(_time.GetUtcNow() - Started)}"
         : $"{Result} · {MessageTimes.Short(Ended ?? Started, _time)}";
 
     private string Result => State switch

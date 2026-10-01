@@ -1,3 +1,4 @@
+using Claudette.Core;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Text.Json;
@@ -594,13 +595,7 @@ public sealed partial class AgentNode : ObservableObject
         toolUseResult is JsonValue value && value.GetValueKind() == JsonValueKind.String && value.GetValue<string>().Contains("rejected", StringComparison.OrdinalIgnoreCase)
         || text.TrimStart().StartsWith("[Request interrupted", StringComparison.Ordinal);
 
-    internal static string FormatElapsed(TimeSpan span) => span switch
-    {
-        { TotalSeconds: < 1 } => "<1s",
-        { TotalMinutes: < 1 } => $"{(int)span.TotalSeconds}s",
-        { TotalHours: < 1 } => $"{(int)span.TotalMinutes}m {span.Seconds:00}s",
-        _ => $"{(int)span.TotalHours}h {span.Minutes:00}m",
-    };
+    internal static string FormatElapsed(TimeSpan span) => span < TimeSpan.FromSeconds(1) ? "<1s" : Formats.Elapsed(span);
 
     internal static string? FirstLine(string? text)
     {
@@ -612,6 +607,5 @@ public sealed partial class AgentNode : ObservableObject
         return line.Length > 140 ? line[..137] + "…" : line;
     }
 
-    private static string? Str(JsonObject obj, string name) =>
-        obj[name] is JsonValue value && value.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : null;
+    private static string? Str(JsonObject obj, string name) => obj.GetString(name);
 }

@@ -54,7 +54,8 @@ public sealed partial class ProjectRunsViewModel : ViewModelBase
     private readonly IProjectRunsHost _host;
     /// <summary>The running job's process tree, for the process monitor and Stop.</summary>
     private ProcessTree? _jobTree;
-    private ITimer? _runTicker;
+    /// <summary>A running entry's time ticks every second.</summary>
+    private UiTicker RunTicker => field ??= new(_services.Time, _services.Dispatcher, TimeSpan.FromSeconds(1), () => RunningRun?.Tick());
     private ProjectRunViewModel? _notifiedRun;
 
     internal ProjectRunsViewModel(AppServices services, IProjectRunsHost host)
@@ -78,7 +79,7 @@ public sealed partial class ProjectRunsViewModel : ViewModelBase
 
     partial void OnRunningRunChanged(ProjectRunViewModel? value)
     {
-        UpdateRunTicker();
+        RunTicker.Run(RunningRun is not null);
         _host.RunningRunChanged();
     }
 
@@ -260,25 +261,6 @@ public sealed partial class ProjectRunsViewModel : ViewModelBase
         _host.JobEnded(result.State == ProjectJobState.Succeeded ? action?.ThenOnSuccess : null);
     }
 
-    /// <summary>A running entry's time ticks every second, from the injected clock.</summary>
-    private void UpdateRunTicker()
-    {
-        if (RunningRun is not null)
-        {
-            _runTicker ??= _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() => RunningRun?.Tick()), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
-        }
-        else
-        {
-            StopRunTicker();
-        }
-    }
-
-    private void StopRunTicker()
-    {
-        _runTicker?.Dispose();
-        _runTicker = null;
-    }
-
     /// <summary><b>Copy</b> on the Project page: the log it shows.</summary>
     [RelayCommand]
     private Task CopyOutputAsync() =>
@@ -315,7 +297,7 @@ public sealed partial class ProjectRunsViewModel : ViewModelBase
         {
             RunningRun?.Job?.Stop();
         }
-        StopRunTicker();
+        RunTicker.Stop();
         _notifiedRun = null;
         SelectedRun = null;
         Items.Clear();

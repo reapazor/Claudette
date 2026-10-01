@@ -991,11 +991,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     // ---- Copy and times (DESIGN.md §5, "Copy and times") ---------------------------------------------------
 
-    /// <summary>How long a Copy button says "Copied".</summary>
+    /// <summary>How long a Copy button says "Copied", here and in Settings.</summary>
     public static readonly TimeSpan CopiedFor = TimeSpan.FromSeconds(1.5);
 
-    /// <summary>What says "Copied" now, and the timer that puts it back.</summary>
-    private readonly Dictionary<object, ITimer> _copied = [];
+    /// <summary>What says "Copied" now, and the timeout that puts it back.</summary>
+    private readonly Dictionary<object, UiTimeout> _copied = [];
 
     /// <summary><b>Copy message</b> on a user message or a reply: its text, as Markdown for a reply.</summary>
     [RelayCommand]
@@ -1022,22 +1022,16 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>Says "Copied" on <paramref name="target"/> for <see cref="CopiedFor"/>, timed by the tab's clock.</summary>
     private void ShowCopied(object target, Action<bool> show)
     {
-        if (_copied.Remove(target, out var earlier))
+        if (!_copied.TryGetValue(target, out var timeout))
         {
-            earlier.Dispose();
+            _copied[target] = timeout = new UiTimeout(_services.Time, _services.Dispatcher);
         }
         show(true);
-        ITimer? timer = null;
-        timer = _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() =>
+        timeout.Restart(CopiedFor, () =>
         {
-            if (_copied.TryGetValue(target, out var current) && ReferenceEquals(current, timer))
-            {
-                _copied.Remove(target);
-                current.Dispose();
-                show(false);
-            }
-        }), null, CopiedFor, Timeout.InfiniteTimeSpan);
-        _copied[target] = timer;
+            _copied.Remove(target);
+            show(false);
+        });
     }
 
     /// <summary>A message's short time says "today" only on the day it was sent; looking at the tab again catches up.</summary>
@@ -1074,7 +1068,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         NotifyCheckIn();
     });
 
-    private ITimer? _checkInTicker;
+    /// <summary>The check-in bar's countdown ticks every second.</summary>
+    private UiTicker CheckInTicker => field ??= new(_services.Time, _services.Dispatcher, TimeSpan.FromSeconds(1), () => OnPropertyChanged(nameof(CheckInCountdownText)));
 
     /// <summary>A check-in counting down to being sent, shown in a bar over the composer; null otherwise.</summary>
     [ObservableProperty]
@@ -1088,24 +1083,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         ? $"Checking in with Claude in {Math.Max(0, (int)Math.Ceiling((countdown.SendsAt - _services.Time.GetUtcNow()).TotalSeconds))} s."
         : null;
 
-    partial void OnCheckInCountdownChanged(CheckInCountdown? value)
-    {
-        if (value is null)
-        {
-            StopCheckInTicker();
-        }
-        else
-        {
-            _checkInTicker ??= _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() => OnPropertyChanged(nameof(CheckInCountdownText))), null,
-                TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
-        }
-    }
-
-    private void StopCheckInTicker()
-    {
-        _checkInTicker?.Dispose();
-        _checkInTicker = null;
-    }
+    partial void OnCheckInCountdownChanged(CheckInCountdown? value) => CheckInTicker.Run(value is not null);
 
     /// <summary><b>Send now</b> on the bar: the check-in goes without waiting out the countdown.</summary>
     [RelayCommand]
@@ -1957,9 +1935,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             timer.Dispose();
         }
         _copied.Clear();
-        StopAgentTicker();
-        StopTaskTicker();
-        StopCheckInTicker();
+        AgentTicker.Stop();
+        TaskTicker.Stop();
+        CheckInTicker.Stop();
         // The session's last events aren't applied once it stops, so nothing else would end the turn's line, and its
         // timer would keep this tab alive.
         Working.Dispose();

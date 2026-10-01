@@ -1,3 +1,4 @@
+using Claudette.Core;
 using System.Collections.ObjectModel;
 using Claudette.App.Services;
 using Claudette.Core.Git;
@@ -12,7 +13,7 @@ public sealed class FolderEntry(string path, string? branch, DateTimeOffset? las
 {
     public string Path { get; } = path;
 
-    public string Name => System.IO.Path.GetFileName(Path) is { Length: > 0 } name ? name : Path;
+    public string Name => Formats.FolderName(Path);
 
     /// <summary>The path with the home folder shortened to <c>~</c>.</summary>
     public string ShortPath
@@ -52,7 +53,7 @@ public sealed class FolderEntry(string path, string? branch, DateTimeOffset? las
             }
             if (lastUsed is { } used)
             {
-                parts.Add(Ago(time.GetUtcNow() - used));
+                parts.Add(Formats.Ago(time.GetUtcNow() - used));
             }
             if (OpenTabs > 0)
             {
@@ -61,15 +62,6 @@ public sealed class FolderEntry(string path, string? branch, DateTimeOffset? las
             return string.Join(" · ", parts);
         }
     }
-
-    private static string Ago(TimeSpan span) => span switch
-    {
-        { TotalMinutes: < 1 } => "just now",
-        { TotalHours: < 1 } => $"{(int)span.TotalMinutes} min ago",
-        { TotalDays: < 1 } => $"{(int)span.TotalHours} h ago",
-        { TotalDays: < 2 } => "yesterday",
-        _ => $"{(int)span.TotalDays} days ago",
-    };
 }
 
 /// <summary>The picker behind Ctrl/Cmd+T and the sidebar's <b>New tab</b> (DESIGN.md §4, "Opening a tab").</summary>

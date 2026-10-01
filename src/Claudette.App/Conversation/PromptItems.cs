@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -328,8 +329,7 @@ public sealed partial class PermissionItem : PromptItem
         return true;
     }
 
-    private static string? Str(JsonObject obj, string name) =>
-        obj[name] is JsonValue value && value.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : null;
+    private static string? Str(JsonObject obj, string name) => obj.GetString(name);
 }
 
 /// <summary>One option of a clarifying question.</summary>

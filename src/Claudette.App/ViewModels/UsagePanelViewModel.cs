@@ -1,3 +1,4 @@
+using Claudette.Core;
 using System.Globalization;
 using Claudette.App.Controls;
 using Claudette.App.Services;
@@ -47,12 +48,12 @@ public sealed record ProjectBurnRow(string Name, string? Folder, string Tokens, 
     public static IReadOnlyList<ProjectBurnRow> From(IReadOnlyList<ProjectTokenSum> sums)
     {
         var total = Math.Max(1, sums.Sum(s => s.Total));
-        var names = sums.Select(s => s.Project is { } folder ? FolderName(folder) : null).ToArray();
+        var names = sums.Select(s => s.Project is { } folder ? Formats.FolderName(folder) : null).ToArray();
         return sums
             .Select((s, i) => new ProjectBurnRow(
                 s.Project is not { } folder ? "Earlier turns"
                     : names.Count(n => n == names[i]) > 1 && Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(folder)) is { Length: > 0 } parent
-                        ? $"{names[i]} ({FolderName(parent)})"
+                        ? $"{names[i]} ({Formats.FolderName(parent)})"
                         : names[i]!,
                 s.Project,
                 TokenTotals.Short(s.Total),
@@ -60,9 +61,6 @@ public sealed record ProjectBurnRow(string Name, string? Folder, string Tokens, 
                 $"{s.Turns} turn{(s.Turns == 1 ? "" : "s")}",
                 (double)s.Total / total))
             .ToArray();
-
-        static string FolderName(string path) =>
-            Path.GetFileName(Path.TrimEndingDirectorySeparator(path)) is { Length: > 0 } name ? name : path;
     }
 }
 

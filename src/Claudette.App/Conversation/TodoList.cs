@@ -1,3 +1,4 @@
+using Claudette.Core;
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -54,7 +55,7 @@ public sealed partial class TodoItem(string content, string? activeForm, string 
 
     /// <summary>"Took 4m", "Started 14:05" or "Added 14:02", for the Tasks page.</summary>
     public string? TimeText =>
-        CompletedAt is { } done && StartedAt is { } began ? $"Took {Duration(done - began)}"
+        CompletedAt is { } done && StartedAt is { } began ? $"Took {Formats.Duration(done - began)}"
         : CompletedAt is { } finished ? $"Done {finished.ToLocalTime():t}"
         : StartedAt is { } started ? $"Started {started.ToLocalTime():t}"
         : CreatedAt is { } created ? $"Added {created.ToLocalTime():t}"
@@ -69,13 +70,6 @@ public sealed partial class TodoItem(string content, string? activeForm, string 
     };
 
     public bool HasDetail => DetailText is not null;
-
-    private static string Duration(TimeSpan span) => span switch
-    {
-        { TotalSeconds: < 60 } => $"{Math.Max(0, (int)span.TotalSeconds)}s",
-        { TotalHours: < 1 } => $"{(int)span.TotalMinutes}m",
-        _ => $"{(int)span.TotalHours}h {span.Minutes:00}m",
-    };
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayText))]

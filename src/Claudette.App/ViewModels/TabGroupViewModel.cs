@@ -1,3 +1,4 @@
+using Claudette.Core;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -28,7 +29,7 @@ public sealed partial class TabGroupViewModel : ObservableObject
 
     public string Folder { get; }
 
-    public string FolderName => Path.GetFileName(Folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) is { Length: > 0 } name ? name : Folder;
+    public string FolderName => Formats.FolderName(Folder);
 
     /// <summary>The folder is in a git repository, so a tab can work in a worktree of it (DESIGN.md §4, "Worktree tabs").</summary>
     public bool CanMakeWorktrees => _canMakeWorktrees ??= Core.Git.GitInfo.TryGetBranch(Folder) is not null;

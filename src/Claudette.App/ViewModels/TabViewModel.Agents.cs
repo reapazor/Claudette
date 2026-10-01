@@ -10,7 +10,8 @@ namespace Claudette.App.ViewModels;
 /// </summary>
 public sealed partial class TabViewModel
 {
-    private ITimer? _agentTicker;
+    /// <summary>Running times tick every second while an agent runs.</summary>
+    private UiTicker AgentTicker => field ??= new(_services.Time, _services.Dispatcher, TimeSpan.FromSeconds(1), Agents.Tick);
 
     /// <summary>Kept by the conversation builder from the same routing as the subagent groups.</summary>
     public AgentMap Agents { get; }
@@ -143,25 +144,6 @@ public sealed partial class TabViewModel
             // Gone after /clear.
             SelectedAgent = null;
         }
-        UpdateAgentTicker();
-    }
-
-    /// <summary>Running times tick every second while an agent runs, from the injected clock.</summary>
-    private void UpdateAgentTicker()
-    {
-        if (Agents.IsTicking)
-        {
-            _agentTicker ??= _services.Time.CreateTimer(_ => _services.Dispatcher.Post(Agents.Tick), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
-        }
-        else
-        {
-            StopAgentTicker();
-        }
-    }
-
-    private void StopAgentTicker()
-    {
-        _agentTicker?.Dispose();
-        _agentTicker = null;
+        AgentTicker.Run(Agents.IsTicking);
     }
 }

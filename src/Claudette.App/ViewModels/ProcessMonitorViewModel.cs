@@ -1,3 +1,4 @@
+using Claudette.Core;
 using System.Collections.ObjectModel;
 using Claudette.App.Conversation;
 using Claudette.App.Services;
@@ -254,7 +255,7 @@ public sealed partial class ProcessMonitorViewModel : ViewModelBase
         UpdateRows(Ordered(snapshots).Select(snapshot => (
             snapshot,
             Indent: Depth(snapshot) * 14.0,
-            Running: snapshot.StartTime is { } started ? Elapsed(now - started) : "",
+            Running: snapshot.StartTime is { } started ? Formats.Duration(now - started) : "",
             Tool: _processTools.TryGetValue(snapshot.Pid, out var toolId) && toolsById.TryGetValue(toolId, out var tool) ? tool : null)).ToList());
     }
 
@@ -328,14 +329,6 @@ public sealed partial class ProcessMonitorViewModel : ViewModelBase
             }
         }
     }
-
-    private static string Elapsed(TimeSpan span) => span switch
-    {
-        { TotalMinutes: < 1 } => $"{(int)span.TotalSeconds}s",
-        { TotalHours: < 1 } => $"{(int)span.TotalMinutes}m",
-        { TotalDays: < 1 } => $"{(int)span.TotalHours}h {span.Minutes:00}m",
-        _ => $"{(int)span.TotalDays}d {span.Hours}h",
-    };
 
     [RelayCommand]
     private void ShowProcessTool(ProcessRow? row)

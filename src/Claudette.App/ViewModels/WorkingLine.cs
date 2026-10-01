@@ -1,3 +1,4 @@
+using Claudette.Core;
 using System.Globalization;
 using Claudette.App.Services;
 using Claudette.Core.Claude;
@@ -221,12 +222,7 @@ public sealed partial class WorkingLine(
     }
 
     /// <summary>"8s", "1m 05s", "1h 02m".</summary>
-    public static string Elapsed(TimeSpan span) => span switch
-    {
-        { TotalHours: >= 1 } => string.Create(CultureInfo.InvariantCulture, $"{(int)span.TotalHours}h {span.Minutes:00}m"),
-        { TotalMinutes: >= 1 } => string.Create(CultureInfo.InvariantCulture, $"{(int)span.TotalMinutes}m {span.Seconds:00}s"),
-        _ => string.Create(CultureInfo.InvariantCulture, $"{Math.Max(0, (int)span.TotalSeconds)}s"),
-    };
+    public static string Elapsed(TimeSpan span) => Formats.Elapsed(span);
 
     public void Dispose() => Stop();
 }

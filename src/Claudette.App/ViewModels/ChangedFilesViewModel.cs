@@ -85,7 +85,7 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
     private ChangedFiles? _changes;
     private ReviewedFiles? _reviewed;
     /// <summary>Writes the library record once the ticking stops, for a tab that syncs.</summary>
-    private ITimer? _reviewSync;
+    private UiTimeout ReviewSync => field ??= new(_services.Time, _services.Dispatcher);
     private bool _reviewSyncStopped;
     private bool _refreshQueued;
     /// <summary>Changes came while the tab was in the background; the rows catch up when it's selected.</summary>
@@ -107,7 +107,7 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
     /// </summary>
     internal static readonly TimeSpan GitRefreshDelay = TimeSpan.FromMilliseconds(500);
 
-    private ITimer? _gitRefreshTimer;
+    private UiTimeout GitRefreshWait => field ??= new(_services.Time, _services.Dispatcher);
 
     /// <summary>The git listing under way; a newer refresh stops it.</summary>
     private CancellationTokenSource? _gitRefresh;
@@ -201,8 +201,7 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
         if (ShowGitChanges)
         {
             // Once the edits pause.
-            _gitRefreshTimer?.Dispose();
-            _gitRefreshTimer = _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() => _ = RefreshAsync()), null, GitRefreshDelay, Timeout.InfiniteTimeSpan);
+            GitRefreshWait.Restart(GitRefreshDelay, () => _ = RefreshAsync());
             return;
         }
         if (_refreshQueued)
@@ -225,8 +224,7 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
         List<ChangedFileRow> rows;
         if (ShowGitChanges)
         {
-            _gitRefreshTimer?.Dispose();
-            _gitRefreshTimer = null;
+            GitRefreshWait.Cancel();
             var refresh = new CancellationTokenSource();
             Interlocked.Exchange(ref _gitRefresh, refresh)?.Cancel();
             IReadOnlyList<GitChange> changes;
@@ -417,22 +415,13 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
         {
             return;
         }
-        _reviewSync?.Dispose();
-        ITimer? timer = null;
-        timer = _services.Time.CreateTimer(_ => _services.Dispatcher.Post(() =>
+        ReviewSync.Restart(ReviewSyncDelay, () =>
         {
-            if (timer is null || !ReferenceEquals(_reviewSync, timer))
-            {
-                return;
-            }
-            _reviewSync = null;
-            timer.Dispose();
             if (_host.CanSyncNow && !_reviewSyncStopped)
             {
                 _host.CopyToLibrary();
             }
-        }), null, ReviewSyncDelay, Timeout.InfiniteTimeSpan);
-        _reviewSync = timer;
+        });
     }
 
     /// <summary>
@@ -442,10 +431,8 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
     internal void StopReviewSync()
     {
         _reviewSyncStopped = true;
-        _reviewSync?.Dispose();
-        _reviewSync = null;
-        _gitRefreshTimer?.Dispose();
-        _gitRefreshTimer = null;
+        ReviewSync.Cancel();
+        GitRefreshWait.Cancel();
         _gitRefresh?.Cancel();
     }
 

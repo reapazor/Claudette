@@ -1,6 +1,7 @@
 using Claudette.App.Services;
 using Claudette.Core.Accessibility;
 using Claudette.Core.Settings;
+using Claudette.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -125,7 +126,7 @@ public sealed partial class ShellViewModel
         var state = _services.State;
         foreach (var folder in state.FavoriteFolders.Concat(state.RecentFolders.Select(r => r.Path)).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            entries.Add(new PaletteEntry(Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) is { Length: > 0 } name ? name : folder,
+            entries.Add(new PaletteEntry(Formats.FolderName(folder),
                 "Folder", () => OpenFolderAsync(folder), Detail: folder));
         }
 
