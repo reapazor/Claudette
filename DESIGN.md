@@ -303,7 +303,7 @@ Using the picker:
 **Other ways in.**
 
 - Dragging a folder from Finder or Explorer onto the sidebar opens a tab there.
-- The command line: `Claudette --folder <path>` opens a tab in that folder on startup. Open Recent and the jump list use this too. `--login` is how the login entry starts Claudette: minimized, and ignored by a running Claudette ([§9](#starting-at-login)).
+- The command line: `Claudette --folder <path>` opens a tab in that folder on startup. Open Recent and the jump list use this too. A relative path is from where the command ran, also when a running Claudette takes it. `--login` is how the login entry starts Claudette: minimized, and ignored by a running Claudette ([§9](#starting-at-login)).
 - On macOS, **File → Open Recent** and the Dock icon's menu list recent folders. On Windows, the taskbar jump list does the same, unless the user has turned off **Show recently opened items** in Windows' Start settings, which stops Windows from showing any app's recent items there.
 - Choosing any of these opens a new tab in that folder.
 - The lists hold favorites first, then recent folders, up to 10, leaving out folders that no longer exist. Folders with the same name show their parent too (`work/api`), as tab groups do.

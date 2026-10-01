@@ -228,7 +228,19 @@ public sealed class SingleInstance : IDisposable
             while (!stop.IsCancellationRequested)
             {
                 server ??= await CreateServerAsync(stop).ConfigureAwait(false);
-                await server.WaitForConnectionAsync(stop).ConfigureAwait(false);
+                try
+                {
+                    await server.WaitForConnectionAsync(stop).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // A launch that connected and went at once can break the pipe: open another and keep listening, or
+                    // every later launch would start a second Claudette.
+                    _logger.LogDebug(ex, "Waiting for a later launch failed; listening again.");
+                    await server.DisposeAsync().ConfigureAwait(false);
+                    server = null;
+                    continue;
+                }
                 // The next one before this one closes: launches at the same moment wait in its queue. On macOS and
                 // Linux, closing the last one in the process closes the socket, and with it any launch still waiting.
                 var connected = server;
@@ -292,7 +304,15 @@ public sealed class SingleInstance : IDisposable
                 if (await reader.ReadLineAsync(stop).ConfigureAwait(false) is { } line
                     && JsonSerializer.Deserialize<string[]>(line) is { } args)
                 {
-                    ArgumentsReceived?.Invoke(args);
+                    try
+                    {
+                        ArgumentsReceived?.Invoke(args);
+                    }
+                    catch (Exception ex)
+                    {
+                        // The app's handler failed on these: later launches still reach it.
+                        _logger.LogWarning(ex, "A later launch's arguments couldn't be handled.");
+                    }
                 }
             }
             catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)

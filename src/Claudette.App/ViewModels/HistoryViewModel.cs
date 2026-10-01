@@ -156,7 +156,11 @@ public sealed partial class HistoryViewModel : ViewModelBase
                 }
                 return count;
             }, search.Token);
-            ReplySearchText = found == 0 ? "Claude's replies in the other sessions don't mention that either." : $"Found {Sessions(found)} more in Claude's replies.";
+            // A search that finished just as the words changed says nothing about the new ones.
+            if (ReferenceEquals(_replySearch, search) && !search.IsCancellationRequested)
+            {
+                ReplySearchText = found == 0 ? "Claude's replies in the other sessions don't mention that either." : $"Found {Sessions(found)} more in Claude's replies.";
+            }
         }
         catch (OperationCanceledException)
         {
