@@ -238,12 +238,16 @@ public sealed partial class HistoryViewModel : ViewModelBase
     /// virtualizes it: only the rows on screen are built, however long History is.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFirstLoad))]
     public partial IReadOnlyList<object> Rows { get; private set; } = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsEmpty))]
+    [NotifyPropertyChangedFor(nameof(IsEmpty), nameof(IsFirstLoad))]
     [NotifyCanExecuteChangedFor(nameof(SearchRepliesCommand))]
     public partial bool IsLoading { get; set; } = true;
+
+    /// <summary>Loading with nothing listed yet. A refresh leaves the list in place rather than pushing it down.</summary>
+    public bool IsFirstLoad => IsLoading && Rows.Count == 0;
 
     [ObservableProperty]
     public partial string? Error { get; set; }

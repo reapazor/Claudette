@@ -16,12 +16,14 @@
 
       <Grid Grid.Row="1" RowDefinitions="Auto,*">
         <StackPanel Spacing="12" Margin="8,0,8,4">
-          <TextBlock Classes="muted" Margin="8" Text="Reading your sessions…" IsVisible="{Binding IsLoading}" />
+          <!-- Only before the first list: a refresh keeps the list where it is until the new one replaces it. -->
+          <TextBlock Classes="muted" Margin="8" Text="Reading your sessions…" IsVisible="{Binding IsFirstLoad}" />
           <TextBlock Classes="error" Margin="8" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
           <TextBlock Classes="muted" Margin="8" Text="No sessions found." IsVisible="{Binding IsEmpty}" />
           <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0">
+            <!-- Disabled rather than hidden while it searches, so the row, and the list under it, don't move. -->
             <Button Classes="flat" Content="Search Claude's replies too" Command="{Binding SearchRepliesCommand}"
-                    IsVisible="{Binding !IsSearchingReplies}" ToolTip.Tip="Reads each session's transcript, so it takes a moment" />
+                    ToolTip.Tip="Reads each session's transcript, so it takes a moment" />
             <TextBlock Classes="muted small" Text="{Binding ReplySearchText}" VerticalAlignment="Center" TextWrapping="Wrap"
                        IsVisible="{Binding HasReplySearchText}" />
           </StackPanel>
