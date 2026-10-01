@@ -54,7 +54,7 @@ public class SidePanelScrollUiTests
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
         await UiText.SettleUntilAsync(window, () => tab.ProjectTools.Project is not null, "the project");
         await tab.ProjectTools.RunActionCommand.ExecuteAsync(tab.ProjectTools.Actions.Single(a => a.Id == "build-editor"));
-        var run = tab.ProjectTools.Runs.Single();
+        var run = tab.ProjectTools.Runs.Items.Single();
         run.OpenCommand.Execute(null);
         launcher.Processes.Last().WriteOutput($"error C2065: {LongName}: undeclared identifier");
         await UiText.SettleUntilAsync(window, () => run.Output.Count > 0, "the output");

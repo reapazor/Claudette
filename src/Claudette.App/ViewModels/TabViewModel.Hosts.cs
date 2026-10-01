@@ -27,9 +27,9 @@ public sealed partial class TabViewModel : IProcessMonitorHost, IChangedFilesHos
 
     string? IProcessMonitorHost.TaskIdFor(string toolUseId) => Tasks.TaskIdFor(toolUseId);
 
-    IReadOnlyList<ProcessSnapshot> IProcessMonitorHost.ProjectJobProcesses(bool includeCommandLines) => ProjectTools.JobProcesses(includeCommandLines);
+    IReadOnlyList<ProcessSnapshot> IProcessMonitorHost.ProjectJobProcesses(bool includeCommandLines) => ProjectTools.Runs.JobProcesses(includeCommandLines);
 
-    ProcessTree? IProcessMonitorHost.ProjectJobTreeHolding(int pid) => ProjectTools.JobTreeHolding(pid);
+    ProcessTree? IProcessMonitorHost.ProjectJobTreeHolding(int pid) => ProjectTools.Runs.JobTreeHolding(pid);
 
     void IProcessMonitorHost.ScrollTo(ConversationItem item) => ScrollTo(item);
 

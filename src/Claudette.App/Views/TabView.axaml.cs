@@ -43,7 +43,7 @@ public partial class TabView : UserControl
         SidePanelEdge.PointerReleased += (_, e) => EndSidePanelResize(e.Pointer);
         SidePanelEdge.PointerCaptureLost += (_, _) => EndSidePanelResize(null);
         SidePanelEdge.DoubleTapped += (_, _) => ViewModel?.ResetSidePanelWidth();
-        SizeChanged += (_, e) => SidePanel.MaxWidth = Math.Max(ShellViewModel.MinSidePanelWidth, e.NewSize.Width - MinConversationWidth);
+        SizeChanged += (_, e) => SidePanel.MaxWidth = Math.Max(ShellLayout.MinSidePanelWidth, e.NewSize.Width - MinConversationWidth);
     }
 
     private TabViewModel? ViewModel => DataContext as TabViewModel;
@@ -242,7 +242,7 @@ public partial class TabView : UserControl
             _tab.FindFocusRequested -= OnFindFocusRequested;
             _tab.Find.PropertyChanged -= OnFindPropertyChanged;
             _tab.PropertyChanged -= OnTabPropertyChanged;
-            _tab.ProjectTools.PropertyChanged -= OnProjectToolsPropertyChanged;
+            _tab.ProjectTools.Runs.PropertyChanged -= OnProjectRunsPropertyChanged;
             // The list belonged to that tab.
             TasksChip.Flyout?.Hide();
             _tab.IsTaskListOpen = false;
@@ -257,7 +257,7 @@ public partial class TabView : UserControl
             _tab.FindFocusRequested += OnFindFocusRequested;
             _tab.Find.PropertyChanged += OnFindPropertyChanged;
             _tab.PropertyChanged += OnTabPropertyChanged;
-            _tab.ProjectTools.PropertyChanged += OnProjectToolsPropertyChanged;
+            _tab.ProjectTools.Runs.PropertyChanged += OnProjectRunsPropertyChanged;
         }
         WatchProjectOutput();
         MarkFindCurrent();
@@ -360,9 +360,9 @@ public partial class TabView : UserControl
     }
 
     /// <summary>The Project page shows another run.</summary>
-    private void OnProjectToolsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void OnProjectRunsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ProjectToolsViewModel.SelectedRun))
+        if (e.PropertyName == nameof(ProjectRunsViewModel.SelectedRun))
         {
             WatchProjectOutput();
         }
@@ -392,7 +392,7 @@ public partial class TabView : UserControl
         {
             _projectOutput.CollectionChanged -= OnProjectOutputChanged;
         }
-        _projectOutput = _tab?.ProjectTools.SelectedRun?.Output;
+        _projectOutput = _tab?.ProjectTools.Runs.SelectedRun?.Output;
         if (_projectOutput is not null)
         {
             _projectOutput.CollectionChanged += OnProjectOutputChanged;

@@ -68,7 +68,7 @@ public sealed partial class ShellViewModel
         Command("New tab", NewTab, KeyboardShortcuts.NewTab);
         Command("Open from History", OpenHistory, KeyboardShortcuts.History);
         AsyncCommand("Settings", OpenSettingsAsync, KeyboardShortcuts.Settings);
-        Command(IsSidebarCollapsed ? "Expand the sidebar" : "Collapse the sidebar", ToggleSidebar, KeyboardShortcuts.ToggleSidebar);
+        Command(Layout.IsSidebarCollapsed ? "Expand the sidebar" : "Collapse the sidebar", () => Layout.ToggleSidebarCommand.Execute(null), KeyboardShortcuts.ToggleSidebar);
         var zoom = _services.Settings.Appearance.Zoom;
         Command("Zoom in", ZoomIn, KeyboardShortcuts.ZoomIn, $"{zoom}%");
         Command("Zoom out", ZoomOut, KeyboardShortcuts.ZoomOut, $"{zoom}%");

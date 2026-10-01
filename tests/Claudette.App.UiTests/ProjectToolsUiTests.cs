@@ -72,10 +72,10 @@ public class ProjectToolsUiTests
         await tab.ProjectTools.RunActionCommand.ExecuteAsync(tab.ProjectTools.Actions.Single(a => a.Id == "generate-project-files"));
         launcher.Processes.Last().WriteOutput("Generating...");
         launcher.Processes.Last().Exit(6);
-        var failed = tab.ProjectTools.Runs.Single();
+        var failed = tab.ProjectTools.Runs.Items.Single();
         await UiText.SettleUntilAsync(window, () => failed.Failed, "the failure");
         await tab.ProjectTools.RunActionCommand.ExecuteAsync(tab.ProjectTools.Actions.Single(a => a.Id == "build-editor"));
-        var running = tab.ProjectTools.Runs[^1];
+        var running = tab.ProjectTools.Runs.Items[^1];
         UiText.Settle(window);
 
         Assert.True(list.IsEffectivelyVisible);
@@ -127,7 +127,7 @@ public class ProjectToolsUiTests
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
         await UiText.SettleUntilAsync(window, () => tab.ProjectTools.Project is not null, "the project");
         await tab.ProjectTools.RunActionCommand.ExecuteAsync(tab.ProjectTools.Actions.Single(a => a.Id == "build-editor"));
-        var run = tab.ProjectTools.Runs.Single();
+        var run = tab.ProjectTools.Runs.Items.Single();
         run.OpenCommand.Execute(null);
         UiText.Settle(window);
         var output = window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "ProjectOutputList");

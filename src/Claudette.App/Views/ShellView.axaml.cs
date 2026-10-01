@@ -46,11 +46,11 @@ public partial class ShellView : UserControl
         SidebarEdge.PointerCaptureLost += (_, _) => EndResize(null);
         SidebarEdge.DoubleTapped += (_, _) =>
         {
-            ViewModel?.ResizeSidebar(ShellViewModel.DefaultSidebarWidth);
-            ViewModel?.SaveSidebarWidth();
+            ViewModel?.Layout.ResizeSidebar(ShellLayout.DefaultSidebarWidth);
+            ViewModel?.Layout.SaveSidebarWidth();
         };
         // A narrow window shows the sidebar's rail (DESIGN.md §4, "Sidebar").
-        SizeChanged += (_, e) => ViewModel?.SetAvailableWidth(e.NewSize.Width);
+        SizeChanged += (_, e) => ViewModel?.Layout.SetAvailableWidth(e.NewSize.Width);
     }
 
     // ---- Resizing the sidebar -------------------------------------------------------------------------------------
@@ -63,7 +63,7 @@ public partial class ShellView : UserControl
         }
         // Measured against the whole view, which doesn't move as the edge does.
         _resizeFrom = e.GetPosition(this).X;
-        _resizeStartWidth = shell.SidebarWidth;
+        _resizeStartWidth = shell.Layout.SidebarWidth;
         e.Pointer.Capture(SidebarEdge);
         e.Handled = true;
     }
@@ -72,7 +72,7 @@ public partial class ShellView : UserControl
     {
         if (_resizeFrom is { } from)
         {
-            ViewModel?.ResizeSidebar(_resizeStartWidth + e.GetPosition(this).X - from);
+            ViewModel?.Layout.ResizeSidebar(_resizeStartWidth + e.GetPosition(this).X - from);
         }
     }
 
@@ -84,7 +84,7 @@ public partial class ShellView : UserControl
         }
         _resizeFrom = null;
         pointer?.Capture(null);
-        ViewModel?.SaveSidebarWidth();
+        ViewModel?.Layout.SaveSidebarWidth();
     }
 
     private void OnFolderDragOver(object? sender, DragEventArgs e) =>
@@ -257,7 +257,7 @@ public partial class ShellView : UserControl
             _shell.PropertyChanged += OnShellChanged;
             if (Bounds.Width > 0)
             {
-                _shell.SetAvailableWidth(Bounds.Width);
+                _shell.Layout.SetAvailableWidth(Bounds.Width);
             }
         }
         WatchUpdates();
@@ -364,7 +364,7 @@ public partial class ShellView : UserControl
         }
         else if (Is(KeyboardShortcuts.ToggleSidebar))
         {
-            shell.ToggleSidebarCommand.Execute(null);
+            shell.Layout.ToggleSidebarCommand.Execute(null);
         }
         else if (Is(KeyboardShortcuts.CommandPalette))
         {

@@ -15,40 +15,40 @@ public class SidebarTests
     public async Task Collapsing_the_sidebar_is_remembered()
     {
         await using var h = new TabTestHarness();
-        Assert.False(h.Shell.IsSidebarCollapsed);
-        Assert.Equal(ShellViewModel.DefaultSidebarWidth, h.Shell.SidebarDisplayWidth);
+        Assert.False(h.Shell.Layout.IsSidebarCollapsed);
+        Assert.Equal(ShellLayout.DefaultSidebarWidth, h.Shell.Layout.SidebarDisplayWidth);
 
-        h.Shell.ToggleSidebarCommand.Execute(null);
+        h.Shell.Layout.ToggleSidebarCommand.Execute(null);
 
-        Assert.True(h.Shell.IsSidebarCollapsed);
-        Assert.Equal(ShellViewModel.RailWidth, h.Shell.SidebarDisplayWidth);
+        Assert.True(h.Shell.Layout.IsSidebarCollapsed);
+        Assert.Equal(ShellLayout.RailWidth, h.Shell.Layout.SidebarDisplayWidth);
         Assert.True(h.Services.State.SidebarCollapsed);
-        Assert.True(new ShellViewModel(h.Services, () => { }).IsSidebarCollapsed);
+        Assert.True(new ShellViewModel(h.Services, () => { }).Layout.IsSidebarCollapsed);
     }
 
     [Fact]
     public async Task A_narrow_window_shows_the_rail_without_changing_the_users_choice()
     {
         await using var h = new TabTestHarness();
-        h.Shell.SetAvailableWidth(1200);
+        h.Shell.Layout.SetAvailableWidth(1200);
 
-        h.Shell.SetAvailableWidth(ShellViewModel.NarrowWidth - 1);
-        Assert.True(h.Shell.IsSidebarCollapsed);
+        h.Shell.Layout.SetAvailableWidth(ShellLayout.NarrowWidth - 1);
+        Assert.True(h.Shell.Layout.IsSidebarCollapsed);
         Assert.False(h.Services.State.SidebarCollapsed);
 
         // Expanding while narrow is only for now.
-        h.Shell.ToggleSidebarCommand.Execute(null);
-        Assert.False(h.Shell.IsSidebarCollapsed);
+        h.Shell.Layout.ToggleSidebarCommand.Execute(null);
+        Assert.False(h.Shell.Layout.IsSidebarCollapsed);
         Assert.False(h.Services.State.SidebarCollapsed);
 
-        h.Shell.SetAvailableWidth(1200);
-        Assert.False(h.Shell.IsSidebarCollapsed);
+        h.Shell.Layout.SetAvailableWidth(1200);
+        Assert.False(h.Shell.Layout.IsSidebarCollapsed);
 
         // Collapsed by the user, it stays collapsed after the window has been narrow.
-        h.Shell.ToggleSidebarCommand.Execute(null);
-        h.Shell.SetAvailableWidth(600);
-        h.Shell.SetAvailableWidth(1200);
-        Assert.True(h.Shell.IsSidebarCollapsed);
+        h.Shell.Layout.ToggleSidebarCommand.Execute(null);
+        h.Shell.Layout.SetAvailableWidth(600);
+        h.Shell.Layout.SetAvailableWidth(1200);
+        Assert.True(h.Shell.Layout.IsSidebarCollapsed);
     }
 
     [Fact]
@@ -56,17 +56,17 @@ public class SidebarTests
     {
         await using var h = new TabTestHarness();
 
-        h.Shell.ResizeSidebar(40);
-        Assert.Equal(ShellViewModel.MinSidebarWidth, h.Shell.SidebarWidth);
-        h.Shell.ResizeSidebar(2000);
-        Assert.Equal(ShellViewModel.MaxSidebarWidth, h.Shell.SidebarWidth);
+        h.Shell.Layout.ResizeSidebar(40);
+        Assert.Equal(ShellLayout.MinSidebarWidth, h.Shell.Layout.SidebarWidth);
+        h.Shell.Layout.ResizeSidebar(2000);
+        Assert.Equal(ShellLayout.MaxSidebarWidth, h.Shell.Layout.SidebarWidth);
 
-        h.Shell.ResizeSidebar(300);
+        h.Shell.Layout.ResizeSidebar(300);
         Assert.Null(h.Services.State.SidebarWidth);
-        h.Shell.SaveSidebarWidth();
+        h.Shell.Layout.SaveSidebarWidth();
 
         Assert.Equal(300, h.Services.State.SidebarWidth);
-        Assert.Equal(300, new ShellViewModel(h.Services, () => { }).SidebarDisplayWidth);
+        Assert.Equal(300, new ShellViewModel(h.Services, () => { }).Layout.SidebarDisplayWidth);
     }
 
     [Fact]

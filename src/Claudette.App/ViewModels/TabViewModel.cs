@@ -410,7 +410,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             // Its claudette.json may have changed while another tab was showing (DESIGN.md §18).
             _ = ProjectTools.RefreshFileAsync();
         }
-        ProjectTools.UpdateShownRun();
+        ProjectTools.Runs.UpdateShownRun();
     }
 
     /// <summary>Two check-ins in a row got no reply (DESIGN.md §5, "Check-ins on long turns"); shown on the tab's row.</summary>
@@ -1965,7 +1965,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         Working.Dispose();
         _services.Notifications.ClearTab(Id);
         Perforce.Stop();
-        ProjectTools.CloseRuns(killProcesses);
+        ProjectTools.Runs.CloseRuns(killProcesses);
         ChangedFiles.StopReviewSync();
         if (_starting is { } starting)
         {

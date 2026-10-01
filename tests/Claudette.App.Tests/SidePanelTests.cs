@@ -20,14 +20,14 @@ public class SidePanelTests
         var (first, second) = (h.Shell.AllTabs.First(), h.Shell.AllTabs.Last());
         // The selected tab starts meanwhile, changing properties on another thread while the test reads them.
         await TabTestHarness.Eventually(() => first.Status == TabStatus.Idle && first.IsSettled, "the first tab to start");
-        Assert.Equal(ShellViewModel.DefaultSidePanelWidth, second.SidePanelWidth);
+        Assert.Equal(ShellLayout.DefaultSidePanelWidth, second.SidePanelWidth);
         var changed = new List<string?>();
         second.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
 
         first.ResizeSidePanel(40);
-        Assert.Equal(ShellViewModel.MinSidePanelWidth, second.SidePanelWidth);
+        Assert.Equal(ShellLayout.MinSidePanelWidth, second.SidePanelWidth);
         first.ResizeSidePanel(5000);
-        Assert.Equal(ShellViewModel.MaxSidePanelWidth, second.SidePanelWidth);
+        Assert.Equal(ShellLayout.MaxSidePanelWidth, second.SidePanelWidth);
         Assert.Contains(nameof(TabViewModel.SidePanelWidth), changed);
 
         // Kept when the drag ends, for every tab and the next launch.
@@ -35,12 +35,12 @@ public class SidePanelTests
         Assert.Null(h.Services.State.SidePanelWidth);
         first.SaveSidePanelWidth();
         Assert.Equal(480, h.Services.State.SidePanelWidth);
-        Assert.Equal(480, new ShellViewModel(h.Services, () => { }).SidePanelWidth);
+        Assert.Equal(480, new ShellViewModel(h.Services, () => { }).Layout.SidePanelWidth);
 
         // Double-clicking the edge.
         second.ResetSidePanelWidth();
-        Assert.Equal(ShellViewModel.DefaultSidePanelWidth, first.SidePanelWidth);
-        Assert.Equal(ShellViewModel.DefaultSidePanelWidth, h.Services.State.SidePanelWidth);
+        Assert.Equal(ShellLayout.DefaultSidePanelWidth, first.SidePanelWidth);
+        Assert.Equal(ShellLayout.DefaultSidePanelWidth, h.Services.State.SidePanelWidth);
     }
 
     [Fact]

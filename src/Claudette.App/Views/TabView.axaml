@@ -794,7 +794,7 @@
             <Button Grid.Column="2" Classes="pagetab" Classes.selected="{Binding IsProjectPage}" Command="{Binding ShowProjectPageCommand}" IsVisible="{Binding ProjectTools.HasTools}" ToolTip.Tip="{Binding ProjectTools.HeaderTitle}">
               <StackPanel Orientation="Horizontal" Spacing="4">
                 <TextBlock Text="Project" Classes.muted="{Binding !IsProjectPage}" />
-                <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding ProjectTools.IsJobRunning}" />
+                <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding ProjectTools.Runs.IsJobRunning}" />
               </StackPanel>
             </Button>
             <Button Grid.Column="3" Classes="pagetab" Classes.selected="{Binding IsProcessesPage}" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding ProcessMonitor.IsOn}">
@@ -913,19 +913,19 @@
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" IsVisible="{Binding ProjectTools.HasSelectedRun}">
-                <TextBlock Classes="small" Classes.error="{Binding ProjectTools.SelectedRun.Failed, FallbackValue=False}" Text="{Binding ProjectTools.SelectedRun.Status, FallbackValue={x:Null}}"
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" IsVisible="{Binding ProjectTools.Runs.HasSelectedRun}">
+                <TextBlock Classes="small" Classes.error="{Binding ProjectTools.Runs.SelectedRun.Failed, FallbackValue=False}" Text="{Binding ProjectTools.Runs.SelectedRun.Status, FallbackValue={x:Null}}"
                            TextWrapping="Wrap" VerticalAlignment="Center" />
-                <Button Grid.Column="1" Content="Stop" Command="{Binding ProjectTools.SelectedRun.StopCommand, FallbackValue={x:Null}}"
-                        IsVisible="{Binding ProjectTools.SelectedRun.IsRunning, FallbackValue=False}" ToolTip.Tip="Ends the job and every process it started" />
-                <Button Grid.Column="2" Content="Copy" Command="{Binding ProjectTools.CopyOutputCommand}" ToolTip.Tip="Copy the output" />
+                <Button Grid.Column="1" Content="Stop" Command="{Binding ProjectTools.Runs.SelectedRun.StopCommand, FallbackValue={x:Null}}"
+                        IsVisible="{Binding ProjectTools.Runs.SelectedRun.IsRunning, FallbackValue=False}" ToolTip.Tip="Ends the job and every process it started" />
+                <Button Grid.Column="2" Content="Copy" Command="{Binding ProjectTools.Runs.CopyOutputCommand}" ToolTip.Tip="Copy the output" />
               </Grid>
-              <TextBlock Classes="muted small" Text="{Binding ProjectTools.SelectedRun.OutputNote, FallbackValue={x:Null}}" TextWrapping="Wrap"
-                         IsVisible="{Binding ProjectTools.SelectedRun.OutputNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}, FallbackValue=False}" />
+              <TextBlock Classes="muted small" Text="{Binding ProjectTools.Runs.SelectedRun.OutputNote, FallbackValue={x:Null}}" TextWrapping="Wrap"
+                         IsVisible="{Binding ProjectTools.Runs.SelectedRun.OutputNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}, FallbackValue=False}" />
             </StackPanel>
-            <ListBox x:Name="ProjectOutputList" ItemsSource="{Binding ProjectTools.SelectedRun.Output, FallbackValue={x:Null}}" Background="Transparent" Margin="8,0,8,8"
+            <ListBox x:Name="ProjectOutputList" ItemsSource="{Binding ProjectTools.Runs.SelectedRun.Output, FallbackValue={x:Null}}" Background="Transparent" Margin="8,0,8,8"
                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                     IsVisible="{Binding ProjectTools.HasSelectedRun}" AutomationProperties.Name="Output">
+                     IsVisible="{Binding ProjectTools.Runs.HasSelectedRun}" AutomationProperties.Name="Output">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="x:String">
                   <TextBlock Classes="mono small" Text="{Binding}" />

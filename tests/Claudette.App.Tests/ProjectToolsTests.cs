@@ -43,7 +43,7 @@ public class ProjectToolsTests
     private static ProjectMenuEntry Entry(TabViewModel tab, string label) => InlineDispatcher.Read(() => tab.ProjectTools.Menu.Single(e => e.Label == label));
 
     /// <summary>The newest run: the one the last job made.</summary>
-    internal static ProjectRunViewModel? LastRun(TabViewModel tab) => InlineDispatcher.Read(() => tab.ProjectTools.Runs.LastOrDefault());
+    internal static ProjectRunViewModel? LastRun(TabViewModel tab) => InlineDispatcher.Read(() => tab.ProjectTools.Runs.Items.LastOrDefault());
 
     // ---- The chip and its menu --------------------------------------------------------------------------------------------
 
@@ -274,19 +274,19 @@ public class ProjectToolsTests
         Assert.True(spec.TrackProcessTree);
         Assert.False(spec.Detached);
         Assert.NotNull(spec.Environment);
-        Assert.True(tab.ProjectTools.IsJobRunning);
+        Assert.True(tab.ProjectTools.Runs.IsJobRunning);
         Assert.Equal("Build editor…", tab.ProjectTools.ButtonText);
         Assert.False(Entry(tab, "Generate project files").IsEnabled);
         Assert.Contains("Stop it first", Entry(tab, "Generate project files").Tip, StringComparison.Ordinal);
         var build = LastRun(tab)!;
-        Assert.Same(build, tab.ProjectTools.SelectedRun);
+        Assert.Same(build, tab.ProjectTools.Runs.SelectedRun);
         process.WriteOutput("Building NightOwlEditor...");
         process.WriteError("warning: deprecated");
         await TabTestHarness.Eventually(() => build.Output.Contains("warning: deprecated"), "the output");
         Assert.StartsWith("$ ", build.Output[0], StringComparison.Ordinal);
 
         process.Exit(0);
-        await TabTestHarness.Eventually(() => !tab.ProjectTools.IsJobRunning, "the end");
+        await TabTestHarness.Eventually(() => !tab.ProjectTools.Runs.IsJobRunning, "the end");
 
         Assert.Equal("Build editor succeeded.", build.Status);
         Assert.False(build.Failed);
@@ -311,7 +311,7 @@ public class ProjectToolsTests
         await tab.ProjectTools.RunActionCommand.ExecuteAsync(Action(tab, "build-editor"));
         var process = launcher.Processes.Last();
 
-        var run = tab.ProjectTools.SelectedRun!;
+        var run = tab.ProjectTools.Runs.SelectedRun!;
 
         Assert.True(run.StopCommand.CanExecute(null));
         run.StopCommand.Execute(null);
@@ -387,7 +387,7 @@ public class ProjectToolsTests
         {
             process.WriteOutput($"line {i}");
         }
-        var run = tab.ProjectTools.SelectedRun!;
+        var run = tab.ProjectTools.Runs.SelectedRun!;
         await TabTestHarness.Eventually(() => run.Output.LastOrDefault() == "line 5200", "the output");
 
         // The oldest go 500 at a time: past 5,000, the first 500 (the command line and lines 1 to 499) went.
@@ -395,7 +395,7 @@ public class ProjectToolsTests
         Assert.Equal("line 500", run.Output[0]);
         Assert.Equal(500, run.OutputDropped);
         Assert.Contains("5,000", run.OutputNote!.Replace(".", ",", StringComparison.Ordinal).Replace(" ", ",", StringComparison.Ordinal), StringComparison.Ordinal);
-        await tab.ProjectTools.CopyOutputCommand.ExecuteAsync(null);
+        await tab.ProjectTools.Runs.CopyOutputCommand.ExecuteAsync(null);
         Assert.EndsWith("line 5200", h.Platform.Clipboard, StringComparison.Ordinal);
     }
 
@@ -606,7 +606,7 @@ public class ProjectToolsTests
         Assert.Null(h.Shell.Confirmation);
         Assert.Equal(started + 1, launcher.Started.Count);
         launcher.Processes.Last().Exit(0);
-        await TabTestHarness.Eventually(() => !tab.ProjectTools.IsJobRunning, "the end");
+        await TabTestHarness.Eventually(() => !tab.ProjectTools.Runs.IsJobRunning, "the end");
     }
 
     // ---- Links --------------------------------------------------------------------------------------------------------------

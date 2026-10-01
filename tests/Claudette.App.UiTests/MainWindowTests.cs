@@ -285,7 +285,7 @@ public class MainWindowTests
         window.KeyReleaseQwerty(PhysicalKey.B, primary);
         UiText.Settle(window);
 
-        Assert.True(h.Shell.IsSidebarCollapsed);
+        Assert.True(h.Shell.Layout.IsSidebarCollapsed);
         var sidebar = window.GetVisualDescendants().OfType<Control>().Single(c => c.Name == "Sidebar");
         await Verify(UiText.Describe(sidebar, (h.Root, "{root}")));
     }
