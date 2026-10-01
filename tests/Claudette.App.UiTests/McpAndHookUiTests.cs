@@ -42,8 +42,10 @@ public class McpAndHookUiTests
 
         Assert.Equal("Sent", card.Outcome);
         await UiText.SettleUntilAsync(window, () => tab.Status != TabStatus.NeedsInput, "the tab to stop waiting");
-        var answer = h.Transport.Sent.Last(m => m["type"]?.GetValue<string>() == "control_response");
-        Assert.Equal("NEXUS", answer["response"]!["response"]!["content"]!["project"]!.GetValue<string>());
+        // The session writes the answer once the request completes, off the UI thread: wait for it.
+        System.Text.Json.Nodes.JsonObject? answer = null;
+        await UiText.SettleUntilAsync(window, () => (answer = h.Transport.Sent.LastOrDefault(m => m["type"]?.GetValue<string>() == "control_response")) is not null, "the answer");
+        Assert.Equal("NEXUS", answer!["response"]!["response"]!["content"]!["project"]!.GetValue<string>());
     }
 
     [AvaloniaFact]
