@@ -91,7 +91,7 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
 - **Checking the package** before anything closes. If the package fails a check, nothing else happens.
   - **MSIX:** its manifest must be `reapazor.Claudette`, from the same publisher as the installed package (compared as the package family name, so a package signed by someone else would install beside this one instead of replacing it). It must also be the release's version and this machine's architecture. Windows checks the signature when it installs.
   - **macOS:** the image is mounted, and its `Claudette.app` copied next to the running one, as `.Claudette-update.app` in the same folder. The copy must have:
-    - a valid signature (`codesign --verify --deep --strict`), from the same team as the running app (when the running app is signed);
+    - a valid signature (`codesign --verify --deep --strict`). When the running app is signed with a Developer ID, the copy must also meet the code requirement `anchor apple generic and certificate leaf[subject.OU] = "<its team>"`: a certificate Apple issued to the same team, which an ad-hoc signature or another developer's doesn't. When the running app's own signature can't be read (`codesign` failed or timed out), nothing is installed, rather than the check being skipped;
     - the bundle identifier `com.reapazor.claudette`;
     - the release's version.
 - **The handover**, as for a new build ([§9](#working-on-claudette)):

@@ -88,16 +88,30 @@ public sealed class MacAppInstaller(IProcessLauncher launcher, TimeProvider time
 
     private async Task VerifyAsync(string staged, AppVersion version, CancellationToken cancellationToken)
     {
-        var signature = await RunAsync("/usr/bin/codesign", ["--verify", "--deep", "--strict", staged], cancellationToken);
+        // The developer this Claudette is signed by, asked first: a check that can't be made refuses the update rather
+        // than letting it through. The new version must then satisfy a code requirement naming that team, with a
+        // certificate Apple issued, which an ad-hoc signature or someone else's certificate doesn't.
+        var mine = await TeamAsync(appBundle, cancellationToken);
+        if (mine is TeamCheck.Unreadable unreadable)
+        {
+            throw new AppInstallException($"This Claudette's own signature couldn't be read, so the new version couldn't be checked against it: {unreadable.Reason}");
+        }
+        IReadOnlyList<string> verify = mine is TeamCheck.Signed signed
+            ? ["--verify", "--deep", "--strict", $"-R=anchor apple generic and certificate leaf[subject.OU] = \"{signed.Team}\"", staged]
+            : ["--verify", "--deep", "--strict", staged];
+        var signature = await RunAsync("/usr/bin/codesign", verify, cancellationToken);
         if (signature.ExitCode != 0)
         {
+            if (mine is TeamCheck.Signed own)
+            {
+                // Say why, when it's the developer: the requirement's failure message doesn't.
+                var other = await TeamAsync(staged, cancellationToken) is TeamCheck.Signed { Team: var team } ? team : null;
+                if (other != own.Team)
+                {
+                    throw new AppInstallException($"The new version is signed by a different developer ({other ?? "none"}) than this one ({own.Team}), so it wasn't installed.");
+                }
+            }
             throw new AppInstallException($"The new version's signature didn't check out, so it wasn't installed: {Tail(signature)}");
-        }
-        var mine = await TeamAsync(appBundle, cancellationToken);
-        var theirs = await TeamAsync(staged, cancellationToken);
-        if (mine is not null && theirs != mine)
-        {
-            throw new AppInstallException($"The new version is signed by a different developer ({theirs ?? "none"}) than this one ({mine}), so it wasn't installed.");
         }
         var plist = Path.Combine(staged, "Contents", "Info.plist");
         if (await PlistValueAsync(plist, "CFBundleIdentifier", cancellationToken) != BundleIdentifier)
@@ -144,20 +158,46 @@ public sealed class MacAppInstaller(IProcessLauncher launcher, TimeProvider time
         return reader.ReadToEnd();
     }
 
-    /// <summary>The team identifier <c>codesign</c> reports for a signed app, or null when it has none.</summary>
-    private async Task<string?> TeamAsync(string path, CancellationToken cancellationToken)
+    /// <summary>What <c>codesign</c> says about an app's signer.</summary>
+    private abstract record TeamCheck
+    {
+        /// <summary>Signed with a Developer ID: its team identifier.</summary>
+        public sealed record Signed(string Team) : TeamCheck;
+
+        /// <summary>Not signed, or signed ad hoc (a build that wasn't released).</summary>
+        public sealed record Unsigned : TeamCheck;
+
+        /// <summary><c>codesign</c> couldn't say (it failed or timed out).</summary>
+        public sealed record Unreadable(string Reason) : TeamCheck;
+    }
+
+    /// <summary>The team <c>codesign</c> reports for an app. A team identifier is ten letters and digits.</summary>
+    private async Task<TeamCheck> TeamAsync(string path, CancellationToken cancellationToken)
     {
         var result = await RunAsync("/usr/bin/codesign", ["-dv", "--verbose=2", path], cancellationToken);
         // codesign writes the details to standard error.
-        foreach (var line in (result.StandardError + result.StandardOutput).Split('\n'))
+        var text = result.StandardError + result.StandardOutput;
+        if (result.ExitCode != 0)
+        {
+            return text.Contains("not signed at all", StringComparison.Ordinal)
+                ? new TeamCheck.Unsigned()
+                : new TeamCheck.Unreadable(Tail(result));
+        }
+        foreach (var line in text.Split('\n'))
         {
             if (line.StartsWith("TeamIdentifier=", StringComparison.Ordinal))
             {
                 var team = line["TeamIdentifier=".Length..].Trim();
-                return team.Length == 0 || team == "not set" ? null : team;
+                if (team.Length == 0 || team == "not set")
+                {
+                    return new TeamCheck.Unsigned();
+                }
+                return team.Length == 10 && team.All(char.IsAsciiLetterOrDigit)
+                    ? new TeamCheck.Signed(team)
+                    : new TeamCheck.Unreadable($"codesign gave an unexpected team, \"{team}\".");
             }
         }
-        return null;
+        return new TeamCheck.Unsigned();
     }
 
     private async Task<string?> PlistValueAsync(string plist, string key, CancellationToken cancellationToken)
