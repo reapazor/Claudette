@@ -409,6 +409,27 @@ items:
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: RealCliTests
     fallback: See control_request. SIGINT also ends a turn (documented in headless mode).
+  - id: "CLAUDE_CODE_RESUME_INTERRUPTED_TURN"
+    kind: env
+    status: documented
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/env-vars
+    test: RestartTests, RealCliTests
+    fallback: Set to 1, once, for a tab Claudette's own restart cut off mid-turn; Claude Code re-runs the turn on resume (checked with 2.1.286). Without it the tab resumes idle, as before.
+  - id: "CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS"
+    kind: env
+    status: documented
+    usedIn: src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/env-vars
+    test: RestartTests, RealCliTests
+    fallback: 600000 (a restart snapshot's 10 minutes) beside CLAUDE_CODE_RESUME_INTERRUPTED_TURN, so a stale turn isn't re-run.
+  - id: "resume_reason"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript#resume_reason
+    test: RestartTests, RealCliTests
+    fallback: On a re-run's assistant messages and result; the first one adds a note. Without it the re-run reads as an ordinary turn.
   - id: "startup_failure_reason"
     kind: field
     status: documented

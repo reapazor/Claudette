@@ -109,6 +109,9 @@ public sealed class ConversationBuilder
         init => _tasks = value;
     }
 
+    /// <summary>The turn under way is one Claude Code carries on after a restart, and the conversation says so.</summary>
+    private bool _carriedOnNoted;
+
     /// <summary>Ids of messages Claudette sent without a card, such as Compact's <c>/compact</c>: their echoes are no prompt's.</summary>
     private readonly HashSet<string> _sentWithoutCard = new(StringComparer.Ordinal);
 
@@ -228,6 +231,12 @@ public sealed class ConversationBuilder
                 break;
 
             case AssistantMessageReceived assistant:
+                if (!_carriedOnNoted && assistant.Message.Raw.GetString("resume_reason") is not null)
+                {
+                    // A turn Claude Code re-runs after a restart cut it off (DESIGN.md §9, "Working on Claudette").
+                    _carriedOnNoted = true;
+                    AddNote("Carrying on with the turn the restart cut off.");
+                }
                 ApplyAssistant(assistant.Message);
                 _lastEntryUuid = assistant.Message.Raw.GetString("uuid") ?? _lastEntryUuid;
                 break;
@@ -345,6 +354,7 @@ public sealed class ConversationBuilder
 
             case TurnCompleted completed:
                 CloseOpen();
+                _carriedOnNoted = false;
                 _retryNote = null;
                 ApplyTurnCompleted(completed.Result);
                 _agents?.OnTurnCompleted();

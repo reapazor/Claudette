@@ -409,6 +409,31 @@ public sealed class RealCliTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_turn_cut_off_by_a_restart_carries_on_when_the_session_resumes()
+    {
+        // DESIGN.md §9, "Working on Claudette": Claudette's own restart stops a working tab without interrupting it...
+        string sessionId;
+        await using (var first = await StartAsync())
+        {
+            await first.SendUserMessageAsync("SLOW", TestContext.Current.CancellationToken);
+            await first.ReadUntilAsync<TextDelta>();
+            sessionId = first.SessionId!;
+            await first.StopAsync(TimeSpan.FromSeconds(1));
+        }
+
+        // ...and resumes it with CLAUDE_CODE_RESUME_INTERRUPTED_TURN, which re-runs the turn (checked with 2.1.286).
+        await using var second = await StartAsync(resume: sessionId, environment: new()
+        {
+            ["CLAUDE_CODE_RESUME_INTERRUPTED_TURN"] = "1",
+            ["CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS"] = "600000",
+        });
+        var (done, seen) = await second.ReadUntilAsync<TurnCompleted>(timeout: TimeSpan.FromSeconds(30));
+
+        Assert.Equal("interrupted_turn", done.Result.Raw["resume_reason"]?.GetValue<string>());
+        Assert.Contains(seen.OfType<AssistantMessageReceived>(), a => a.Message.Raw["resume_reason"] is not null);
+    }
+
+    [Fact]
     public async Task Interrupt_stops_a_streaming_reply()
     {
         await using var session = await StartAsync();

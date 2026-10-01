@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Claudette.App.Conversation;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
@@ -160,6 +161,47 @@ public class RestartTests
         Assert.Empty(h.Shell.AllTabs);
         Assert.True(h.Services.SuspendSaving);
         Assert.Equal(2, h.Services.State.Tabs.Count);
+    }
+
+    [Fact]
+    public async Task A_turn_under_way_is_left_for_Claude_Code_to_carry_on_after_the_restart()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        tab.ComposerText = "long job";
+        await tab.SendCommand.ExecuteAsync(null);
+        h.Transport.Emit("""{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-5-5"}""");
+        await TabTestHarness.Eventually(() => tab.IsInTurn && tab.State.SessionId == "s1", "the turn");
+
+        var snapshot = h.Shell.CaptureForRestart();
+        await h.Shell.CloseTabsForRestartAsync();
+
+        // It isn't interrupted, so the transcript ends in the turn...
+        Assert.Equal([tab.Id], snapshot.InterruptedTabIds);
+        Assert.DoesNotContain(h.Transport.Sent, m => m["request"]?["subtype"]?.GetValue<string>() == "interrupt");
+
+        // ...and the session resumes with Claude Code told to carry it on, if it's no older than the snapshot can be.
+        h.WriteTranscript("s1", """{"type":"user","timestamp":"2026-09-28T10:00:00Z","uuid":"u1","sessionId":"s1","message":{"role":"user","content":"long job"}}""");
+        h.Shell.Restore(null, snapshot);
+        await TabTestHarness.Eventually(() => h.Factory.Launches.Count == 2, "the tab to start again");
+        var restored = h.Shell.AllTabs.Single();
+        var environment = h.Factory.Launches[^1].EnvironmentOverrides;
+        Assert.Equal("s1", h.Factory.Launches[^1].Resume);
+        Assert.Equal("1", environment["CLAUDE_CODE_RESUME_INTERRUPTED_TURN"]);
+        Assert.Equal("600000", environment["CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS"]);
+
+        // Claude Code's re-run says why it runs; the conversation says so once.
+        h.Transport.Emit("""{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-5-5"}""");
+        h.Transport.Emit("""{"type":"assistant","resume_reason":"interrupted_turn","message":{"content":[{"type":"text","text":"Picking up again."}]}}""");
+        h.Transport.Emit("""{"type":"assistant","resume_reason":"interrupted_turn","message":{"content":[{"type":"text","text":"Done."}]}}""");
+        h.Transport.EmitTurn();
+        await TabTestHarness.Eventually(() => restored.Items.OfType<TurnSummaryItem>().Any(), "the re-run");
+        Assert.Single(restored.Items.OfType<NoteItem>(), n => n.Text == "Carrying on with the turn the restart cut off.");
+
+        // Only that once: the next start is as usual.
+        await ((IRemoteControlHost)restored).RestartSessionAsync();
+        await TabTestHarness.Eventually(() => h.Factory.Launches.Count == 3, "the restart");
+        Assert.False(h.Factory.Launches[^1].EnvironmentOverrides.ContainsKey("CLAUDE_CODE_RESUME_INTERRUPTED_TURN"));
     }
 
     [Fact]

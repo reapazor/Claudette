@@ -253,6 +253,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         SaveTabs();
         foreach (var tab in AllTabs.Where(t => snapshot?.RunningTabIds.Contains(t.Id) == true))
         {
+            if (snapshot!.InterruptedTabIds.Contains(tab.Id))
+            {
+                tab.CarryOnInterruptedTurn();
+            }
             _ = tab.EnsureStartedAsync();
         }
         // Library retention and settings sync, at launch (DESIGN.md §9, §14). Retention keeps the sessions of open tabs
@@ -886,6 +890,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         SelectedTabId = SelectedTab?.Id,
         Drafts = AllTabs.Where(t => t.Draft is not null).ToDictionary(t => t.Id, t => t.Draft!),
         RunningTabIds = AllTabs.Where(t => t.IsProcessRunning).Select(t => t.Id).ToList(),
+        InterruptedTabIds = AllTabs.Where(t => t.IsInTurn).Select(t => t.Id).ToList(),
     };
 
     /// <summary>
@@ -901,7 +906,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         Groups.Clear();
         OpenTabs.Clear();
         OnPropertyChanged(nameof(HasTabs));
-        await Task.WhenAll(tabs.Select(t => t.CloseAsync(killProcesses: true).AsTask()));
+        // A turn is left as it is, not interrupted, so Claude Code can carry it on after the restart.
+        await Task.WhenAll(tabs.Select(t => t.CloseAsync(killProcesses: true, interruptTurn: false).AsTask()));
         OnTabStatusChanged();
     }
 

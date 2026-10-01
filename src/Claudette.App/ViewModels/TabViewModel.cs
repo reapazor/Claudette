@@ -288,6 +288,18 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     public bool IsWorking => Status is TabStatus.Working or TabStatus.NeedsInput;
 
+    /// <summary>Claude Code is in a turn: working, or waiting on the user within it.</summary>
+    public bool IsInTurn => _session?.State == SessionState.Working;
+
+    /// <summary>The next start carries on the turn Claudette's restart cut off (DESIGN.md §9, "Working on Claudette").</summary>
+    private bool _carryOnInterruptedTurn;
+
+    /// <summary>
+    /// Starts the next session with <c>CLAUDE_CODE_RESUME_INTERRUPTED_TURN</c>, so Claude Code carries on the turn the
+    /// restart cut off, if the transcript ends in it and is no older than a restart's snapshot can be.
+    /// </summary>
+    internal void CarryOnInterruptedTurn() => _carryOnInterruptedTurn = true;
+
     public bool NeedsInput => Status == TabStatus.NeedsInput;
 
     public bool IsBusyStatus => Status is TabStatus.Working or TabStatus.Starting;
@@ -1384,6 +1396,13 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             var settingsFolder = State.WithoutProjectSettings ? null : folder;
             var starting = _startingMode = await Task.Run(() => _services.ReadStartingPermissionMode(settingsFolder));
             var environment = new Dictionary<string, string?>(_services.RemoteControl.ClaudeVariables);
+            if (_carryOnInterruptedTurn && resume is not null)
+            {
+                // Only after Claudette's own restart, and only once: Claude Code re-runs the turn without the user.
+                environment["CLAUDE_CODE_RESUME_INTERRUPTED_TURN"] = "1";
+                environment["CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS"] = ((long)RestartSnapshot.MaxAge.TotalMilliseconds).ToString(CultureInfo.InvariantCulture);
+            }
+            _carryOnInterruptedTurn = false;
             if (settings.ClaudeCode.KeepFileCheckpoints)
             {
                 // Copies of files before Claude changes them, so a prompt's changes can be put back (DESIGN.md §5).
@@ -2066,7 +2085,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     }
 
     /// <param name="killProcesses">Also end every process the session started (DESIGN.md §4, "Cleanup").</param>
-    private async Task StopSessionAsync(bool killProcesses = false)
+    /// <param name="interruptTurn">
+    /// Interrupt a turn first, so it ends cleanly. A restart of Claudette leaves it as it is instead, for Claude Code to
+    /// carry on afterwards.
+    /// </param>
+    private async Task StopSessionAsync(bool killProcesses = false, bool interruptTurn = true)
     {
         var session = _session;
         _session = null;
@@ -2080,7 +2103,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             await ProcessMonitor.EndTreeAsync(killProcesses);
             return;
         }
-        if (session.State == SessionState.Working)
+        if (session.State == SessionState.Working && interruptTurn)
         {
             // Interrupt first, so the turn ends cleanly with a result (DESIGN.md §13, "Shutdown").
             try
@@ -2109,7 +2132,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     }
 
     /// <summary>Closing the tab. By default everything the tab started is stopped too; the user can keep it running.</summary>
-    public async ValueTask CloseAsync(bool killProcesses)
+    /// <param name="interruptTurn">Interrupt a turn under way; a restart of Claudette leaves it for Claude Code to carry on.</param>
+    public async ValueTask CloseAsync(bool killProcesses, bool interruptTurn = true)
     {
         await _closing.CancelAsync();
         _checkIns.Dispose();
@@ -2142,7 +2166,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             }
         }
         ReleaseLease();
-        await StopSessionAsync(killProcesses);
+        await StopSessionAsync(killProcesses, interruptTurn);
         ChangedFiles.CleanUpDiffFiles();
     }
 

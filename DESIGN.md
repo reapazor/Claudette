@@ -1162,7 +1162,7 @@ Claudette can host the Claude Code session that works on Claudette's own source.
   - With a debugger attached, or with `CLAUDETTE_RUN_IN_PLACE=1`, a source build runs in place.
 - **Noticing a new build.** Claudette checks the build output every 2 seconds. A build counts once its files have stopped changing from one check to the next. A failed build writes nothing, so it's never offered.
 - **Offering the restart.** **New build ready** appears at the foot of the sidebar ([§4](#sidebar)). Its dialog says when the build was made, and offers:
-  - **Restart now.** A working tab is interrupted, and resumes its session after the restart.
+  - **Restart now.** A working tab's turn isn't interrupted but left as it is, and Claude Code carries it on after the restart (below).
   - **Restart when idle**, while a tab is working: it waits until no tab is starting, working or waiting on the user.
   - **Restart into new builds by itself when no tab is working**, remembered on this machine. With it on, a Claude Code session that rebuilds Claudette sees the restart as soon as its turn ends.
 - **What's kept:**
@@ -1170,6 +1170,7 @@ Claudette can host the Claude Code session that works on Claudette's own source.
   - The message typed in each tab, with its one-off suffixes and attached images.
   - The selected tab, and the window's position and size.
   - Tabs whose Claude Code was running start again straight away and resume their sessions. The others start when selected, as on launch.
+  - A tab that was in a turn carries it on. The restart stops its Claude Code without interrupting the turn, so the transcript ends in it, and the tab starts again with `CLAUDE_CODE_RESUME_INTERRUPTED_TURN=1`: Claude Code re-runs the turn by itself, and the conversation says *"Carrying on with the turn the restart cut off."* (the re-run's messages carry `resume_reason`). Only once, and only within 10 minutes (`CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS`, as long as a snapshot lasts), so a restart taken back a day later after an update doesn't re-run a stale prompt. This is the one time Claude Code works without being asked: only for a restart Claudette made.
   - Processes the tabs started are stopped, as when Claudette closes ([Process monitor](#process-monitor)).
 - **The handover:**
   1. The running build copies the new one and writes a snapshot of the above to `restart.json` in the data folder. It saves its state, then stops every tab as closing does, and from then on writes no settings or state.
@@ -1374,7 +1375,7 @@ What Claudette reads from it (the command is documented; the line format isn't, 
   - `ClaudeSession` owns one `claude` process. It turns the output stream into typed events (`AssistantDelta`, `ToolUse`, `ToolResult`, `PermissionRequest`, `TurnCompleted`, `TitleChanged`, `UsageUpdated`, `RateLimit`, `AuthRequired`, `Exited`…), and exposes commands such as `SendAsync`, `InterruptAsync`, `RespondToPermissionAsync`, `SetModelAsync`, `SetEffortAsync` and `SetPermissionModeAsync`.
 - **Threading.** Each session reads its process on a background task. Events go to the UI thread through a channel, and streaming text is batched so the UI isn't updated for every token.
 - **Resilience.** If a process exits unexpectedly, the tab shows an error with a **Restart** button that resumes the same session ID.
-- **Shutdown.** When Claudette closes while a tab is working, it interrupts the turn first so the session is left in a clean state.
+- **Shutdown.** When Claudette closes while a tab is working, it interrupts the turn first so the session is left in a clean state. Its own restart into a new build or version doesn't, so Claude Code can carry the turn on afterwards ([§9](#working-on-claudette)).
 - **Logging.** Raw protocol traffic can be logged per session (off by default) to help debug parsing problems when Claude Code changes its output. Sign-in secrets are taken out of each line before it's written: the pasted sign-in code and its state, values under the usual names for tokens, keys and passwords, and the `code` and `state` of an address. Claudette's own warnings and errors always go to `claudette.log` in the log folder (**Open log folder**), which is kept under 2 MB: past that it becomes `claudette.1.log`, replacing the one before.
 - **Nothing ends the app by surprise.** Each session event is applied on its own: one that fails is logged and noted once in the conversation (*"Claudette couldn't show part of this conversation…"*), and the rest carry on. An exception nothing else caught on the UI thread is logged and handled rather than closing Claudette, which would leave every tab's `claude` running ([§4](#process-monitor)), and a failed background task nobody waited for is logged.
 
