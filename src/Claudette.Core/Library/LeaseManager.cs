@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Files;
 using Claudette.Core.Json;
 using Claudette.Core.Protocol;
 using Claudette.Core.Settings;
@@ -121,11 +122,7 @@ public sealed class LeaseManager : IDisposable
     public void TakeOver(string sessionId, string sessionFolder)
     {
         ThrowIfDisposed();
-        Write(sessionFolder);
-        lock (_lock)
-        {
-            _held[sessionId] = sessionFolder;
-        }
+        WriteHeld(sessionId, sessionFolder);
     }
 
     /// <summary>
@@ -167,11 +164,7 @@ public sealed class LeaseManager : IDisposable
         {
             if (write)
             {
-                Write(sessionFolder);
-                lock (_lock)
-                {
-                    _held[sessionId] = sessionFolder;
-                }
+                WriteHeld(sessionId, sessionFolder);
             }
             return true;
         }
@@ -248,6 +241,11 @@ public sealed class LeaseManager : IDisposable
                     }
                 }
                 Write(folder);
+                if (!Holds(sessionId, folder))
+                {
+                    // Released while it was written.
+                    DeleteIfMine(folder);
+                }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -322,6 +320,47 @@ public sealed class LeaseManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Holds the session and writes its lease. A release can cross the write, as when a tab turns sync off while its
+    /// turn's copy finishes: <see cref="Release"/> only knows the sessions held, so the session is held before the file
+    /// is written, and a file written after its release goes again, rather than staying this run's until it's stale.
+    /// </summary>
+    private void WriteHeld(string sessionId, string sessionFolder)
+    {
+        lock (_lock)
+        {
+            _held[sessionId] = sessionFolder;
+        }
+        try
+        {
+            Write(sessionFolder);
+        }
+        catch
+        {
+            // Not written, so not held, as the caller is told.
+            lock (_lock)
+            {
+                if (_held.TryGetValue(sessionId, out var held) && held == sessionFolder)
+                {
+                    _held.Remove(sessionId);
+                }
+            }
+            throw;
+        }
+        if (!Holds(sessionId, sessionFolder))
+        {
+            DeleteIfMine(sessionFolder);
+        }
+    }
+
+    private bool Holds(string sessionId, string sessionFolder)
+    {
+        lock (_lock)
+        {
+            return _held.TryGetValue(sessionId, out var held) && held == sessionFolder;
+        }
+    }
+
     private void Write(string sessionFolder) =>
         LibraryFiles.WriteText(
             Path.Combine(sessionFolder, FileName),
@@ -333,7 +372,8 @@ public sealed class LeaseManager : IDisposable
         {
             if (Read(sessionFolder).Lease?.Owner == OwnerId)
             {
-                File.Delete(Path.Combine(sessionFolder, FileName));
+                // A scanner or indexer may hold a file just written for a moment, on Windows above all.
+                FileRetry.Run(() => File.Delete(Path.Combine(sessionFolder, FileName)));
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

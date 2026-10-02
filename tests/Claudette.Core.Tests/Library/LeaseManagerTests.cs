@@ -140,6 +140,26 @@ public sealed class LeaseManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task Release_waits_out_a_file_held_open_for_a_moment()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to delete an open file.");
+        _desktop.TakeOver(Session, _folder);
+        // As a scanner or the search indexer holds a file just written.
+        var held = new FileStream(LeasePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var release = Task.Run(async () =>
+        {
+            await Task.Delay(150, TestContext.Current.CancellationToken);
+            await held.DisposeAsync();
+        }, TestContext.Current.CancellationToken);
+
+        _desktop.Release(Session);
+        await release;
+
+        Assert.False(File.Exists(LeasePath));
+        Assert.Empty(_desktop.HeldSessions);
+    }
+
+    [Fact]
     public void Dispose_releases_held_leases()
     {
         var run = new LeaseManager("DESKTOP-01", _time);
