@@ -266,6 +266,7 @@ public sealed partial class TabViewModel
             State.ForkOnNextStart = false;
             State.ResumeAt = null;
             State.ResumeDropsTurn = null;
+            State.Plan = null;
             _forkAwaitingId = false;
             _restoredTranscript = true;
             _conversation.AddNote(note);
@@ -300,6 +301,7 @@ public sealed partial class TabViewModel
     {
         ComposerText = text;
         Attachments.Clear();
+        PastedTexts.Clear();
         for (var i = 0; i < images.Count; i++)
         {
             TryAttach(images[i], string.Create(CultureInfo.InvariantCulture, $"Image {i + 1}"));

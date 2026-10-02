@@ -145,6 +145,7 @@ public sealed partial class ConversationSearch : ObservableObject
             ThinkingItem thinking => !thinking.IsExpanded,
             ToolUseItem tool => !tool.IsExpanded && !Has(tool.Name, query) && !Has(tool.Summary, query),
             HookRunItem hook => !hook.IsExpanded && !Has(hook.Title, query),
+            UserMessageItem user => user.IsTextCut && !Has(user.ShownText, query) && !Has(user.SuffixText, query),
             _ => false,
         };
     }

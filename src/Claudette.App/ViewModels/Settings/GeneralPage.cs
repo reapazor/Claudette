@@ -1,14 +1,21 @@
 using Claudette.Core.LoginItems;
 using Claudette.Core.Settings;
 using Claudette.Core.Updates;
+using CommunityToolkit.Mvvm.Input;
 
 namespace Claudette.App.ViewModels.Settings;
 
+/// <summary>A choice for <b>Remove worktrees no tab has used for</b>.</summary>
+public sealed record InactiveDaysChoice(int Days)
+{
+    public override string ToString() => Days == 0 ? "Never" : $"{Days} days";
+}
+
 /// <summary>
-/// Settings → General (DESIGN.md §14): starting at login, closing and renaming tabs, Claude's service status, and
-/// Claudette's own updates.
+/// Settings → General (DESIGN.md §14): starting at login, closing and renaming tabs, Claude's service status, messages
+/// sent while Claude works, cleaning up worktrees, and Claudette's own updates.
 /// </summary>
-public sealed class GeneralPage : SettingsPage
+public sealed partial class GeneralPage : SettingsPage
 {
     private LoginItemStatus? _loginItem;
     private bool _changingLoginItem;
@@ -21,6 +28,9 @@ public sealed class GeneralPage : SettingsPage
         Entry("Confirm before closing a tab where Claude is working"),
         Entry("Also rename the session in Claude Code when I rename a tab"),
         Entry("Show Claude's service status"),
+        Entry("Messages sent while Claude works", pageText: "Messages sent while Claude works"),
+        Entry("Remove worktrees once their work is merged", pageText: "Remove worktrees once everything in them is merged"),
+        Entry("Remove worktrees no tab has used", pageText: "Remove worktrees no tab has used for"),
         Entry("Claudette version", pageText: "Claudette updates"),
         Entry("Check for Claudette updates automatically"),
         Entry("Include pre-releases"),
@@ -121,6 +131,123 @@ public sealed class GeneralPage : SettingsPage
     {
         get => Settings.General.ShowServiceStatus;
         set => Set(value, v => Settings.General.ShowServiceStatus = v);
+    }
+
+    // ---- Messages sent while Claude works (DESIGN.md §5, "Queued messages") --------------------------------------
+
+    /// <summary>Sent at once, for Claude to read at its next step.</summary>
+    public bool SteerWhileWorking
+    {
+        get => Settings.General.MessagesWhileWorking == WhileWorking.Steer;
+        set
+        {
+            if (value)
+            {
+                SetWhileWorking(WhileWorking.Steer);
+            }
+        }
+    }
+
+    /// <summary>Held until the turn ends, then sent as the next turn.</summary>
+    public bool QueueWhileWorking
+    {
+        get => Settings.General.MessagesWhileWorking == WhileWorking.Queue;
+        set
+        {
+            if (value)
+            {
+                SetWhileWorking(WhileWorking.Queue);
+            }
+        }
+    }
+
+    private void SetWhileWorking(WhileWorking choice)
+    {
+        if (Settings.General.MessagesWhileWorking == choice)
+        {
+            return;
+        }
+        Settings.General.MessagesWhileWorking = choice;
+        OnPropertyChanged(nameof(SteerWhileWorking));
+        OnPropertyChanged(nameof(QueueWhileWorking));
+        Save();
+    }
+
+    // ---- Cleaning up worktrees (DESIGN.md §4, "Cleaning up worktrees") ---------------------------------------------
+
+    public bool RemoveMergedWorktrees
+    {
+        get => Settings.General.RemoveMergedWorktrees;
+        set
+        {
+            Set(value, v => Settings.General.RemoveMergedWorktrees = v);
+            OnPropertyChanged(nameof(CanCleanUpWorktrees));
+        }
+    }
+
+    /// <summary>The choices for <b>Remove worktrees no tab has used for</b>; 0 is never.</summary>
+    public IReadOnlyList<InactiveDaysChoice> InactiveDaysChoices { get; } = [.. new[] { 0, 7, 14, 30, 90 }.Select(d => new InactiveDaysChoice(d))];
+
+    public InactiveDaysChoice RemoveInactiveWorktreesAfter
+    {
+        get => InactiveDaysChoices.FirstOrDefault(c => c.Days == Settings.General.RemoveInactiveWorktreesAfterDays)
+            ?? new InactiveDaysChoice(Settings.General.RemoveInactiveWorktreesAfterDays);
+        set
+        {
+            if (value is not null && value.Days != Settings.General.RemoveInactiveWorktreesAfterDays)
+            {
+                Set(value.Days, v => Settings.General.RemoveInactiveWorktreesAfterDays = v);
+                OnPropertyChanged(nameof(CanCleanUpWorktrees));
+            }
+        }
+    }
+
+    /// <summary>What the last cleanup removed, and when: "Last removed brisk-otter and calm-heron, 2 h ago."</summary>
+    public string WorktreeCleanupText
+    {
+        get
+        {
+            if (_cleanupResult is { } result)
+            {
+                return result;
+            }
+            if (Services.State.LastWorktreeCleanup is not { Removed.Count: > 0 } last)
+            {
+                return "Nothing removed yet. Claudette looks a minute after it starts, then every hour.";
+            }
+            var names = last.Removed.Select(p => Path.GetFileName(Path.TrimEndingDirectorySeparator(p))).ToList();
+            var list = names.Count == 1 ? names[0] : $"{string.Join(", ", names[..^1])} and {names[^1]}";
+            return $"Last removed {list}, {Core.Formats.Ago(Services.Time.GetUtcNow() - last.At)}.";
+        }
+    }
+
+    public bool CanCleanUpWorktrees => (RemoveMergedWorktrees || Settings.General.RemoveInactiveWorktreesAfterDays > 0) && !_cleaningUp;
+
+    private string? _cleanupResult;
+    private bool _cleaningUp;
+
+    /// <summary><b>Clean up now</b>: a pass straight away, rather than at the next hour.</summary>
+    [RelayCommand]
+    private async Task CleanUpWorktreesAsync()
+    {
+        _cleaningUp = true;
+        OnPropertyChanged(nameof(CanCleanUpWorktrees));
+        try
+        {
+            var removed = await Services.Worktrees.RunAsync();
+            _cleanupResult = removed.Count switch
+            {
+                0 => "Nothing to remove right now.",
+                1 => $"Removed {Path.GetFileName(removed[0])}.",
+                _ => $"Removed {removed.Count} worktrees: {string.Join(", ", removed.Select(Path.GetFileName))}.",
+            };
+        }
+        finally
+        {
+            _cleaningUp = false;
+            OnPropertyChanged(nameof(CanCleanUpWorktrees));
+            OnPropertyChanged(nameof(WorktreeCleanupText));
+        }
     }
 
     // ---- Claudette's own updates (DESIGN.md §2, "Updating Claudette") ---------------------------------------------

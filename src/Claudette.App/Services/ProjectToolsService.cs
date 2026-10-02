@@ -72,12 +72,28 @@ public sealed class ProjectToolsService(AppServices services, ISystemProcesses? 
     /// Starts a program that outlives Claudette, such as the editor. The returned process is dropped rather than
     /// disposed: disposing it would end it.
     /// </summary>
-    public void Launch(ProcessStartSpec spec) =>
-        _ = services.Launcher.Start(ProjectToolEnvironment.Apply(spec with { Detached = true }, services.UserEnvironment.Current));
+    /// <param name="extra">Variables added to the environment, such as a new worktree's (DESIGN.md §18, "Setting up a new worktree").</param>
+    public void Launch(ProcessStartSpec spec, IReadOnlyDictionary<string, string>? extra = null) =>
+        _ = services.Launcher.Start(WithExtra(ProjectToolEnvironment.Apply(spec with { Detached = true }, services.UserEnvironment.Current), extra));
 
     /// <summary>Starts a long job, its process tree tracked so it shows in the process monitor and Stop ends all of it.</summary>
-    public ProjectJob StartJob(string name, ProcessStartSpec spec) =>
-        ProjectJob.Start(name, services.Launcher, ProjectToolEnvironment.Apply(spec with { TrackProcessTree = true, Detached = false }, services.UserEnvironment.Current));
+    /// <param name="extra">Variables added to the environment, such as a new worktree's.</param>
+    public ProjectJob StartJob(string name, ProcessStartSpec spec, IReadOnlyDictionary<string, string>? extra = null) =>
+        ProjectJob.Start(name, services.Launcher, WithExtra(ProjectToolEnvironment.Apply(spec with { TrackProcessTree = true, Detached = false }, services.UserEnvironment.Current), extra));
+
+    private static ProcessStartSpec WithExtra(ProcessStartSpec spec, IReadOnlyDictionary<string, string>? extra)
+    {
+        if (extra is null || extra.Count == 0)
+        {
+            return spec;
+        }
+        var environment = new Dictionary<string, string>(spec.Environment ?? ProjectToolEnvironment.Create(), OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        foreach (var (name, value) in extra)
+        {
+            environment[name] = value;
+        }
+        return spec with { Environment = environment };
+    }
 
     /// <summary>How <b>Open solution</b> opens <paramref name="path"/>, as Settings → Project tools says.</summary>
     public SolutionOpening Opener(string path) =>

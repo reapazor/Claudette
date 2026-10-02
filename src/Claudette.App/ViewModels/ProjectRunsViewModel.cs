@@ -177,7 +177,7 @@ public sealed partial class ProjectRunsViewModel : ViewModelBase
                 Directory.CreateDirectory(Path.GetDirectoryName(result)!);
                 File.Delete(result);
             }
-            job = _services.ProjectTools.StartJob(action.Label, spec);
+            job = _services.ProjectTools.StartJob(action.Label, spec, action.ExtraEnvironment);
         }
         catch (Exception ex) when (ProjectToolsViewModel.IsStartFailure(ex))
         {

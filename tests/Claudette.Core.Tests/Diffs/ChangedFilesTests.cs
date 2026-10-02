@@ -333,6 +333,55 @@ public sealed class ChangedFilesTests : IDisposable
         Assert.Equal("src/a.cs", insensitive.DisplayPath(insensitive.Files[0], _root.ToUpperInvariant()));
     }
 
+    // ---- Changes per turn (DESIGN.md §8) ---------------------------------------------------------------------------
+
+    [Fact]
+    public void Each_turn_hands_over_the_files_it_changed_with_what_they_held_before_it()
+    {
+        var auth = PathOf("auth.cs");
+        Edit("t1", auth, "one\n");
+        Edit("t2", auth, "one changed\n");
+        Use("t3", "Write", PathOf("new.cs"));
+        _files.RecordToolResult("t3", false, JsonNode.Parse($$"""{"type":"create","filePath":{{Json(PathOf("new.cs"))}},"content":"x\n","structuredPatch":[],"originalFile":null}"""));
+
+        var first = _files.TakeTurn();
+
+        // A file once, before the turn's first change to it, in order of first change.
+        Assert.Equal([(auth, "one\n", false, true), (PathOf("new.cs"), (string?)null, true, true)], first.Select(c => (c.Path, c.Before, c.IsNew, c.BeforeKnown)));
+
+        Edit("t4", auth, "two\n");
+        var second = Assert.Single(_files.TakeTurn());
+        // Before the second turn: how the first left it, while the list keeps the session's first "before".
+        Assert.Equal("two\n", second.Before);
+        Assert.Equal("one\n", Assert.Single(_files.Files, f => f.Path == auth).Before);
+        Assert.Empty(_files.TakeTurn());
+    }
+
+    [Fact]
+    public void A_transcript_read_back_has_no_turn_to_hand_over()
+    {
+        Use("t1", "Edit", PathOf("a.cs"));
+        _files.RecordToolResult("t1", false, new JsonObject { ["filePath"] = PathOf("a.cs"), ["originalFile"] = "a", ["oldString"] = "a" }, inTurn: false);
+
+        Assert.Single(_files.Files);
+        Assert.Empty(_files.TakeTurn());
+    }
+
+    [Fact]
+    public void A_turns_change_is_counted_against_the_file_as_it_left_it()
+    {
+        var path = PathOf("count.cs");
+        File.WriteAllText(path, "one\ntwo\nthree\n");
+        Edit("t1", path, "one\n");
+
+        var change = Assert.Single(_files.TakeTurn());
+
+        Assert.Equal((2, 0), _files.CountAgainstDisk(change));
+        Assert.Null(_files.CountAgainstDisk(change with { BeforeKnown = false, Before = null }));
+        File.Delete(path);
+        Assert.Equal((0, 1), _files.CountAgainstDisk(change));
+    }
+
     private void Use(string id, string tool, string path) =>
         _files.RecordToolUse(id, tool, new JsonObject { ["file_path"] = path });
 

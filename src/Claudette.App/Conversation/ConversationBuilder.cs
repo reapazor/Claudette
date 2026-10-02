@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json.Nodes;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 
@@ -421,17 +422,6 @@ public sealed class ConversationBuilder
         }
         Items.Add(item);
         _agents?.OnPrompt(item);
-        if (item is PlanItem plan && _parent is null && _todoList is { } todos)
-        {
-            // An approved plan heads the Tasks page (DESIGN.md §5, "Tasks").
-            plan.Answered += (_, _) =>
-            {
-                if (plan.State == PermissionState.Allowed && plan.HasPlan)
-                {
-                    todos.SetPlan(plan.Plan.ToString());
-                }
-            };
-        }
     }
 
     private void ApplyAssistant(AssistantMessage message)
@@ -513,8 +503,21 @@ public sealed class ConversationBuilder
                 {
                     node.OnResult(result.Text, result.IsError, message.ToolUseResult, message.WasInterrupted(result.ToolUseId));
                 }
+                if (tool.Name == "ExitPlanMode" && !result.IsError && _parent is null && ApprovedPlan(tool, message.ToolUseResult) is { } plan)
+                {
+                    // An approved plan heads the Tasks page (DESIGN.md §5, "Tasks"). Its result says so however it was
+                    // approved: on its card, in the Claude app, or before the tab was restored.
+                    _todoList?.SetPlan(plan);
+                }
             }
         }
+    }
+
+    /// <summary>The plan an approved ExitPlanMode result carries, else the one the call was given; null without either.</summary>
+    private static string? ApprovedPlan(ToolUseItem tool, JsonNode? toolUseResult)
+    {
+        var plan = (toolUseResult as JsonObject)?.GetString("plan") ?? tool.Input.GetString("plan");
+        return string.IsNullOrWhiteSpace(plan) ? null : plan;
     }
 
     /// <summary>One note per retry sequence, updated in place rather than one row per attempt.</summary>

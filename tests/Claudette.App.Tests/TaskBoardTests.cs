@@ -112,10 +112,66 @@ public class TaskBoardTests
 
         Assert.Equal("1. Read\n2. Fix", _list.Plan);
         Assert.True(_list.HasAnything);
-        Assert.Equal(_time.GetUtcNow(), _list.PlanApprovedAt);
+        Assert.Equal(_time.GetUtcNow(), _list.PlanAt);
+        Assert.Equal(PlanSource.Approved, _list.PlanSource);
 
         _list.Clear();
         Assert.False(_list.HasAnything);
+    }
+
+    [Fact]
+    public void A_restored_tab_shows_the_plan_its_transcript_approved_dated_by_the_approval()
+    {
+        // Claude Code 2.1.285 and later: the call has no plan of its own; the approved result carries it.
+        var builder = new ConversationBuilder([], _list) { Time = _time };
+        var asked = DateTimeOffset.Parse("2026-09-30T16:20:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var approved = asked.AddMinutes(3);
+
+        builder.Replay(Assistant(Wire.Tool(null, "p1", "ExitPlanMode", new JsonObject())), asked);
+        builder.Replay(Results(Wire.Result("p1", "User has approved your plan.", toolUseResult: Json("""{"plan":"## Fix\n1. Read","isAgent":false,"filePath":"plan.md"}"""))), approved);
+
+        Assert.Equal("## Fix\n1. Read", _list.Plan);
+        Assert.Equal(approved, _list.PlanAt);
+        Assert.Equal(PlanSource.Approved, _list.PlanSource);
+        Assert.StartsWith("Approved ", _list.PlanTimeText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_plan_sent_back_to_planning_or_a_subagents_plan_doesnt_head_the_list()
+    {
+        var builder = new ConversationBuilder([], _list) { Time = _time };
+
+        builder.Apply(Assistant(Wire.Tool(null, "p1", "ExitPlanMode", Json("""{"plan":"1. Read"}"""))));
+        builder.Apply(Results(Wire.Result("p1", "The user doesn't want to proceed with this tool use.", isError: true)));
+        builder.Apply(Assistant(Wire.Agent("a1", "Plan it", "Make a plan")));
+        builder.Apply(Assistant(Wire.Tool("a1", "p2", "ExitPlanMode", Json("""{"plan":"2. Fix"}"""))));
+        builder.Apply(Results(Wire.Result("p2", "Approved.", parent: "a1", toolUseResult: Json("""{"plan":"2. Fix","isAgent":true}"""))));
+
+        Assert.False(_list.HasPlan);
+    }
+
+    [Fact]
+    public void A_plan_from_a_reply_says_so_with_when_Claude_wrote_it()
+    {
+        var written = DateTimeOffset.Parse("2026-09-30T16:20:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        _list.SetPlan("Here's my plan.", PlanSource.Reply, written);
+        Assert.Equal($"From Claude's reply at {written.ToLocalTime():t}", _list.PlanTimeText);
+
+        _list.SetPlan("Here's my plan.", PlanSource.Reply, null);
+        Assert.Equal("From Claude's reply", _list.PlanTimeText);
+    }
+
+    private static AssistantMessageReceived Assistant(string line)
+    {
+        Assert.True(MessageParser.TryParse(line, out var message, out _));
+        return new AssistantMessageReceived((AssistantMessage)message!);
+    }
+
+    private static ToolResultsReceived Results(string line)
+    {
+        Assert.True(MessageParser.TryParse(line, out var message, out _));
+        return new ToolResultsReceived((UserMessage)message!);
     }
 
     [Fact]

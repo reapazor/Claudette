@@ -67,6 +67,12 @@ public sealed class ChangedFile
     }
 }
 
+/// <summary>A file one turn changed (DESIGN.md §8, "Changes per turn"), with what it held before the turn's first change to it.</summary>
+/// <param name="Path">The path as Claude Code reported it.</param>
+/// <param name="Before">The file before this turn changed it; null when it was new, or when <paramref name="BeforeKnown"/> is false.</param>
+/// <param name="IsNew">The turn created it.</param>
+public sealed record TurnFileChange(string Path, string? Before, bool IsNew, bool BeforeKnown);
+
 /// <summary>
 /// A changed file compared with the disk now. <paramref name="Added"/> and <paramref name="Removed"/> are null when
 /// the lines can't be counted: a binary or very large file, or an unknown "before".
@@ -95,6 +101,9 @@ public sealed class ChangedFiles
     private readonly HashSet<string> _applied = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ChangedFile> _byPath;
     private readonly List<ChangedFile> _files = [];
+    /// <summary>The files changed since the last <see cref="TakeTurn"/>, by normalized path, in order of first change.</summary>
+    private readonly Dictionary<string, TurnFileChange> _turnByPath;
+    private readonly List<TurnFileChange> _turn = [];
 
     /// <param name="timeProvider">Stamps each change.</param>
     /// <param name="pathComparer">
@@ -105,6 +114,7 @@ public sealed class ChangedFiles
         _timeProvider = timeProvider;
         _pathComparer = pathComparer ?? PlatformPathComparer;
         _byPath = new Dictionary<string, ChangedFile>(_pathComparer);
+        _turnByPath = new Dictionary<string, TurnFileChange>(_pathComparer);
     }
 
     /// <summary>Case-insensitive on Windows and macOS, case-sensitive on Linux.</summary>
@@ -144,7 +154,11 @@ public sealed class ChangedFiles
     /// </summary>
     /// <param name="toolUseResult">The structured <c>tool_use_result</c> (<c>toolUseResult</c> in transcripts).</param>
     /// <param name="at">When the change happened, for transcript replay; defaults to now.</param>
-    public void RecordToolResult(string toolUseId, bool isError, JsonNode? toolUseResult, DateTimeOffset? at = null)
+    /// <param name="inTurn">
+    /// The change is part of the turn under way, for <see cref="TakeTurn"/>. A transcript read back has no turns to
+    /// show, so its changes aren't.
+    /// </param>
+    public void RecordToolResult(string toolUseId, bool isError, JsonNode? toolUseResult, DateTimeOffset? at = null, bool inTurn = true)
     {
         if (!_pending.Remove(toolUseId, out var pending) || isError)
         {
@@ -164,6 +178,14 @@ public sealed class ChangedFiles
         _applied.Add(toolUseId);
         var when = at ?? _timeProvider.GetUtcNow();
         var key = Normalize(path);
+        if (inTurn && !_turnByPath.ContainsKey(key))
+        {
+            // What the file held before this turn's first change to it: this change's own "before".
+            var (turnBefore, turnNew, turnKnown) = ReadBefore(pending.ToolName, result);
+            var change = new TurnFileChange(path, turnBefore, turnNew, turnKnown);
+            _turnByPath.Add(key, change);
+            _turn.Add(change);
+        }
         if (_byPath.TryGetValue(key, out var file))
         {
             file.AddChange(toolUseId, when);
@@ -188,6 +210,40 @@ public sealed class ChangedFiles
 
     /// <summary>The changed file at <paramref name="path"/>, or null when Claude hasn't changed it in this session.</summary>
     public ChangedFile? Find(string path) => _byPath.GetValueOrDefault(Normalize(path));
+
+    /// <summary>
+    /// The files changed since the last call, in order of their first change, each with what it held before that change
+    /// (DESIGN.md §8, "Changes per turn"). Called as each turn ends, which starts the next.
+    /// </summary>
+    public IReadOnlyList<TurnFileChange> TakeTurn()
+    {
+        var turn = _turn.ToArray();
+        _turn.Clear();
+        _turnByPath.Clear();
+        return turn;
+    }
+
+    /// <summary>
+    /// A turn's change to a file, counted against the file on disk: how the turn left it, when it has just ended. Null
+    /// when the lines can't be counted (binary, too large, or the "before" isn't known).
+    /// </summary>
+    public (int Added, int Removed)? CountAgainstDisk(TurnFileChange change)
+    {
+        if (!change.BeforeKnown || change.Before is { } before && (LineDiff.LooksBinary(before) || before.Length > MaxInspectBytes))
+        {
+            return null;
+        }
+        var read = TextFiles.Read(change.Path, MaxInspectBytes);
+        return read.Kind switch
+        {
+            TextFileKind.Text => LineDiff.Count(change.Before, read.Text),
+            TextFileKind.Missing => LineDiff.Count(change.Before, null),
+            _ => null,
+        };
+    }
+
+    /// <summary>Whether two paths name the same file, by this list's rule.</summary>
+    public bool SamePath(string a, string b) => _pathComparer.Equals(Normalize(a), Normalize(b));
 
     /// <summary>Compares a changed file with what's on disk now.</summary>
     public ChangedFileState Inspect(ChangedFile file)

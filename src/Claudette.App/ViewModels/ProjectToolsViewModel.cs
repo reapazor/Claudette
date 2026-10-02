@@ -369,6 +369,67 @@ public sealed partial class ProjectToolsViewModel : ViewModelBase, IProjectRunsH
     /// <summary>A folder's project files changed through the in-app editor, here or in another tab in the same folder.</summary>
     internal void ReloadCustomActions() => _ = RefreshFileAsync();
 
+    // ---- Setting up a new worktree (DESIGN.md §18) -------------------------------------------------------------------
+
+    /// <summary>
+    /// A worktree tab's worktree has just been made: runs the actions marked <c>runOnNewWorktree</c>, one after another
+    /// in order, each only once the one before succeeded. They're read from the main checkout's files, where
+    /// <c>claudette.local.json</c> is (git ignores it, so the worktree has none), and run in the worktree, told both
+    /// folders. The shared file's run only when the folder is trusted, as Claude Code runs a folder's hooks.
+    /// </summary>
+    /// <param name="trusted">The main checkout is trusted, and the tab uses its own configuration (DESIGN.md §7, "Folder trust").</param>
+    internal async Task RunWorktreeSetupAsync(string mainCheckout, string worktree, bool trusted)
+    {
+        ProjectFileContents file;
+        try
+        {
+            file = await _services.ProjectTools.ReadProjectFileAsync(mainCheckout);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return;
+        }
+        var setups = file.Actions.Where(a => a.RunOnNewWorktree).ToList();
+        if (setups.Count == 0)
+        {
+            return;
+        }
+        var skipped = trusted ? [] : setups.Where(a => a.Scope == ProjectFileScope.Shared).ToList();
+        if (skipped.Count > 0)
+        {
+            _host.AddNote($"{ProjectFile.SharedName}'s actions for a new worktree didn't run, because this folder isn't trusted: {string.Join(", ", skipped.Select(a => a.Name))}. "
+                + "Run them from the project's menu, or trust the folder from the tab's menu.", NoteKind.Warning);
+        }
+        var environment = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [CustomProjectAction.WorktreeVariable] = worktree,
+            [CustomProjectAction.MainCheckoutVariable] = mainCheckout,
+        };
+        var actions = setups.Except(skipped)
+            .Select(a => _services.ProjectTools.CustomActions(new ProjectFileContents([a], [], []), worktree)[0].Action with { ExtraEnvironment = environment })
+            .Where(a => a.IsEnabled)
+            .ToList();
+        if (actions.Count == 0)
+        {
+            return;
+        }
+        _host.AddNote($"Setting up the new worktree: {string.Join(", ", actions.Select(a => a.Label))}.");
+        // Launched ones start at once; the jobs run one after another, each once the one before it worked.
+        foreach (var launch in actions.Where(a => a.Kind == ProjectActionKind.Launch))
+        {
+            await RunActionAsync(launch);
+        }
+        ProjectAction? chain = null;
+        foreach (var job in actions.Where(a => a.Kind == ProjectActionKind.Run).Reverse())
+        {
+            chain = job with { ThenOnSuccess = chain };
+        }
+        if (chain is not null)
+        {
+            await RunActionAsync(chain);
+        }
+    }
+
     /// <summary>Every project detection found for the folder, nearest first, for Settings' Tools page.</summary>
     internal IReadOnlyList<ProjectCandidate> Candidates => _projectDetection.Candidates;
 
@@ -398,7 +459,7 @@ public sealed partial class ProjectToolsViewModel : ViewModelBase, IProjectRunsH
             case ProjectActionKind.Launch when action.Process is { } spec:
                 try
                 {
-                    _services.ProjectTools.Launch(spec);
+                    _services.ProjectTools.Launch(spec, action.ExtraEnvironment);
                 }
                 catch (Exception ex) when (IsStartFailure(ex))
                 {

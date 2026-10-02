@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
@@ -50,6 +51,29 @@ public class TasksAndMcpPagesUiTests
         Assert.Contains("Add the users.email index.", texts);
         Assert.Contains("Waiting on #1", texts);
         Assert.Contains(texts, t => t?.Contains("#2", StringComparison.Ordinal) == true && t.Contains("Run the migration", StringComparison.Ordinal));
+    }
+
+    [AvaloniaFact]
+    public async Task A_replys_Show_as_the_plan_puts_it_at_the_head_of_the_tasks_page()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell }, 1200, 800);
+        h.Transport.EmitTurn("Here's my plan: read the build script, then fix the config.");
+        var view = window.GetVisualDescendants().OfType<TabView>().Single();
+        Button ShowAsPlan() => view.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Show as the plan");
+        await UiText.SettleUntilAsync(window, () => view.GetVisualDescendants().OfType<Button>().Any(b => AutomationProperties.GetName(b) == "Show as the plan"), "the reply's chip");
+        var button = ShowAsPlan();
+        Assert.True(button.IsVisible);
+        Assert.IsType<Claudette.App.Conversation.AssistantTextItem>(button.CommandParameter);
+
+        button.Command!.Execute(button.CommandParameter);
+        await UiText.SettleUntilAsync(window, () => tab.IsTasksPage, "the tasks page");
+        var texts = Texts(view);
+
+        Assert.Contains("Plan", texts);
+        Assert.Contains(texts, t => t?.StartsWith("From Claude's reply at ", StringComparison.Ordinal) == true);
+        Assert.Contains(texts, t => t?.Contains("read the build script", StringComparison.Ordinal) == true);
     }
 
     [AvaloniaFact]

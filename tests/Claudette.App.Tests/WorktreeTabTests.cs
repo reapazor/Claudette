@@ -13,9 +13,9 @@ namespace Claudette.App.Tests;
 /// </summary>
 public class WorktreeTabTests
 {
-    private static readonly bool GitInstalled = FileProbe.Instance.FindOnPath(OperatingSystem.IsWindows() ? "git.exe" : "git") is not null;
+    internal static readonly bool GitInstalled = FileProbe.Instance.FindOnPath(OperatingSystem.IsWindows() ? "git.exe" : "git") is not null;
 
-    private static async Task GitAsync(string folder, params string[] arguments)
+    internal static async Task GitAsync(string folder, params string[] arguments)
     {
         var result = await ProcessRunner.RunAsync(new ProcessLauncher(),
             new ProcessStartSpec("git", ["-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false", .. arguments]) { WorkingDirectory = folder },
@@ -23,7 +23,7 @@ public class WorktreeTabTests
         Assert.True(result.ExitCode == 0, $"git {string.Join(' ', arguments)} failed: {result.StandardError}");
     }
 
-    private static async Task InitRepositoryAsync(TabTestHarness h)
+    internal static async Task InitRepositoryAsync(TabTestHarness h)
     {
         await GitAsync(h.WorkFolder, "init", "-q");
         await GitAsync(h.WorkFolder, "commit", "-q", "--allow-empty", "-m", "init");
@@ -33,7 +33,7 @@ public class WorktreeTabTests
     /// Opens a worktree tab and plays Claude Code's part: <c>--worktree</c> makes the worktree (with git, locked, as in
     /// <c>-p</c> mode, when <paramref name="realWorktree"/>), and the first turn's <c>system/init</c> reports it.
     /// </summary>
-    private static async Task<(TabViewModel Tab, string Path)> WorktreeTabAsync(TabTestHarness h, bool realWorktree)
+    internal static async Task<(TabViewModel Tab, string Path)> WorktreeTabAsync(TabTestHarness h, bool realWorktree)
     {
         await h.Shell.OpenWorktreeTabAsync(h.WorkFolder);
         var tab = h.Shell.SelectedTab!;

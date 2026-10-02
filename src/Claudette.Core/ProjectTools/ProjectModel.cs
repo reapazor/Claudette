@@ -49,6 +49,12 @@ public sealed record ProjectAction(string Id, string Label, ProjectActionKind Ki
     /// <summary>Run after this one succeeds, such as Launch editor after Build editor ("Build and launch").</summary>
     public ProjectAction? ThenOnSuccess { get; init; }
 
+    /// <summary>
+    /// Variables added to its process's environment, such as a new worktree's and its main checkout's (DESIGN.md §18,
+    /// "Setting up a new worktree").
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? ExtraEnvironment { get; init; }
+
     /// <summary>Why it can't run now, such as "Generate project files first"; null when it can. Shown as the tooltip.</summary>
     public string? DisabledReason { get; init; }
 

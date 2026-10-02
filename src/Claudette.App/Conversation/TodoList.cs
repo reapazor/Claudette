@@ -98,6 +98,16 @@ public sealed partial class TodoItem(string content, string? activeForm, string 
     public string DisplayText => IsActive && !string.IsNullOrEmpty(ActiveForm) ? ActiveForm : Content;
 }
 
+/// <summary>Where the Tasks page's plan came from (DESIGN.md §5, "Tasks").</summary>
+public enum PlanSource
+{
+    /// <summary>A plan the user approved (ExitPlanMode).</summary>
+    Approved,
+
+    /// <summary>A reply the user chose with <b>Show as the plan</b>.</summary>
+    Reply,
+}
+
 /// <summary>
 /// The to-do list pinned at the top of the conversation (DESIGN.md §5). Fed by <c>TodoWrite</c>, or by the
 /// <c>TaskCreate</c>/<c>TaskUpdate</c> tools when a session uses those instead.
@@ -114,7 +124,10 @@ public sealed partial class TodoList : ObservableObject
     /// <summary>The clock that dates each task's changes, for the Tasks page (DESIGN.md §5, "Tasks"). Null: no times.</summary>
     public TimeProvider? Time { get; set; }
 
-    /// <summary>The plan the user approved last (ExitPlanMode), shown above the tasks; null before one.</summary>
+    /// <summary>
+    /// The plan shown above the tasks: the one the user approved last (ExitPlanMode), or a reply they chose with <b>Show
+    /// as the plan</b>, whichever came later; null before either.
+    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPlan), nameof(HasAnything), nameof(PlanMarkdown))]
     public partial string? Plan { get; private set; }
@@ -122,14 +135,26 @@ public sealed partial class TodoList : ObservableObject
     /// <summary>The plan, for the Markdown view.</summary>
     public LiveMarkdown.Avalonia.ObservableStringBuilder PlanMarkdown => new(Plan ?? "");
 
-    /// <summary>"Approved 14:05", under the plan.</summary>
-    public string? PlanApprovedText => PlanApprovedAt is { } at ? $"Approved {at.ToLocalTime():t}" : null;
+    /// <summary>"Approved 14:05", or "From Claude's reply at 14:03", under the plan.</summary>
+    public string? PlanTimeText => (PlanSource, PlanAt) switch
+    {
+        (PlanSource.Reply, { } at) => $"From Claude's reply at {at.ToLocalTime():t}",
+        (PlanSource.Reply, null) => "From Claude's reply",
+        (_, { } at) => $"Approved {at.ToLocalTime():t}",
+        _ => null,
+    };
 
     public bool HasPlan => !string.IsNullOrWhiteSpace(Plan);
 
+    /// <summary>Where the plan came from.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PlanApprovedText))]
-    public partial DateTimeOffset? PlanApprovedAt { get; private set; }
+    [NotifyPropertyChangedFor(nameof(PlanTimeText))]
+    public partial PlanSource PlanSource { get; private set; }
+
+    /// <summary>When the plan was approved, or when Claude wrote the reply it came from; null when not known.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PlanTimeText))]
+    public partial DateTimeOffset? PlanAt { get; private set; }
 
     /// <summary>The Tasks page has something to show.</summary>
     public bool HasAnything => HasItems || HasPlan;
@@ -141,10 +166,14 @@ public sealed partial class TodoList : ObservableObject
     public TodoItem? Current => Items.FirstOrDefault(i => i.IsActive);
 
     /// <summary>A plan the user approved: the Tasks page shows it above the tasks it turns into.</summary>
-    public void SetPlan(string plan)
+    public void SetPlan(string plan) => SetPlan(plan, PlanSource.Approved, Now());
+
+    /// <summary>The Tasks page's plan, from <paramref name="source"/>, approved or written at <paramref name="at"/>.</summary>
+    public void SetPlan(string plan, PlanSource source, DateTimeOffset? at)
     {
         Plan = plan.Trim();
-        PlanApprovedAt = Now();
+        PlanSource = source;
+        PlanAt = at;
     }
 
     [ObservableProperty]
@@ -301,7 +330,7 @@ public sealed partial class TodoList : ObservableObject
         _pendingCreates.Clear();
         _pendingReads.Clear();
         Plan = null;
-        PlanApprovedAt = null;
+        PlanAt = null;
         Changed();
     }
 

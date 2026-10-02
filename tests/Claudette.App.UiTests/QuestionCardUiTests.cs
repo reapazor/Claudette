@@ -12,7 +12,7 @@ using Claudette.App.Views;
 
 namespace Claudette.App.UiTests;
 
-/// <summary>Claude's clarifying questions (DESIGN.md §5) answered with the mouse.</summary>
+/// <summary>Claude's clarifying questions and plans (DESIGN.md §7) answered with the mouse.</summary>
 public sealed class QuestionCardUiTests
 {
     [AvaloniaFact]
@@ -45,6 +45,37 @@ public sealed class QuestionCardUiTests
         Assert.True(Choice(conversation, "Docs").IsChecked);
         Assert.False(Choice(conversation, "Postgres").IsChecked);
         Assert.Equal("API, Docs", prompt.Questions[0].Answer);
+    }
+
+    [AvaloniaFact]
+    public async Task A_plans_card_offers_auto_mode_first_while_the_tab_can_use_it()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        var conversation = window.GetVisualDescendants().OfType<ItemsControl>().Single(c => c.Name == "ConversationItems");
+        Button[] Approves() => [.. conversation.GetVisualDescendants().OfType<Button>()
+            .Where(b => b.IsEffectivelyVisible && b.Content is string text && text.StartsWith("Approve", StringComparison.Ordinal))];
+        async Task<PlanItem> PlanAsync(string requestId)
+        {
+            h.Transport.Emit("""{"type":"control_request","request_id":"ID","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","input":{"plan":"1. Read\n2. Fix"}}}"""
+                .Replace("\"ID\"", $"\"{requestId}\"", StringComparison.Ordinal));
+            await UiText.SettleUntilAsync(window, () => tab.Items.OfType<PlanItem>().Any(p => p.Request.RequestId == requestId) && Approves().Length > 0, "the plan");
+            return tab.Items.OfType<PlanItem>().Single(p => p.Request.RequestId == requestId);
+        }
+
+        var plan = await PlanAsync("p1");
+        Assert.Equal(["Approve, auto mode", "Approve, accept edits", "Approve, ask before edits"], Approves().Select(b => b.Content as string));
+        Assert.Equal([true, false, false], Approves().Select(b => b.Classes.Contains("accent")));
+        Click(window, Approves()[0]);
+        Assert.Equal("Approved. Auto mode checks actions and blocks risky ones", plan.Outcome);
+
+        // Haiku has no auto mode: Approve, accept edits is the main button again.
+        tab.ChooseModelCommand.Execute(tab.Models.Single(m => m.Value == "haiku"));
+        await tab.ModelSwitch.ConfirmCommand.ExecuteAsync(null);
+        await PlanAsync("p2");
+        Assert.Equal(["Approve, accept edits", "Approve, ask before edits"], Approves().Select(b => b.Content as string));
+        Assert.Equal([true, false], Approves().Select(b => b.Classes.Contains("accent")));
     }
 
     /// <summary>The check box or radio button for an option, the only one it has.</summary>

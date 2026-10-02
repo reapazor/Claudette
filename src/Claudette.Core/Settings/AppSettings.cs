@@ -185,6 +185,31 @@ public sealed class GeneralSettings
     /// incident (DESIGN.md §18, "Service status"). Off stops the checks too.
     /// </summary>
     public bool ShowServiceStatus { get; set; } = true;
+
+    /// <summary>What happens to a message sent while Claude works (DESIGN.md §5, "Queued messages").</summary>
+    public WhileWorking MessagesWhileWorking { get; set; } = WhileWorking.Steer;
+
+    /// <summary>
+    /// Remove the worktrees of worktree tabs once everything in them is on another branch, with no uncommitted changes
+    /// (DESIGN.md §4, "Cleaning up worktrees"). Off by default.
+    /// </summary>
+    public bool RemoveMergedWorktrees { get; set; }
+
+    /// <summary>
+    /// Remove the worktrees of worktree tabs that no tab has used for this many days, with no uncommitted changes, keeping
+    /// a branch that has commits of its own (DESIGN.md §4, "Cleaning up worktrees"). 0 turns it off, the default.
+    /// </summary>
+    public int RemoveInactiveWorktreesAfterDays { get; set; }
+}
+
+/// <summary>Settings → General → <b>Messages sent while Claude works</b> (DESIGN.md §5, "Queued messages").</summary>
+public enum WhileWorking
+{
+    /// <summary>Sent to Claude Code at once, which gives it to Claude at its next step, inside the turn.</summary>
+    Steer,
+
+    /// <summary>Held by Claudette until the turn ends, then sent as the next turn.</summary>
+    Queue,
 }
 
 public sealed class ClaudeCodeSettings

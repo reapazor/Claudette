@@ -93,6 +93,7 @@ public class PermissionModeTests
         await using var h = new TabTestHarness();
         var tab = await h.OpenTabAsync();
         Assert.Contains(tab.PermissionModeChoices, c => c.IsAuto);
+        Assert.True(tab.IsAutoModeAvailable);
         var switched = new List<string?>();
         tab.PropertyChanged += (_, e) => switched.Add(e.PropertyName);
 
@@ -101,6 +102,9 @@ public class PermissionModeTests
 
         Assert.DoesNotContain(tab.PermissionModeChoices, c => c.IsAuto);
         Assert.Contains(nameof(TabViewModel.PermissionModeChoices), switched);
+        // Nor on a plan's card.
+        Assert.False(tab.IsAutoModeAvailable);
+        Assert.Contains(nameof(TabViewModel.IsAutoModeAvailable), switched);
     }
 
     [Fact]
@@ -113,6 +117,7 @@ public class PermissionModeTests
 
         Assert.Null(h.Factory.Launches[0].PermissionMode);
         Assert.DoesNotContain(tab.PermissionModeChoices, c => c.IsAuto);
+        Assert.False(tab.IsAutoModeAvailable);
         Assert.Equal("Default (Manual)", TabSettings(h, tab).ModeChoices[0].Label);
     }
 

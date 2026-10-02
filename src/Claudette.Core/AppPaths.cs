@@ -47,6 +47,9 @@ public sealed record AppPaths(string DataDirectory, string SettingsDirectory)
     /// <summary>This machine's copy of each scratch pad (DESIGN.md §18, "Scratch pad").</summary>
     public string ScratchPadsDirectory => Path.Combine(DataDirectory, ScratchPads.ScratchPadStore.FolderName);
 
+    /// <summary>Each tab's unsent message, and the stash (DESIGN.md §5, "Drafts and the stash").</summary>
+    public string DraftsDirectory => Path.Combine(DataDirectory, Composer.DraftStore.FolderName);
+
     /// <summary>Downloaded Claudette releases, one folder per version (DESIGN.md §2, "Updating Claudette").</summary>
     public string UpdatesDirectory => Path.Combine(DataDirectory, "updates");
 

@@ -206,6 +206,14 @@ public static class ProjectFile
                 break;
         }
         json["mode"] = action.Mode == CustomActionMode.LaunchAndForget ? "launch" : "output";
+        if (action.RunOnNewWorktree)
+        {
+            json["runOnNewWorktree"] = true;
+        }
+        else
+        {
+            json.Remove("runOnNewWorktree");
+        }
         return json;
     }
 
@@ -298,6 +306,8 @@ public static class ProjectFile
             Mode = mode.Value,
             Os = osList,
             IfExists = ifExists,
+            // Anything but true leaves it to a click.
+            RunOnNewWorktree = entry["runOnNewWorktree"] is JsonValue run && run.TryGetValue<bool>(out var on) && on,
         };
         return new ProjectFileEntry(node, action, null, forThisOS);
     }

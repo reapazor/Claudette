@@ -125,6 +125,12 @@ public partial class TabView : UserControl
             ComposerPanel.ShowSuffixes();
             e.Handled = true;
         }
+        else if (Shortcuts.Matches(tab.Keyboard, KeyboardShortcuts.Stash, e.Key, e.KeyModifiers))
+        {
+            // DESIGN.md §5, "Drafts and the stash".
+            tab.StashCommand.Execute(null);
+            e.Handled = true;
+        }
     }
 
     /// <summary>
@@ -146,6 +152,12 @@ public partial class TabView : UserControl
         var focusedBox = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() as TextBox;
         if (focusedBox is not null && !ComposerPanel.HasFocus(focusedBox)
             || e.Key == Key.Back && !string.IsNullOrEmpty(focusedBox?.Text))
+        {
+            return;
+        }
+        // With Ctrl/Cmd+Enter as the send key (DESIGN.md §14), it sends what's typed in the composer; with nothing typed it
+        // answers the prompt.
+        if (allow && e.Key == Key.Enter && tab.Keyboard.SendKey == SendKey.PrimaryEnter && ComposerPanel.HasFocus(focusedBox) && tab.SendCommand.CanExecute(null))
         {
             return;
         }

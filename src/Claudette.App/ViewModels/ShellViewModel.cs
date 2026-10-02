@@ -36,6 +36,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             }
         });
         _services.Notifications.SelectedTabId = () => SelectedTab?.Id;
+        // The worktrees open tabs work in are never cleaned up (DESIGN.md §4, "Cleaning up worktrees").
+        _services.Worktrees.OpenTabs = () => [.. AllTabs.Select(t => t.State)];
         IsCompact = services.Settings.Appearance.Density == Density.Compact;
         IsClaudeStyle = services.Settings.Appearance.Style == AppStyle.Claude;
         _services.SettingsChanged += (_, _) =>
@@ -248,6 +250,11 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             {
                 tab.RestoreDraft(draft);
             }
+            else
+            {
+                // What was typed when Claudette last quit (DESIGN.md §5, "Drafts and the stash").
+                tab.RestoreSavedDraft();
+            }
             // A deleted clone, say: shown straight away, not only once the tab is selected (DESIGN.md §9, "Missing folder").
             if (!Directory.Exists(tab.Folder))
             {
@@ -268,6 +275,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         // that sync; a tab that doesn't sync has no part in the library.
         var keep = state.Tabs.Where(t => t.SyncToLibrary).Select(t => t.SessionId).OfType<string>().ToHashSet();
         _ = Task.Run(() => _services.Library.Prune(keep));
+        // The drafts of tabs that weren't restored won't be needed.
+        _ = _services.Drafts.KeepOnlyAsync(state.Tabs.Select(t => t.Id).ToHashSet(StringComparer.Ordinal));
+        // Worktrees no tab needs any more go, as Settings → General says (DESIGN.md §4, "Cleaning up worktrees").
+        _services.Worktrees.Start();
         _ = _services.Library.SyncSettingsAsync();
         if (initialFolder is not null)
         {
@@ -512,7 +523,11 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         }
         SaveTabs();
         OnTabStatusChanged();
+        // Its worktree's inactivity counts from now (DESIGN.md §4, "Cleaning up worktrees").
+        _services.Worktrees.MarkUsed(tab.State);
         await tab.CloseAsync(killProcesses);
+        // Closed, not quit: its draft goes with it (DESIGN.md §5, "Drafts and the stash").
+        await _services.Drafts.SaveAsync(tab.Id, null);
     }
 
     // ---- Selection and groups -------------------------------------------------------------------------------

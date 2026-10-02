@@ -97,7 +97,58 @@ public sealed partial class UserMessageItem(string text, string? suffixText = nu
     /// Its echo ends the wait.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(QueuedText), nameof(CancelQueuedTip))]
     public partial bool IsQueued { get; set; }
+
+    /// <summary>
+    /// Held by Claudette until the turn ends, with Settings → General set to queue messages sent while Claude works
+    /// (DESIGN.md §5, "Queued messages"): Claude Code hasn't been sent it yet. <b>Send now</b> sends it into the turn.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(QueuedText), nameof(CancelQueuedTip))]
+    public partial bool IsHeld { get; set; }
+
+    /// <summary>What the queued line says: when it goes.</summary>
+    public string QueuedText => IsHeld ? "Queued: sent when this turn ends" : "Queued: sent when Claude can take it";
+
+    public string CancelQueuedTip => IsHeld
+        ? "Takes the message back before it's sent, and puts it in the composer"
+        : "Takes the message back before Claude reads it, and puts it in the composer";
+
+    /// <summary>How much of a long message the card shows until <b>Show all</b>, such as a large paste (DESIGN.md §5, "Attachments").</summary>
+    public const int ShownTextLimit = 4_000;
+
+    /// <summary>How many lines of a long message the card shows until <b>Show all</b>.</summary>
+    public const int ShownLineLimit = 40;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShownText), nameof(IsTextCut))]
+    public partial bool ShowsAllText { get; set; }
+
+    /// <summary>The text as the card shows it: the start of a long one, up to <see cref="ShownTextLimit"/> characters or <see cref="ShownLineLimit"/> lines.</summary>
+    public string ShownText => IsTextCut ? Text[..CutAt(Text)] : Text;
+
+    public bool IsTextCut => !ShowsAllText && CutAt(Text) < Text.Length;
+
+    public string ShowAllText => $"Show all ({(System.Text.Encoding.UTF8.GetByteCount(Text) + 1023) / 1024:N0} KB)";
+
+    [RelayCommand]
+    private void ShowAll() => ShowsAllText = true;
+
+    /// <summary>Where a long text is cut: at the limit, or at the end of its last shown line when that comes first.</summary>
+    private static int CutAt(string text)
+    {
+        var end = Math.Min(text.Length, ShownTextLimit);
+        var lines = 0;
+        for (var i = 0; i < end; i++)
+        {
+            if (text[i] == '\n' && ++lines == ShownLineLimit)
+            {
+                return i;
+            }
+        }
+        return end;
+    }
 
     /// <summary>
     /// The conversation entry just before this prompt: resuming there leaves the prompt out. Null for the first prompt,
@@ -127,6 +178,15 @@ public sealed partial class UserMessageItem(string text, string? suffixText = nu
 
     /// <summary>Attached images, shown as thumbnails (DESIGN.md §5, "Attachments").</summary>
     public IReadOnlyList<MessageImage> Images { get; init; } = [];
+
+    /// <summary>
+    /// The large pastes sent after what was typed (DESIGN.md §5, "Attachments"), so a message taken back puts them back as
+    /// attachments. Only for a message sent here: a transcript's is one text.
+    /// </summary>
+    public IReadOnlyList<string> PastedTexts { get; set; } = [];
+
+    /// <summary>With <see cref="PastedTexts"/>, what was typed before them; null when the text is all typed.</summary>
+    public string? TypedText { get; set; }
 
     public bool HasImages => Images.Count > 0;
 }
@@ -674,10 +734,36 @@ public sealed partial class UnsupportedMessageItem(string messageType, string js
     public partial bool IsExpanded { get; set; }
 }
 
-/// <summary>The small footer after each turn: duration, tokens and model (DESIGN.md §5).</summary>
-public sealed class TurnSummaryItem(string text) : ConversationItem
+/// <summary>A file on a turn's footer, which opens the turn's changes to it (DESIGN.md §8, "Changes per turn").</summary>
+public sealed partial class TurnFileRow(TurnSummaryItem turn, Core.Diffs.TurnFileChange change, string displayPath) : ObservableObject
+{
+    public TurnSummaryItem Turn { get; } = turn;
+
+    public Core.Diffs.TurnFileChange Change { get; } = change;
+
+    public string DisplayPath { get; } = displayPath;
+
+    /// <summary><c>+12 −3</c> once counted against how the turn left the file; null until then, or when it can't be.</summary>
+    [ObservableProperty]
+    public partial string? Stats { get; set; }
+}
+
+/// <summary>
+/// The small footer after each turn: duration, tokens and model (DESIGN.md §5), and the files the turn changed (DESIGN.md
+/// §8, "Changes per turn").
+/// </summary>
+public sealed partial class TurnSummaryItem(string text) : ConversationItem
 {
     public string Text { get; } = text;
+
+    /// <summary>The files the turn changed with Edit, Write, MultiEdit or NotebookEdit, in order; empty when it changed none.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasFiles), nameof(FilesText))]
+    public partial IReadOnlyList<TurnFileRow> Files { get; set; } = [];
+
+    public bool HasFiles => Files.Count > 0;
+
+    public string FilesText => Files.Count == 1 ? "1 file changed" : $"{Files.Count} files changed";
 
     /// <summary>The footer for a turn's result; null when the result says none of those.</summary>
     /// <param name="modelName">Turns a model id into a display name.</param>

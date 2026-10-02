@@ -1,3 +1,5 @@
+using Claudette.App.Conversation;
+using Claudette.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -175,6 +177,52 @@ public sealed partial class TabViewModel
         IsSidePanelOpen = true;
         Page = SidePanelPage.Tasks;
     }
+
+    /// <summary>
+    /// A reply's <b>Show as the plan</b> (DESIGN.md §5, "Tasks"): for a plan Claude wrote in a reply rather than through
+    /// Plan mode. It heads the Tasks page as an approved plan does, and the side panel opens on it. Kept with the tab.
+    /// </summary>
+    [RelayCommand]
+    private void ShowAsPlan(AssistantTextItem? reply)
+    {
+        if (reply is null || reply.IsStreaming || string.IsNullOrWhiteSpace(reply.Text))
+        {
+            return;
+        }
+        TodoList.SetPlan(reply.Text, PlanSource.Reply, reply.SentAt);
+        State.Plan = new ChosenPlan { Text = TodoList.Plan!, WrittenAt = reply.SentAt, ChosenAt = _services.Time.GetUtcNow() };
+        _services.SaveState();
+        OpenSidePanelPage(SidePanelPage.Tasks);
+        _shell.Announce("Shown as the plan on the Tasks page.");
+    }
+
+    /// <summary>
+    /// A restored tab's chosen plan, once its conversation is read back: shown while its reply is still there (a rewind
+    /// can go back past it) and no plan was approved after it was chosen; forgotten otherwise.
+    /// </summary>
+    private void RestoreChosenPlan()
+    {
+        if (State.Plan is not { } chosen)
+        {
+            return;
+        }
+        var approvedLater = TodoList is { HasPlan: true, PlanSource: PlanSource.Approved, PlanAt: { } approved } && approved > chosen.ChosenAt;
+        if (approvedLater || !Replies(Items).Any(r => r.Text.Trim() == chosen.Text))
+        {
+            State.Plan = null;
+            return;
+        }
+        TodoList.SetPlan(chosen.Text, PlanSource.Reply, chosen.WrittenAt);
+    }
+
+    /// <summary>Every reply in the conversation, subagents' groups' too.</summary>
+    private static IEnumerable<AssistantTextItem> Replies(IEnumerable<ConversationItem> items) =>
+        items.SelectMany<ConversationItem, AssistantTextItem>(item => item switch
+        {
+            AssistantTextItem reply => [reply],
+            SubagentItem group => Replies(group.Items),
+            _ => [],
+        });
 
     /// <summary>Opens the side panel on the Project page: <b>Show output…</b>, a run's entry, or its notification.</summary>
     private void OpenProjectPage()

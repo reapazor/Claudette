@@ -6,6 +6,13 @@
   <!-- Keyboard (DESIGN.md §14) -->
   <StackPanel Spacing="12">
     <TextBlock Classes="section" Text="Keyboard" />
+    <!-- Which key sends the message (DESIGN.md §14, "Keyboard shortcuts") -->
+    <TextBlock Text="Send with" FontWeight="SemiBold" />
+    <RadioButton GroupName="SendKey" Content="Enter, with Shift+Enter for a new line" IsChecked="{Binding SendWithEnter}" />
+    <RadioButton GroupName="SendKey" Content="{Binding PrimaryEnterLabel}" IsChecked="{Binding SendWithPrimaryEnter}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="With nothing typed, it still answers a waiting prompt, as Allow the waiting prompt does." IsVisible="{Binding SendWithPrimaryEnter}" />
+    <TextBlock Text="Shortcuts" FontWeight="SemiBold" Margin="0,8,0,0" />
     <TextBlock Classes="muted small" TextWrapping="Wrap"
                Text="Click a shortcut, then press the keys you want. Esc cancels. Quick suffix shortcuts are set in Quick suffixes." />
     <ItemsControl ItemsSource="{Binding ShortcutRows}">
@@ -34,7 +41,7 @@
       </ItemsControl.ItemTemplate>
     </ItemsControl>
     <TextBlock Classes="muted small" TextWrapping="Wrap"
-               Text="In the message box, Enter sends and Shift+Enter starts a new line. In the new tab picker, 1–9 pick a folder; in the quick suffixes menu, 1–9 pick a suffix." />
+               Text="{Binding FixedKeysText}" />
     <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
   </StackPanel>
 </UserControl>

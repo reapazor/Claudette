@@ -237,6 +237,24 @@ public class PromptTests
     }
 
     [Fact]
+    public async Task Approving_a_plan_in_auto_mode_switches_to_auto()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        var plan = await PromptAsync<PlanItem>(h, tab, """
+            {"type":"control_request","request_id":"p1","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","input":{"plan":"1. Read\n2. Fix"}}}
+            """);
+
+        plan.ApproveInAutoModeCommand.Execute(null);
+
+        var approved = await ReplyAsync(h, "p1");
+        Assert.Equal("allow", approved["behavior"]!.GetValue<string>());
+        Assert.Equal("setMode", approved["updatedPermissions"]![0]!["type"]!.GetValue<string>());
+        Assert.Equal("auto", approved["updatedPermissions"]![0]!["mode"]!.GetValue<string>());
+        Assert.Equal("Approved. Auto mode checks actions and blocks risky ones", plan.Outcome);
+    }
+
+    [Fact]
     public async Task A_withdrawn_request_is_marked_no_longer_needed()
     {
         await using var h = new TabTestHarness();

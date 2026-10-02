@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Claudette.App.Services;
 using Claudette.App.ViewModels;
+using Claudette.Core.Settings;
 
 namespace Claudette.App.Views;
 
@@ -77,7 +78,18 @@ public partial class ComposerView : UserControl
         {
             return;
         }
-        if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift) && ViewModel is { } tab)
+        if (ViewModel is not { } tab)
+        {
+            return;
+        }
+        if (e.Key == Key.V && Shortcuts.Matches(PasteAsTextChord, e.Key, e.KeyModifiers))
+        {
+            // The clipboard's text in the box as it is, however long (DESIGN.md §5, "Attachments").
+            e.Handled = true;
+            _ = PasteAsTextAsync(tab);
+            return;
+        }
+        if (e.Key == Key.Enter && IsSendKey(tab, e.KeyModifiers))
         {
             e.Handled = true;
             if (tab.SendCommand.CanExecute(null))
@@ -86,6 +98,32 @@ public partial class ComposerView : UserControl
                 Sent?.Invoke();
             }
         }
+    }
+
+    private static readonly KeyChord PasteAsTextChord = new(ChordModifiers.Primary | ChordModifiers.Shift, "V");
+
+    private static readonly KeyChord PrimaryEnter = new(ChordModifiers.Primary, "Enter");
+
+    /// <summary>
+    /// Settings → Keyboard → <b>Send with</b> (DESIGN.md §14): Enter, with Shift+Enter for a new line, or Ctrl/Cmd+Enter,
+    /// with Enter for one. The text box makes the new line itself.
+    /// </summary>
+    private static bool IsSendKey(TabViewModel tab, KeyModifiers modifiers) => tab.Keyboard.SendKey == SendKey.PrimaryEnter
+        ? Shortcuts.Matches(PrimaryEnter, Key.Enter, modifiers)
+        : !modifiers.HasFlag(KeyModifiers.Shift);
+
+    private async Task PasteAsTextAsync(TabViewModel tab)
+    {
+        if (await tab.ClipboardTextAsync() is not { Length: > 0 } text)
+        {
+            return;
+        }
+        var current = Composer.Text ?? "";
+        var start = Math.Clamp(Math.Min(Composer.SelectionStart, Composer.SelectionEnd), 0, current.Length);
+        var end = Math.Clamp(Math.Max(Composer.SelectionStart, Composer.SelectionEnd), 0, current.Length);
+        Composer.Text = current[..start] + text + current[end..];
+        Composer.CaretIndex = start + text.Length;
+        Composer.ClearSelection();
     }
 
     /// <summary>
@@ -169,6 +207,9 @@ public partial class ComposerView : UserControl
 
     /// <summary>Closes the dropdown a picked item lives in.</summary>
     private void OnFlyoutItemPicked(object? sender, RoutedEventArgs e) => CloseFlyout(sender as Visual);
+
+    /// <summary>The stash's entries say how long ago each was stashed: up to date as its menu opens (DESIGN.md §5).</summary>
+    private void OnStashMenuOpened(object? sender, EventArgs e) => ViewModel?.RefreshStash();
 
     private void OnSuffixPicked(object? sender, RoutedEventArgs e) => CloseFlyout(sender as Visual, () => Composer.Focus());
 

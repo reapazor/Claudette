@@ -56,8 +56,9 @@ internal static class ScratchPadAdd
     }
 
     /// <summary>
-    /// The menu for <paramref name="at"/>: Copy and Add to scratch pad for selected text, or for the whole message under
-    /// the pointer when nothing is selected. Null elsewhere, which leaves a control's own menu to it.
+    /// The menu for <paramref name="at"/>: Copy, Quote in reply (DESIGN.md §5, "Copy and times") and Add to scratch pad for
+    /// selected text, or for the whole message under the pointer when nothing is selected, with Show as the plan for a
+    /// whole reply (DESIGN.md §5, "Tasks"). Null elsewhere, which leaves a control's own menu to it.
     /// </summary>
     internal static ContextMenu? Menu(TabViewModel tab, Selection at)
     {
@@ -69,20 +70,27 @@ internal static class ScratchPadAdd
                 Items =
                 {
                     new MenuItem { Header = "Copy", Command = new AsyncRelayCommand(() => tab.CopyTextAsync(text)) },
+                    new MenuItem { Header = "Quote in reply", Command = new RelayCommand(() => tab.QuoteInComposer(text)) },
                     new MenuItem { Header = "Add to scratch pad", Command = new RelayCommand(() => tab.AddToScratchPad(text)) },
                 },
             };
         }
         if (at.Message is { } message)
         {
-            return new ContextMenu
+            var menu = new ContextMenu
             {
                 Items =
                 {
                     new MenuItem { Header = "Copy message", Command = tab.CopyMessageCommand, CommandParameter = message },
+                    new MenuItem { Header = "Quote message", Command = tab.QuoteMessageCommand, CommandParameter = message },
                     new MenuItem { Header = "Add message to scratch pad", Command = tab.AddMessageToScratchPadCommand, CommandParameter = message },
                 },
             };
+            if (message is AssistantTextItem { IsStreaming: false } reply)
+            {
+                menu.Items.Add(new MenuItem { Header = "Show as the plan", Command = tab.ShowAsPlanCommand, CommandParameter = reply });
+            }
+            return menu;
         }
         return null;
     }

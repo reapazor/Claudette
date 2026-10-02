@@ -154,7 +154,7 @@ public class SidePanelUiTests
 
     private static Button PageTab(PageTabsPanel row, string label) => PageTabs(row).Single(p => Label(p).Text == label);
 
-    private static Button MorePages(PageTabsPanel row) => Assert.IsType<Button>(row.Children[^1]);
+    private static Button MorePages(PageTabsPanel row) => Assert.IsType<FreshMenuButton>(row.Children[^1]);
 
     /// <summary>
     /// The tabs in the row, then the button for the rest when some are left out (and only then), side by side within it;
@@ -172,11 +172,21 @@ public class SidePanelUiTests
         Assert.All(row.Overflow, c => Assert.False(KeyboardNavigation.GetIsTabStop(c)));
     }
 
+    /// <summary>
+    /// Clicks the button, as the user does, and returns its menu once it shows its entries: the menu is made as it opens,
+    /// and entries that are only in the menu's list, not in the menu shown, don't count.
+    /// </summary>
     private static async Task<MenuFlyout> OpenAsync(Window window, Button button)
     {
+        var center = button.TranslatePoint(new Point(button.Bounds.Width / 2, button.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(center);
+        window.MouseDown(center, MouseButton.Left);
+        window.MouseUp(center, MouseButton.Left);
         var menu = Assert.IsType<MenuFlyout>(button.Flyout);
-        menu.ShowAt(button);
         await UiText.SettleUntilAsync(window, () => menu.IsOpen, "the menu");
+        var items = menu.Items.OfType<MenuItem>().ToList();
+        Assert.NotEmpty(items);
+        Assert.All(items, item => Assert.NotNull(TopLevel.GetTopLevel(item)));
         return menu;
     }
 

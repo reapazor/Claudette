@@ -351,9 +351,27 @@ public sealed class RealCliTests : IAsyncLifetime
         Assert.Equal("ExitPlanMode", requested.Request.ToolName);
         Assert.Equal("1. Read the code\n2. Fix the bug", requested.Request.Input["plan"]?.GetValue<string>());
         requested.Request.AllowAndSetMode("acceptEdits");
-        await session.ReadUntilAsync<TurnCompleted>();
+        var (_, seen) = await session.ReadUntilAsync<TurnCompleted>();
 
         Assert.Equal("acceptEdits", session.PermissionMode);
+        // The approved result carries the plan, which heads the Tasks page however it was approved (DESIGN.md §5, "Tasks").
+        var result = seen.OfType<ToolResultsReceived>().Single(r => r.Message.Content.OfType<ToolResultBlock>().Any(b => b.ToolUseId == requested.Request.ToolUseId));
+        Assert.False(result.Message.Content.OfType<ToolResultBlock>().Single().IsError);
+        Assert.Equal("1. Read the code\n2. Fix the bug", (result.Message.ToolUseResult as JsonObject)?["plan"]?.GetValue<string>().Trim());
+    }
+
+    [Fact]
+    public async Task Approving_a_plan_in_auto_mode_leaves_plan_mode_for_auto()
+    {
+        // A model with auto mode, as the card offers it only then (DESIGN.md §7).
+        await using var session = await StartAsync(permissionMode: "plan", model: "sonnet");
+
+        await session.SendUserMessageAsync("EXIT_PLAN", TestContext.Current.CancellationToken);
+        var (requested, _) = await session.ReadUntilAsync<PermissionRequested>();
+        requested.Request.AllowAndSetMode("auto");
+        await session.ReadUntilAsync<TurnCompleted>();
+
+        Assert.Equal("auto", session.PermissionMode);
     }
 
     [Fact]

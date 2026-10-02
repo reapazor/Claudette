@@ -33,6 +33,19 @@ public sealed partial class TabViewModel
     /// <summary>How many turns this tab's sessions have started, so a restart can tell whether another began.</summary>
     private int _turnsStarted;
 
+    /// <summary>
+    /// The worktree Claude Code was asked to make was already there as it started: a restart before the first turn opens
+    /// it again, and its setup actions have run already (DESIGN.md §18, "Setting up a new worktree").
+    /// </summary>
+    private bool _worktreeExistedAtStart;
+
+    /// <summary>Notes, before Claude Code starts with <c>--worktree</c>, whether that worktree is there already.</summary>
+    private async Task NoteWhetherWorktreeExistsAsync()
+    {
+        _worktreeExistedAtStart = State.NewWorktree is { } name && await _services.Git.GetRepositoryRootAsync(Folder) is { } root
+            && Directory.Exists(Core.Git.GitWorktrees.PathFor(root, name));
+    }
+
     private void AddWorktreeRows(List<InfoRow> rows)
     {
         if (WorktreeName is { } name && State.WorktreeOf is { } main)
@@ -68,6 +81,12 @@ public sealed partial class TabViewModel
             ProjectTools.ReloadCustomActions();
             OnScratchPadFolderChanged();
             _conversation.AddNote($"Working in the worktree {FolderName}, on its own branch: {State.Folder}.");
+            if (!_worktreeExistedAtStart && State.WorktreeOf is { } main)
+            {
+                // Made just now, not opened again after a restart: the folder's actions for a new worktree run (DESIGN.md §18).
+                var trusted = !State.WithoutProjectSettings && _services.IsFolderTrusted(main);
+                _ = ProjectTools.RunWorktreeSetupAsync(main, State.Folder, trusted);
+            }
         }
         OnPropertyChanged(nameof(WorktreeName));
         OnPropertyChanged(nameof(WorktreeTip));

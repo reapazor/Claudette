@@ -155,6 +155,31 @@
 
     <Border x:Name="ComposerBox" Classes="composer" Classes.bypass="{Binding IsBypassMode}" DragDrop.AllowDrop="True">
       <Grid RowDefinitions="Auto,Auto,Auto">
+        <StackPanel>
+        <!-- Large pastes, kept as attachments rather than in the box (DESIGN.md §5, "Attachments") -->
+        <ItemsControl x:Name="PastedTextList" ItemsSource="{Binding PastedTexts}" IsVisible="{Binding PastedTexts.Count}" Margin="0,4,0,2">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel ItemSpacing="6" LineSpacing="6" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="vm:PastedTextAttachment">
+              <Border Classes="chip pastedtext">
+                <ToolTip.Tip>
+                  <TextBlock Classes="mono small" Text="{Binding Preview}" MaxWidth="560" TextWrapping="NoWrap" />
+                </ToolTip.Tip>
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Classes="small" Text="{Binding Label}" VerticalAlignment="Center" />
+                  <Button Classes="flat" Padding="3" ToolTip.Tip="Remove" AutomationProperties.Name="Remove pasted text"
+                          Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RemovePastedTextCommand}" CommandParameter="{Binding}">
+                    <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="7" Height="7" Stretch="Uniform" />
+                  </Button>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
         <!-- Attached images, removable (DESIGN.md §5, "Attachments") -->
         <ItemsControl x:Name="AttachmentList" ItemsSource="{Binding Attachments}" IsVisible="{Binding Attachments.Count}" Margin="0,4,0,2">
           <ItemsControl.ItemsPanel>
@@ -179,6 +204,7 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
+        </StackPanel>
 
         <TextBox x:Name="Composer" Grid.Row="1" Text="{Binding ComposerText}" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="240"
                  PlaceholderText="{Binding Tips.ComposerPlaceholder}" />
@@ -249,6 +275,40 @@
                     </ItemsControl>
                     <Separator Margin="0,4" />
                     <Button Classes="flat row" Content="Edit suffixes…" Click="OnFlyoutItemPicked" Command="{Binding EditSuffixesCommand}" />
+                  </StackPanel>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+
+            <!-- The stash, which every tab shares (DESIGN.md §5, "Drafts and the stash") -->
+            <Button x:Name="StashButton" Classes="flat" IsVisible="{Binding HasStash}" ToolTip.Tip="{Binding Tips.Stash}">
+              <TextBlock Classes="muted small" Text="{Binding StashButtonText}" />
+              <Button.Flyout>
+                <Flyout Placement="TopEdgeAlignedLeft" Opened="OnStashMenuOpened">
+                  <StackPanel MinWidth="300" MaxWidth="440" Spacing="2">
+                    <TextBlock Classes="muted small" Margin="8,2" TextWrapping="Wrap"
+                               Text="Messages put aside with Stash. Pick one to put it back in the composer." />
+                    <ItemsControl ItemsSource="{Binding StashEntries}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:StashEntry">
+                          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                            <Button Classes="flat row" HorizontalContentAlignment="Stretch" Click="OnFlyoutItemPicked"
+                                    ToolTip.Tip="{Binding Stashed.Draft.Text}"
+                                    Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).UnstashCommand}" CommandParameter="{Binding}">
+                              <StackPanel>
+                                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Classes="muted small" Text="{Binding Detail}" />
+                              </StackPanel>
+                            </Button>
+                            <Button Grid.Column="1" Classes="flat" Padding="6" VerticalAlignment="Center" ToolTip.Tip="Delete it from the stash"
+                                    AutomationProperties.Name="Delete from the stash"
+                                    Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).RemoveStashedCommand}" CommandParameter="{Binding}">
+                              <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="7" Height="7" Stretch="Uniform" />
+                            </Button>
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                   </StackPanel>
                 </Flyout>
               </Button.Flyout>

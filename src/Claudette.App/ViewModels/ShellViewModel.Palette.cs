@@ -91,6 +91,11 @@ public sealed partial class ShellViewModel
             {
                 Command(main.Label, () => tab.ProjectTools.RunMainActionCommand.Execute(null), KeyboardShortcuts.RunProjectAction, tab.ProjectTools.Project?.Name);
             }
+            // DESIGN.md §5, "Drafts and the stash".
+            if (tab.Draft is { IsEmpty: false })
+            {
+                Command("Stash the message", () => tab.StashCommand.Execute(null), KeyboardShortcuts.Stash);
+            }
             Command("Show changed files", () => tab.OpenSidePanelPage(SidePanelPage.Files));
             Command("Show the agent map", () => tab.OpenSidePanelPage(SidePanelPage.Agents));
             Command("Show tasks", () => tab.OpenSidePanelPage(SidePanelPage.Tasks));

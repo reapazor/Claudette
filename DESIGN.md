@@ -145,7 +145,7 @@ An installed Claudette checks its GitHub releases for a newer version, downloads
 2. **Sidebar**, on the left. One row per tab (one tab per session), with a status icon, grouped by working folder, and under a tab's row, the runs of its project actions ([§18](#project-tools)). **New tab** is at its top; the selected tab's project, with its actions and links ([§18](#project-tools)), **History**, the Claude Code and Claudette update badges and **Settings** are at its foot. It collapses to a rail of status icons. See [§4](#sidebar).
 3. **Conversation.** The selected tab's conversation. See [§5](#5-conversation-view).
 4. **Side panel (collapsible).** Files changed in this tab ([§8](#8-file-changes--diff-view)), its agent map ([§18](#agent-map)), its project's tools and their output when it has any ([§18](#project-tools)), optionally its running processes ([§4](#process-monitor)), its plan and tasks while Claude keeps a list ([§5](#tasks)), its MCP servers when the session has any ([§4](#mcp-servers)), and its project's scratch pad, always, last ([§18](#scratch-pad)).
-   - Its pages are tabs along its top, over a divider, as in VS Code's panel: the page showing is in full text with an accent line under it, the others muted. A page's tab shows a busy dot while it has something running. When the tabs don't all fit, the last ones go into the menu of a **⋯** button after the row, which shows a dot while one of them does; the page showing always keeps its tab in the row, taking the row's last place if it has to. The × at the end closes the panel. How it's built: `Controls/PageTabsPanel` places the tabs and hides the ones left out.
+   - Its pages are tabs along its top, over a divider, as in VS Code's panel: the page showing is in full text with an accent line under it, the others muted. A page's tab shows a busy dot while it has something running. When the tabs don't all fit, the last ones go into the menu of a **⋯** button after the row, which shows a dot while one of them does; the page showing always keeps its tab in the row, taking the row's last place if it has to. The × at the end closes the panel. How it's built: `Controls/PageTabsPanel` places the tabs and hides the ones left out, and the **⋯** button is a `Controls/FreshMenuButton`, which makes its menu each time it opens: Avalonia 12.1 makes a `MenuFlyout`'s presenter before raising `Opening`, so entries added to it then never show.
    - **Resizing.** Drag its left edge to make it wider or narrower (260 to 900 pixels; 340 by default), leaving the conversation at least 360. Double-click the edge for the default width. The width is the same for every tab, and remembered.
    - **Scrolling.** Every page scrolls both ways, so nothing on it is cut off. A row's name, numbers and status stay within the width shown and line up at its right edge, while the long text under them is shown whole and scrolls sideways: a changed file's path, a process's command line, a project run's log lines, an agent nested past the edge. Text that reads as prose (tasks and the plan, MCP servers' details and errors, an agent's prompt and result) wraps at the width shown instead, and code blocks in it scroll sideways on their own. How it's built: the pages' scroll viewers scroll sideways, and `Controls/ShownWidth` keeps what's inside it to the shown width from where it starts.
 5. **Composer.** Where you type to the selected tab, plus the Stop button and per-tab controls.
@@ -252,13 +252,26 @@ Several tabs in one folder edit the same files, so one tab's changes can trip an
   - *With work in it*: **Keep the worktree brisk-otter?**, saying what it holds (*uncommitted changes and 2 commits on no other branch*), with **Keep** and **Remove and discard**.
   - Removing looks again first: if what it holds changed while the question waited (a commit made from a terminal, say), it asks again rather than removing. Then it unlocks it, runs `git worktree remove` (with `--force` when discarding; it may take minutes for a big tree), and deletes the `worktree-<name>` branch when it has no commits of its own or they're discarded too. Git's refusal is shown as it said it, and a worktree git didn't remove is locked again.
   - **Close group** and **Close other tabs** offer the worktrees they leave with nothing of their own together, and keep the rest. A worktree another open tab still works in, or will (a copy made before the first turn), isn't asked about, and nor is one whose tab was closed with **Close, leave running**: what was left running may be working there. A kept worktree stays with its session in History.
+- **Setting it up.** The folder's actions marked to run in each new worktree run there once Claude Code has made it, such as installing dependencies ([§18](#project-tools), "Setting up a new worktree").
+
+#### Cleaning up worktrees
+
+Kept worktrees pile up. Settings → General → **Worktrees** can remove them on their own; both rules are off by default.
+
+- **Remove worktrees once everything in them is merged.** A worktree with nothing of its own (no uncommitted changes, and every commit on another branch, local or remote) goes with its branch, as **Remove** would, a day after a tab last used it. The day means one closed with **Keep** a moment ago isn't taken at once.
+- **Remove worktrees no tab has used for** *Never* (the default), 7, 14, 30 or 90 days. The worktree goes, and its `worktree-<name>` branch stays when it has commits on no other branch, so nothing committed is lost and a new worktree tab, or a terminal, can carry on from it.
+- **Never removed:** a worktree an open tab works in or will (one waiting to be made with `--worktree`), one with uncommitted changes or untracked files, one whose work git couldn't count, and any worktree Claude Code didn't make for a worktree tab (only those at `<checkout>/.claude/worktrees/<name>` are looked at). Files git ignores there, such as build output or a copied `.env`, go with a removed worktree, as the setting says. Its session stays in History; opening it finds its folder gone ([§9](#restore-on-launch), "Missing folder").
+- **When a tab last used one.** State keeps the time for each worktree (`worktreesLastUsed` in `state.json`): an open tab's worktree is marked at each pass, and a closed tab's as it closes. A worktree first met with no time, such as one made before this setting existed or from a terminal, counts from when Claudette first saw it.
+- **When it looks.** A minute after launch, then every hour, on the injected clock, while either rule is on. It looks in the repositories of the open tabs, the recent and favorite folders, and the worktrees it has times for: `git worktree list`, then what each holds as the close question reads it ([above](#worktree-tabs)), then `git worktree remove` without `--force`, so git itself refuses to remove changes. Just before removing, it checks again that no tab has opened there.
+- **What it did.** Settings says what the last pass removed and when (*"Last removed brisk-otter and calm-heron, 2 h ago."*), with **Clean up now** for a pass straight away. Each removal is logged.
+- How it's built: Core's `Git/WorktreeCleanup` decides, from what git says, the time and the rules; the app's `Services/WorktreeCleanupService` finds the worktrees, keeps the times and removes them through `GitWorktrees`. `WorktreeCleanupTests` (Core) and `WorktreeCleanupServiceTests` (the app, against real git repositories in temporary folders).
 
 ### Command palette
 
 `Ctrl/Cmd+Shift+P` opens a box over the window that does anything Claudette has a command for, by typing a few letters of it.
 
 - **What it lists**, in this order before anything is typed:
-  - **Commands**: new tab, History, Settings, collapsing the sidebar, zooming in and out (and back to 100% when zoomed, [§3](#accessibility)), going to the next tab waiting (when one is); and for the selected tab, find, Stop (while Claude works), the project's main action, the side panel's pages, **Tab settings…**, **Duplicate tab**, **New tab in a worktree** (for a folder in a git repository, [Worktree tabs](#worktree-tabs)), restarting Claude Code (when it stopped) and closing the tab. Each shows its shortcut, so the palette teaches them.
+  - **Commands**: new tab, History, Settings, collapsing the sidebar, zooming in and out (and back to 100% when zoomed, [§3](#accessibility)), going to the next tab waiting (when one is); and for the selected tab, find, Stop (while Claude works), the project's main action, **Stash the message** (while something's typed, [§5](#drafts-and-the-stash)), the side panel's pages, **Tab settings…**, **Duplicate tab**, **New tab in a worktree** (for a folder in a git repository, [Worktree tabs](#worktree-tabs)), restarting Claude Code (when it stopped) and closing the tab. Each shows its shortcut, so the palette teaches them.
   - **Tabs**, by name with their folder: picking one selects it.
   - **Folders**: favorites, then recent folders. Picking one opens a new tab there.
   - **Settings** categories: picking one opens Settings there.
@@ -405,7 +418,7 @@ The conversation is drawn from Claude Code's structured output stream, not from 
 | To-do list | Pinned checklist at the top of the conversation while it exists. |
 | Permission prompt | Inline card with buttons. See [§7](#7-permission-prompts). |
 | Errors / API retries | Inline warning row. |
-| Turn summary | Small footer after each turn: duration, tokens, model. |
+| Turn summary | Small footer after each turn: duration, tokens, model, and *"· 3 files changed"* when it changed files, a link to each file's changes in that turn ([§8](#changes-per-turn)). |
 
 Scrolling follows new output unless the user has scrolled up; a "Jump to latest" button appears when they have. Scrolling up with the wheel, a scroll bar, the keys or a swipe counts at once, even when output arrives in the same frame, so the view doesn't take the reader back to the bottom; a move the list makes by itself (correcting its estimate of the messages above) doesn't. Following holds still: the screen's worth either side of the view stays built because a reply's Markdown lays out in the background, so a reply built again starts one line tall, and with only the items in view built the list measured shorter, then taller, frame after frame, and the view jumped with it.
 
@@ -416,8 +429,9 @@ The conversation is virtualized: only the items in view, and a screen's worth ei
 - **Code blocks.** A code block has a header line with its language, **Wrap lines** and **Copy**.
   - Copy puts the block's code on the clipboard, without the Markdown fences and with the OS's line endings, and the button says *Copied* for 1.5 seconds.
   - The buttons are LiveMarkdown's, in Claudette's own template for the block. The tab does the copying, through the same clipboard as everything else. Code blocks in the agent map's prompts and reports work the same way.
-- **Messages.** Hovering a user message or a reply shows a small chip on its top-right corner: when it was sent, **Copy message** and **Add to scratch pad** ([§18](#scratch-pad)). A user message's chip also has **⋯**, its menu to go back to it ([below](#rewind-and-branch)).
-- **Selected text.** Right-clicking text selected in the conversation, a reply's across its Markdown included, gives **Copy** and **Add to scratch pad**; with nothing selected, a message's gives **Copy message** and **Add message to scratch pad**. A code block's header has **Add to scratch pad** beside **Copy** too ([§18](#scratch-pad)).
+- **Messages.** Hovering a user message or a reply shows a small chip on its top-right corner: when it was sent, **Copy message** and **Add to scratch pad** ([§18](#scratch-pad)). A user message's chip also has **⋯**, its menu to go back to it ([below](#rewind-and-branch)); a finished reply's has **Show as the plan** ([Tasks](#tasks)).
+- **Selected text.** Right-clicking text selected in the conversation, a reply's across its Markdown included, gives **Copy**, **Quote in reply** and **Add to scratch pad**; with nothing selected, a message's gives **Copy message**, **Quote message** and **Add message to scratch pad**, and a finished reply's **Show as the plan** too. A code block's header has **Add to scratch pad** beside **Copy** too ([§18](#scratch-pad)).
+  - **Quote in reply** puts the text at the end of the composer as a Markdown quote, each line starting `> `, with an empty line after it to write under, and the focus there, so a reply can answer one part of what Claude said. **Quote message** does the same with the whole message, as **Copy message** copies it.
   - It also shows while the message has keyboard focus, so Tab reaches the button.
   - A reply copies as its Markdown, as Claude wrote it. A user message copies as it was sent, with its quick suffixes after a blank line.
   - The button says *Copied* for a moment, as on code blocks.
@@ -464,7 +478,8 @@ A user message's **⋯** menu goes back to it. Claude Code does the work: a resu
 
 ### Composer
 
-- Multi-line text box. `Enter` sends, `Shift+Enter` adds a new line.
+- Multi-line text box. `Enter` sends, `Shift+Enter` adds a new line. Settings → Keyboard → **Send with** can make it `Ctrl/Cmd+Enter` to send and `Enter` for a new line instead ([§14](#keyboard-shortcuts)).
+- What's typed is kept: quitting Claudette keeps it with the tab, and **Stash** puts it aside for any tab ([Drafts and the stash](#drafts-and-the-stash)).
 - **Stop.** A Stop button replaces Send while Claude is working, and `Esc` does the same. Stopping interrupts the current turn; it does not close the session.
 - You can type and send while Claude is working; the message is queued and delivered to the session. See [Queued messages](#queued-messages).
 - **Earlier prompts.** `Up` on the composer's first line brings back the tab's previous prompt, as a terminal's history does, and again for the one before; `Down` on its last line comes forward, back to what was being typed. A restored tab has its transcript's prompts too. Typing ends it, so the next `Up` starts from the newest again. The same prompt twice in a row is kept once, and a tab keeps its last 200. With the autocomplete list open, the arrows move in the list instead.
@@ -480,7 +495,12 @@ A message sent while Claude is working waits its turn: Claude Code reads it at t
 - Its card says *"Queued: sent when Claude can take it"*, with **Cancel**, until Claude Code takes it (its echo comes back). So does a check-in waiting the same way.
 - **Stop** takes back everything that's waiting along with the turn, rather than letting it run as soon as the turn ends: the `interrupt` has `cancel_queued`, when Claude Code lists the `interrupt_cancel_queued_v1` capability. Without it, Stop is the plain interrupt and what waits runs afterwards, as before.
 - **Cancel** takes one message back on its own (`cancel_async_message`, undocumented). If Claude Code has already taken it, or can't, the card stays as it is and a note says so.
-- A message taken back loses its card, and what the user wrote goes back into the composer with its images, ahead of anything typed since, so nothing is lost; a note says how many were taken back. A check-in taken back just goes.
+- A message taken back loses its card, and what the user wrote goes back into the composer with its images and large pastes, ahead of anything typed since, so nothing is lost; a note says how many were taken back. A check-in taken back just goes.
+- **Queue instead.** Settings → General → **Messages sent while Claude works** chooses between sending them into the turn, as above (the default), and queueing them: Claudette holds each message until the turn ends, then sends it as the next turn, one per turn, oldest first. It's for lining up the next task without turning Claude from the one under way.
+  - A held message's card says *"Queued: sent when this turn ends"*, with **Send now**, which sends it into the turn after all (or as a turn, if Claude has finished), and **Cancel**, which takes it back without asking Claude Code, which never had it.
+  - **Stop** takes back held messages too, with what Claude Code was holding. So does Claude Code exiting: they can't go to a process that's gone.
+  - A turn a usage limit stopped doesn't send the next one, which the limit would stop too: held messages wait for the next turn to end, or for **Send now** ([§6](#continuing-after-a-limit-resets)).
+  - A message sent while nothing is working goes at once, as always. Claudette's own messages (check-ins, continuing after a limit) always go into the turn.
 
 ### Working line
 
@@ -509,9 +529,11 @@ While Claude works, a line above the composer says so, the way Claude Code's ter
 
 ### Tasks
 
-When Claude keeps a task list (`TodoWrite`, or `TaskCreate` and `TaskUpdate`), the side panel gets a **Tasks** page, with *"2 of 5"* done on its tab. The pinned list at the top of the conversation stays as it was; the page has room for more.
+When Claude keeps a task list (`TodoWrite`, or `TaskCreate` and `TaskUpdate`), or the tab has a plan, the side panel gets a **Tasks** page, with *"2 of 5"* done on its tab. The pinned list at the top of the conversation stays as it was; the page has room for more.
 
-- **The plan** the user approved last (`ExitPlanMode`), as Markdown, with when it was approved. The tasks Claude makes from it follow.
+- **The plan**, as Markdown, above the tasks Claude makes from it. It's the later of:
+  - the plan the user approved last (`ExitPlanMode`), with when: *"Approved 14:05"*. Its result carries the plan (`tool_use_result.plan`), so it shows however it was approved: on its card, in the Claude app ([§18](#remote-control)), or before the tab was restored, whose transcript has it.
+  - a reply the user chose with **Show as the plan** (on a reply's chip and its menu, [Copy and times](#copy-and-times)), with when Claude wrote it: *"From Claude's reply at 14:03"*. This is for a plan Claude wrote in a reply rather than in Plan mode, such as one the user approves by answering "go". Choosing another reply replaces it. It's saved with the tab, so a restored tab shows it again while the reply is still in the conversation (a rewind can go back past it).
 - **Each task:** its state (to do, in progress, done), its number as Claude refers to it (*#3*, for `TaskCreate` tasks), its subject and its description, *"Waiting on #1, #2"* while a task it depends on isn't done, and a line with who's working on it when Claude says (a subagent or teammate) and its time: *Explore · Took 4m*, *Started 14:05* or *Added 14:02*.
 - The one in progress shows its active form (*"Running the tests"*) in bold.
 - Tasks are the session's, so a subagent's `TaskCreate` and `TaskUpdate` calls land here too; a subagent's own `TodoWrite` list stays a card in its group. The calls themselves show here rather than as cards, as do `TaskList` and `TaskGet`, whose results fill in what the calls didn't show. A restored tab's tasks are dated by their transcript entries.
@@ -603,11 +625,28 @@ Claude Code keeps some work going after a turn ends, and its own UIs count it (*
     - macOS: `public.png`, else `public.tiff` or `public.jpeg`, converted to PNG.
     - Linux: `image/png` or `image/jpeg`.
   - A pasted or dropped picture is sent as PNG. When the PNG would be over 20 MB, as a photo-like screenshot of a 5K screen can be, it's sent as JPEG at quality 90 instead, about a tenth of the size.
-- **In the conversation.** A sent message shows its images as thumbnails above its text. Claude Code stores them in the transcript, so a restored tab shows them too.
-- **Drafts.** Attached images stay with the message until it's sent.
+- **Large pastes.** Text over 32 KB (in UTF-8), such as a log, isn't put in the box, where it would make typing slow and the message hard to edit around. It's kept as an attachment instead: a chip above the box, *"Pasted text · 1,204 lines · 48 KB"*, whose tooltip shows its first 12 lines, with a `×` (**Remove pasted text**).
+  - It's sent after what's typed, each paste after a blank line, as one text: Claude reads it in full, and an `@path` in what's typed is still read ([Autocomplete](#autocomplete)). A message can be only pastes.
+  - `Ctrl/Cmd+Shift+V` pastes the clipboard's text into the box as it is, however long.
+  - A message taken back ([Queued messages](#queued-messages)) puts its pastes back as attachments. **Edit and resend** puts the whole message in the box, since its transcript has it as one text.
+- **In the conversation.** A sent message shows its images as thumbnails above its text. Claude Code stores them in the transcript, so a restored tab shows them too. A long message, over 4,000 characters or 40 lines, shows its start, with **Show all (48 KB)**, as a long tool output does; Find opens it when the match is in what's hidden.
+- **Drafts.** Attached images and pastes stay with the message until it's sent.
   - A message sent while Claude Code needs a sign-in waits with its images, and they go with it after the sign-in ([§11](#signing-in)).
-  - Restarting into a new build keeps them with the tab's draft, in `restart.json`, and so does taking the tabs back when the new build doesn't start ([§9](#working-on-claudette)).
-  - They aren't saved anywhere else: closing Claudette with an unsent message loses them, as it loses the text.
+  - Quitting keeps them with the tab's draft ([below](#drafts-and-the-stash)), and so does restarting into a new build, in `restart.json`, and taking the tabs back when the new build doesn't start ([§9](#working-on-claudette)).
+
+### Drafts and the stash
+
+What's typed isn't lost by quitting, and can be put aside.
+
+- **Kept with the tab.** Each tab's unsent message (its text, one-off quick suffixes, attached images and large pastes) is written a second after it last changed, and when the tab closes, to `drafts/tab-<id>.json` in the data folder. A restored tab has it back in its composer.
+  - Closing a tab, rather than quitting, deletes its draft. So does sending, which empties it.
+  - At launch, the drafts of tabs that weren't restored (unpinned ones, with **Also restore unpinned tabs** off) are deleted.
+  - After a restart into a new build, the snapshot's draft wins, as before ([§9](#working-on-claudette)); writes stop once the new build owns the files.
+- **Stash.** **Stash the message** (`Ctrl/Cmd+S`, rebindable, and in the command palette while there's something typed) takes the whole draft out of the composer and keeps it in the stash, which every tab shares. It's for a message that belongs somewhere else, or later.
+  - While the stash has anything, the composer bar has **Stashed (2) ▾** after **Suffixes**. Its menu lists them newest first: the first line (or what's attached, *"2 images"*), and the folder it was written in with how long ago (*"api · 5 min ago"*), its tooltip the whole text.
+  - Picking one takes it out of the stash and puts it in this tab's composer, ahead of anything typed, as a message taken back is. Its `×` deletes it.
+  - Each entry is a file in `drafts/stash/`, so the stash outlives quitting. It belongs to this machine and doesn't sync.
+- How it's built: Core's `Composer/DraftStore` reads and writes the files and never throws; the app's `Services/DraftService` writes them in order off the UI thread, and keeps the stash for the tabs (`StashChanged`); `TabViewModel.Drafts.cs` saves the tab's draft, stashes and quotes. `DraftStoreTests` (Core), `DraftsAndStashTests` (the tab).
 
 ### Quick suffixes
 
@@ -914,7 +953,7 @@ The plan's limits are the account's, so every machine signed in to it sees the s
   - **Dismiss** denies it.
   - The card replaces the tool's own row.
 - **A plan to approve** (`ExitPlanMode`, in Plan mode): the plan as Markdown, taken from the tool's `plan` input. The buttons are:
-  - **Approve, accept edits** and **Approve, ask before edits**. These allow the tool with a `setMode` update to `acceptEdits` or `default`, so the session leaves plan mode.
+  - **Approve, auto mode**, **Approve, accept edits** and **Approve, ask before edits**. These allow the tool with a `setMode` update to `auto`, `acceptEdits` or `default`, so the session leaves plan mode. **Approve, auto mode** is offered while Auto is, as in the mode picker (below), and is then the main button; otherwise **Approve, accept edits** is.
   - **Keep planning…**, which denies it with optional feedback.
 - The real-CLI tests confirmed both against Claude Code 2.1.284.
 
@@ -1006,6 +1045,16 @@ The diff view can put back what Claude changed, when it knows what the file held
 - The file keeps its encoding: UTF-8, or UTF-16 or UTF-32 when its byte order mark says so. A file that isn't valid text in one of those (Latin-1, say) isn't written, with a message saying why: reading it would mean guessing, and writing the guess back would change characters nobody touched.
 - The file is written to a temporary name and renamed, as Claudette's own files are. A symbolic link is written through, to the file it points to, and stays a link; on macOS and Linux the file keeps its permissions, such as being executable. Changed files picks the change up as it does any other.
 
+### Changes per turn
+
+Changed files shows everything since the session started. A turn's footer shows what that turn changed.
+
+- **On the footer.** After the duration, tokens and model, *"· 3 files changed"*, for a turn that changed files with Edit, Write, MultiEdit or NotebookEdit, its subagents' included. Clicking it lists the files, each with `+12 −3`, counted against the file as the turn left it, as it ended.
+- **A file's diff** opens in the diff view: the file before the turn's first change to it (that change's `originalFile`), against how the turn left it. That's how the next turn that changed the file found it (that turn's first `originalFile`); with none since, it's the file now, and the header says so: *"this turn's changes: before it, against the file now"*. Changes made outside Claude between turns count toward the earlier turn.
+- The view only shows them: there's no **Revert** or **Reviewed**, which belong to the file's changes as Changed files shows them. A file whose "before" isn't known shows as it is, as in Changed files.
+- **Only live turns.** A transcript has no footers, so a restored tab's earlier turns have none, and nor does a turn that was stopped or ended in an error: its changes are in Changed files only. Going back ([§5](#rewind-and-branch)) reads the conversation back without them.
+- How it's built: `ChangedFiles` (Core) notes each live change's own "before" for the turn under way, and `TakeTurn` hands them over as the turn ends; `ChangedFilesViewModel` puts them on the footer, keeps the turns in order to find the "after", and opens `DiffSource` with a fixed `After` and no revert. `ChangedFilesTests` (Core) and `ChangesPerTurnTests` (the tab).
+
 ### External diff tool
 
 - In Settings → Diff tool, the user chooses how diffs open: **Built-in** (the default), a **preset**, or a **custom command**.
@@ -1047,6 +1096,7 @@ The diff view can put back what Claude changed, when it knows what the file held
   - Folder, name, pinned state, whether it syncs, and group order.
   - Session ID, model, effort and per-tab overrides.
   - Suffixes kept on the tab, and token stats.
+  - The unsent message in its composer ([§5](#drafts-and-the-stash)).
   - The changed files ticked as reviewed ([§8](#8-file-changes--diff-view)).
 - Tabs come back in the same order and resume their sessions, with the earlier conversation loaded so you can scroll back.
 - **Starting fast.** Restored tabs don't start their `claude` process until you first select them or send them a message. Launching with many pinned tabs is quick, and tabs you don't touch use no resources.
@@ -1581,7 +1631,7 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 
 | Category | Settings |
 |---|---|
-| General | Start Claudette when I log in (off by default; this machine's, kept by the OS, and left by **Reset to defaults**; [§9](#starting-at-login)). Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. Show Claude's service status (on by default): the header's dot and the incident banner ([§18](#service-status)). Claudette's version and updates: check for updates automatically (on by default), include pre-releases (off), **Check now**, and the update's actions. See [Updating Claudette](#updating-claudette). |
+| General | Start Claudette when I log in (off by default; this machine's, kept by the OS, and left by **Reset to defaults**; [§9](#starting-at-login)). Confirm before closing a working tab. Also rename the session in Claude Code when a tab is renamed. Show Claude's service status (on by default): the header's dot and the incident banner ([§18](#service-status)). Messages sent while Claude works: sent into the turn (the default) or queued until it ends ([§5](#queued-messages)). **Worktrees**: remove worktrees once everything in them is merged (off), and remove worktrees no tab has used for *Never* (the default) to 90 days, with what the last cleanup removed and **Clean up now** ([§4](#cleaning-up-worktrees)); this machine's, like the rest of the page. Claudette's version and updates: check for updates automatically (on by default), include pre-releases (off), **Check now**, and the update's actions. See [Updating Claudette](#updating-claudette). |
 | Sessions | Also restore unpinned tabs on launch (off by default; pinned tabs are always restored). Session library folder (with **Browse…** and **Move library…**, which copies existing sessions to the new folder). Sync new tabs to the session library (off by default; each tab can be switched with **Sync to other machines** in its menu). Name for this machine, as shown in History. How long to keep sessions in the library. Sync Claudette's settings through the library (off by default). See [§9](#session-library-sync-across-machines) and [Settings sync](#settings-sync-optional). |
 | Processes | Show the process monitor. Refresh interval. Show command lines. See [§4](#process-monitor). |
 | Claude Code | Path to `claude` (auto-detected, with **Browse…**). Installed version and install method, from `claude doctor`. Signed-in account (email, plan and organization), with **Sign in** / **Sign out…**, the same as the header's account menu ([§11](#signing-in)). Check for Claude Code updates automatically. Ask before using a new folder's own configuration (on by default; [Folder trust](#folder-trust)). Use my login shell's environment (macOS and Linux only, on by default; [§13](#login-shell-environment)). **Claude app (Remote Control)**: Connect new tabs to the Claude app (off by default; each tab has its own switch), with what it does, the privacy note and how to get pushes on the phone, and Keep this computer awake while tabs are connected (on by default). Disabled, with the reason, when the account can't use it ([§18](#remote-control-the-claude-app)). |
@@ -1593,19 +1643,20 @@ A **Settings** window opens with `Ctrl+,` on Windows or `Cmd+,` on macOS, where 
 | Diff tool | Built-in, a preset or a custom command, with **Test**. See [§8](#external-diff-tool). |
 | Project tools | Unreal's default editor configuration (Development or DebugGame). Project files for Visual Studio, VS Code or Xcode (the OS's own by default). Tell Claude about Unreal projects (on by default). Unity's default code optimization (Release or Debug), and Tell Claude about Unity projects (on by default). The Godot executable (**Browse…**, **Detect**), and Tell Claude about Godot projects (on by default). Open solutions with the OS's app, Rider, Visual Studio, VS Code or another program (**Browse…**). See [§18](#project-tools). |
 | Notifications | On/off for each type in [§10](#10-notifications), including **A project action finishes**. Dock/taskbar badge on/off, and animating the icon while tabs work or wait. |
-| Keyboard | List of shortcuts, each one rebindable ([below](#keyboard-shortcuts)). |
+| Keyboard | Send with: Enter (the default) or `Ctrl/Cmd+Enter`. List of shortcuts, each one rebindable ([below](#keyboard-shortcuts)). |
 | Perforce | Off by default. Keep Perforce logins fresh. Password source. Renew-before time. Tickets for all hosts. Show changelist on tabs. The stored password (**Save** / **Forget**). Per-folder server and user. See [§18](#perforce-ticket-handling). |
 | Advanced | Protocol logging and **Open log folder**. **Diagnostics** page ([§16](#staying-tolerant-at-runtime)). Extra command-line arguments passed to `claude`. Minimum supported Claude Code version (read-only). |
 
 ### Keyboard shortcuts
 
-Settings → Keyboard lists every shortcut Claudette handles, with its default from the section that describes it: new tab, close tab, next and previous tab, go to tab 1–9, History, Settings, collapsing the sidebar, Stop, the quick suffixes menu, allowing or denying the waiting prompt, running the project's main action (`Ctrl/Cmd+Shift+E`, [§18](#project-tools)), finding in the conversation (`Ctrl/Cmd+F`, [§5](#find)), going to the next tab waiting for you (`Ctrl/Cmd+J`, [§4](#4-tabs--sessions)), the command palette (`Ctrl/Cmd+Shift+P`, [§4](#command-palette)), and zooming in, out and back to 100% (`Ctrl/Cmd +`, `−` and `0`, [§3](#accessibility)). A shortcut on a digit, `+` or `−` also answers to the number pad's key.
+Settings → Keyboard lists every shortcut Claudette handles, with its default from the section that describes it: new tab, close tab, next and previous tab, go to tab 1–9, History, Settings, collapsing the sidebar, Stop, the quick suffixes menu, stashing the message (`Ctrl/Cmd+S`, [§5](#drafts-and-the-stash)), allowing or denying the waiting prompt, running the project's main action (`Ctrl/Cmd+Shift+E`, [§18](#project-tools)), finding in the conversation (`Ctrl/Cmd+F`, [§5](#find)), going to the next tab waiting for you (`Ctrl/Cmd+J`, [§4](#4-tabs--sessions)), the command palette (`Ctrl/Cmd+Shift+P`, [§4](#command-palette)), and zooming in, out and back to 100% (`Ctrl/Cmd +`, `−` and `0`, [§3](#accessibility)). A shortcut on a digit, `+` or `−` also answers to the number pad's key.
 
 - **Rebinding.** Click a shortcut and press the new keys; Esc cancels. **Reset** puts one back, **Remove** clears it, and **Reset to defaults** restores them all.
 - **One key for both OSes.** Shortcuts are stored with a *Primary* modifier: Ctrl on Windows and Linux, Cmd on macOS. That way a shortcut synced between a Windows machine and a Mac means the same thing on both. Ctrl is its own modifier only on macOS; elsewhere it is Primary.
 - **Refused shortcuts.** A shortcut already used by another command or a quick suffix is refused, and the row names the conflict. So is a letter, digit or punctuation key without Ctrl, Alt or Cmd, since it would get in the way of typing. Escape, Tab, Enter, Backspace, Delete and function keys are allowed on their own.
 - **Go to tab 1–9** is one shortcut for all nine digits; rebinding it takes any digit and keeps its modifiers.
-- **Fixed keys**, listed on the page but not rebindable: Enter sends and Shift+Enter starts a new line; in the new tab picker and the quick suffixes menu, 1–9 pick an entry.
+- **Send with**, at the top of the page: **Enter, with Shift+Enter for a new line** (the default), or **Ctrl+Enter, with Enter for a new line** (`⌘↩` on macOS), for messages with many lines. The composer's placeholder says which. `Ctrl/Cmd+Enter` also answers the waiting prompt ([§7](#7-permission-prompts)): with it as the send key, it sends what's typed in the composer, and with nothing typed it answers the prompt. It syncs with the shortcuts.
+- **Fixed keys**, listed on the page but not rebindable: `Ctrl/Cmd+Shift+V` in the composer pastes text as it is, however long ([§5](#attachments)); in the new tab picker and the quick suffixes menu, 1–9 pick an entry.
 - **Quick suffixes** each get their own optional shortcut in Settings → Quick suffixes ([§5](#quick-suffixes)), checked for conflicts the same way.
 - Tooltips and the composer's placeholder show the current shortcuts.
 
@@ -1648,7 +1699,7 @@ Some settings can be changed for a single tab from the tab's right-click menu, u
 
 **Sync settings through the session library** (Settings → Sessions, off by default) keeps Claudette's settings the same on every machine that uses the same library folder ([§9](#session-library-sync-across-machines)).
 
-- **What syncs:** appearance, new-tab defaults, usage settings (thresholds, continuing when a limit resets, and sharing usage with other machines), check-ins, quick suffixes, notifications, keyboard shortcuts and process monitor options.
+- **What syncs:** appearance, new-tab defaults, usage settings (thresholds, continuing when a limit resets, and sharing usage with other machines), check-ins, quick suffixes, notifications, keyboard shortcuts (and **Send with**) and process monitor options.
 - **What stays on each machine:** whether Claudette starts at login (the OS keeps it, [§9](#starting-at-login)), the path to `claude`, the login shell setting, the Claude app settings, this machine's name, the library folder itself, the diff tool and Settings → Project tools (program paths and installed IDEs differ between machines), recent and favorite folders, folder mappings, pinned tabs, window sizes and positions, the sidebar's and the usage header's collapsed or detailed state, and the Perforce settings (servers, workspaces and stored passwords belong to the machine). A stored Perforce password is never in `settings.json` at all ([§18](#perforce-ticket-handling)). The main window comes back where it was, with its size and maximized state, unless that position is no longer on a screen (a monitor unplugged since), when the OS places it.
 - The synced settings are stored as one file in the library. Each setting keeps the time it was last changed, and the newest change wins, so edits on two machines don't overwrite each other wholesale.
 - The first time sync is turned on and the library already has settings from another machine, Claudette asks: **Use synced settings** or **Replace them with this machine's**.
@@ -2046,6 +2097,15 @@ Claudette has to keep working when Claude Code adds things it doesn't know about
     - **The branch on tab rows ([§4](#sidebar)).** ✅ Built 2026-10-01. The git branch a tab works on, or its worktree, at the right of the row's second line with **Copy branch name**; the Perforce changelist badge moved there beside it from the name line. Settings → Appearance → **Show git branch on tab rows**.
       - **Still to verify:** how the badges fit beside long second lines (an error, a usage limit's wait) on real desktops, in both styles and densities.
     - **Subagents leave the running-tasks chip ([§5](#running-tasks), [§18](#agent-map)).** ✅ Built 2026-10-01. The chip and the info card list background work other than subagents, which the **Agents** button already counts, to give the composer bar back its room; each running subagent's row on the Agents page has its own **■** Stop. The tab row's count still includes them.
+    - **From T3 Code.** ✅ Built 2026-10-02. Features T3 Code (t3.codes) has that suit Claudette:
+      - [Drafts and the stash](#drafts-and-the-stash): a tab's unsent message outlives quitting, and **Stash** (`Ctrl/Cmd+S`) puts it aside for any tab.
+      - [Queued messages](#queued-messages) can wait for the turn to end instead of steering it (Settings → General), with **Send now**.
+      - **Quote in reply** and **Quote message** ([§5](#copy-and-times)).
+      - [Changes per turn](#changes-per-turn) on each turn's footer.
+      - [Setting up a new worktree](#project-tools) with `claudette.json` actions marked `runOnNewWorktree`.
+      - **Send with** `Ctrl/Cmd+Enter` ([§14](#keyboard-shortcuts)), large pastes kept as attachments, and long messages shown short ([§5](#attachments)).
+      - [Cleaning up worktrees](#cleaning-up-worktrees) once merged or unused.
+      - **Still to verify:** on real Windows, macOS and Linux desktops in both styles: the composer with pasted-text chips and the **Stashed** menu, the turn footer's flyout, and `Ctrl+Enter` sending with a prompt waiting; worktree setup actions running in a real worktree Claude Code made, with a trusted and an untrusted folder; a cleanup pass over real kept worktrees left for a day.
 
 ## 18. Future Features
 
@@ -2353,7 +2413,8 @@ A tab can do things for the project in its folder: launch the editor, generate p
   "actions": [
     { "name": "Run tests", "command": "dotnet test", "folder": "src", "mode": "output" },
     { "name": "Open Grafana", "command": "start https://grafana.example", "mode": "launch", "os": ["windows"] },
-    { "name": "Play the build", "command": "Build\\Game.exe", "mode": "launch", "ifExists": "Build/Game.exe" }
+    { "name": "Play the build", "command": "Build\\Game.exe", "mode": "launch", "ifExists": "Build/Game.exe" },
+    { "name": "Install packages", "command": "npm ci", "runOnNewWorktree": true }
   ],
   "links": [
     { "name": "Board", "url": "https://example.atlassian.net/jira/software/projects/ABC/boards/1" },
@@ -2368,19 +2429,25 @@ A tab can do things for the project in its folder: launch the editor, generate p
   - `mode` is `output` (the default: a run in the sidebar with its log on the Project page, **Stop**, and the notification) or `launch` (started and left alone).
   - `os` is optional: `windows`, `macos` or `linux`. An action whose `os` leaves out this machine isn't shown.
   - `ifExists` is optional: a path, or a list of paths, relative to the tab's folder. The action is shown only while every one of them exists, as a file or a folder; otherwise it's left out without a reason, like an action for another OS. It's checked each time the files are read (below), so an action that runs a build appears once a build has made it, at the latest when the build's own action ends or the menu opens.
+  - `runOnNewWorktree` is optional: `true` also runs it on its own in each new worktree a worktree tab makes ([below](#project-tools), "Setting up a new worktree"). Anything else leaves it to a click.
   - Commands run through the user's shell: `cmd.exe /d /s /c "<command>"` on Windows, `$SHELL -c` (or `/bin/sh -c`) elsewhere. Otherwise they run like built-in actions.
   - An action's id is its file and position, such as `shared:0`, which Stop and the notification use.
   - They're listed in the project's menu after the project's actions, under a separator.
 - **Picking up edits.** The files are read again when the tab is selected, when Claudette comes to the front, when a turn ends (Claude may have edited them), when the project's menu opens, and after the in-app editor saves. Reads are numbered as they start, and one that finishes after a later one has been shown is dropped, so quick saves in a row never leave a tab showing an older file (and a detection from before a choice never undoes it). Claudette doesn't watch them with the file system: a watcher per tab runs into the OS's limits (128 inotify instances per user on many Linux machines) and doesn't work on some network drives, and these moments cover when an edit can matter.
 - **The in-app editor.**
   - It's in Settings, on the tab's **Actions** page ([§14](#the-projects-pages)); it was in **Tab settings…** until milestone 15, which now points there.
-  - **Add an action…** opens Settings on that page with a small dialog: name, command, working folder, **Only show when this exists** (`ifExists`), **Run with output** or **Launch and forget**, and which file it goes in, **Just me (claudette.local.json)** (the default) or **Shared with the project (claudette.json)**. The dialog scrolls when the window is shorter than it, as it is at the size Settings opens at.
+  - **Add an action…** opens Settings on that page with a small dialog: name, command, working folder, **Only show when this exists** (`ifExists`), **Run with output** or **Launch and forget**, **Also run it in each new worktree a worktree tab makes** (`runOnNewWorktree`), and which file it goes in, **Just me (claudette.local.json)** (the default) or **Shared with the project (claudette.json)**. The dialog scrolls when the window is shorter than it, as it is at the size Settings opens at.
     - **Only show when this exists** is empty for an action that's always shown. **Browse…** picks a file and writes it relative to the tab's folder, with forward slashes so a shared file works on every OS; a folder is typed. Several paths are separated by semicolons.
-  - The page has a choice of the two files, and the chosen file's actions with **Add…**, **Edit…**, **Remove**, **Move up**, **Move down** and **Open file**. Entries for other OSes are listed, marked "only on …", entries with `ifExists` are marked "only when … exists" (whether it does now or not), and entries that can't be read are listed with their reason and can only be removed. Like the rest of Settings, each change is saved as it's made.
+  - The page has a choice of the two files, and the chosen file's actions with **Add…**, **Edit…**, **Remove**, **Move up**, **Move down** and **Open file**. Entries for other OSes are listed, marked "only on …", entries with `ifExists` are marked "only when … exists" (whether it does now or not), those for new worktrees "runs in each new worktree", and entries that can't be read are listed with their reason and can only be removed. Like the rest of Settings, each change is saved as it's made.
   - Saving reads the file as JSON, replaces only `actions`, keeps every other key and each entry's other fields (such as `os`, which the dialog doesn't edit), and writes it indented. The page says so: saving rewrites the file, so comments in it are dropped. A file that isn't valid JSON is never overwritten; the editor says to fix it by hand first.
-- **No confirmation.** Actions from `claudette.json` run on a click, exactly like those from `claudette.local.json`: the user chose not to be asked first, although a project from someone else can put any command behind a friendly name. Nothing in either file runs on its own: only an explicit click runs an action, and hovering one shows its whole command first.
+- **No confirmation.** Actions from `claudette.json` run on a click, exactly like those from `claudette.local.json`: the user chose not to be asked first, although a project from someone else can put any command behind a friendly name. Hovering one shows its whole command first.
   - `claudette.local.json` is the user's own file, so its actions run without asking.
-  - Nothing from these files runs except on an explicit click or the main action's shortcut: no automatic runs and no hooks.
+  - Nothing from these files runs on its own except the actions marked `runOnNewWorktree`, when a worktree tab makes a worktree (below), and from `claudette.json` only in a folder the user trusts, as Claude Code runs a folder's own hooks ([§7](#folder-trust)). Everything else runs only on an explicit click or the main action's shortcut.
+- **Setting up a new worktree.** A new worktree is a fresh checkout: no installed dependencies, and none of the files git ignores, such as a local `.env`. Actions marked `runOnNewWorktree` set it up.
+  - **When.** Once Claude Code has made the worktree for a worktree tab ([§4](#worktree-tabs)), as its first `system/init` names it. Not when it opens one that was already there, as after a restart before the first turn: Claudette notes before starting whether the worktree exists.
+  - **Which.** They're read from the main checkout's files, where `claudette.local.json` is (git ignores it, so the worktree has none), in their order. Those from `claudette.local.json` always run. Those from `claudette.json` run only while the main checkout is trusted and the tab uses its configuration; otherwise a note names them and says they can be run from the project's menu, or the folder trusted from the tab's menu.
+  - **How.** In the worktree (`folder` is relative to it), with `CLAUDETTE_WORKTREE` and `CLAUDETTE_MAIN_CHECKOUT` in their environment, so one can copy what the checkout has: `copy "%CLAUDETTE_MAIN_CHECKOUT%\.env" .env` on Windows, `cp "$CLAUDETTE_MAIN_CHECKOUT/.env" .` elsewhere. A note says *"Setting up the new worktree: Install packages, Copy .env."* `launch` ones start at once; `output` ones run as jobs, one after another, each only once the one before it succeeded, with their runs under the tab's row as any job's ([§4](#sidebar)).
+  - They stay in the project's menu, to run again by hand.
 
 **Links.**
 
@@ -2524,7 +2591,7 @@ A place to keep notes beside the conversation: what to check later, a command wo
   - Under it, where the pad is kept: *"Synced to your other machines through the session library"*; with the library in its default folder, which no other machine sees, *"On this machine. To see it on your other machines too, keep the session library in a synced folder (Settings → Sessions)."*; or why it stays here: *"On this machine only: the repository has no remote to know it by on another machine."*, *"… the folder isn't in a git repository."*
   - The rest is the text: plain text in the code font, so pasted code keeps its columns, wrapping at the width shown. Typing saves it a second after typing stops.
 - **Adding to it.** Each puts the text at the end after a blank line (blank lines around it and trailing spaces left out), opens the side panel on the page, and selects what was added there, without taking the keyboard from where it was. A screen reader hears *"Added to the scratch pad."*
-  - **Right-click on selected text** in the conversation (a prompt, a reply across its Markdown, thinking, a tool's input or output, a note, anything in a subagent's group): **Copy** and **Add to scratch pad**. With nothing selected, right-clicking a prompt or reply gives **Copy message** and **Add message to scratch pad**. Anywhere else a control keeps its own menu.
+  - **Right-click on selected text** in the conversation (a prompt, a reply across its Markdown, thinking, a tool's input or output, a note, anything in a subagent's group): **Copy** and **Add to scratch pad**. With nothing selected, right-clicking a prompt or reply gives **Copy message** and **Add message to scratch pad**, and a finished reply **Show as the plan** ([§5](#tasks)). Anywhere else a control keeps its own menu.
   - **A message's chip** ([§5](#copy-and-times)), beside **Copy message**: the whole message, as Copy copies it (a reply's Markdown, a prompt with its suffixes).
   - **A code block's header**, beside **Copy**: the code, fenced in its language (```` ```csharp ````), with a longer fence when the code has one of its own. In a tab's conversation and side panel, not the agent map's window, which has no pad.
 - **Which pad.** A project is known as a session's project identity is ([§9](#session-library-sync-across-machines)): the git remote in its normal form, and the folder's path inside the repository. So every branch, worktree and clone of it shares the pad, and a tab group for a subfolder (`api/web`) has its own, as tab groups are by folder. Without a remote it stays on this machine: a repository's pad by its git folder and the path inside it (its worktrees still share it), any other folder's by its path. The pad's file is named by a hash of that, so the library's file names don't name remotes or folders.

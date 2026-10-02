@@ -164,6 +164,25 @@ public sealed class ProjectFileTests : IDisposable
     }
 
     [Fact]
+    public void An_action_can_run_in_each_new_worktree_and_saving_keeps_or_drops_the_flag()
+    {
+        var contents = ProjectFile.Parse("""
+            { "actions": [
+                { "name": "Install", "command": "npm ci", "runOnNewWorktree": true },
+                { "name": "Lint", "command": "npm run lint", "runOnNewWorktree": "yes" },
+                { "name": "Test", "command": "npm test" }
+            ] }
+            """, ProjectFileScope.Shared, ToolOS.Linux);
+
+        // Only true turns it on (DESIGN.md §18, "Setting up a new worktree").
+        Assert.Equal([true, false, false], contents.Actions.Select(a => a.RunOnNewWorktree));
+        Assert.True(ProjectFile.ToJson(contents.Actions[0])["runOnNewWorktree"]!.GetValue<bool>());
+        var off = contents.Actions[0].Clone();
+        off.RunOnNewWorktree = false;
+        Assert.False(ProjectFile.ToJson(off, ProjectFile.ToJson(contents.Actions[0])).ContainsKey("runOnNewWorktree"));
+    }
+
+    [Fact]
     public void A_missing_file_is_created_and_one_that_isnt_JSON_is_never_overwritten()
     {
         var folder = _temp.CreateFolder("game");

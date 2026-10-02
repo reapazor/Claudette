@@ -21,7 +21,8 @@ public sealed record CustomActionRow(JsonNode? Raw, CustomProjectAction? Action,
         : (action.Mode == CustomActionMode.LaunchAndForget ? "Launch and forget: " : "")
             + action.Command + (string.IsNullOrWhiteSpace(action.WorkingFolder) ? "" : $"  (in {action.WorkingFolder})")
             + (ForThisOS ? "" : $"  · only on {string.Join(", ", action.Os ?? [])}")
-            + (action.IfExists is { } paths ? $"  · only when {string.Join(" and ", paths)} {(paths.Count == 1 ? "exists" : "exist")}" : "");
+            + (action.IfExists is { } paths ? $"  · only when {string.Join(" and ", paths)} {(paths.Count == 1 ? "exists" : "exist")}" : "")
+            + (action.RunOnNewWorktree ? "  · runs in each new worktree" : "");
 
     /// <summary>The entry to write back: its JSON with the edited fields over it.</summary>
     public JsonNode? ToJson() => Action is { } action ? ProjectFile.ToJson(action, Raw) : Raw?.DeepClone();

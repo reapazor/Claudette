@@ -18,6 +18,18 @@ public sealed class ComposerAttachment(MessageImage image, string name)
     public byte[] Data => Image.Data;
 }
 
+/// <summary>A large paste kept as an attachment rather than in the box (DESIGN.md §5, "Attachments").</summary>
+public sealed class PastedTextAttachment(string text)
+{
+    public string Text { get; } = text;
+
+    /// <summary><c>Pasted text · 1,204 lines · 48 KB</c>.</summary>
+    public string Label { get; } = PastedText.Describe(text);
+
+    /// <summary>Its first lines, for the tooltip.</summary>
+    public string Preview { get; } = PastedText.Preview(text);
+}
+
 /// <summary>The composer's autocomplete and attachments (DESIGN.md §5, "Composer").</summary>
 public sealed partial class TabViewModel
 {
@@ -62,6 +74,7 @@ public sealed partial class TabViewModel
             // Typing, or sending: the next Up starts from the newest again.
             _recall.Reset();
         }
+        DraftChanged();
     }
 
     /// <summary>The <c>/</c> and <c>@</c> popup.</summary>
@@ -172,10 +185,10 @@ public sealed partial class TabViewModel
     }
 
     /// <summary>
-    /// A paste into the composer: copied files are attached, then text is left to paste as usual, then an image (such
-    /// as a screenshot) is attached. Text wins over an image because apps often put both, as an image of the same
-    /// text; text that's only white space doesn't, since it says nothing the image doesn't. Returns what to insert
-    /// (mentions, or nothing), or null to let the text box paste the text itself.
+    /// A paste into the composer: copied files are attached, then text is left to paste as usual (or kept as an
+    /// attachment when it's large), then an image (such as a screenshot) is attached. Text wins over an image because
+    /// apps often put both, as an image of the same text; text that's only white space doesn't, since it says nothing
+    /// the image doesn't. Returns what to insert (mentions, or nothing), or null to let the text box paste the text itself.
     /// </summary>
     public async Task<string?> PasteAttachmentsAsync()
     {
@@ -184,8 +197,14 @@ public sealed partial class TabViewModel
         {
             return await AddFilesAsync(files) ?? "";
         }
-        if (!string.IsNullOrWhiteSpace(await platform.GetClipboardTextAsync()))
+        if (await platform.GetClipboardTextAsync() is { } text && !string.IsNullOrWhiteSpace(text))
         {
+            if (PastedText.IsLarge(text))
+            {
+                // Too much for the box to stay quick and easy to edit around: an attachment (DESIGN.md §5, "Attachments").
+                AddPastedText(text);
+                return "";
+            }
             return null;
         }
         if (await platform.GetClipboardImageAsync() is { } image)
@@ -220,6 +239,38 @@ public sealed partial class TabViewModel
         AttachmentError = null;
         SendCommand.NotifyCanExecuteChanged();
         return images;
+    }
+
+    // ---- Large pastes (DESIGN.md §5, "Attachments") ---------------------------------------------------------------
+
+    /// <summary>Pastes too large for the box, sent after what's typed.</summary>
+    public ObservableCollection<PastedTextAttachment> PastedTexts { get; } = [];
+
+    /// <summary>Keeps <paramref name="text"/> as an attachment rather than in the box.</summary>
+    public void AddPastedText(string text)
+    {
+        PastedTexts.Add(new PastedTextAttachment(text));
+        SendCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand]
+    private void RemovePastedText(PastedTextAttachment? paste)
+    {
+        if (paste is not null && PastedTexts.Remove(paste))
+        {
+            SendCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    /// <summary><c>Ctrl/Cmd+Shift+V</c>: the clipboard's text, however long, to paste into the box as it is. Null when there's none.</summary>
+    public Task<string?> ClipboardTextAsync() => _services.Platform.GetClipboardTextAsync();
+
+    /// <summary>Takes the pastes for a message being sent, and clears them from the composer.</summary>
+    private IReadOnlyList<string> TakePastedTexts()
+    {
+        var pastes = PastedTexts.Select(p => p.Text).ToArray();
+        PastedTexts.Clear();
+        return pastes;
     }
 
     /// <summary>The attached images, for the draft a restart into a new build keeps (DESIGN.md §9, "Working on Claudette").</summary>

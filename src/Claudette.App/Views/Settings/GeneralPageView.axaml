@@ -20,6 +20,31 @@
     <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                Text="A dot in the header, and a banner while Claude Code, the Claude API or claude.ai has an incident. Read from status.claude.com every 5 minutes." />
 
+    <!-- Messages sent while Claude works (DESIGN.md §5, "Queued messages") -->
+    <TextBlock Text="Messages sent while Claude works" FontWeight="SemiBold" Margin="0,8,0,0" />
+    <RadioButton GroupName="WhileWorking" Content="Send them into the turn: Claude reads each at its next step" IsChecked="{Binding SteerWhileWorking}" />
+    <RadioButton GroupName="WhileWorking" Content="Queue them: each is sent as the next turn, once this one ends" IsChecked="{Binding QueueWhileWorking}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="A queued message has Send now, to send it into the turn after all, and Cancel. Stop takes queued messages back to the composer." />
+
+    <!-- Cleaning up worktrees (DESIGN.md §4, "Cleaning up worktrees") -->
+    <TextBlock Text="Worktrees" FontWeight="SemiBold" Margin="0,8,0,0" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="The worktrees of worktree tabs that no open tab works in. One with uncommitted changes is always kept. Files git ignores there, such as build output, go with a removed worktree." />
+    <CheckBox Content="Remove worktrees once everything in them is merged" IsChecked="{Binding RemoveMergedWorktrees}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="Every commit is on another branch, so nothing is lost. The worktree and its branch go a day after a tab last used it." />
+    <Grid ColumnDefinitions="Auto,160" ColumnSpacing="8">
+      <TextBlock Classes="label" Text="Remove worktrees no tab has used for" VerticalAlignment="Center" />
+      <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding InactiveDaysChoices}" SelectedItem="{Binding RemoveInactiveWorktreesAfter}" />
+    </Grid>
+    <TextBlock Classes="muted small" TextWrapping="Wrap"
+               Text="The worktree goes, and its branch stays when it has commits on no other branch, so a new worktree tab can carry on from it." />
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <TextBlock Classes="muted small" TextWrapping="Wrap" VerticalAlignment="Center" Text="{Binding WorktreeCleanupText}" />
+      <Button Grid.Column="1" Content="Clean up now" Command="{Binding CleanUpWorktreesCommand}" IsEnabled="{Binding CanCleanUpWorktrees}" />
+    </Grid>
+
     <!-- Claudette's own updates, from its GitHub releases (DESIGN.md §2, "Updating Claudette") -->
     <TextBlock Text="Claudette updates" FontWeight="SemiBold" Margin="0,8,0,0" />
     <CheckBox Content="Check for Claudette updates automatically" IsChecked="{Binding CheckForAppUpdates}" />

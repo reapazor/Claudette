@@ -32,7 +32,54 @@ public sealed partial class KeyboardPage : SettingsPage
     }
 
     public override IEnumerable<SettingsSearchResult> SearchEntries =>
-        KeyboardShortcuts.All.Select(c => Entry($"{c.Label} shortcut", pageText: c.Label));
+        [Entry("Send with", pageText: "Send with"), .. KeyboardShortcuts.All.Select(c => Entry($"{c.Label} shortcut", pageText: c.Label))];
+
+    // ---- Send with (DESIGN.md §14, "Keyboard shortcuts") ----------------------------------------------------------
+
+    /// <summary>Enter sends, Shift+Enter starts a new line.</summary>
+    public bool SendWithEnter
+    {
+        get => Settings.Keyboard.SendKey == SendKey.Enter;
+        set
+        {
+            if (value)
+            {
+                SetSendKey(SendKey.Enter);
+            }
+        }
+    }
+
+    /// <summary>Ctrl/Cmd+Enter sends, Enter starts a new line.</summary>
+    public bool SendWithPrimaryEnter
+    {
+        get => Settings.Keyboard.SendKey == SendKey.PrimaryEnter;
+        set
+        {
+            if (value)
+            {
+                SetSendKey(SendKey.PrimaryEnter);
+            }
+        }
+    }
+
+    public string PrimaryEnterLabel => $"{new KeyChord(ChordModifiers.Primary, "Enter").Display(Claudette.App.Services.Shortcuts.IsMac)}, with Enter for a new line";
+
+    /// <summary>The keys that can't be rebound, listed under the shortcuts.</summary>
+    public string FixedKeysText =>
+        $"In the message box, {new KeyChord(ChordModifiers.Primary | ChordModifiers.Shift, "V").Display(Claudette.App.Services.Shortcuts.IsMac)} pastes text as it is, however long. "
+        + "In the new tab picker, 1–9 pick a folder; in the quick suffixes menu, 1–9 pick a suffix.";
+
+    private void SetSendKey(SendKey key)
+    {
+        if (Settings.Keyboard.SendKey == key)
+        {
+            return;
+        }
+        Settings.Keyboard.SendKey = key;
+        OnPropertyChanged(nameof(SendWithEnter));
+        OnPropertyChanged(nameof(SendWithPrimaryEnter));
+        Save();
+    }
 
     public ObservableCollection<ShortcutRow> ShortcutRows { get; } = [];
 

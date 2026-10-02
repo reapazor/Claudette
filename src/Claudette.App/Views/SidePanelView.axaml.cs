@@ -31,6 +31,7 @@ public partial class SidePanelView : UserControl
         InitializeComponent();
         // Tunnel: the list's items take Enter for themselves.
         ChangedFilesList.AddHandler(KeyDownEvent, OnChangedFileKeyDown, RoutingStrategies.Tunnel);
+        MorePages.MenuItems = MorePageItems;
     }
 
     private TabViewModel? ViewModel => DataContext as TabViewModel;
@@ -52,20 +53,17 @@ public partial class SidePanelView : UserControl
 
     // ---- The pages that don't fit (DESIGN.md §3, "Side panel") ------------------------------------------------------
 
-    /// <summary>The menu lists the tabs left out of the row, each with its badge and dot.</summary>
-    private void OnMorePagesOpening(object? sender, EventArgs e)
+    /// <summary>The menu, made as it opens: the tabs left out of the row, each with its badge and dot.</summary>
+    private List<MenuItem> MorePageItems()
     {
-        if (sender is not MenuFlyout menu)
-        {
-            return;
-        }
-        menu.Items.Clear();
+        var items = new List<MenuItem>();
         foreach (var tab in PageTabs.Overflow.OfType<Button>())
         {
             var dot = StatusDot(tab);
             var texts = tab.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsVisible && t != dot).Select(t => t.Text);
-            menu.Items.Add(new MenuItem { Header = string.Join(" · ", texts), Command = tab.Command, Icon = dot is null ? null : DotLike(dot) });
+            items.Add(new MenuItem { Header = string.Join(" · ", texts), Command = tab.Command, Icon = dot is null ? null : DotLike(dot) });
         }
+        return items;
     }
 
     private static TextBlock DotLike(TextBlock dot)

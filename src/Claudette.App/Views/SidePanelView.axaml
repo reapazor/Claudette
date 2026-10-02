@@ -61,16 +61,13 @@
           <Button Classes="pagetab" Classes.selected="{Binding IsScratchPadPage}" Command="{Binding ShowScratchPadPageCommand}" ToolTip.Tip="Notes shared by the tabs in this project">
             <TextBlock Text="Scratch Pad" Classes.muted="{Binding !IsScratchPadPage}" />
           </Button>
-          <!-- The pages that don't fit, with a dot when one of them shows one -->
-          <Button Classes="flat" Padding="6" VerticalAlignment="Center" ToolTip.Tip="More pages" AutomationProperties.Name="More pages">
+          <!-- The pages that don't fit, with a dot when one of them shows one; its menu is made as it opens -->
+          <controls:FreshMenuButton x:Name="MorePages" Classes="flat" Padding="6" VerticalAlignment="Center" ToolTip.Tip="More pages" AutomationProperties.Name="More pages">
             <StackPanel Orientation="Horizontal" Spacing="3">
               <Path Data="{StaticResource IconMore}" Fill="{DynamicResource MutedTextBrush}" Width="12" Height="12" Stretch="None" />
               <TextBlock x:Name="MorePagesDot" Classes="status" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="False" />
             </StackPanel>
-            <Button.Flyout>
-              <MenuFlyout Placement="BottomEdgeAlignedLeft" Opening="OnMorePagesOpening" />
-            </Button.Flyout>
-          </Button>
+          </controls:FreshMenuButton>
         </controls:PageTabsPanel>
         <Button Grid.Column="1" Classes="flat" Padding="6" VerticalAlignment="Center" ToolTip.Tip="Close the side panel" AutomationProperties.Name="Close side panel" Command="{Binding ToggleSidePanelCommand}">
           <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
@@ -189,7 +186,8 @@
         </ListBox>
       </DockPanel>
 
-      <!-- Tasks (DESIGN.md §5, "Tasks"): the approved plan, then each task with its state, owner, what it waits on and times -->
+      <!-- Tasks (DESIGN.md §5, "Tasks"): the plan (approved, or a reply shown as the plan), then each task with its state,
+           owner, what it waits on and times -->
       <DockPanel IsVisible="{Binding IsTasksPage}">
         <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="12,0,12,6" Text="{Binding TodoList.Summary}" IsVisible="{Binding TodoList.HasItems}" />
         <!-- The text wraps at the width shown; a plan's code blocks scroll sideways on their own -->
@@ -200,7 +198,7 @@
                 <StackPanel Spacing="4">
                   <Grid ColumnDefinitions="*,Auto">
                     <TextBlock Text="Plan" FontWeight="SemiBold" />
-                    <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding TodoList.PlanApprovedText}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding TodoList.PlanTimeText}" VerticalAlignment="Center" />
                   </Grid>
                   <md:MarkdownRenderer MarkdownBuilder="{Binding TodoList.PlanMarkdown}" />
                 </StackPanel>

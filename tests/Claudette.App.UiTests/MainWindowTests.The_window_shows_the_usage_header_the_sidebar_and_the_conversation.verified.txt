@@ -26,6 +26,7 @@
 "12:00"
 [button] Copy message
 [button] Add to scratch pad
+[button] Show as the plan
 "Opus"
 [field] "Message Claude…  (Enter to send, Shift+Enter for a new line, Esc to stop)"
 [button] Attach a file

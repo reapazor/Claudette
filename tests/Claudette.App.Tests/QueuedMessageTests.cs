@@ -114,4 +114,101 @@ public class QueuedMessageTests
         Assert.True(one.IsQueued);
         Assert.StartsWith("Couldn't take that message back", tab.Items.OfType<NoteItem>().Last().Text, StringComparison.Ordinal);
     }
+
+    // ---- Queue instead (Settings → General → Messages sent while Claude works) ----------------------------------------
+
+    private static readonly string Result = """{"type":"result","subtype":"success","is_error":false,"session_id":"s1"}""";
+
+    private static TabTestHarness Queueing() => new(s => s.General.MessagesWhileWorking = Core.Settings.WhileWorking.Queue);
+
+    [Fact]
+    public async Task Queued_until_the_turn_ends_each_message_goes_as_the_next_turn_one_per_turn()
+    {
+        await using var h = Queueing();
+        var tab = await WorkingAsync(h);
+
+        tab.ComposerText = "then the docs";
+        await tab.SendCommand.ExecuteAsync(null);
+        tab.ComposerText = "then the changelog";
+        await tab.SendCommand.ExecuteAsync(null);
+
+        var (docs, changelog) = (Card(tab, "then the docs"), Card(tab, "then the changelog"));
+        Assert.True(docs is { IsQueued: true, IsHeld: true });
+        Assert.Equal("Queued: sent when this turn ends", docs.QueuedText);
+        Assert.DoesNotContain("then the docs", h.Transport.SentUserTexts);
+
+        h.Transport.Emit(Result);
+        await TabTestHarness.Eventually(() => h.Transport.SentUserTexts.Contains("then the docs"), "the first held message");
+        Assert.False(docs.IsHeld);
+        Assert.True(docs.IsQueued);
+        Assert.DoesNotContain("then the changelog", h.Transport.SentUserTexts);
+        Assert.True(changelog.IsHeld);
+
+        // Its turn ends too: the next one goes.
+        h.Transport.Emit(Result);
+        await TabTestHarness.Eventually(() => h.Transport.SentUserTexts.Contains("then the changelog"), "the second held message");
+    }
+
+    [Fact]
+    public async Task Send_now_sends_a_held_message_into_the_turn_and_Cancel_takes_it_back_without_asking_Claude_Code()
+    {
+        await using var h = Queueing();
+        var tab = await WorkingAsync(h);
+        tab.ComposerText = "steer after all";
+        await tab.SendCommand.ExecuteAsync(null);
+        tab.ComposerText = "never mind";
+        await tab.SendCommand.ExecuteAsync(null);
+        var (steer, never) = (Card(tab, "steer after all"), Card(tab, "never mind"));
+
+        await tab.SendHeldNowCommand.ExecuteAsync(steer);
+
+        Assert.Contains("steer after all", h.Transport.SentUserTexts);
+        Assert.True(steer is { IsHeld: false, IsQueued: true });
+        Assert.Equal("Queued: sent when Claude can take it", steer.QueuedText);
+
+        await tab.CancelQueuedMessageCommand.ExecuteAsync(never);
+
+        Assert.DoesNotContain(never, tab.Items);
+        Assert.Equal("never mind", tab.ComposerText);
+        Assert.DoesNotContain("cancel_async_message", h.Transport.SentControlSubtypes);
+        h.Transport.Emit(Result);
+        await TabTestHarness.Eventually(() => tab.Status != TabStatus.Working, "the turn's end");
+        Assert.DoesNotContain("never mind", h.Transport.SentUserTexts);
+    }
+
+    [Fact]
+    public async Task Stop_takes_back_held_messages_with_what_Claude_Code_held()
+    {
+        await using var h = Queueing();
+        var tab = await WorkingAsync(h, "interrupt_receipt_v1", "interrupt_cancel_queued_v1");
+        tab.ComposerText = "held here";
+        await tab.SendCommand.ExecuteAsync(null);
+        h.Transport.Answers["interrupt"] = _ => new JsonObject { ["still_queued"] = new JsonArray(), ["cancelled"] = new JsonArray() };
+
+        await tab.StopCommand.ExecuteAsync(null);
+
+        Assert.Equal("held here", tab.ComposerText);
+        Assert.Equal("Took back a message that was waiting its turn.", tab.Items.OfType<NoteItem>().Last().Text);
+        h.Transport.Emit(Result);
+        await TabTestHarness.Eventually(() => tab.Status != TabStatus.Working, "the turn's end");
+        Assert.DoesNotContain("held here", h.Transport.SentUserTexts);
+    }
+
+    [Fact]
+    public async Task A_held_messages_large_pastes_come_back_as_attachments()
+    {
+        await using var h = Queueing();
+        var tab = await WorkingAsync(h);
+        var paste = string.Join("\n", Enumerable.Range(1, 3000).Select(i => $"stack frame {i:D5} at Something.Deep()"));
+        tab.ComposerText = "why does this crash?";
+        tab.AddPastedText(paste);
+        await tab.SendCommand.ExecuteAsync(null);
+        var held = Assert.Single(tab.Items.OfType<UserMessageItem>(), m => m.IsHeld);
+        Assert.Equal($"why does this crash?\n\n{paste}", held.Text);
+
+        await tab.CancelQueuedMessageCommand.ExecuteAsync(held);
+
+        Assert.Equal("why does this crash?", tab.ComposerText);
+        Assert.Equal(paste, Assert.Single(tab.PastedTexts).Text);
+    }
 }

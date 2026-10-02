@@ -29,6 +29,7 @@ public sealed partial class ProjectActionEditorViewModel : ViewModelBase
         WorkingFolder = existing?.WorkingFolder ?? "";
         IfExists = string.Join("; ", existing?.IfExists ?? []);
         LaunchAndForget = existing?.Mode == CustomActionMode.LaunchAndForget;
+        RunOnNewWorktree = existing?.RunOnNewWorktree ?? false;
         SaveToShared = existing?.Scope == ProjectFileScope.Shared;
     }
 
@@ -111,6 +112,14 @@ public sealed partial class ProjectActionEditorViewModel : ViewModelBase
         set => LaunchAndForget = !value;
     }
 
+    /// <summary>Runs on its own in each new worktree a worktree tab makes (DESIGN.md §18, "Setting up a new worktree").</summary>
+    [ObservableProperty]
+    public partial bool RunOnNewWorktree { get; set; }
+
+    public string RunOnNewWorktreeText =>
+        $"Run there, once Claude Code has made it, such as to install dependencies. {CustomProjectAction.WorktreeVariable} and {CustomProjectAction.MainCheckoutVariable} "
+        + $"name the two folders, to copy a local .env from, say. A shared action runs only in a folder you trust.";
+
     [RelayCommand(CanExecute = nameof(CanSave))]
     private void Save()
     {
@@ -121,6 +130,7 @@ public sealed partial class ProjectActionEditorViewModel : ViewModelBase
         var paths = IfExists.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         action.IfExists = paths.Length > 0 ? paths : null;
         action.Mode = LaunchAndForget ? CustomActionMode.LaunchAndForget : CustomActionMode.RunWithOutput;
+        action.RunOnNewWorktree = RunOnNewWorktree;
         _close();
         _save(action, SaveToShared ? ProjectFileScope.Shared : ProjectFileScope.Local);
     }

@@ -126,6 +126,8 @@ public sealed class AppServices : IAsyncDisposable
         Git = new GitWorkingTree(launcher, timeProvider, environment: UserEnvironment);
         Library = new LibraryService(this);
         ScratchPads = new ScratchPadService(this);
+        Drafts = new DraftService(this);
+        Worktrees = new WorktreeCleanupService(this);
         ProtocolLog.DeleteOld(paths.ProtocolLogDirectory, timeProvider.GetUtcNow());
         BeforeContentStore.DeleteOld(paths.BeforeContentDirectory, timeProvider.GetUtcNow());
         Notifications =new NotificationService(this, notifier ?? NullNotifier.Instance);
@@ -326,6 +328,12 @@ public sealed class AppServices : IAsyncDisposable
 
     /// <summary>The projects' scratch pads (DESIGN.md §18, "Scratch pad").</summary>
     public ScratchPadService ScratchPads { get; }
+
+    /// <summary>Each tab's unsent message, and the stash (DESIGN.md §5, "Drafts and the stash").</summary>
+    public DraftService Drafts { get; }
+
+    /// <summary>Removing worktree tabs' worktrees on their own, as Settings → General says (DESIGN.md §4, "Cleaning up worktrees").</summary>
+    public WorktreeCleanupService Worktrees { get; }
 
     public AppPaths Paths { get; }
 
@@ -557,6 +565,7 @@ public sealed class AppServices : IAsyncDisposable
         await _settingsStore.SaveAsync(Settings);
         await _stateStore.SaveAsync(State);
         await ScratchPads.FlushAsync();
+        await Drafts.FlushAsync();
     }
 
     /// <summary>
@@ -609,6 +618,7 @@ public sealed class AppServices : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        Worktrees.Dispose();
         ScratchPads.Dispose();
         Library.Dispose();
         Notifications.Dispose();

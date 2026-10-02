@@ -111,6 +111,10 @@ public sealed class ShortcutTips(AppSettings settings) : ObservableObject
 
     public string Suffixes => Tip("Quick suffixes", KeyboardShortcuts.Suffixes);
 
+    public string Stash => Text(KeyboardShortcuts.Stash) is { } shortcut
+        ? $"Messages put aside with Stash ({shortcut}), which every tab shares"
+        : "Messages put aside with Stash, which every tab shares";
+
     public string CollapseSidebar => Tip("Collapse the sidebar", KeyboardShortcuts.ToggleSidebar);
 
     public string ExpandSidebar => Tip("Expand the sidebar", KeyboardShortcuts.ToggleSidebar);
@@ -119,9 +123,17 @@ public sealed class ShortcutTips(AppSettings settings) : ObservableObject
 
     public string Deny => Text(KeyboardShortcuts.DenyPrompt) ?? "";
 
-    public string ComposerPlaceholder => Text(KeyboardShortcuts.Stop) is { } stop
-        ? $"Message Claude…  (Enter to send, Shift+Enter for a new line, {stop} to stop)"
-        : "Message Claude…  (Enter to send, Shift+Enter for a new line)";
+    /// <summary>The composer's placeholder: which key sends, which starts a new line (Settings → Keyboard → Send with), and Stop.</summary>
+    public string ComposerPlaceholder
+    {
+        get
+        {
+            var keys = settings.Keyboard.SendKey == SendKey.PrimaryEnter
+                ? $"{new KeyChord(ChordModifiers.Primary, "Enter").Display(Shortcuts.IsMac)} to send, Enter for a new line"
+                : "Enter to send, Shift+Enter for a new line";
+            return Text(KeyboardShortcuts.Stop) is { } stop ? $"Message Claude…  ({keys}, {stop} to stop)" : $"Message Claude…  ({keys})";
+        }
+    }
 
     /// <summary>The shortcut as it reads on this OS, or null when it has been removed.</summary>
     public string? Text(string commandId) => KeyboardShortcuts.Resolve(settings.Keyboard, commandId)?.Display(Shortcuts.IsMac);

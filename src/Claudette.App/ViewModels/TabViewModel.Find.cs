@@ -35,6 +35,9 @@ public sealed partial class TabViewModel
                 case HookRunItem hook:
                     hook.IsExpanded = true;
                     break;
+                case UserMessageItem user:
+                    user.ShowsAllText = true;
+                    break;
             }
         }
         ScrollTo(item);

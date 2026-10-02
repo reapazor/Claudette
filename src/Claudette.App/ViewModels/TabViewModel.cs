@@ -4,6 +4,7 @@ using Claudette.App.Conversation;
 using Claudette.App.Services;
 using Claudette.Core;
 using Claudette.Core.Claude;
+using Claudette.Core.Composer;
 using Claudette.Core.Development;
 using Claudette.Core.Git;
 using Claudette.Core.Library;
@@ -125,6 +126,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 Chips.Add(new SuffixChip(kept, isKept: true));
             }
         }
+        // The draft is written as it changes, so it outlives quitting (DESIGN.md §5, "Drafts and the stash").
+        Chips.CollectionChanged += (_, _) => DraftChanged();
+        Attachments.CollectionChanged += (_, _) => DraftChanged();
+        PastedTexts.CollectionChanged += (_, _) => DraftChanged();
+        services.Drafts.StashChanged += OnStashChanged;
         Context.RefreshTokens();
         RestoreLimitWait();
         // Project tools (DESIGN.md §18): the project and the folder's own actions and links, as soon as they're read.
@@ -426,7 +432,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     public IReadOnlyList<ModelInfo> Models => _session?.Initialization?.Models.Where(m => m.Value != "default").ToArray() ?? [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ModelBadge), nameof(InfoRows), nameof(EffortLevels), nameof(PermissionModeChoices), nameof(RowDetail))]
+    [NotifyPropertyChangedFor(nameof(ModelBadge), nameof(InfoRows), nameof(EffortLevels), nameof(PermissionModeChoices), nameof(IsAutoModeAvailable), nameof(RowDetail))]
     public partial string? ModelName { get; set; }
 
     /// <summary>The model id Claude Code reports (for example <c>claude-opus-5-5[1m]</c>).</summary>
@@ -482,7 +488,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>What Claude Code's settings files say about the mode this tab starts in, read as it starts (DESIGN.md §7).</summary>
     private StartingPermissionMode? _startingMode;
 
-    private bool IsAutoModeAvailable => _startingMode?.AutoModeDisabled != true && CurrentModelInfo?.SupportsAutoMode != false;
+    /// <summary>
+    /// Auto mode can be used: the model supports it and no settings file turns it off. The mode picker and a plan's
+    /// <b>Approve, auto mode</b> offer it only then (DESIGN.md §7).
+    /// </summary>
+    public bool IsAutoModeAvailable => _startingMode?.AutoModeDisabled != true && CurrentModelInfo?.SupportsAutoMode != false;
 
     /// <summary>The mode this tab starts in when neither its settings nor Claudette's choose one, once it has started.</summary>
     internal string? ClaudeCodeStartingMode => _startingMode is { } starting
@@ -800,12 +810,16 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     // ---- Restarting into a new build (DESIGN.md §9, "Working on Claudette") -------------------------------
 
-    /// <summary>The message typed but not sent, with its one-off quick suffixes and attached images, or null when there's none.</summary>
-    public TabDraft? Draft => ComposerText.Length == 0 && Chips.All(c => c.IsKept) && Attachments.Count == 0
+    /// <summary>
+    /// The message typed but not sent, with its one-off quick suffixes, attached images and large pastes, or null when
+    /// there's none (DESIGN.md §5, "Drafts and the stash").
+    /// </summary>
+    public TabDraft? Draft => ComposerText.Length == 0 && Chips.All(c => c.IsKept) && Attachments.Count == 0 && PastedTexts.Count == 0
         ? null
-        : new TabDraft(ComposerText, Chips.Where(c => !c.IsKept).Select(c => c.Suffix.Id).ToList(), Attachments.Count > 0 ? DraftImages() : null);
+        : new TabDraft(ComposerText, Chips.Where(c => !c.IsKept).Select(c => c.Suffix.Id).ToList(), Attachments.Count > 0 ? DraftImages() : null,
+            PastedTexts.Count > 0 ? [.. PastedTexts.Select(p => p.Text)] : null);
 
-    /// <summary>Puts back a draft from the build that restarted into this one.</summary>
+    /// <summary>Puts back a draft: from the last time Claudette ran, or the build that restarted into this one.</summary>
     public void RestoreDraft(TabDraft draft)
     {
         ComposerText = draft.Text;
@@ -814,6 +828,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             AddSuffix(_services.Settings.QuickSuffixes.FirstOrDefault(s => s.Id == id));
         }
         RestoreDraftImages(draft.Images);
+        foreach (var paste in draft.PastedTexts ?? [])
+        {
+            PastedTexts.Add(new PastedTextAttachment(paste));
+        }
     }
 
     /// <summary>Whether this tab's Claude Code is running.</summary>
@@ -828,9 +846,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
     {
-        var text = ComposerText.Trim();
+        var typed = ComposerText.Trim();
         var suffixes = Chips.Select(c => c.Suffix.Text).ToArray();
-        if (text.Length == 0 && suffixes.Length == 0 && Attachments.Count == 0)
+        if (typed.Length == 0 && suffixes.Length == 0 && Attachments.Count == 0 && PastedTexts.Count == 0)
         {
             return;
         }
@@ -842,19 +860,31 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             Chips.Remove(chip);
         }
         var images = TakeAttachments();
+        // Large pastes go after what was typed (DESIGN.md §5, "Attachments").
+        var pastes = TakePastedTexts();
+        var text = PastedText.Join(typed, pastes);
         _autoContinue.UserSent();
         var stamp = NewStamp(fromUser: true);
         var card = _conversation.AddUserMessage(text, suffixText, images: images);
         card.SentId = stamp.Uuid;
+        card.TypedText = pastes.Count > 0 ? typed : null;
+        card.PastedTexts = pastes;
+        _recall.Add(typed);
+        _firstPrompt ??= text.Length > 0 ? text : suffixText;
+        if (HoldsWhileWorking)
+        {
+            // Held until the turn ends, as Settings → General says (DESIGN.md §5, "Queued messages").
+            Hold(card, new PendingMessage(text, images, suffixText, stamp));
+            return;
+        }
         // Sent while Claude works, it waits its turn (DESIGN.md §5, "Queued messages").
         card.IsQueued = IsWorking;
-        _recall.Add(text);
-        _firstPrompt ??= text.Length > 0 ? text : suffixText;
         await SendRawAsync(text, images, suffixText, stamp);
         _ = RequestTitleAsync();
     }
 
-    private bool CanSend() => !IsReadOnly && (Status is not (TabStatus.Starting or TabStatus.Error) || IsWaitingForSignIn) && (ComposerText.Trim().Length > 0 || Chips.Count > 0 || Attachments.Count > 0);
+    private bool CanSend() => !IsReadOnly && (Status is not (TabStatus.Starting or TabStatus.Error) || IsWaitingForSignIn)
+        && (ComposerText.Trim().Length > 0 || Chips.Count > 0 || Attachments.Count > 0 || PastedTexts.Count > 0);
 
     /// <summary>A new id for a message, and whether the user typed or chose it (DESIGN.md §13, "Wire format").</summary>
     private static MessageStamp NewStamp(bool fromUser) => new(Guid.NewGuid().ToString(), fromUser);
@@ -908,9 +938,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         RemoteControl.OnStoppedHere();
         try
         {
-            // What was waiting its turn is cancelled with it, and comes back to the composer (DESIGN.md §5).
+            // What was waiting its turn is cancelled with it, and comes back to the composer (DESIGN.md §5): what Claude
+            // Code was holding, and what Claudette was.
+            var held = TakeAllHeld();
             var receipt = await _session.InterruptAsync(cancelQueued: true);
-            TakeBack(receipt.Cancelled);
+            TakeBack([.. held, .. receipt.Cancelled]);
         }
         catch (Exception ex)
         {
@@ -925,6 +957,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     [RelayCommand]
     private async Task CancelQueuedMessageAsync(UserMessageItem? message)
     {
+        if (message is { IsHeld: true } held && TakeBackHeld(held))
+        {
+            return;
+        }
         if (message is not { IsQueued: true, SentId: { } id } || _session is null)
         {
             return;
@@ -960,9 +996,15 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 continue;
             }
-            if (card.CopyText.Trim() is { Length: > 0 } text)
+            // Its large pastes go back as attachments, not into the box (DESIGN.md §5, "Attachments").
+            var typed = card.TypedText is { } typedText ? (card.HasSuffix ? $"{typedText}\n\n{card.SuffixText}" : typedText) : card.CopyText;
+            if (typed.Trim() is { Length: > 0 } text)
             {
                 texts.Add(text);
+            }
+            foreach (var paste in card.PastedTexts)
+            {
+                PastedTexts.Add(new PastedTextAttachment(paste));
             }
             foreach (var image in card.Images)
             {
@@ -1191,6 +1233,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 environment["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] = "true";
             }
             var resumeAt = resume is null ? null : State.ResumeAt;
+            if (State.NewWorktree is not null)
+            {
+                await NoteWhetherWorktreeExistsAsync();
+            }
             var options = await Perforce.WithPerforceAsync(await ProjectTools.WithNoteAsync(new ClaudeLaunchOptions
             {
                 WorkingDirectory = Folder,
@@ -1255,6 +1301,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             OnPropertyChanged(nameof(Models));
             OnPropertyChanged(nameof(EffortLevels));
             OnPropertyChanged(nameof(PermissionModeChoices));
+            OnPropertyChanged(nameof(IsAutoModeAvailable));
             if (State.Ultracode)
             {
                 await ApplyUltracodeAsync(session, on: true);
@@ -1472,15 +1519,16 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     case TranscriptMessage { Message: AssistantMessage assistant }:
                         var assistantEvent = new AssistantMessageReceived(assistant);
                         _conversation.Replay(assistantEvent, item.Time);
-                        ChangedFiles.Record(assistantEvent);
+                        ChangedFiles.Record(assistantEvent, live: false);
                         break;
                     case TranscriptMessage { Message: UserMessage results }:
                         var resultsEvent = new ToolResultsReceived(results);
                         _conversation.Replay(resultsEvent, item.Time);
-                        ChangedFiles.Record(resultsEvent);
+                        ChangedFiles.Record(resultsEvent, live: false);
                         break;
                 }
             }
+            RestoreChosenPlan();
             if (State.AutoName is null && transcript.Title is { } title)
             {
                 State.AutoName = title;
@@ -1716,6 +1764,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 RefreshBranch();
                 // The switch changed while Claude worked (DESIGN.md §18, "Remote Control").
                 RemoteControl.OnTurnCompleted(session);
+                // The files this turn changed, on its footer (DESIGN.md §8, "Changes per turn").
+                ChangedFiles.EndTurn(Items.LastOrDefault() as TurnSummaryItem);
+                // A message held until the turn ended goes now (DESIGN.md §5, "Queued messages").
+                SendNextHeld();
                 if (_restartForExtraFolders)
                 {
                     // After this event is handled: the restart stops the session it came from.
@@ -1727,6 +1779,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 State.SessionStartedAt = _services.Time.GetUtcNow();
                 OnPropertyChanged(nameof(InfoRows));
                 TodoList.Clear();
+                State.Plan = null;
                 State.AutoName = null;
                 _titleRequested = false;
                 _firstPrompt = null;
@@ -1741,6 +1794,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 SetRunningVersion(null);
                 _checkIns.TurnEnded();
                 _waitingOnUser.Clear();
+                // Held messages can't go to a Claude Code that's gone: they come back to the composer.
+                TakeBack(TakeAllHeld());
                 ErrorMessage = exited.Exit.ExitCode == 0 ? null : ExitErrorMessage(exited.Exit);
                 Status = exited.Exit.ExitCode == 0 ? TabStatus.Exited : TabStatus.Error;
                 OnPropertyChanged(nameof(CanRestart));
@@ -1929,7 +1984,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// <param name="interruptTurn">Interrupt a turn under way; a restart of Claudette leaves it for Claude Code to carry on.</param>
     public async ValueTask CloseAsync(bool killProcesses, bool interruptTurn = true)
     {
+        // Before closing stops the draft from being written again: quitting keeps it.
+        FlushDraft();
         await _closing.CancelAsync();
+        _services.Drafts.StashChanged -= OnStashChanged;
         _checkIns.Dispose();
         _autoContinue.Dispose();
         foreach (var timer in _copied.Values)

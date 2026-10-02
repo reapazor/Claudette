@@ -75,7 +75,7 @@ public class ScratchPadUiTests
     }
 
     [AvaloniaFact]
-    public async Task Text_selected_in_a_reply_has_Copy_and_Add_to_scratch_pad_on_its_menu()
+    public async Task Text_selected_in_a_reply_has_Copy_Quote_and_Add_to_scratch_pad_on_its_menu()
     {
         await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
         var tab = await h.OpenTabAsync();
@@ -96,9 +96,12 @@ public class ScratchPadUiTests
         Assert.Equal("Use exponential backoff for retries.", renderer.SelectedText?.Trim());
 
         var menu = ScratchPadAdd.Menu(tab, ScratchPadAdd.At(block)!)!;
-        Assert.Equal(["Copy", "Add to scratch pad"], menu.Items.OfType<MenuItem>().Select(m => m.Header as string));
+        Assert.Equal(["Copy", "Quote in reply", "Add to scratch pad"], menu.Items.OfType<MenuItem>().Select(m => m.Header as string));
         menu.Items.OfType<MenuItem>().First().Command!.Execute(null);
         await UiText.SettleUntilAsync(window, () => h.Platform.Clipboard?.Trim() == "Use exponential backoff for retries.", "the copy");
+        // Quote in reply: a Markdown quote in the composer, to write under (DESIGN.md §5, "Copy and times").
+        menu.Items.OfType<MenuItem>().ElementAt(1).Command!.Execute(null);
+        Assert.Equal("> Use exponential backoff for retries.\n\n", tab.ComposerText);
         menu.Items.OfType<MenuItem>().Last().Command!.Execute(null);
         Assert.Equal("Use exponential backoff for retries.\n", tab.ScratchPad.Text);
         Assert.True(tab.IsScratchPadPage);
@@ -108,10 +111,10 @@ public class ScratchPadUiTests
         block.RaiseEvent(request);
         Assert.True(request.Handled);
 
-        // With nothing selected, it's about the whole message.
+        // With nothing selected, it's about the whole message: a reply's can be the plan (DESIGN.md §5, "Tasks").
         renderer.ClearSelection();
         var whole = ScratchPadAdd.Menu(tab, ScratchPadAdd.At(block)!)!;
-        Assert.Equal(["Copy message", "Add message to scratch pad"], whole.Items.OfType<MenuItem>().Select(m => m.Header as string));
+        Assert.Equal(["Copy message", "Quote message", "Add message to scratch pad", "Show as the plan"], whole.Items.OfType<MenuItem>().Select(m => m.Header as string));
     }
 
     private static Button AddButton(CodeBlock block) =>

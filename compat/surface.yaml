@@ -640,6 +640,13 @@ items:
     usedIn: tools/Claudette.MockApi/MockAnthropicApi.cs
     test: RealCliTests
     fallback: The plan mode reminder names the plan file ("You should create your plan at <path> using the Write tool."), and the mock's EXIT_PLAN writes the plan there. If the wording changes, match the new wording; without a path the mock passes the plan as input.plan, which 2.1.285 drops.
+  - id: "ExitPlanModeOutput"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: TaskBoardTests, TasksPlanTests, RealCliTests
+    fallback: "An approved ExitPlanMode's tool_use_result (toolUseResult in transcripts) carries the plan as plan, which heads the Tasks page however it was approved: on its card, in the Claude app, or before a restore (DESIGN.md §5, \"Tasks\"). A denied one is an error result. Without plan, the call's own input.plan is used (the model passed it before 2.1.285); without either, the plan shows only in the conversation."
   - id: "permission_denied"
     kind: message
     status: documented
@@ -1316,7 +1323,7 @@ items:
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: ClaudeSessionTests, PermissionModeTests, RealCliTests
     # On each model in the initialize reply; left out for a model without auto mode (Haiku 4.5 in 2.1.284). The mode
-    # picker offers Auto only for the tab's model when it's true (DESIGN.md §7).
+    # picker offers Auto only for the tab's model when it's true, and so does a plan's card (DESIGN.md §7).
 
   # --- History and the session library (DESIGN.md §9) --------------------------------------------------
   - id: "isMeta"

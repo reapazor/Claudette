@@ -66,6 +66,17 @@
         </Button>
       </StackPanel>
     </DataTemplate>
+    <!-- A reply: its time, Copy and Add to scratch pad, and Show as the plan once it's whole (DESIGN.md §5, "Tasks"). -->
+    <DataTemplate x:Key="ReplyTools" x:DataType="conv:AssistantTextItem">
+      <StackPanel Orientation="Horizontal" Spacing="2">
+        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource MessageTools}" />
+        <Button Classes="flat" Padding="5,3" VerticalAlignment="Center" ToolTip.Tip="Show as the plan on the Tasks page" AutomationProperties.Name="Show as the plan"
+                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ShowAsPlanCommand}" CommandParameter="{Binding}" IsVisible="{Binding !IsStreaming}">
+          <Path Data="{StaticResource IconToolPlan}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.1" StrokeLineCap="Round"
+                Width="12" Height="12" Stretch="None" />
+        </Button>
+      </StackPanel>
+    </DataTemplate>
   </UserControl.Resources>
 
   <UserControl.Styles>
@@ -96,14 +107,23 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" IsVisible="{Binding Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <SelectableTextBlock Text="{Binding ShownText}" TextWrapping="Wrap" IsVisible="{Binding Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <!-- A long message, such as a large paste, shows its start (DESIGN.md §5, "Attachments") -->
+            <Button Classes="flat" Padding="0" HorizontalAlignment="Left" IsVisible="{Binding IsTextCut}" Command="{Binding ShowAllCommand}">
+              <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding ShowAllText}" TextDecorations="Underline" />
+            </Button>
             <SelectableTextBlock Classes="muted small" Text="{Binding SuffixText}" TextWrapping="Wrap" IsVisible="{Binding HasSuffix}" />
             <!-- Waiting its turn behind Claude's work (DESIGN.md §5, "Queued messages") -->
             <StackPanel Classes="queued" Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsQueued}">
-              <TextBlock Classes="muted small" Text="Queued: sent when Claude can take it" VerticalAlignment="Center" />
+              <TextBlock Classes="muted small" Text="{Binding QueuedText}" VerticalAlignment="Center" />
+              <Button Classes="flat" Padding="0" VerticalAlignment="Center" IsVisible="{Binding IsHeld}"
+                      Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).SendHeldNowCommand}" CommandParameter="{Binding}"
+                      ToolTip.Tip="Sends it now, into the turn: Claude reads it at its next step">
+                <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="Send now" TextDecorations="Underline" />
+              </Button>
               <Button Classes="flat" Padding="0" VerticalAlignment="Center"
                       Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CancelQueuedMessageCommand}" CommandParameter="{Binding}"
-                      ToolTip.Tip="Takes the message back before Claude reads it, and puts it in the composer">
+                      ToolTip.Tip="{Binding CancelQueuedTip}">
                 <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="Cancel" TextDecorations="Underline" />
               </Button>
             </StackPanel>
@@ -117,7 +137,7 @@
       <Panel Classes="message">
         <md:MarkdownRenderer MarkdownBuilder="{Binding Markdown}"
                              LinkCommand="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenLinkCommand}" />
-        <ContentControl Classes="messagetools" Content="{Binding}" ContentTemplate="{StaticResource MessageTools}" />
+        <ContentControl Classes="messagetools" Content="{Binding}" ContentTemplate="{StaticResource ReplyTools}" />
       </Panel>
     </DataTemplate>
 
@@ -405,9 +425,13 @@
           <md:MarkdownRenderer MarkdownBuilder="{Binding Plan}" IsVisible="{Binding HasPlan}"
                                LinkCommand="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenLinkCommand}" />
           <TextBlock Classes="muted" Text="Claude has finished planning and is ready to start making changes." TextWrapping="Wrap" IsVisible="{Binding !HasPlan}" />
+          <!-- Auto mode first, as the main button, while the tab can use it (DESIGN.md §7) -->
           <WrapPanel ItemSpacing="8" LineSpacing="6" IsVisible="{Binding IsPending}">
-            <Button Classes="accent" Content="Approve, accept edits" Command="{Binding ApproveAcceptingEditsCommand}"
-                    ToolTip.Tip="Start working, and edit files without asking" />
+            <Button Classes="accent" Content="Approve, auto mode" Command="{Binding ApproveInAutoModeCommand}"
+                    IsVisible="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).IsAutoModeAvailable}"
+                    ToolTip.Tip="Start working in auto mode: a safety check reviews actions and blocks risky ones" />
+            <Button Classes.accent="{Binding !$parent[UserControl].((vm:TabViewModel)DataContext).IsAutoModeAvailable}" Content="Approve, accept edits"
+                    Command="{Binding ApproveAcceptingEditsCommand}" ToolTip.Tip="Start working, and edit files without asking" />
             <Button Content="Approve, ask before edits" Command="{Binding ApproveAskingForEditsCommand}" ToolTip.Tip="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).Tips.Allow}" />
             <Button Content="Keep planning…" Command="{Binding StartFeedbackCommand}" />
           </WrapPanel>
@@ -505,7 +529,34 @@
     </DataTemplate>
 
     <DataTemplate DataType="conv:TurnSummaryItem">
-      <TextBlock Classes="muted small" Text="{Binding Text}" Opacity="0.8" Margin="0,0,0,4" />
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,4">
+        <TextBlock Classes="muted small" Text="{Binding Text}" Opacity="0.8" VerticalAlignment="Center" />
+        <!-- The files the turn changed, each opening the turn's changes to it (DESIGN.md §8, "Changes per turn") -->
+        <Button Classes="flat turnfiles" Padding="0" VerticalAlignment="Center" IsVisible="{Binding HasFiles}"
+                ToolTip.Tip="What this turn changed, file by file">
+          <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding FilesText, StringFormat='· {0}'}" />
+          <Button.Flyout>
+            <Flyout Placement="BottomEdgeAlignedLeft">
+              <StackPanel MinWidth="280" MaxWidth="560" Spacing="2">
+                <TextBlock Classes="muted small" Margin="8,2" Text="Changed in this turn" />
+                <ItemsControl ItemsSource="{Binding Files}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="conv:TurnFileRow">
+                      <Button Classes="flat row" HorizontalContentAlignment="Stretch" ToolTip.Tip="{Binding Change.Path}"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.OpenTurnDiffCommand}" CommandParameter="{Binding}">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                          <TextBlock Classes="mono small" Text="{Binding DisplayPath}" TextTrimming="PathSegmentEllipsis" />
+                          <TextBlock Grid.Column="1" Classes="muted small mono" Text="{Binding Stats}" />
+                        </Grid>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
+      </StackPanel>
     </DataTemplate>
   </UserControl.DataTemplates>
 

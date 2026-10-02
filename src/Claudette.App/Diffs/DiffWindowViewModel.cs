@@ -44,6 +44,11 @@ public sealed record SideBySideDiffRow(DiffCell? Left, DiffCell? Right, bool IsH
 /// <paramref name="Before"/> is the file at HEAD (Changed files in git mode), not before Claude's first change. No HEAD
 /// copy means the file is new to git, maybe the user's own, so it isn't deleted: there's nothing to revert to.
 /// </param>
+/// <param name="After">
+/// What to compare with instead of the file now: how an earlier turn left it (DESIGN.md §8, "Changes per turn"). Null
+/// reads the file.
+/// </param>
+/// <param name="AllowRevert">Whether <b>Revert</b> is offered; a turn's changes are only shown.</param>
 public sealed record DiffSource(
     string Path,
     string DisplayPath,
@@ -55,7 +60,12 @@ public sealed record DiffSource(
     Func<Task> CopyPath,
     bool BeforeKnown = true,
     DiffReview? Review = null,
-    bool FromGit = false);
+    bool FromGit = false,
+    DiffAfter? After = null,
+    bool AllowRevert = true);
+
+/// <summary>A diff's "after" side that isn't the file now; null text means the file didn't exist then.</summary>
+public sealed record DiffAfter(string? Text);
 
 /// <summary>The diff view's <b>Reviewed</b> button (DESIGN.md §8, "Reviewed"). Called on the UI thread.</summary>
 /// <param name="LatestChange">The id of Claude's latest change to the file, or null when it hasn't changed it.</param>
@@ -157,7 +167,7 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
     public bool CanRevert => HasRevertTarget && !IsLoading && _after is not null && !_isBinary && !string.Equals(_after, _source.Before, StringComparison.Ordinal);
 
     /// <summary>There's something to put back: what the file held is known, and from git, the file is at HEAD.</summary>
-    private bool HasRevertTarget => _source.BeforeKnown && !(_source.FromGit && _source.Before is null);
+    private bool HasRevertTarget => _source.AllowRevert && _source.After is null && _source.BeforeKnown && !(_source.FromGit && _source.Before is null);
 
     /// <summary><b>Revert file</b>'s tip: what the file goes back to.</summary>
     public string RevertFileTip => _source.FromGit ? "Put the whole file back as it is at HEAD" : "Put the whole file back as it was before Claude changed it";
@@ -235,12 +245,16 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
         var before = _source.Before;
         var path = _source.Path;
         var dark = _dark;
+        var fixedAfter = _source.After;
         var (after, beforeColors, afterColors, message) = await Task.Run(() =>
         {
-            string? current = null;
+            string? current = fixedAfter?.Text;
             try
             {
-                current = File.Exists(path) ? File.ReadAllText(path) : null;
+                if (fixedAfter is null)
+                {
+                    current = File.Exists(path) ? File.ReadAllText(path) : null;
+                }
             }
             catch (IOException)
             {
@@ -250,7 +264,7 @@ public sealed partial class DiffWindowViewModel : ViewModelBase
                 return (current, null, null, "This is a binary file, so there's nothing to show line by line.");
             }
             var (beforeColors, afterColors) = Highlight(before, current, path, dark);
-            return (current, beforeColors, afterColors, current is null ? "The file has been deleted." : null);
+            return (current, beforeColors, afterColors, current is not null ? null : fixedAfter is null ? "The file has been deleted." : "The file didn't exist after this turn.");
         });
         _after = after;
         _isBinary = IsBinary(before, after);

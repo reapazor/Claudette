@@ -170,6 +170,7 @@ public static class KeyboardShortcuts
     public const string Settings = "settings.open";
     public const string Stop = "composer.stop";
     public const string Suffixes = "composer.suffixes";
+    public const string Stash = "composer.stash";
     public const string AllowPrompt = "prompt.allow";
     public const string DenyPrompt = "prompt.deny";
     public const string ToggleSidebar = "sidebar.toggle";
@@ -194,6 +195,7 @@ public static class KeyboardShortcuts
         new(ToggleSidebar, "Collapse or expand the sidebar", Chord("Primary+B")),
         new(Stop, "Stop Claude", Chord("Escape")),
         new(Suffixes, "Quick suffixes menu", Chord("Primary+Shift+S")),
+        new(Stash, "Stash the message", Chord("Primary+S")),
         new(AllowPrompt, "Allow the waiting prompt", Chord("Primary+Enter")),
         new(DenyPrompt, "Deny the waiting prompt", Chord("Primary+Back")),
         new(RunProjectAction, "Run the project's main action", Chord("Primary+Shift+E")),
@@ -252,4 +254,17 @@ public static class KeyboardShortcuts
 public sealed class KeyboardSettings
 {
     public Dictionary<string, string> Bindings { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>Which key sends the composer's message, and which starts a new line (DESIGN.md §14, "Keyboard shortcuts").</summary>
+    public SendKey SendKey { get; set; } = SendKey.Enter;
+}
+
+/// <summary>The key that sends the composer's message (DESIGN.md §14, "Keyboard shortcuts").</summary>
+public enum SendKey
+{
+    /// <summary>Enter sends, and Shift+Enter starts a new line.</summary>
+    Enter,
+
+    /// <summary>Ctrl+Enter (Cmd+Enter on macOS) sends, and Enter starts a new line.</summary>
+    PrimaryEnter,
 }

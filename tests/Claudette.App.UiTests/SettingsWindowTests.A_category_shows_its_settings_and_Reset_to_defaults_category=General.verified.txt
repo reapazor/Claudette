@@ -6,7 +6,24 @@
 "Then claude --resume <name> in a terminal finds the session by the same name."
 [x] Show Claude's service status
 "A dot in the header, and a banner while Claude Code, the Claude API or claude.ai has an incident. Read from status.claude.com every 5 minutes."
+"Messages sent while Claude works"
+[toggle on] Send them into the turn: Claude reads each at its next step
+[toggle] Queue them: each is sent as the next turn, once this one ends
+"A queued message has Send now, to send it into the turn after all, and Cancel. Stop takes queued messages back to the composer."
+"Worktrees"
+"The worktrees of worktree tabs that no open tab works in. One with uncommitted changes is always kept. Files git ignores there, such as build output, go with a removed worktree."
+[ ] Remove worktrees once everything in them is merged
+"Every commit is on another branch, so nothing is lost. The worktree and its branch go a day after a tab last used it."
+"Remove worktrees no tab has used for"
+[choice] "Never"
+"The worktree goes, and its branch stays when it has commits on no other branch, so a new worktree tab can carry on from it."
+"Nothing removed yet. Claudette looks a minute after it starts, then every hour."
+[button] Clean up now
 "Claudette updates"
 [x] Check for Claudette updates automatically
 [ ] Include pre-releases
 [button] Reset to defaults
+[button] Line up
+[button] Page up
+[button] Page down
+[button] Line down

@@ -87,8 +87,16 @@ public sealed class RestartSnapshot
 /// <summary>The versions an update restart went from and to, so the new version can tell whether it installed.</summary>
 public sealed record AppUpdateHandover(string From, string To);
 
-/// <summary>A tab's unsent message: the text, the one-off quick suffixes added to it, and its attached images (DESIGN.md §5).</summary>
-public sealed record TabDraft(string Text, IReadOnlyList<string> SuffixIds, IReadOnlyList<DraftImage>? Images = null);
+/// <summary>
+/// A tab's unsent message: the text, the one-off quick suffixes added to it, its attached images and the large pastes
+/// kept as attachments (DESIGN.md §5, "Drafts and the stash").
+/// </summary>
+public sealed record TabDraft(string Text, IReadOnlyList<string> SuffixIds, IReadOnlyList<DraftImage>? Images = null, IReadOnlyList<string>? PastedTexts = null)
+{
+    /// <summary>Nothing to send: no text, suffixes, images or pastes.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsEmpty => Text.Trim().Length == 0 && SuffixIds.Count == 0 && Images is null or [] && PastedTexts is null or [];
+}
 
 /// <summary>An image attached to an unsent message, with the name its thumbnail shows (DESIGN.md §5, "Attachments").</summary>
 public sealed record DraftImage(string Name, byte[] Data);

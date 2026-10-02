@@ -50,6 +50,18 @@ public sealed class CustomProjectAction
     /// </summary>
     public IReadOnlyList<string>? IfExists { get; set; }
 
+    /// <summary>
+    /// Runs on its own in each new worktree a worktree tab makes (<c>"runOnNewWorktree": true</c>), such as installing
+    /// dependencies or copying a local <c>.env</c> (DESIGN.md §18, "Setting up a new worktree"). It's in the menu too.
+    /// </summary>
+    public bool RunOnNewWorktree { get; set; }
+
+    /// <summary>The variable a new worktree's actions find the worktree in.</summary>
+    public const string WorktreeVariable = "CLAUDETTE_WORKTREE";
+
+    /// <summary>The variable a new worktree's actions find its main checkout in, to copy files such as a local <c>.env</c> from.</summary>
+    public const string MainCheckoutVariable = "CLAUDETTE_MAIN_CHECKOUT";
+
     public CustomProjectAction Clone() => (CustomProjectAction)MemberwiseClone();
 
     /// <summary>Does everything in <see cref="IfExists"/> exist under <paramref name="tabFolder"/>?</summary>

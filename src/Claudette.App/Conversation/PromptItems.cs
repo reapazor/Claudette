@@ -500,8 +500,8 @@ public sealed partial class QuestionItem : PromptItem
 }
 
 /// <summary>
-/// Claude finished planning (<c>ExitPlanMode</c>) and wants to start changing things: approve with edits accepted,
-/// approve with edits still asked for, or keep planning with feedback.
+/// Claude finished planning (<c>ExitPlanMode</c>) and wants to start changing things: approve in auto mode, approve with
+/// edits accepted, approve with edits still asked for, or keep planning with feedback.
 /// </summary>
 public sealed partial class PlanItem : PromptItem
 {
@@ -522,6 +522,10 @@ public sealed partial class PlanItem : PromptItem
 
     [ObservableProperty]
     public partial string Feedback { get; set; } = "";
+
+    /// <summary>Offered while the tab can use auto mode, as the mode picker offers it (DESIGN.md §7).</summary>
+    [RelayCommand]
+    private void ApproveInAutoMode() => Approve("auto", "Approved. Auto mode checks actions and blocks risky ones");
 
     [RelayCommand]
     private void ApproveAcceptingEdits() => Approve("acceptEdits", "Approved. Edits are accepted automatically");

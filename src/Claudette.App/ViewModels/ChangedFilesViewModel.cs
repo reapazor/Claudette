@@ -151,7 +151,8 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
     internal void OnFolderChanged() => OnPropertyChanged(nameof(IsGitRepository));
 
     /// <summary>Follows the session's Edit and Write calls, live and from a restored transcript.</summary>
-    internal void Record(SessionEvent sessionEvent)
+    /// <param name="live">From the running session, so its changes count toward the turn's footer; false for a transcript read back.</param>
+    internal void Record(SessionEvent sessionEvent, bool live = true)
     {
         switch (sessionEvent)
         {
@@ -164,7 +165,7 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
             case ToolResultsReceived { Message: var results }:
                 foreach (var result in results.Content.OfType<ToolResultBlock>())
                 {
-                    Changes.RecordToolResult(result.ToolUseId, result.IsError, results.ToolUseResult);
+                    Changes.RecordToolResult(result.ToolUseId, result.IsError, results.ToolUseResult, inTurn: live);
                 }
                 break;
         }
@@ -182,7 +183,81 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
             _changes = null;
         }
         _inspections.Clear();
+        // The footers are read back without their files: a transcript has no turns to show.
+        _turns.Clear();
         QueueRefresh();
+    }
+
+    // ---- Changes per turn (DESIGN.md §8) ---------------------------------------------------------------------------
+
+    /// <summary>The footers of the turns that changed files, oldest first: a turn's changes end where a later one's start.</summary>
+    private readonly List<TurnSummaryItem> _turns = [];
+
+    /// <summary>
+    /// A turn ended: the files it changed go on its footer, <paramref name="summary"/>, and the next turn starts
+    /// counting. A turn without a footer (stopped, or ended in an error) keeps its changes only in the list.
+    /// </summary>
+    internal void EndTurn(TurnSummaryItem? summary)
+    {
+        var changes = Changes.TakeTurn();
+        if (summary is null || changes.Count == 0)
+        {
+            return;
+        }
+        var folder = _host.Folder;
+        var rows = changes.Select(c => new TurnFileRow(summary, c, Relative(c.Path, folder))).ToArray();
+        summary.Files = rows;
+        _turns.Add(summary);
+        _ = CountTurnAsync(rows);
+    }
+
+    /// <summary>The footer's counts, against the files as the turn left them: on disk, as it has just ended.</summary>
+    private async Task CountTurnAsync(IReadOnlyList<TurnFileRow> rows)
+    {
+        var changes = Changes;
+        var counted = await Task.Run(() => rows
+            .Select(row => changes.CountAgainstDisk(row.Change) is var (added, removed) ? $"+{added} −{removed}" : null)
+            .ToArray());
+        for (var i = 0; i < rows.Count; i++)
+        {
+            rows[i].Stats = counted[i];
+        }
+    }
+
+    /// <summary>
+    /// A file on a turn's footer: its diff from before the turn to how the turn left it, which is how the next turn that
+    /// changed it found it, or the file now when none has.
+    /// </summary>
+    [RelayCommand]
+    private void OpenTurnDiff(TurnFileRow? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+        var change = row.Change;
+        var later = _turns.SkipWhile(t => !ReferenceEquals(t, row.Turn)).Skip(1)
+            .SelectMany(t => t.Files).FirstOrDefault(f => Changes.SamePath(f.Change.Path, change.Path));
+        // A later turn's "before" that isn't known leaves the file now as the best there is.
+        var after = later is { Change.BeforeKnown: true } ? new DiffAfter(later.Change.Before) : null;
+        var label = !change.BeforeKnown ? "what it held before this turn isn't known, so there's nothing to compare it with"
+            : after is not null ? (change.IsNew ? "this turn's changes: new in it, as it left it" : "this turn's changes: before it, against how it left it")
+            : later is not null ? "this turn's changes, with a later turn's: before it, against the file now"
+            : change.IsNew ? "this turn's changes: new in it, against the file now"
+            : "this turn's changes: before it, against the file now";
+        var file = new ChangedFileRow { Path = change.Path, DisplayPath = row.DisplayPath, Status = change.IsNew ? "A" : "M", StatusText = "" };
+        DiffRequested?.Invoke(new DiffSource(
+            change.Path,
+            row.DisplayPath,
+            change.Before,
+            label,
+            null,
+            () => OpenFileInEditorAsync(file),
+            () => RevealFileAsync(file),
+            () => CopyFilePathAsync(file),
+            change.BeforeKnown,
+            After: after,
+            AllowRevert: false));
     }
 
     private void QueueRefresh()

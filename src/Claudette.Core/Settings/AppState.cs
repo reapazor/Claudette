@@ -124,6 +124,24 @@ public sealed class AppState
     /// §9, "Starting at login"). Whether the entry is on is the OS's to say.
     /// </summary>
     public LoginItemRecord LoginItem { get; set; } = new();
+
+    /// <summary>
+    /// When a tab last worked in each worktree Claude Code made, by its path, or when Claudette first saw one no tab
+    /// had used; for removing inactive ones (DESIGN.md §4, "Cleaning up worktrees").
+    /// </summary>
+    public Dictionary<string, DateTimeOffset> WorktreesLastUsed { get; set; } = [];
+
+    /// <summary>The worktrees the last cleanup removed, and when, for Settings → General to say.</summary>
+    public WorktreeCleanupRecord? LastWorktreeCleanup { get; set; }
+}
+
+/// <summary>What a worktree cleanup removed (DESIGN.md §4, "Cleaning up worktrees").</summary>
+public sealed class WorktreeCleanupRecord
+{
+    public DateTimeOffset At { get; set; }
+
+    /// <summary>The removed worktrees' paths.</summary>
+    public List<string> Removed { get; set; } = [];
 }
 
 /// <summary>What's saved for one tab (DESIGN.md §9, "Restore on launch").</summary>
@@ -229,6 +247,25 @@ public sealed class TabState
     /// limit resets"), so a restart keeps waiting.
     /// </summary>
     public LimitWait? LimitWait { get; set; }
+
+    /// <summary>
+    /// A reply the user chose with <b>Show as the plan</b> (DESIGN.md §5, "Tasks"), so a restored tab shows it on the Tasks
+    /// page again. Null when there's none, and after <c>/clear</c>.
+    /// </summary>
+    public ChosenPlan? Plan { get; set; }
+}
+
+/// <summary>A reply the user chose as a tab's plan (DESIGN.md §5, "Tasks").</summary>
+public sealed class ChosenPlan
+{
+    /// <summary>The reply's Markdown, as Claude wrote it.</summary>
+    public string Text { get; set; } = "";
+
+    /// <summary>When Claude wrote the reply; null when not known.</summary>
+    public DateTimeOffset? WrittenAt { get; set; }
+
+    /// <summary>When the user chose it: a plan approved after this takes its place.</summary>
+    public DateTimeOffset ChosenAt { get; set; }
 }
 
 /// <summary>Per-tab settings that replace the defaults (DESIGN.md §14, "Per-tab overrides"). Null means "use the default".</summary>
