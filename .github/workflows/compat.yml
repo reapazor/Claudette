@@ -99,6 +99,8 @@ jobs:
           set -o pipefail
           dotnet test Claudette.slnx --configuration Release --filter "Category!=Live" --blame-hang-timeout 10m --blame-hang-dump-type none 2>&1 | tee test-output.txt
 
+      # The whole report, and the issue's copy cut to GitHub's 65,536-character limit (a large docs change can match
+      # hundreds of ids, and a diff can run to megabytes).
       - name: Write the report
         if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
         env:
@@ -111,6 +113,19 @@ jobs:
           --tests-file test-output.txt
           --tests-outcome "$OUTCOME"
           --out report.md
+          --issue-out issue.md
+
+      # Everything the issue may have cut: the whole report, the test output and the new CLI help.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
+        with:
+          name: compat-report
+          path: |
+            report.md
+            test-output.txt
+            cli-help-new.txt
+          retention-days: 90
+          if-no-files-found: error
 
       - name: Open an issue
         if: steps.detect.outputs.new == 'true' && steps.existing.outputs.count == '0'
@@ -119,7 +134,7 @@ jobs:
           VERSION: ${{ steps.detect.outputs.version }}
         run: |
           gh label create compat --color 5319E7 --description "Claude Code compatibility" --force
-          url=$(gh issue create --title "Claude Code $VERSION compatibility report" --label compat --body-file report.md)
+          url=$(gh issue create --title "Claude Code $VERSION compatibility report" --label compat --body-file issue.md)
           echo "Opened $url"
           if [ "$(jq -r .quiet compat-result.json)" = "true" ]; then
             gh issue close "$url" --comment "Nothing in compat/surface.yaml changed and all tests passed. Closed automatically and kept as a record."

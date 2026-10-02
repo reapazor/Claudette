@@ -264,7 +264,7 @@ Kept worktrees pile up. Settings → General → **Worktrees** can remove them o
 - **When a tab last used one.** State keeps the time for each worktree (`worktreesLastUsed` in `state.json`): an open tab's worktree is marked at each pass, and a closed tab's as it closes. A worktree first met with no time, such as one made before this setting existed or from a terminal, counts from when Claudette first saw it.
 - **When it looks.** A minute after launch, then every hour, on the injected clock, while either rule is on. It looks in the repositories of the open tabs, the recent and favorite folders, and the worktrees it has times for: `git worktree list`, then what each holds as the close question reads it ([above](#worktree-tabs)), then `git worktree remove` without `--force`, so git itself refuses to remove changes. Just before removing, it checks again that no tab has opened there.
 - **What it did.** Settings says what the last pass removed and when (*"Last removed brisk-otter and calm-heron, 2 h ago."*), with **Clean up now** for a pass straight away. Each removal is logged.
-- How it's built: Core's `Git/WorktreeCleanup` decides, from what git says, the time and the rules; the app's `Services/WorktreeCleanupService` finds the worktrees, keeps the times and removes them through `GitWorktrees`. `WorktreeCleanupTests` (Core) and `WorktreeCleanupServiceTests` (the app, against real git repositories in temporary folders).
+- How it's built: Core's `Git/WorktreeCleanup` decides, from what git says, the time and the rules; the app's `Services/WorktreeCleanupService` finds the worktrees, keeps the times and removes them through `GitWorktrees`. Git lists a worktree by its real path and a tab names it as it was opened (on macOS, a folder under `/var` is really under `/private/var`), so the service matches paths with their symbolic links followed (Core's `Files/RealPath`). `WorktreeCleanupTests` (Core) and `WorktreeCleanupServiceTests` (the app, against real git repositories in temporary folders).
 
 ### Command palette
 
@@ -1872,9 +1872,10 @@ A scheduled GitHub Action (`.github/workflows/compat.yml`) runs once a day. It u
 4. **Tests** by installing that version and running the free test suite against it, including the real-CLI tests with the mock model.
 5. **Reports** by opening a GitHub issue, *"Claude Code 2.1.285 compatibility report"*, labeled `compat`.
    - The issue shows test results first, then matched changes, then the full diffs in collapsed sections.
+   - GitHub refuses an issue body over 65,536 characters, and a large docs change can match hundreds of identifiers with diffs running to megabytes. The issue's copy is cut to fit: each diff and the test log are shortened in turn, and the matched identifiers are all kept, their hits going first. A cut issue says so and links the run, whose `compat-report` artifact holds the whole report, the test output and the new CLI help.
    - If nothing matched and every test passed, the issue is closed automatically and kept as a record.
 
-A tracked docs page that's gone (404 or 410) counts as a change: its diff shows the page replaced by a note saying so.
+A tracked docs page that's gone (404 or 410), or that answers with HTML rather than Markdown, counts as a change: its diff shows the page replaced by a note saying so. A `docs` link in the surface file may point at a section of a page (`…/typescript#options`); the page is fetched once, without the fragment, since a URL's fragment never reaches the server and `typescript#options.md` would fetch the HTML page instead.
 
 The same workflow runs the real-CLI tests against the **minimum** supported version (`minimum` in the surface file), on days when `main` changed in the last 25 hours (or when run by hand with *minimum* ticked). Claudette's own changes are what could stop it working with an older Claude Code, and checking once a day, rather than on every pull request, keeps CI minutes flat. Inputs reach its scripts through the environment, never pasted into them, and `GH_TOKEN` is given only to the steps that call `gh`.
 

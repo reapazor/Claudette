@@ -1,3 +1,4 @@
+using Claudette.Core.Files;
 using Claudette.Core.Git;
 using Claudette.Core.Settings;
 using Microsoft.Extensions.Logging;
@@ -8,7 +9,8 @@ namespace Claudette.App.Services;
 /// Removes worktree tabs' worktrees on their own, as Settings → General says (DESIGN.md §4, "Cleaning up worktrees"):
 /// those with nothing of their own once a day has passed, and those no tab has used for the days chosen. A minute after
 /// launch, then every hour, through the injected clock. Git runs off the UI thread; the tabs and the state are read and
-/// changed on it.
+/// changed on it. Git lists a worktree by its real path, and a tab names it as it was opened (on macOS, under
+/// <c>/var</c> rather than <c>/private/var</c>), so paths are matched with their links followed (<see cref="RealPath"/>).
 /// </summary>
 public sealed class WorktreeCleanupService : IDisposable
 {
@@ -137,19 +139,21 @@ public sealed class WorktreeCleanupService : IDisposable
 
     /// <summary>A tab works in <paramref name="path"/>, or will: one waiting to make it with <c>--worktree</c>.</summary>
     private static bool InUse(IEnumerable<TabState> tabs, string root, string path) => tabs.Any(t =>
-        FolderHistory.SamePath(t.Folder, path)
-        || t.NewWorktree is { } pending && FolderHistory.SamePath(GitWorktrees.PathFor(root, pending), path));
+        RealPath.Same(t.Folder, path)
+        || t.NewWorktree is { } pending && RealPath.Same(GitWorktrees.PathFor(root, pending), path));
 
+    /// <summary>When a tab last used the worktree: the latest time kept under any spelling of its path.</summary>
     private DateTimeOffset? LastUsed(string path)
     {
+        DateTimeOffset? latest = null;
         foreach (var (key, when) in State.WorktreesLastUsed)
         {
-            if (FolderHistory.SamePath(key, path))
+            if (RealPath.Same(key, path) && (latest is null || when > latest))
             {
-                return when;
+                latest = when;
             }
         }
-        return null;
+        return latest;
     }
 
     private DateTimeOffset SetLastUsed(string path, DateTimeOffset when)
@@ -161,7 +165,7 @@ public sealed class WorktreeCleanupService : IDisposable
 
     private void RemoveLastUsed(string path)
     {
-        foreach (var key in State.WorktreesLastUsed.Keys.Where(k => FolderHistory.SamePath(k, path)).ToList())
+        foreach (var key in State.WorktreesLastUsed.Keys.Where(k => RealPath.Same(k, path)).ToList())
         {
             State.WorktreesLastUsed.Remove(key);
         }
