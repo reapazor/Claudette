@@ -68,12 +68,12 @@ public class TasksAndMcpPagesUiTests
         Assert.IsType<Claudette.App.Conversation.AssistantTextItem>(button.CommandParameter);
 
         button.Command!.Execute(button.CommandParameter);
-        await UiText.SettleUntilAsync(window, () => tab.IsTasksPage, "the tasks page");
+        // The plan's Markdown lays out in the background: the page is read once it shows the plan's text.
+        await UiText.SettleUntilAsync(window, () => tab.IsTasksPage && Texts(view).Any(t => t?.Contains("read the build script", StringComparison.Ordinal) == true), "the plan on the tasks page");
         var texts = Texts(view);
 
         Assert.Contains("Plan", texts);
         Assert.Contains(texts, t => t?.StartsWith("From Claude's reply at ", StringComparison.Ordinal) == true);
-        Assert.Contains(texts, t => t?.Contains("read the build script", StringComparison.Ordinal) == true);
     }
 
     [AvaloniaFact]
