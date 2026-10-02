@@ -4,10 +4,11 @@
 //       Is there a Claude Code version newer than `lastTested` in compat/surface.yaml? Prints JSON and, on
 //       GitHub Actions, sets the `new` and `version` step outputs. Without --version, uses npm's `latest` tag.
 //
-//   node compat/check.mjs report --version X [--from Y] [--help-file F] [--tests-file F] [--tests-outcome success|failure] [--out report.md]
+//   node compat/check.mjs report --version X [--from Y] [--help-file F] [--tests-file F] [--tests-outcome success|failure] [--out report.md] [--issue-out issue.md]
 //       Writes a Markdown report: changelog entries since lastTested, the Agent SDK type diff, diffs of the docs pages
 //       and CLI help against the snapshots in compat/, and every change that mentions an id from surface.yaml.
-//       Also writes compat-result.json ({ matches, testsPassed, quiet }).
+//       With --issue-out, also writes the report cut to fit a GitHub issue (every matched id kept, the diffs
+//       shortened in turn), for the workflow to open one with. Also writes compat-result.json ({ matches, testsPassed, quiet }).
 //
 //   node compat/check.mjs update-snapshots [--help-file F]
 //       Refreshes compat/docs/*.md (and compat/cli-help.txt from F) after a report has been handled.
@@ -26,7 +27,8 @@ const compatDir = path.dirname(fileURLToPath(import.meta.url));
 const surfacePath = path.join(compatDir, 'surface.yaml');
 const docsDir = path.join(compatDir, 'docs');
 const helpSnapshot = path.join(compatDir, 'cli-help.txt');
-const MAX_SECTION = 12000; // keep the issue body under GitHub's 65,536 character limit
+const MAX_SECTION = 12000; // where each diff or log in the issue is cut, halved until the body fits
+const MAX_ISSUE = 60000; // GitHub refuses an issue body over 65,536 characters
 
 const [mode, ...rest] = process.argv.slice(2);
 const opts = {};
@@ -123,35 +125,42 @@ async function report() {
     : '';
 
   const quiet = matches.length === 0 && testsPassed !== false;
-  const lines = [
-    `Claude Code **${version}** is out. Claudette was last tested with **${from}**.`,
-    '',
-    `- Tests: ${testsPassed === null ? 'not run' : testsPassed ? '✅ passed' : '❌ failed'}`,
-    `- Changes mentioning something in \`compat/surface.yaml\`: **${matches.length}**`,
-    '',
-    '## Matched changes',
-    '',
-    matches.length
-      ? matches.map((m) => `- \`${m.id}\`\n${m.hits.map((h) => `  - \`${h.trim().slice(0, 200).replace(/`/g, "'")}\``).join('\n')}`).join('\n')
-      : '_None._',
-    '',
-  ];
-  if (testSummary) lines.push('## Test results', '', '```', truncate(testSummary), '```', '');
-  for (const s of sections) {
-    lines.push(`<details${s.open ? ' open' : ''}><summary><b>${s.title}</b></summary>`, '');
-    lines.push(s.lang ? `\`\`\`${s.lang}\n${truncate(s.body)}\n\`\`\`` : s.body, '', '</details>', '');
-  }
-  lines.push(
-    '## Handling this report (DESIGN.md §16)',
-    '',
-    '1. Read the matched changes and any failing tests. Re-run the relevant scenario in `spikes/` to see protocol changes.',
-    '2. Update the code, `compat/surface.yaml` and the protocol fixtures.',
-    `3. Bump \`lastTested\` in \`compat/surface.yaml\` and \`ClaudeLocator.LastTestedVersion\` to ${version}.`,
-    '4. Refresh the snapshots: `node compat/check.mjs update-snapshots --help-file <claude --help output>`.',
-  );
+  // The report at `limit` characters per diff or log; `cut` says where the whole one is.
+  const render = (limit, cut) => {
+    const lines = [
+      `Claude Code **${version}** is out. Claudette was last tested with **${from}**.`,
+      '',
+      `- Tests: ${testsPassed === null ? 'not run' : testsPassed ? '✅ passed' : '❌ failed'}`,
+      `- Changes mentioning something in \`compat/surface.yaml\`: **${matches.length}**`,
+    ];
+    if (cut) lines.push(`- Cut to fit an issue: the whole report is the \`compat-report\` artifact of ${runUrl() ?? 'the workflow run'}.`);
+    lines.push('', '## Matched changes', '', matchedChanges(matches, limit), '');
+    if (testSummary) lines.push('## Test results', '', '```', truncate(testSummary, limit), '```', '');
+    for (const s of sections) {
+      lines.push(`<details${s.open ? ' open' : ''}><summary><b>${s.title}</b></summary>`, '');
+      lines.push(s.lang ? `\`\`\`${s.lang}\n${truncate(s.body, limit)}\n\`\`\`` : s.body, '', '</details>', '');
+    }
+    lines.push(
+      '## Handling this report (DESIGN.md §16)',
+      '',
+      '1. Read the matched changes and any failing tests. Re-run the relevant scenario in `spikes/` to see protocol changes.',
+      '2. Update the code, `compat/surface.yaml` and the protocol fixtures.',
+      `3. Bump \`lastTested\` in \`compat/surface.yaml\` and \`ClaudeLocator.LastTestedVersion\` to ${version}.`,
+      '4. Refresh the snapshots: `node compat/check.mjs update-snapshots --help-file <claude --help output>`.',
+    );
+    return lines.join('\n') + '\n';
+  };
 
   const out = opts.out ?? 'report.md';
-  fs.writeFileSync(out, lines.join('\n') + '\n');
+  fs.writeFileSync(out, render(Infinity, false));
+  if (opts['issue-out']) {
+    // Cut to GitHub's limit: each diff or log shorter in turn, and the matched ids before their hits.
+    let issue = render(MAX_SECTION, false);
+    for (let limit = MAX_SECTION; issue.length > MAX_ISSUE && limit >= 500; limit = Math.floor(limit / 2)) {
+      issue = render(limit, true);
+    }
+    fs.writeFileSync(opts['issue-out'], issue);
+  }
   fs.writeFileSync('compat-result.json', JSON.stringify({ version, matches: matches.length, testsPassed, quiet }, null, 2));
   console.log(`Wrote ${out}: ${matches.length} matched change(s), tests ${testsPassed === null ? 'not run' : testsPassed ? 'passed' : 'failed'}.`);
 }
@@ -182,7 +191,8 @@ function readSurface() {
     minimum: field('minimum') ?? fail('surface.yaml has no minimum'),
     lastTested: field('lastTested') ?? fail('surface.yaml has no lastTested'),
     ids: [...yaml.matchAll(/^\s*- id:\s*(.+)$/gm)].map((m) => unquote(m[1])),
-    docs: [...new Set([...yaml.matchAll(/^\s*docs:\s*(\S+)/gm)].map((m) => m[1]))],
+    // A link may point at a section of a page (#fragment); the page is fetched once, as Markdown, without it.
+    docs: [...new Set([...yaml.matchAll(/^\s*docs:\s*(\S+)/gm)].map((m) => m[1].split('#')[0]))],
   };
 }
 
@@ -222,10 +232,18 @@ function docSlug(url) {
   return url.replace(/^https?:\/\/[^/]+\/docs\/(en\/)?/, '').replace(/[^a-zA-Z0-9-]+/g, '__') + '.md';
 }
 
-/** The page's Markdown; a note when it's gone, which differs from any snapshot of it; null when it couldn't be fetched. */
+/**
+ * The page's Markdown; a note when it's gone, or answers with HTML instead, which differs from any snapshot of it; null
+ * when it couldn't be fetched.
+ */
 async function fetchDocPage(url) {
   try {
-    return await text(url + '.md');
+    const page = await text(url + '.md');
+    if (/^\s*<(!doctype|html)\b/i.test(page)) {
+      console.warn(`${url}.md answered with HTML, not Markdown.`);
+      return `This page answered with HTML rather than Markdown: it was removed or moved, or the site changed. Find where its content went and update surface.yaml's docs links.\n`;
+    }
+    return page;
   } catch (e) {
     if (e.status === 404 || e.status === 410) {
       console.warn(`${url}.md is gone (${e.status}).`);
@@ -249,8 +267,26 @@ function diff(a, b, labelA, labelB) {
   return (r.stdout ?? '').split('\n').filter((l) => !l.startsWith('diff --git') && !l.startsWith('index ')).join('\n').trim();
 }
 
-function truncate(s) {
-  return s.length > MAX_SECTION ? s.slice(0, MAX_SECTION) + `\n… (${s.length - MAX_SECTION} more characters)` : s;
+function truncate(s, limit) {
+  return s.length > limit ? s.slice(0, limit) + `\n… (${s.length - limit} more characters)` : s;
+}
+
+// Every matched id with up to five of its hits; with less room, one hit each, then the ids alone.
+function matchedChanges(matches, limit) {
+  if (matches.length === 0) return '_None._';
+  for (const hitsEach of [5, 1, 0]) {
+    const text = matches
+      .map((m) => [`- \`${m.id}\``, ...m.hits.slice(0, hitsEach).map((h) => `  - \`${h.trim().slice(0, 200).replace(/`/g, "'")}\``)].join('\n'))
+      .join('\n');
+    if (text.length <= limit) return text;
+  }
+  return truncate(matches.map((m) => `- \`${m.id}\``).join('\n'), limit);
+}
+
+// The workflow run's page, on GitHub Actions.
+function runUrl() {
+  const { GITHUB_SERVER_URL: server, GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: run } = process.env;
+  return server && repo && run ? `${server}/${repo}/actions/runs/${run}` : null;
 }
 
 async function text(url) {

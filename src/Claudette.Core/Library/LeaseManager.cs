@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Claudette.Core.Files;
 using Claudette.Core.Json;
 using Claudette.Core.Protocol;
 using Claudette.Core.Settings;
@@ -62,6 +64,7 @@ public sealed class LeaseManager : IDisposable
     private readonly ITimer _timer;
     private readonly Lock _lock = new();
     private readonly Dictionary<string, string> _held = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Lock> _sessionLocks = new(StringComparer.Ordinal);
     private bool _disposed;
 
     /// <param name="machineName">This machine's name as shown in History (Settings → Sessions).</param>
@@ -121,10 +124,9 @@ public sealed class LeaseManager : IDisposable
     public void TakeOver(string sessionId, string sessionFolder)
     {
         ThrowIfDisposed();
-        Write(sessionFolder);
-        lock (_lock)
+        lock (SessionLock(sessionId))
         {
-            _held[sessionId] = sessionFolder;
+            WriteHeld(sessionId, sessionFolder);
         }
     }
 
@@ -167,10 +169,9 @@ public sealed class LeaseManager : IDisposable
         {
             if (write)
             {
-                Write(sessionFolder);
-                lock (_lock)
+                lock (SessionLock(sessionId))
                 {
-                    _held[sessionId] = sessionFolder;
+                    WriteHeld(sessionId, sessionFolder);
                 }
             }
             return true;
@@ -190,14 +191,17 @@ public sealed class LeaseManager : IDisposable
     /// <summary>Stops refreshing the lease and deletes the file, but only if it's still ours.</summary>
     public void Release(string sessionId)
     {
-        string? folder;
-        lock (_lock)
+        lock (SessionLock(sessionId))
         {
-            _held.Remove(sessionId, out folder);
-        }
-        if (folder is not null)
-        {
-            DeleteIfMine(folder);
+            string? folder;
+            lock (_lock)
+            {
+                _held.Remove(sessionId, out folder);
+            }
+            if (folder is not null)
+            {
+                DeleteIfMine(folder);
+            }
         }
     }
 
@@ -239,15 +243,18 @@ public sealed class LeaseManager : IDisposable
                     (lost ??= []).Add((sessionId, lease.Machine));
                     continue;
                 }
-                lock (_lock)
+                lock (SessionLock(sessionId))
                 {
-                    if (_disposed || !_held.ContainsKey(sessionId))
+                    lock (_lock)
                     {
-                        // Released while this ran: don't bring its file back.
-                        continue;
+                        if (_disposed || !_held.ContainsKey(sessionId))
+                        {
+                            // Released while this ran: don't bring its file back.
+                            continue;
+                        }
                     }
+                    Write(folder);
                 }
-                Write(folder);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -264,7 +271,7 @@ public sealed class LeaseManager : IDisposable
     public void Dispose()
     {
         _timer.Dispose();
-        string[] folders;
+        KeyValuePair<string, string>[] held;
         lock (_lock)
         {
             if (_disposed)
@@ -272,12 +279,15 @@ public sealed class LeaseManager : IDisposable
                 return;
             }
             _disposed = true;
-            folders = [.. _held.Values];
+            held = [.. _held];
             _held.Clear();
         }
-        foreach (var folder in folders)
+        foreach (var (sessionId, folder) in held)
         {
-            DeleteIfMine(folder);
+            lock (SessionLock(sessionId))
+            {
+                DeleteIfMine(folder);
+            }
         }
     }
 
@@ -322,6 +332,24 @@ public sealed class LeaseManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Serializes writing or deleting one session's file with the change to <see cref="_held"/> that goes with it:
+    /// <see cref="Release"/> only knows the sessions held, so a release that crossed a write (a tab turning sync off as
+    /// its turn's copy finished) found nothing to delete, and the file it just missed stayed this run's until it was
+    /// stale. Other sessions' files, and every read, stay unserialized: a slow drive holds up one session at most.
+    /// </summary>
+    private Lock SessionLock(string sessionId) => _sessionLocks.GetOrAdd(sessionId, _ => new Lock());
+
+    /// <summary>Writes the lease, then holds the session: a held session's lease is on disk. Under its session lock.</summary>
+    private void WriteHeld(string sessionId, string sessionFolder)
+    {
+        Write(sessionFolder);
+        lock (_lock)
+        {
+            _held[sessionId] = sessionFolder;
+        }
+    }
+
     private void Write(string sessionFolder) =>
         LibraryFiles.WriteText(
             Path.Combine(sessionFolder, FileName),
@@ -333,7 +361,8 @@ public sealed class LeaseManager : IDisposable
         {
             if (Read(sessionFolder).Lease?.Owner == OwnerId)
             {
-                File.Delete(Path.Combine(sessionFolder, FileName));
+                // A scanner or indexer may hold a file just written for a moment, on Windows above all.
+                FileRetry.Run(() => File.Delete(Path.Combine(sessionFolder, FileName)));
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

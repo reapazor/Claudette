@@ -264,7 +264,7 @@ Kept worktrees pile up. Settings → General → **Worktrees** can remove them o
 - **When a tab last used one.** State keeps the time for each worktree (`worktreesLastUsed` in `state.json`): an open tab's worktree is marked at each pass, and a closed tab's as it closes. A worktree first met with no time, such as one made before this setting existed or from a terminal, counts from when Claudette first saw it.
 - **When it looks.** A minute after launch, then every hour, on the injected clock, while either rule is on. It looks in the repositories of the open tabs, the recent and favorite folders, and the worktrees it has times for: `git worktree list`, then what each holds as the close question reads it ([above](#worktree-tabs)), then `git worktree remove` without `--force`, so git itself refuses to remove changes. Just before removing, it checks again that no tab has opened there.
 - **What it did.** Settings says what the last pass removed and when (*"Last removed brisk-otter and calm-heron, 2 h ago."*), with **Clean up now** for a pass straight away. Each removal is logged.
-- How it's built: Core's `Git/WorktreeCleanup` decides, from what git says, the time and the rules; the app's `Services/WorktreeCleanupService` finds the worktrees, keeps the times and removes them through `GitWorktrees`. `WorktreeCleanupTests` (Core) and `WorktreeCleanupServiceTests` (the app, against real git repositories in temporary folders).
+- How it's built: Core's `Git/WorktreeCleanup` decides, from what git says, the time and the rules; the app's `Services/WorktreeCleanupService` finds the worktrees, keeps the times and removes them through `GitWorktrees`. Git lists a worktree by its real path and a tab names it as it was opened (on macOS, a folder under `/var` is really under `/private/var`), so the service matches paths with their symbolic links followed (Core's `Files/RealPath`). `WorktreeCleanupTests` (Core) and `WorktreeCleanupServiceTests` (the app, against real git repositories in temporary folders).
 
 ### Command palette
 
@@ -1011,7 +1011,7 @@ In a terminal, Claude Code asks before it works in a folder for the first time, 
   - The view is a window of its own, so it can stay open beside the conversation.
   - It shows the changes with a few lines of context, or the **Whole file**.
   - Long lines scroll sideways with a scroll bar along the bottom, Shift and the mouse wheel, or a touchpad. Every line scrolls together, both sides at once when they're side by side, and the line numbers stay where they are. The rows scroll up and down as usual.
-  - Highlighting uses TextMate grammars, by file extension, with the dark or light theme to match the app. Files over 20,000 lines, and binary files, are shown without it.
+  - Highlighting uses TextMate grammars, by file extension, with the dark or light theme to match the app. Files over 20,000 lines, and binary files, are shown without it. A line over 1,000 characters, as a minified file's, gets 50 ms and shows the rest in the default color; a shorter line is tokenized whole, since with a budget the first line of a freshly loaded grammar, or any line on a busy machine, could come back half colored.
   - A leading byte order mark isn't counted as a change.
 - Actions: open in external diff tool, open in external editor (the app the OS uses for that file type), reveal in Finder/Explorer, copy path.
 - If the folder is a git repo, a toggle switches to **working tree vs HEAD**. This also shows changes made by Bash commands or by the user.
@@ -1222,6 +1222,7 @@ Claude Code's credentials and settings are never copied.
 - The lease names the machine and a random id for this run of Claudette, so two copies of Claudette on one machine are told apart.
 - When a refresh finds another machine's name in the lease, the session was taken over. The tab stops its `claude` process, becomes read-only, and says where the session continued.
 - Every copy to the library checks the lease first, as **Sync now** does, because leases are only refreshed once a minute. A turn that ends after another machine took the session over writes nothing, and the tab becomes read-only then rather than at the next refresh. The copy takes the lease last, so a lease of this run's means the copy finished.
+- Turning sync off releases the lease: its file is deleted, with a moment's retries while a scanner or the search indexer holds it. A release and a write of the same session's lease never cross (the tab's turn finishing its copy just as sync is turned off): each waits for the other, so the release finds the file to delete rather than leaving it this run's until it's stale.
 - A lease file that can't be read (a sync client half way through writing it, or a damaged one) isn't treated as free: nothing takes the lease or writes the session on the strength of it, a refresh leaves it alone, and retention keeps the session. A restored tab still starts from this machine's transcript, and the next copy looks again.
 - If the sync client creates conflict copies (for example `session (1).jsonl`), Claudette shows them in History as separate, forked entries. It never merges them.
   - It recognizes the numbered copies Google Drive and OneDrive make, Dropbox's "conflicted copy", Syncthing's `.sync-conflict-…`, and `<id>-<machine>.jsonl`.
@@ -1872,9 +1873,10 @@ A scheduled GitHub Action (`.github/workflows/compat.yml`) runs once a day. It u
 4. **Tests** by installing that version and running the free test suite against it, including the real-CLI tests with the mock model.
 5. **Reports** by opening a GitHub issue, *"Claude Code 2.1.285 compatibility report"*, labeled `compat`.
    - The issue shows test results first, then matched changes, then the full diffs in collapsed sections.
+   - GitHub refuses an issue body over 65,536 characters, and a large docs change can match hundreds of identifiers with diffs running to megabytes. The issue's copy is cut to fit: each diff and the test log are shortened in turn, and the matched identifiers are all kept, their hits going first. A cut issue says so and links the run, whose `compat-report` artifact holds the whole report, the test output and the new CLI help.
    - If nothing matched and every test passed, the issue is closed automatically and kept as a record.
 
-A tracked docs page that's gone (404 or 410) counts as a change: its diff shows the page replaced by a note saying so.
+A tracked docs page that's gone (404 or 410), or that answers with HTML rather than Markdown, counts as a change: its diff shows the page replaced by a note saying so. A `docs` link in the surface file may point at a section of a page (`…/typescript#options`); the page is fetched once, without the fragment, since a URL's fragment never reaches the server and `typescript#options.md` would fetch the HTML page instead.
 
 The same workflow runs the real-CLI tests against the **minimum** supported version (`minimum` in the surface file), on days when `main` changed in the last 25 hours (or when run by hand with *minimum* ticked). Claudette's own changes are what could stop it working with an older Claude Code, and checking once a day, rather than on every pull request, keeps CI minutes flat. Inputs reach its scripts through the environment, never pasted into them, and `GH_TOKEN` is given only to the steps that call `gh`.
 

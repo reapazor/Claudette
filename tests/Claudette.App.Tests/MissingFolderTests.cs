@@ -94,8 +94,9 @@ public class MissingFolderTests
 
         tab.UnpinAndCloseCommand.Execute(null);
 
-        await TabTestHarness.Eventually(() => !h.Shell.AllTabs.Any(), "the tab to close");
+        // The close goes on off the test's thread after it lists the tab's processes: the state is saved a moment after
+        // the tab leaves the shell.
+        await TabTestHarness.Eventually(() => !h.Shell.AllTabs.Any() && h.Services.State.Tabs.Count == 0, "the tab to close");
         Assert.Null(h.Shell.Confirmation);
-        Assert.Empty(h.Services.State.Tabs);
     }
 }

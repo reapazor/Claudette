@@ -60,8 +60,14 @@ public sealed class QuestionCardUiTests
         {
             h.Transport.Emit("""{"type":"control_request","request_id":"ID","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","input":{"plan":"1. Read\n2. Fix"}}}"""
                 .Replace("\"ID\"", $"\"{requestId}\"", StringComparison.Ordinal));
-            await UiText.SettleUntilAsync(window, () => tab.Items.OfType<PlanItem>().Any(p => p.Request.RequestId == requestId) && Approves().Length > 0, "the plan");
-            return tab.Items.OfType<PlanItem>().Single(p => p.Request.RequestId == requestId);
+            // The plan's Markdown lays out in the background and moves the buttons down as it lands, so the card is
+            // ready once it shows the plan.
+            PlanItem? plan = null;
+            await UiText.SettleUntilAsync(window, () =>
+                (plan = tab.Items.OfType<PlanItem>().FirstOrDefault(p => p.Request.RequestId == requestId)) is not null
+                && conversation.GetVisualDescendants().OfType<Border>().FirstOrDefault(b => b.DataContext == plan) is { } card
+                && UiText.Describe(card).Contains("\"Fix\"", StringComparison.Ordinal) && Approves().Length > 0, "the plan");
+            return plan!;
         }
 
         var plan = await PlanAsync("p1");
@@ -85,6 +91,9 @@ public sealed class QuestionCardUiTests
 
     private static void Click(Window window, Control target)
     {
+        // Laid out first: the pointer events run the queued work, so a layout still pending would move the target after
+        // its center was taken.
+        UiText.Settle(window);
         var center = target.TranslatePoint(new Point(target.Bounds.Width / 2, target.Bounds.Height / 2), window)!.Value;
         window.MouseMove(center);
         window.MouseDown(center, MouseButton.Left);

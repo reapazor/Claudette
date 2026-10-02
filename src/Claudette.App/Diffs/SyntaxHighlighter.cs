@@ -17,6 +17,14 @@ public static class SyntaxHighlighter
     /// <summary>Bigger files are shown without colors, to keep the diff view quick.</summary>
     public const int MaxLines = 20_000;
 
+    /// <summary>
+    /// A line longer than this gets <see cref="LineTimeLimit"/>, so a minified file's can't hold the diff view; the rest of
+    /// such a line shows in the default color. A shorter line is tokenized whole, as VS Code tokenizes lines up to
+    /// 20,000 characters: with a budget, the first line of a freshly loaded grammar, which pays for compiling its
+    /// patterns, or any line on a busy machine could come back half colored.
+    /// </summary>
+    private const int LongLine = 1_000;
+
     private static readonly TimeSpan LineTimeLimit = TimeSpan.FromMilliseconds(50);
     private static readonly ConcurrentDictionary<bool, (RegistryOptions Options, Registry Registry, Theme Theme)> Themes = new();
     private static readonly Lock GrammarLock = new();
@@ -55,7 +63,7 @@ public static class SyntaxHighlighter
             IStateStack? state = null;
             foreach (var line in lines)
             {
-                var tokens = grammar.TokenizeLine(line, state, LineTimeLimit);
+                var tokens = grammar.TokenizeLine(line, state, line.Length > LongLine ? LineTimeLimit : TimeSpan.MaxValue);
                 state = tokens.RuleStack;
                 var runs = new List<ColoredRun>(tokens.Tokens.Length);
                 foreach (var token in tokens.Tokens)

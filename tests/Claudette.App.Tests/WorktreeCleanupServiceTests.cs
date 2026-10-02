@@ -2,6 +2,7 @@ using Claudette.App.Conversation;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
+using Claudette.Core.Files;
 using Claudette.Core.Git;
 using Claudette.Core.Processes;
 using Claudette.Core.ProjectTools;
@@ -137,8 +138,16 @@ public class WorktreeCleanupServiceTests
         return h;
     }
 
-    private static void LastUsed(TabTestHarness h, string path, TimeSpan ago) =>
-        h.Services.State.WorktreesLastUsed[FolderHistory.Normalize(path)] = h.Time.GetUtcNow() - ago;
+    /// <summary>Replaces the time kept for the worktree, which a pass may have written under git's spelling of its path.</summary>
+    private static void LastUsed(TabTestHarness h, string path, TimeSpan ago)
+    {
+        var times = h.Services.State.WorktreesLastUsed;
+        foreach (var key in times.Keys.Where(k => RealPath.Same(k, path)).ToList())
+        {
+            times.Remove(key);
+        }
+        times[FolderHistory.Normalize(path)] = h.Time.GetUtcNow() - ago;
+    }
 
     private static async Task<bool> BranchExistsAsync(TabTestHarness h, string branch) =>
         (await new GitWorktrees(h.Services.Git).BranchesAsync(h.WorkFolder)).Contains(branch);
@@ -150,19 +159,20 @@ public class WorktreeCleanupServiceTests
         await using var h = await RepositoryAsync(s => s.General.RemoveMergedWorktrees = true);
         var path = await KeptWorktreeAsync(h, "brisk-otter");
 
-        // First seen now: it waits a day.
+        // First seen now: it waits a day. Git names the worktree by its real path (on macOS, the temporary folder's
+        // /var is /private/var), so the paths are matched through their links.
         Assert.Empty(await h.Services.Worktrees.RunAsync());
         Assert.True(Directory.Exists(path));
-        Assert.Contains(h.Services.State.WorktreesLastUsed.Keys, k => FolderHistory.SamePath(k, path));
+        Assert.Contains(h.Services.State.WorktreesLastUsed.Keys, k => RealPath.Same(k, path));
 
         LastUsed(h, path, TimeSpan.FromDays(1));
         var removed = await h.Services.Worktrees.RunAsync();
 
-        Assert.True(FolderHistory.SamePath(path, Assert.Single(removed)));
+        Assert.True(RealPath.Same(path, Assert.Single(removed)));
         Assert.False(Directory.Exists(path));
         Assert.False(await BranchExistsAsync(h, "worktree-brisk-otter"));
         Assert.Single(h.Services.State.LastWorktreeCleanup!.Removed);
-        Assert.DoesNotContain(h.Services.State.WorktreesLastUsed.Keys, k => FolderHistory.SamePath(k, path));
+        Assert.DoesNotContain(h.Services.State.WorktreesLastUsed.Keys, k => RealPath.Same(k, path));
     }
 
     [Fact]

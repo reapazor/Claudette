@@ -23,7 +23,8 @@ public class QueuedMessageTests
             ["type"] = "system", ["subtype"] = "init", ["session_id"] = "s1", ["model"] = "claude-opus-5-5",
             ["capabilities"] = new JsonArray([.. capabilities.Select(c => JsonValue.Create(c))]),
         });
-        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Working, "working");
+        // Working from the send; the capabilities, which Stop reads, arrive with the init.
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Working && tab.State.SessionId == "s1", "working");
         return tab;
     }
 
