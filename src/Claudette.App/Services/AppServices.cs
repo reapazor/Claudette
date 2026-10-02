@@ -125,6 +125,7 @@ public sealed class AppServices : IAsyncDisposable
         Locator = new ClaudeLocator(launcher, timeProvider, UserEnvironment, RemoteControl.ClaudeVariables);
         Git = new GitWorkingTree(launcher, timeProvider, environment: UserEnvironment);
         Library = new LibraryService(this);
+        ScratchPads = new ScratchPadService(this);
         ProtocolLog.DeleteOld(paths.ProtocolLogDirectory, timeProvider.GetUtcNow());
         BeforeContentStore.DeleteOld(paths.BeforeContentDirectory, timeProvider.GetUtcNow());
         Notifications =new NotificationService(this, notifier ?? NullNotifier.Instance);
@@ -140,6 +141,7 @@ public sealed class AppServices : IAsyncDisposable
             UserEnvironment.Start();
             UpdateMotion();
             Library.OnSettingsChanged();
+            ScratchPads.OnSettingsChanged();
             ClaudeUpdates?.OnSettingsChanged();
             Notifications.OnSettingsChanged();
             RemoteControl.OnSettingsChanged();
@@ -321,6 +323,9 @@ public sealed class AppServices : IAsyncDisposable
 
     /// <summary>The session library, leases and settings sync (DESIGN.md §9, §14).</summary>
     public LibraryService Library { get; }
+
+    /// <summary>The projects' scratch pads (DESIGN.md §18, "Scratch pad").</summary>
+    public ScratchPadService ScratchPads { get; }
 
     public AppPaths Paths { get; }
 
@@ -551,6 +556,7 @@ public sealed class AppServices : IAsyncDisposable
         _pendingStateSave?.Cancel();
         await _settingsStore.SaveAsync(Settings);
         await _stateStore.SaveAsync(State);
+        await ScratchPads.FlushAsync();
     }
 
     /// <summary>
@@ -603,6 +609,7 @@ public sealed class AppServices : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        ScratchPads.Dispose();
         Library.Dispose();
         Notifications.Dispose();
         RemoteControl.Dispose();

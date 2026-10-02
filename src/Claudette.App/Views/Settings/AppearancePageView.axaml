@@ -53,6 +53,9 @@
     <CheckBox Content="Show context on tab rows" IsChecked="{Binding ShowContextOnTabs}" />
     <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                Text="A small ring on each tab in the sidebar fills up with the tab's context window. It turns amber when Claude Code is about to compact the conversation, and red when it's nearly full." />
+    <CheckBox Content="Show git branch on tab rows" IsChecked="{Binding ShowBranchOnTabs}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="The branch each tab's folder has checked out, such as “main”, at the right of its second line. A tab in a worktree shows the worktree's name instead." />
     <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
   </StackPanel>
 </UserControl>

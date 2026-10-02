@@ -52,6 +52,8 @@ public partial class TabView : UserControl
         ConversationItems.ContainerPrepared += OnConversationContainerPrepared;
         // Copy on a code block goes through the tab and says "Copied" (DESIGN.md §5, "Copy and times").
         CodeBlockCopy.Attach(this);
+        // Add to scratch pad: a code block's button, and the menu of text selected in the conversation (DESIGN.md §18).
+        ScratchPadAdd.Attach(this, ConversationScroll);
         SidePanelEdge.PointerPressed += OnSidePanelEdgePressed;
         SidePanelEdge.PointerMoved += OnSidePanelEdgeMoved;
         SidePanelEdge.PointerReleased += (_, e) => EndSidePanelResize(e.Pointer);

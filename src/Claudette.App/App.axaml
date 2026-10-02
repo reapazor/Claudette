@@ -68,6 +68,12 @@
                     <Path Data="{DynamicResource IconWrap}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" StrokeLineCap="Round"
                           Width="12" Height="12" Stretch="None" />
                   </ToggleButton>
+                  <!-- Only in a tab, whose styles show it (Themes/ConversationStyles.axaml); the tab adds the code (Views/ScratchPadAdd) -->
+                  <Button x:Name="AddToScratchPadButton" Classes="flat codetool" Focusable="False"
+                          ToolTip.Tip="Add the code to the scratch pad" AutomationProperties.Name="Add to scratch pad">
+                    <Path Data="{DynamicResource IconAddToScratchPad}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.1" StrokeJoin="Round" StrokeLineCap="Round"
+                          Width="12" Height="12" Stretch="None" />
+                  </Button>
                   <Button x:Name="PART_CopyButton" Classes="flat codetool" Focusable="False" ToolTip.Tip="Copy the code" AutomationProperties.Name="Copy code">
                     <TextBlock x:Name="CopyLabel" Classes="muted small" Text="Copy" />
                   </Button>
@@ -85,6 +91,11 @@
     </Style>
     <Style Selector="md|CodeBlock /template/ Border.codeframe">
       <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <!-- Add to scratch pad (DESIGN.md §18, "Scratch pad"): hidden here, and shown by a tab's own styles, which are nearer
+         the block; a value set in the template itself would outrank them. -->
+    <Style Selector="md|CodeBlock /template/ Button#AddToScratchPadButton">
+      <Setter Property="IsVisible" Value="False" />
     </Style>
     <!-- Settings → Appearance → Style → Claude (DESIGN.md §3): rounder, as in the Claude apps. -->
     <Style Selector=".claude md|CodeBlock /template/ Border.codeframe">
@@ -386,6 +397,8 @@
       <StreamGeometry x:Key="IconPhone">M1.5,0.5 L5.5,0.5 A1,1 0 0 1 6.5,1.5 L6.5,8.5 A1,1 0 0 1 5.5,9.5 L1.5,9.5 A1,1 0 0 1 0.5,8.5 L0.5,1.5 A1,1 0 0 1 1.5,0.5 Z M3,7.8 L4,7.8</StreamGeometry>
       <!-- Two sheets: Copy on a message (DESIGN.md §5, "Copy and times"). -->
       <StreamGeometry x:Key="IconCopy">M4,4 L10.5,4 L10.5,10.5 L4,10.5 Z M8,2.5 L8,1.5 L1.5,1.5 L1.5,8 L2.5,8</StreamGeometry>
+      <!-- A note with a plus: Add to scratch pad, on a message and a code block (DESIGN.md §18, "Scratch pad"). -->
+      <StreamGeometry x:Key="IconAddToScratchPad">M1,3.5 L7.5,3.5 L7.5,11 L1,11 Z M2.8,6.5 L5.7,6.5 M2.8,8.8 L5.7,8.8 M9.5,0.8 L9.5,5.2 M7.3,3 L11.7,3</StreamGeometry>
       <!-- Three dots: a message's menu (DESIGN.md §5, "Rewind and branch"). Filled. -->
       <StreamGeometry x:Key="IconMore">M1.5,6 A1,1 0 1 0 3.5,6 A1,1 0 1 0 1.5,6 Z M5,6 A1,1 0 1 0 7,6 A1,1 0 1 0 5,6 Z M8.5,6 A1,1 0 1 0 10.5,6 A1,1 0 1 0 8.5,6 Z</StreamGeometry>
       <!-- A line wrapping back under itself: Wrap on a code block. -->

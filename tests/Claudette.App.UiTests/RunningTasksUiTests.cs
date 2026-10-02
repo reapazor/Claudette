@@ -33,15 +33,17 @@ public class RunningTasksUiTests
         await UiText.SettleUntilAsync(window, () => tab.Tasks.Count == 3, "the tasks");
         h.Time.Advance(TimeSpan.FromSeconds(65));
 
+        // The subagent is the Agents button's and the Agents page's, with its own Stop: the chip leaves it out.
         Assert.True(chip.IsEffectivelyVisible);
-        Assert.Equal("3 running tasks", AutomationProperties.GetName(chip));
-        Assert.Contains("\"3 running tasks\"", UiText.Describe(chip), StringComparison.Ordinal);
+        Assert.Equal("2 running tasks", AutomationProperties.GetName(chip));
+        Assert.Contains("\"2 running tasks\"", UiText.Describe(chip), StringComparison.Ordinal);
+        Assert.Equal("1 agent running", tab.AgentsButtonText);
 
         var flyout = Assert.IsType<Flyout>(chip.Flyout);
         flyout.ShowAt(chip);
         UiText.Settle(window);
         var list = Assert.IsAssignableFrom<Control>(flyout.Content);
-        await UiText.SettleUntilAsync(window, () => list.IsEffectivelyVisible && list.GetVisualDescendants().OfType<Path>().Count() == 3, "the list");
+        await UiText.SettleUntilAsync(window, () => list.IsEffectivelyVisible && list.GetVisualDescendants().OfType<Path>().Count() == 2, "the list");
         Assert.True(tab.IsTaskListOpen);
         var shown = UiText.Describe(list);
         // Each row has its kind's icon, drawn like the tool cards'.
@@ -49,7 +51,7 @@ public class RunningTasksUiTests
         Assert.All(icons, icon => Assert.Equal(12, icon.Width));
         Assert.All(icons, icon => Assert.NotNull(icon.Data));
         var rows = list.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("taskrow")).ToList();
-        Assert.Equal(["task-1", "task-m", "task-bg"], rows.Select(r => ((RunningTask)r.DataContext!).TaskId));
+        Assert.Equal(["task-1", "task-m"], rows.Select(r => ((RunningTask)r.DataContext!).TaskId));
         Assert.Equal("Shell command: Start the dev server\nnpm run dev\nClick to show it in the conversation.", ToolTip.GetTip(rows[0]));
 
         // The running time ticks while the list is open.
@@ -59,7 +61,7 @@ public class RunningTasksUiTests
         // Stop asks first, then goes through Claude Code.
         var stop = list.GetVisualDescendants().OfType<Button>().First(b => b.Content as string == "Stop");
         Assert.Same(tab.StopTaskCommand, stop.Command);
-        Assert.Same(tab.Tasks.Running[0], stop.CommandParameter);
+        Assert.Same(tab.Tasks.Listed[0], stop.CommandParameter);
         stop.Command!.Execute(stop.CommandParameter);
         stop.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         UiText.Settle(window);
@@ -114,9 +116,10 @@ public class RunningTasksUiTests
         h.Transport.Emit(TurnResult);
         await UiText.SettleUntilAsync(window, () => !tab.IsWorking, "the end of the turn");
 
+        // The row counts the subagent too: nothing else on it says work goes on.
         Assert.True(badge.IsEffectivelyVisible);
-        Assert.Equal("3 tasks still running", ToolTip.GetTip(badge));
-        Assert.Equal("3 tasks still running", AutomationProperties.GetName(badge));
+        Assert.Equal("1 agent and 2 tasks still running", ToolTip.GetTip(badge));
+        Assert.Equal("1 agent and 2 tasks still running", AutomationProperties.GetName(badge));
         Assert.Equal("\"3\"", UiText.Describe(badge).Trim());
         // No taller than the name beside it, so the row keeps its height; and a small mark, like the row's icons.
         Assert.Equal(height, row.Bounds.Height, precision: 3);
@@ -154,6 +157,36 @@ public class RunningTasksUiTests
         UiText.Settle(window);
         Assert.Equal(height, row.Bounds.Height, precision: 3);
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task A_running_subagents_Stop_is_on_its_row_in_the_Agents_page()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        StartThreeTasks(h);
+        await UiText.SettleUntilAsync(window, () => tab.Tasks.Count == 3, "the tasks");
+        tab.OpenSidePanelPage(ViewModels.SidePanelPage.Agents);
+        UiText.Settle(window);
+        var tree = window.GetVisualDescendants().OfType<AgentTree>().Single();
+        await UiText.SettleUntilAsync(window, () => tree.GetVisualDescendants().OfType<Button>().Any(b => b.Classes.Contains("agentstop") && b.IsVisible), "the agent's row");
+        var stop = tree.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("agentstop") && b.IsVisible);
+        var node = Assert.IsType<AgentNode>(stop.DataContext);
+        Assert.Equal("task-bg", node.TaskId);
+        Assert.Equal("Stop subagent", AutomationProperties.GetName(stop));
+
+        // There to see on the row selected (or under the pointer), and out of the way on the others.
+        Assert.Equal(0, stop.Opacity);
+        tab.SelectedAgent = node;
+        UiText.Settle(window);
+        Assert.Equal(1, stop.Opacity);
+
+        // It asks first, then goes through Claude Code.
+        stop.Command!.Execute(stop.CommandParameter);
+        Assert.Equal("Stop \"Review the auth code\"?", h.Shell.Confirmation!.Title);
+        await h.Shell.Confirmation.ConfirmCommand.ExecuteAsync(null);
+        await UiText.SettleUntilAsync(window, () => h.Transport.SentControlSubtypes.Contains("stop_task"), "stop_task");
     }
 
     private const string TurnResult = """{"type":"result","subtype":"success","is_error":false,"result":"done","session_id":"s1","duration_ms":1000}""";

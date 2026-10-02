@@ -1,4 +1,4 @@
-﻿"3 running tasks"
+﻿"2 running tasks"
 "Claude Code keeps these going after the turn, and tells Claude when each one ends."
 [button] (parts below)
   "Start the dev server"
@@ -8,10 +8,5 @@
 [button] (parts below)
   "Watch the build log"
   "Monitor"
-  "1m 05s"
-[button] Stop
-[button] (parts below)
-  "Review the auth code"
-  "Subagent"
   "1m 05s"
 [button] Stop

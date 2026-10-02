@@ -25,6 +25,13 @@ public partial class MainWindow : Window
             {
                 _ = tab.ProjectTools.RefreshFileAsync();
             }
+            // Back from a terminal, perhaps, with a branch switched there: the tab rows follow (DESIGN.md §4, "Sidebar").
+            foreach (var each in _viewModel?.Shell?.AllTabs ?? [])
+            {
+                each.RefreshBranch();
+            }
+            // Back from another machine, perhaps, with a scratch pad changed there (DESIGN.md §18, "Scratch pad").
+            _viewModel?.Services.ScratchPads.OnAppActivated();
         };
         Deactivated += (_, _) => _viewModel?.Services.Notifications.SetAppActive(false);
         // A narrow window leaves the busiest tabs, then the weekly chart, out of the detailed header (DESIGN.md §6).

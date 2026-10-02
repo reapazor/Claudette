@@ -44,6 +44,7 @@ public sealed class AppearancePage(SettingsContext context) : SettingsPage(conte
         Entry("Show what Claude is doing while it works"),
         Entry("Detailed usage header"),
         Entry("Show context on tab rows"),
+        Entry("Show git branch on tab rows"),
         Entry("Density"),
         Entry("Zoom"),
         Entry("Motion"),
@@ -174,6 +175,13 @@ public sealed class AppearancePage(SettingsContext context) : SettingsPage(conte
     {
         get => Settings.Appearance.ShowContextOnTabs;
         set => Set(value, v => Settings.Appearance.ShowContextOnTabs = v);
+    }
+
+    /// <summary>The git branch, or worktree, on each tab's row (DESIGN.md §4, "Sidebar").</summary>
+    public bool ShowBranchOnTabs
+    {
+        get => Settings.Appearance.ShowBranchOnTabs;
+        set => Set(value, v => Settings.Appearance.ShowBranchOnTabs = v);
     }
 
     /// <summary>The detailed usage header goes back to its default too, though it's kept with the machine's state.</summary>

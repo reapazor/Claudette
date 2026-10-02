@@ -1,0 +1,53 @@
+<!-- A project's scratch pad (DESIGN.md §18, "Scratch pad"): the side panel's Scratch Pad page, the same pad in every tab
+     of the project. Its look is in Themes/ConversationStyles.axaml. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Claudette.App.ViewModels"
+             x:Class="Claudette.App.Views.ScratchPadView"
+             x:DataType="vm:ScratchPadViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Classes="scratchpadheader">
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="2">
+        <TextBlock Text="{Binding Summary}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Summary}" />
+        <Button Grid.Column="1" Classes="flat" Command="{Binding CopyAllCommand}" ToolTip.Tip="Copy the whole pad">
+          <Panel>
+            <TextBlock Classes="small" Text="Copy all" IsVisible="{Binding !IsCopied}" />
+            <TextBlock Classes="small muted" Text="Copied" IsVisible="{Binding IsCopied}" />
+          </Panel>
+        </Button>
+        <Button Grid.Column="2" Classes="flat" Command="{Binding ClearConfirmation.AskCommand}" IsEnabled="{Binding !IsEmpty}"
+                ToolTip.Tip="Empty the pad, for every tab in the project">
+          <TextBlock Classes="small" Text="Clear…" />
+        </Button>
+      </Grid>
+      <TextBlock Classes="muted small" Classes.warning="{Binding HasSyncProblem}" Text="{Binding SyncText}" TextWrapping="Wrap" ToolTip.Tip="{Binding SyncDetail}" />
+      <!-- Clear… asks first, in place -->
+      <Border Classes="codeblock" IsVisible="{Binding ClearConfirmation.IsOpen}">
+        <StackPanel Spacing="8">
+          <TextBlock TextWrapping="Wrap" Text="Clear the scratch pad? It's emptied in every tab of the project, and on your other machines." />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Classes="accent" Content="Clear" Command="{Binding ClearConfirmation.ConfirmCommand}" />
+            <Button Content="Cancel" Command="{Binding ClearConfirmation.CancelCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+      <!-- Another machine changed it too: which to keep -->
+      <Border Classes="prompt" IsVisible="{Binding HasConflict}">
+        <StackPanel Spacing="8">
+          <TextBlock TextWrapping="Wrap" Text="{Binding ConflictText}" />
+          <ScrollViewer Classes="theirtext" HorizontalScrollBarVisibility="Auto">
+            <SelectableTextBlock Classes="mono small" Text="{Binding TheirText}" AutomationProperties.Name="Their text" />
+          </ScrollViewer>
+          <WrapPanel ItemSpacing="8" LineSpacing="6" IsEnabled="{Binding !IsResolving}">
+            <Button Classes="accent" Content="Keep both" Command="{Binding KeepBothCommand}" ToolTip.Tip="Yours, then what only theirs has" />
+            <Button Content="Use theirs" Command="{Binding UseTheirsCommand}" />
+            <Button Content="Keep mine" Command="{Binding KeepMineCommand}" />
+          </WrapPanel>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+    <TextBox x:Name="Editor" Classes="scratchpad" Text="{Binding Text}" AcceptsReturn="True" TextWrapping="Wrap" NewLine="&#10;"
+             IsReadOnly="{Binding IsReadOnly}" AutomationProperties.Name="Scratch pad"
+             PlaceholderText="Notes for this project. Type here, or right-click text in the conversation and add it." />
+  </DockPanel>
+</UserControl>

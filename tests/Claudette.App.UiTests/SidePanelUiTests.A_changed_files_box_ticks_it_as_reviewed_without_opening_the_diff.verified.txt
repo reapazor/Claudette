@@ -1,5 +1,7 @@
 ﻿[button] Changed Files
 [button] Agents
+[button] Scratch Pad
+[button] More pages
 [button] Close side panel
 "2 files changed · 1 reviewed"
 [button] Refresh

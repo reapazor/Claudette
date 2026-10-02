@@ -1,4 +1,5 @@
 ﻿"bash"
 [toggle on] Wrap lines
+[button] Add to scratch pad
 [button] Copy code: Copy
 "dotnet build⏎dotnet test"

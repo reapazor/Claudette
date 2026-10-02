@@ -66,11 +66,13 @@ public sealed partial class TabViewModel
             OnPropertyChanged(nameof(DisplayName));
             ChangedFiles.OnFolderChanged();
             ProjectTools.ReloadCustomActions();
+            OnScratchPadFolderChanged();
             _conversation.AddNote($"Working in the worktree {FolderName}, on its own branch: {State.Folder}.");
         }
         OnPropertyChanged(nameof(WorktreeName));
         OnPropertyChanged(nameof(WorktreeTip));
         OnPropertyChanged(nameof(InfoRows));
+        OnBranchFolderChanged();
         _services.SaveState();
     }
 

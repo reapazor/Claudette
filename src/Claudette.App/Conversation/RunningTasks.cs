@@ -241,30 +241,39 @@ public sealed class RunningTasks
         }
     }
 
-    /// <summary>The tasks running now, in the order they started.</summary>
+    /// <summary>The tasks running now, in the order they started: what the tab's row counts once the turn is over.</summary>
     public ObservableCollection<RunningTask> Running { get; } = [];
 
     public int Count => Running.Count;
+
+    /// <summary>
+    /// The running tasks the composer bar's chip and the info card list: all but subagents, which the Agents button and
+    /// the Agents page show, with their own Stop (DESIGN.md §18, "Agent map").
+    /// </summary>
+    public ObservableCollection<RunningTask> Listed { get; } = [];
+
+    /// <summary>How many running tasks are subagents.</summary>
+    public int AgentCount => Count - Listed.Count;
 
     /// <summary>The running tasks, or something the list or the info card shows about them, changed.</summary>
     public event Action? Changed;
 
     internal DateTimeOffset Now => _time.GetUtcNow();
 
-    /// <summary>For the tab info card: one line per running task, or null when none are.</summary>
+    /// <summary>For the tab info card: one line per listed task, or null when none are. Its Agents row has the subagents.</summary>
     public string? Summary
     {
         get
         {
-            if (Running.Count == 0)
+            if (Listed.Count == 0)
             {
                 return null;
             }
             const int shown = 4;
-            var lines = Running.Take(shown).Select(t => $"{t.KindText}: {t.Title}").ToList();
-            if (Running.Count > shown)
+            var lines = Listed.Take(shown).Select(t => $"{t.KindText}: {t.Title}").ToList();
+            if (Listed.Count > shown)
             {
-                lines.Add($"and {Running.Count - shown} more");
+                lines.Add($"and {Listed.Count - shown} more");
             }
             return string.Join('\n', lines);
         }
@@ -355,7 +364,7 @@ public sealed class RunningTasks
     /// <summary>Updates running times; called every second while the list is open.</summary>
     public void Tick()
     {
-        foreach (var task in Running)
+        foreach (var task in Listed)
         {
             task.Tick();
         }
@@ -372,28 +381,36 @@ public sealed class RunningTasks
             }
         }
         var running = _open.Where(t => t.IsRunning).ToList();
-        var changed = !running.SequenceEqual(Running);
-        if (changed)
-        {
-            for (var i = Running.Count - 1; i >= 0; i--)
-            {
-                if (!running.Contains(Running[i]))
-                {
-                    Running.RemoveAt(i);
-                }
-            }
-            // What's left is in order, so each new task goes in where the list first differs.
-            for (var i = 0; i < running.Count; i++)
-            {
-                if (i >= Running.Count || !ReferenceEquals(Running[i], running[i]))
-                {
-                    Running.Insert(i, running[i]);
-                }
-            }
-        }
+        var changed = Follow(Running, running);
+        changed |= Follow(Listed, [.. running.Where(t => t.Kind != TaskKind.Agent)]);
         if (changed || notify)
         {
             Changed?.Invoke();
         }
+    }
+
+    /// <summary>Makes <paramref name="shown"/> what <paramref name="wanted"/> is, in place. True when it changed.</summary>
+    private static bool Follow(ObservableCollection<RunningTask> shown, List<RunningTask> wanted)
+    {
+        if (wanted.SequenceEqual(shown))
+        {
+            return false;
+        }
+        for (var i = shown.Count - 1; i >= 0; i--)
+        {
+            if (!wanted.Contains(shown[i]))
+            {
+                shown.RemoveAt(i);
+            }
+        }
+        // What's left is in order, so each new task goes in where the list first differs.
+        for (var i = 0; i < wanted.Count; i++)
+        {
+            if (i >= shown.Count || !ReferenceEquals(shown[i], wanted[i]))
+            {
+                shown.Insert(i, wanted[i]);
+            }
+        }
+        return true;
     }
 }

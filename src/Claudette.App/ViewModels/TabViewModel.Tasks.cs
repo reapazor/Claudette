@@ -7,7 +7,8 @@ namespace Claudette.App.ViewModels;
 /// <summary>
 /// The tab's running tasks (DESIGN.md §5, "Running tasks"): work Claude Code keeps going in the background, such as a
 /// backgrounded shell command, a background subagent, a Monitor watch or a remote agent. A chip in the composer bar
-/// lists them, the tab's row counts them once the turn is over (DESIGN.md §4), and the info card has a row for them.
+/// lists them, but for subagents, which the Agents button and page have; the tab's row counts them all once the turn
+/// is over (DESIGN.md §4), and the info card has a row for those the chip lists.
 /// </summary>
 public sealed partial class TabViewModel
 {
@@ -17,18 +18,36 @@ public sealed partial class TabViewModel
     /// <summary>Kept by the conversation builder from Claude Code's task messages.</summary>
     public RunningTasks Tasks { get; }
 
+    /// <summary>Every running task, subagents too: the tab row's count.</summary>
     public int RunningTaskCount => Tasks.Count;
 
-    /// <summary>The composer bar shows the chip.</summary>
-    public bool HasRunningTasks => Tasks.Count > 0;
+    /// <summary>The composer bar shows the chip: tasks other than subagents are running.</summary>
+    public bool HasRunningTasks => Tasks.Listed.Count > 0;
 
     /// <summary>"1 running task", "3 running tasks": the chip, and the head of its list.</summary>
-    public string RunningTasksText => Tasks.Count == 1 ? "1 running task" : $"{Tasks.Count} running tasks";
+    public string RunningTasksText => Tasks.Listed.Count == 1 ? "1 running task" : $"{Tasks.Listed.Count} running tasks";
 
     /// <summary>The turn is over but tasks are still running: the tab's row shows how many, from any tab.</summary>
-    public bool ShowTaskBadge => HasRunningTasks && !IsWorking;
+    public bool ShowTaskBadge => Tasks.Count > 0 && !IsWorking;
 
-    public string TaskBadgeTip => Tasks.Count == 1 ? "1 task still running" : $"{Tasks.Count} tasks still running";
+    /// <summary>"2 agents and 1 task still running": the row's count, subagents told apart.</summary>
+    public string TaskBadgeTip
+    {
+        get
+        {
+            var (agents, others) = (Tasks.AgentCount, Tasks.Listed.Count);
+            var parts = new List<string>(2);
+            if (agents > 0)
+            {
+                parts.Add(agents == 1 ? "1 agent" : $"{agents} agents");
+            }
+            if (others > 0 || agents == 0)
+            {
+                parts.Add(others == 1 ? "1 task" : $"{others} tasks");
+            }
+            return $"{string.Join(" and ", parts)} still running";
+        }
+    }
 
     /// <summary>The chip's list is open: running times tick every second, from the injected clock.</summary>
     [ObservableProperty]

@@ -1,5 +1,5 @@
-<!-- A tab's side panel (DESIGN.md §3): changed files, agents, tasks, MCP servers, the project's tools and, when the
-     monitor is on, processes. TabView holds it in a border it sizes. -->
+<!-- A tab's side panel (DESIGN.md §3): changed files, agents, tasks, MCP servers, the project's tools, the scratch pad
+     and, when the monitor is on, processes. TabView holds it in a border it sizes. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Claudette.App.ViewModels"
@@ -56,6 +56,10 @@
               <TextBlock Classes="status warning" Text="●" FontSize="8" VerticalAlignment="Center"
                          IsVisible="{Binding McpServers.Attention, Converter={x:Static ObjectConverters.IsNotNull}}" />
             </StackPanel>
+          </Button>
+          <!-- The project's scratch pad (DESIGN.md §18, "Scratch pad") -->
+          <Button Classes="pagetab" Classes.selected="{Binding IsScratchPadPage}" Command="{Binding ShowScratchPadPageCommand}" ToolTip.Tip="Notes shared by the tabs in this project">
+            <TextBlock Text="Scratch Pad" Classes.muted="{Binding !IsScratchPadPage}" />
           </Button>
           <!-- The pages that don't fit, with a dot when one of them shows one -->
           <Button Classes="flat" Padding="6" VerticalAlignment="Center" ToolTip.Tip="More pages" AutomationProperties.Name="More pages">
@@ -286,6 +290,11 @@
           </controls:ShownWidth>
         </ScrollViewer>
       </DockPanel>
+
+      <!-- The project's scratch pad (DESIGN.md §18, "Scratch pad"), once the tab has used it -->
+      <Panel IsVisible="{Binding IsScratchPadPage}">
+        <views:ScratchPadView DataContext="{Binding ShownScratchPad}" />
+      </Panel>
 
       <!-- Processes (DESIGN.md §4, "Process monitor") -->
       <DockPanel IsVisible="{Binding IsProcessesPage}">

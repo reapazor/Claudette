@@ -295,6 +295,9 @@ public sealed class AppearanceSettings
     /// <summary>A small ring on each tab's row showing how full its context is (DESIGN.md §4, "Sidebar").</summary>
     public bool ShowContextOnTabs { get; set; } = true;
 
+    /// <summary>A badge on each tab's row with the git branch it's on, or its worktree (DESIGN.md §4, "Sidebar").</summary>
+    public bool ShowBranchOnTabs { get; set; } = true;
+
     /// <summary>How much room the conversation, the sidebar's rows and the composer take (DESIGN.md §14).</summary>
     public Density Density { get; set; } = Density.Comfortable;
 

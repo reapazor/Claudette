@@ -12,11 +12,13 @@ public enum SidePanelPage
     Processes,
     Tasks,
     Mcp,
+    ScratchPad,
 }
 
 /// <summary>
 /// The side panel (DESIGN.md §3): Changed files, Agents, Tasks, Project when the tab has project tools, MCP when the
-/// session has MCP servers, and Processes when the monitor is on. Which page shows, and how wide it is.
+/// session has MCP servers, Processes when the monitor is on, and the project's scratch pad. Which page shows, and how
+/// wide it is.
 /// </summary>
 public sealed partial class TabViewModel
 {
@@ -37,6 +39,10 @@ public sealed partial class TabViewModel
             {
                 _ = McpServers.RefreshAsync();
             }
+            if (IsScratchPadPage)
+            {
+                _ = ScratchPad.SyncAsync();
+            }
         }
         ProjectTools.Runs.UpdateShownRun();
         ProcessMonitor.OnSidePanelOpenChanged();
@@ -44,7 +50,8 @@ public sealed partial class TabViewModel
 
     /// <summary>Which page of the side panel shows.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsFilesPage), nameof(IsAgentsPage), nameof(IsProjectPage), nameof(IsProcessesPage), nameof(IsTasksPage), nameof(IsMcpPage))]
+    [NotifyPropertyChangedFor(nameof(IsFilesPage), nameof(IsAgentsPage), nameof(IsProjectPage), nameof(IsProcessesPage), nameof(IsTasksPage), nameof(IsMcpPage),
+        nameof(IsScratchPadPage))]
     public partial SidePanelPage Page { get; set; }
 
     partial void OnPageChanged(SidePanelPage value)
@@ -54,6 +61,10 @@ public sealed partial class TabViewModel
         if (value == SidePanelPage.Mcp && IsSidePanelOpen)
         {
             _ = McpServers.RefreshAsync();
+        }
+        if (value == SidePanelPage.ScratchPad && IsSidePanelOpen)
+        {
+            _ = ScratchPad.SyncAsync();
         }
     }
 
@@ -91,6 +102,13 @@ public sealed partial class TabViewModel
     {
         get => Page == SidePanelPage.Mcp;
         set => SetPage(SidePanelPage.Mcp, value);
+    }
+
+    /// <summary>The Scratch Pad page: the project's scratch pad (DESIGN.md §18, "Scratch pad").</summary>
+    public bool IsScratchPadPage
+    {
+        get => Page == SidePanelPage.ScratchPad;
+        set => SetPage(SidePanelPage.ScratchPad, value);
     }
 
     private void SetPage(SidePanelPage page, bool showing)
@@ -139,6 +157,9 @@ public sealed partial class TabViewModel
 
     [RelayCommand]
     private void ShowMcpPage() => Page = SidePanelPage.Mcp;
+
+    [RelayCommand]
+    private void ShowScratchPadPage() => Page = SidePanelPage.ScratchPad;
 
     /// <summary>Opens the side panel on <paramref name="page"/>: the command palette's way to it.</summary>
     internal void OpenSidePanelPage(SidePanelPage page)

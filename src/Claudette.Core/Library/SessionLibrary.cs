@@ -21,6 +21,7 @@ public sealed record LibraryEntry(SessionRecord Record, string TranscriptPath, b
 ///                                   lease.json
 /// &lt;library&gt;/settings-sync.json
 /// &lt;library&gt;/usage/&lt;machine id&gt;.json
+/// &lt;library&gt;/scratch/&lt;pad id&gt;.json      (ScratchPads.ScratchPadStore)
 /// </code>
 /// Files are written to a temporary name and then renamed, so a sync client never uploads a half-written file.
 /// </summary>

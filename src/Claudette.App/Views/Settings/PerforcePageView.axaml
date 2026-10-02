@@ -20,7 +20,7 @@
     <CheckBox Content="Request tickets valid on all hosts (p4 login -a)" IsChecked="{Binding PerforceAllHostsTickets}" />
     <CheckBox Content="Show changelist on tabs" IsChecked="{Binding ShowChangelistOnTabs}" />
     <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
-               Text="A CL 12345 badge after the tab's name. The tab info card always shows the changelist Claude is working in." />
+               Text="A CL 12345 badge at the right of the tab's second line, beside its git branch. The tab info card always shows the changelist Claude is working in." />
 
     <!-- The stored password: the OS credential store, never settings.json -->
     <TextBlock Text="Stored password" FontWeight="SemiBold" Margin="0,8,0,0" />

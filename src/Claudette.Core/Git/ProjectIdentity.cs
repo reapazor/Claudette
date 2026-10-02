@@ -132,7 +132,8 @@ public sealed record ProjectIdentity(string? RemoteUrl, string? Branch, string? 
     /// <summary>The first 7 characters of a commit id, as git shows it.</summary>
     public static string ShortCommit(string commit) => commit.Length > 7 ? commit[..7] : commit;
 
-    private static string RelativePath(string workTree, string folder)
+    /// <summary><paramref name="folder"/> relative to the repository's top folder, with forward slashes; <c>""</c> for the top.</summary>
+    internal static string RelativePath(string workTree, string folder)
     {
         var relative = Path.GetRelativePath(workTree, Path.GetFullPath(folder));
         return relative == "." ? "" : relative.Replace('\\', '/').Trim('/');

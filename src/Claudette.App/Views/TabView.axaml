@@ -30,6 +30,12 @@
             <TextBlock Classes="muted small" Text="Copied" IsVisible="{Binding IsCopied}" />
           </Panel>
         </Button>
+        <!-- The whole message to the project's scratch pad (DESIGN.md §18, "Scratch pad") -->
+        <Button Classes="flat" Padding="5,3" VerticalAlignment="Center" ToolTip.Tip="Add to scratch pad" AutomationProperties.Name="Add to scratch pad"
+                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).AddMessageToScratchPadCommand}" CommandParameter="{Binding}">
+          <Path Data="{StaticResource IconAddToScratchPad}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.1" StrokeJoin="Round" StrokeLineCap="Round"
+                Width="12" Height="12" Stretch="None" />
+        </Button>
       </StackPanel>
     </DataTemplate>
     <!-- Where a waiting prompt stands among the tab's, with the way to the others (DESIGN.md §7, "Several prompts waiting"). -->

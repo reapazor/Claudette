@@ -366,7 +366,7 @@
                     <TextBlock Text="{Binding RunningTasksText}" FontWeight="SemiBold" Margin="6,2,6,0" />
                     <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="6,0,6,4"
                                Text="Claude Code keeps these going after the turn, and tells Claude when each one ends." />
-                    <ItemsControl ItemsSource="{Binding Tasks.Running}">
+                    <ItemsControl ItemsSource="{Binding Tasks.Listed}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="conv:RunningTask">
                           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">

@@ -2,6 +2,7 @@
      they apply inside each tab, and the "compact" and "claude" classes on the shell change them. -->
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
         xmlns:controls="using:Claudette.App.Controls">
   <!-- The chip with a message's time and Copy button: quiet until the message is hovered or focused. -->
   <Style Selector="ContentControl.messagetools">
@@ -119,6 +120,32 @@
   </Style>
   <Style Selector="Border.diffline.hunk">
     <Setter Property="Background" Value="{DynamicResource DiffHunkBrush}" />
+  </Style>
+  <!-- The scratch pad (DESIGN.md §18, "Scratch pad"): plain text in the code font, so pasted code keeps its columns. -->
+  <Style Selector="StackPanel.scratchpadheader">
+    <Setter Property="Margin" Value="12,0,12,6" />
+    <Setter Property="Spacing" Value="4" />
+  </Style>
+  <Style Selector="TextBox.scratchpad">
+    <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+    <Setter Property="FontSize" Value="{DynamicResource CodeFontSize}" />
+    <Setter Property="Margin" Value="8,0,8,8" />
+    <Setter Property="Padding" Value="8,6" />
+    <Setter Property="VerticalContentAlignment" Value="Top" />
+  </Style>
+  <Style Selector=".compact TextBox.scratchpad">
+    <Setter Property="Padding" Value="6,3" />
+  </Style>
+  <Style Selector=".claude TextBox.scratchpad">
+    <Setter Property="CornerRadius" Value="10" />
+  </Style>
+  <!-- A code block's Add to scratch pad: in a tab, not in the agent map's own window, which has no pad -->
+  <Style Selector="md|CodeBlock /template/ Button#AddToScratchPadButton">
+    <Setter Property="IsVisible" Value="True" />
+  </Style>
+  <!-- The other machine's text, when both changed the pad: room to read it, then it scrolls -->
+  <Style Selector="ScrollViewer.theirtext">
+    <Setter Property="MaxHeight" Value="160" />
   </Style>
   <Style Selector="Border.codeblock">
     <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />

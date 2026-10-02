@@ -129,6 +129,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         RestoreLimitWait();
         // Project tools (DESIGN.md §18): the project and the folder's own actions and links, as soon as they're read.
         _ = ProjectTools.RefreshAsync();
+        RefreshBranch();
     }
 
     /// <summary>What's saved for this tab.</summary>
@@ -410,6 +411,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             _ = EnsureStartedAsync();
             // Its claudette.json may have changed while another tab was showing (DESIGN.md §18).
             _ = ProjectTools.RefreshFileAsync();
+            RefreshBranch();
         }
         ProjectTools.Runs.UpdateShownRun();
     }
@@ -775,6 +777,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _autoContinue.SettingsChanged();
         Perforce.OnSettingsChanged();
         ProjectTools.OnSettingsChanged();
+        OnBranchChanged();
     }
 
     /// <summary>
@@ -1392,6 +1395,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(InfoRows));
         ChangedFiles.OnFolderChanged();
         ProjectTools.ReloadCustomActions();
+        OnScratchPadFolderChanged();
+        OnBranchFolderChanged();
         _conversation.AddNote($"Now working in {State.Folder}.");
         await EnsureStartedAsync();
     }
@@ -1706,8 +1711,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 {
                     NotifyTurnFinished(completed.Result);
                 }
-                // Claude may have edited claudette.json or switched branches: the actions and links follow.
+                // Claude may have edited claudette.json or switched branches: the actions and links follow, and the badge.
                 _ = ProjectTools.RefreshFileAsync();
+                RefreshBranch();
                 // The switch changed while Claude worked (DESIGN.md §18, "Remote Control").
                 RemoteControl.OnTurnCompleted(session);
                 if (_restartForExtraFolders)
@@ -1941,6 +1947,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         Perforce.Stop();
         ProjectTools.Runs.CloseRuns(killProcesses);
         ChangedFiles.StopReviewSync();
+        ReleaseScratchPad();
         if (_starting is { } starting)
         {
             // A start under way stops at the cancellation, or finishes: either way, what it started is stopped next.

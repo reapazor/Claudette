@@ -54,24 +54,32 @@ public class SidePanelUiTests
     public async Task The_close_button_comes_after_the_last_page_rather_than_over_it()
     {
         await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
-        var (tab, window, view) = await ShowWithTasksAndMcpAsync(h);
-        tab.ResizeSidePanel(600);
+        var (tab, window, view) = await ShowWithTasksAndMcpAsync(h, windowWidth: WideWindow);
+        tab.ResizeSidePanel(RoomForEveryPage);
         UiText.Settle(window);
         var row = view.GetVisualDescendants().OfType<PageTabsPanel>().Single();
         var close = view.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Close side panel");
 
         Assert.Empty(row.Overflow);
-        Assert.Equal(["Changed Files", "Agents", "Tasks", "MCP"], PageTabs(row).Select(p => Label(p).Text));
+        Assert.Equal(["Changed Files", "Agents", "Tasks", "MCP", "Scratch Pad"], PageTabs(row).Select(p => Label(p).Text));
         AssertLaidOut(row);
-        var mcp = PageTabs(row)[^1];
-        Assert.True(InView(mcp, view).Right <= InView(close, view).Left, $"MCP ends at {InView(mcp, view).Right}, the close button starts at {InView(close, view).Left}");
+        var last = PageTabs(row)[^1];
+        Assert.True(InView(last, view).Right <= InView(close, view).Left, $"The last page ends at {InView(last, view).Right}, the close button starts at {InView(close, view).Left}");
     }
+
+    /// <summary>
+    /// A window and a panel wide enough for every page's tab. Headless text gives each character a whole em, so the tabs
+    /// are about twice as wide as on a real screen.
+    /// </summary>
+    private const double WideWindow = 1600;
+
+    private const double RoomForEveryPage = 850;
 
     [AvaloniaFact]
     public async Task The_pages_that_dont_fit_are_in_a_menu_and_the_page_showing_keeps_a_place_in_the_row()
     {
         await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
-        var (tab, window, view) = await ShowWithTasksAndMcpAsync(h);
+        var (tab, window, view) = await ShowWithTasksAndMcpAsync(h, windowWidth: WideWindow);
         var row = view.GetVisualDescendants().OfType<PageTabsPanel>().Single();
         var more = MorePages(row);
 
@@ -89,12 +97,12 @@ public class SidePanelUiTests
         menu.Hide();
         UiText.Settle(window);
         Assert.True(tab.IsMcpPage);
-        Assert.DoesNotContain(PageTabs(row)[^1], row.Overflow);
+        Assert.DoesNotContain(PageTab(row, "MCP"), row.Overflow);
         Assert.NotEmpty(row.Overflow);
         AssertLaidOut(row);
 
         // With room for them all, the button goes.
-        tab.ResizeSidePanel(700);
+        tab.ResizeSidePanel(RoomForEveryPage);
         UiText.Settle(window);
         Assert.Empty(row.Overflow);
         AssertLaidOut(row);
@@ -109,7 +117,7 @@ public class SidePanelUiTests
         var dot = MorePages(row).GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "MorePagesDot");
 
         // MCP, left out of the row, has its warning dot: the button shows one like it, and so does MCP's entry.
-        Assert.Contains(PageTabs(row)[^1], row.Overflow);
+        Assert.Contains(PageTab(row, "MCP"), row.Overflow);
         Assert.True(dot.IsEffectivelyVisible);
         Assert.Contains("warning", dot.Classes);
         var menu = await OpenAsync(window, MorePages(row));
@@ -124,11 +132,11 @@ public class SidePanelUiTests
     }
 
     /// <summary>A tab with the Tasks and MCP pages beside Changed Files and Agents, its side panel open at its width.</summary>
-    private static async Task<(TabViewModel Tab, Window Window, TabView View)> ShowWithTasksAndMcpAsync(TabTestHarness h, string mcpStatus = "connected")
+    private static async Task<(TabViewModel Tab, Window Window, TabView View)> ShowWithTasksAndMcpAsync(TabTestHarness h, string mcpStatus = "connected", double windowWidth = 1200)
     {
         h.Transport.Answers["mcp_status"] = _ => new JsonObject { ["mcpServers"] = new JsonArray(new JsonObject { ["name"] = "tickets", ["status"] = mcpStatus }) };
         var tab = await h.OpenTabAsync();
-        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        var window = UiText.Show(new ShellView { DataContext = h.Shell }, windowWidth);
         h.Transport.Emit($$"""{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-5-5","permissionMode":"default","mcp_servers":[{"name":"tickets","status":"{{mcpStatus}}"}]}""");
         h.Transport.Emit(new JsonObject
         {
@@ -143,6 +151,8 @@ public class SidePanelUiTests
     }
 
     private static List<Button> PageTabs(PageTabsPanel row) => [.. row.Children.OfType<Button>().Where(b => b.Classes.Contains("pagetab") && b.IsVisible)];
+
+    private static Button PageTab(PageTabsPanel row, string label) => PageTabs(row).Single(p => Label(p).Text == label);
 
     private static Button MorePages(PageTabsPanel row) => Assert.IsType<Button>(row.Children[^1]);
 

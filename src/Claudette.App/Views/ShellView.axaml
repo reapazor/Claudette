@@ -82,6 +82,25 @@
     <Style Selector=".claude Border.taskbadge">
       <Setter Property="CornerRadius" Value="8" />
     </Style>
+    <!-- Where a tab works, at the right of its row's second line (DESIGN.md §4, "Sidebar"): the git branch or worktree,
+         and the Perforce changelist. A long branch name is cut short rather than squeezing the model out. -->
+    <Style Selector="Button.rowbadge">
+      <Setter Property="Padding" Value="0" />
+      <!-- Its border mustn't make the line, and so the row, taller than the text beside it -->
+      <Setter Property="Margin" Value="0,-1" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="MaxWidth" Value="120" />
+    </Style>
+    <Style Selector="Border.rowbadge">
+      <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="4,0" />
+    </Style>
+    <Style Selector=".claude Border.rowbadge">
+      <Setter Property="CornerRadius" Value="8" />
+    </Style>
   </UserControl.Styles>
 
   <Grid ColumnDefinitions="Auto,*">
@@ -186,8 +205,8 @@
                                             ToolTip.Tip="Synced to the session library" AutomationProperties.Name="Synced to the session library">
                                       <Path Data="{StaticResource IconSync}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="9" Height="9" Stretch="Uniform" />
                                     </Border>
-                                    <!-- Works in a git worktree of its own (DESIGN.md §4, "Worktree tabs") -->
-                                    <Border DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding IsInWorktree}" VerticalAlignment="Center" Margin="0,0,5,0"
+                                    <!-- Works in a git worktree of its own (DESIGN.md §4, "Worktree tabs"); in the branch badge while that shows -->
+                                    <Border DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding ShowWorktreeIcon}" VerticalAlignment="Center" Margin="0,0,5,0"
                                             ToolTip.Tip="{Binding WorktreeTip}" AutomationProperties.Name="{Binding WorktreeTip}">
                                       <Path Data="{StaticResource IconBranch}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="9" Height="9" Stretch="Uniform" />
                                     </Border>
@@ -205,27 +224,48 @@
                                             ToolTip.Tip="{Binding TaskBadgeTip}" AutomationProperties.Name="{Binding TaskBadgeTip}">
                                       <TextBlock Text="{Binding RunningTaskCount}" />
                                     </Border>
-                                    <!-- The Perforce changelist (DESIGN.md §18): separate from the name, so renaming keeps it -->
-                                    <Button DockPanel.Dock="Right" Classes="flat changelist" Padding="0" Margin="5,0,0,0" VerticalAlignment="Center"
-                                            IsVisible="{Binding Perforce.ShowChangelistBadge}" ToolTip.Tip="{Binding Perforce.ChangelistBadgeTip}" AutomationProperties.Name="{Binding Perforce.ChangelistBadge}">
-                                      <Border Background="{DynamicResource SubtleBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1" CornerRadius="4" Padding="4,0">
-                                        <TextBlock Classes="muted small" Text="{Binding Perforce.ChangelistBadge}" />
-                                      </Border>
-                                      <Button.Flyout>
-                                        <MenuFlyout>
-                                          <MenuItem Header="Copy changelist number" Command="{Binding Perforce.CopyChangelistCommand}" CommandParameter="{x:Null}" />
-                                          <MenuItem Header="Open in P4V" Command="{Binding Perforce.OpenChangelistInP4VCommand}" CommandParameter="{x:Null}" />
-                                        </MenuFlyout>
-                                      </Button.Flyout>
-                                    </Button>
                                     <Panel>
                                       <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" IsVisible="{Binding !IsRenaming}" />
                                       <TextBox Text="{Binding RenameText}" IsVisible="{Binding IsRenaming}" Padding="4,1" MinHeight="0"
                                                KeyDown="OnRenameKeyDown" LostFocus="OnRenameLostFocus" AttachedToVisualTree="OnRenameAttached" />
                                     </Panel>
                                   </DockPanel>
-                                  <TextBlock Classes="muted small" Classes.warning="{Binding IsAlertStatus}" Classes.error="{Binding IsErrorStatus}"
-                                             Text="{Binding RowDetail}" TextTrimming="CharacterEllipsis" />
+                                  <!-- The model and effort, or what needs attention; at its right, where the tab works (DESIGN.md §4, "Sidebar") -->
+                                  <DockPanel>
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" Margin="6,0,0,0">
+                                      <!-- The git branch, or the worktree: separate from the name, so renaming keeps it -->
+                                      <Button x:Name="BranchBadge" Classes="flat rowbadge" IsVisible="{Binding ShowBranchBadge}"
+                                              ToolTip.Tip="{Binding BranchBadgeTip}" AutomationProperties.Name="{Binding BranchBadgeTip}">
+                                        <Border Classes="rowbadge">
+                                          <StackPanel Orientation="Horizontal" Spacing="3">
+                                            <Path Data="{StaticResource IconBranch}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="8" Height="8" Stretch="Uniform"
+                                                  VerticalAlignment="Center" IsVisible="{Binding IsInWorktree}" />
+                                            <TextBlock Classes="muted small" Text="{Binding BranchBadge}" TextTrimming="CharacterEllipsis" />
+                                          </StackPanel>
+                                        </Border>
+                                        <Button.Flyout>
+                                          <MenuFlyout>
+                                            <MenuItem Header="Copy branch name" Command="{Binding CopyBranchCommand}" />
+                                          </MenuFlyout>
+                                        </Button.Flyout>
+                                      </Button>
+                                      <!-- The Perforce changelist (DESIGN.md §18): separate from the name, so renaming keeps it -->
+                                      <Button Classes="flat rowbadge changelist" IsVisible="{Binding Perforce.ShowChangelistBadge}"
+                                              ToolTip.Tip="{Binding Perforce.ChangelistBadgeTip}" AutomationProperties.Name="{Binding Perforce.ChangelistBadge}">
+                                        <Border Classes="rowbadge">
+                                          <TextBlock Classes="muted small" Text="{Binding Perforce.ChangelistBadge}" />
+                                        </Border>
+                                        <Button.Flyout>
+                                          <MenuFlyout>
+                                            <MenuItem Header="Copy changelist number" Command="{Binding Perforce.CopyChangelistCommand}" CommandParameter="{x:Null}" />
+                                            <MenuItem Header="Open in P4V" Command="{Binding Perforce.OpenChangelistInP4VCommand}" CommandParameter="{x:Null}" />
+                                          </MenuFlyout>
+                                        </Button.Flyout>
+                                      </Button>
+                                    </StackPanel>
+                                    <TextBlock Classes="muted small" Classes.warning="{Binding IsAlertStatus}" Classes.error="{Binding IsErrorStatus}"
+                                               Text="{Binding RowDetail}" TextTrimming="CharacterEllipsis" />
+                                  </DockPanel>
                                 </StackPanel>
                                 <Panel Grid.Column="2">
                                   <Button Classes="flat closetab" Padding="4" VerticalAlignment="Top" ToolTip.Tip="Close tab" AutomationProperties.Name="Close tab"

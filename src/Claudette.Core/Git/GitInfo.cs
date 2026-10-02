@@ -19,4 +19,20 @@ public static class GitInfo
             return null;
         }
     }
+
+    /// <summary>
+    /// What's checked out in the repository containing <paramref name="folder"/>: the branch (null on a detached HEAD)
+    /// and the commit HEAD points at (null when it can't be read). Null when it isn't in a repository.
+    /// </summary>
+    public static (string? Branch, string? Commit)? TryGetHead(string folder)
+    {
+        try
+        {
+            return GitDirectory.Find(folder)?.ReadHead();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return null;
+        }
+    }
 }

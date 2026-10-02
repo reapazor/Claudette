@@ -1,0 +1,5 @@
+﻿"Shared by the tabs in work"
+[button] Copy all
+[button] Clear…
+"On this machine only: the folder isn't in a git repository."
+[field] "Check the retry limit⏎⏎And the timeout⏎"

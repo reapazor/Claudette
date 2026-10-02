@@ -27,6 +27,16 @@
       <Setter Property="CornerRadius" Value="4" />
       <Setter Property="Padding" Value="4,2" />
     </Style>
+    <!-- A running agent's Stop (■): there to see on the row under the pointer or selected, or with keyboard focus. -->
+    <Style Selector="Button.agentstop">
+      <Setter Property="Padding" Value="4" />
+      <Setter Property="Margin" Value="4,0,0,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="Border.agentrow:pointerover Button.agentstop, Button.agentstop.shown, Button.agentstop:focus-visible">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
     <!-- A node waiting on a permission prompt stands out, like the prompt itself (DESIGN.md §7). -->
     <Style Selector="Border.agentrow.waiting">
       <Setter Property="Background" Value="{DynamicResource CautionBackgroundBrush}" />
@@ -52,7 +62,7 @@
           <!-- A row stays within the width shown, however deep: only rows nested past that scroll sideways (DESIGN.md §3) -->
           <controls:ShownWidth>
             <Border Classes="agentrow" Classes.waiting="{Binding IsWaiting}" ToolTip.Tip="{Binding Tooltip}">
-              <Grid ColumnDefinitions="16,*,Auto">
+              <Grid ColumnDefinitions="16,*,Auto,Auto">
                 <TextBlock Classes="status" Classes.busy="{Binding IsRunning}" Classes.alert="{Binding IsWaiting}"
                            Classes.ok="{Binding IsDone}" Classes.failed="{Binding IsFailed}"
                            Text="{Binding StatusGlyph}" Margin="0,1,0,0" />
@@ -61,6 +71,12 @@
                   <TextBlock Classes="muted small" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
                 <TextBlock Grid.Column="2" Classes="mono small muted" Text="{Binding RunningText}" Margin="6,2,0,0" />
+                <!-- Stop subagent…, on the row hovered or selected: its place is kept, so the time doesn't move -->
+                <Button Grid.Column="3" Classes="flat agentstop" Classes.shown="{Binding $parent[TreeViewItem].IsSelected, FallbackValue=False}"
+                        IsVisible="{Binding CanStop}" ToolTip.Tip="{Binding StopText, StringFormat='{}{0}…'}" AutomationProperties.Name="{Binding StopText}"
+                        Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).StopAgentCommand}" CommandParameter="{Binding}">
+                  <Path Data="{StaticResource IconStop}" Fill="{DynamicResource MutedTextBrush}" Width="8" Height="8" Stretch="Uniform" />
+                </Button>
               </Grid>
               <Border.ContextMenu>
                 <ContextMenu>

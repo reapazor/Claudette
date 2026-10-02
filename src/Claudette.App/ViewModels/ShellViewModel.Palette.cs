@@ -99,6 +99,7 @@ public sealed partial class ShellViewModel
             {
                 Command("Show MCP servers", () => tab.OpenSidePanelPage(SidePanelPage.Mcp));
             }
+            Command("Show scratch pad", () => tab.OpenSidePanelPage(SidePanelPage.ScratchPad));
             Command("Tab settings…", () => OpenTabSettingsCommand.Execute(tab));
             AsyncCommand("Duplicate tab", () => DuplicateTabAsync(tab));
             if (CanOpenWorktreeTab(tab))
