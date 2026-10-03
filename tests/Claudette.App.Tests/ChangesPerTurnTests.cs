@@ -106,8 +106,8 @@ public class ChangesPerTurnTests
         h.Shell.Restore(null);
         var tab = h.Shell.AllTabs.Single();
         h.Shell.SelectedTab = tab;
-        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle && tab.IsSettled, "the restored tab");
-        Assert.Single(tab.ChangedFiles.Files);
+        // The rows are listed once the tab is shown, after the files are read off the UI thread.
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle && tab.IsSettled && tab.ChangedFiles.Files.Count == 1, "the restored tab's changed file");
 
         // The first live turn shows only its own changes.
         tab.ComposerText = "just talk";
