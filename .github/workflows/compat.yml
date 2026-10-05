@@ -9,7 +9,7 @@ name: Claude Code compatibility check
 # request.
 on:
   schedule:
-    - cron: "17 7 * * *"
+    - cron: "7 7 1/7 * *"
   workflow_dispatch:
     inputs:
       version:
