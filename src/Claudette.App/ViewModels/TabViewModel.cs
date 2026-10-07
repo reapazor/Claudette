@@ -1696,6 +1696,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     State.ResumeDropsTurn = null;
                     State.TranscriptPath = null;
                 }
+                // The session is the tab's own now (a new one, a copy's, or after /clear): it has the tab's mark.
+                RememberMark();
                 if (started.Init.ClaudeCodeVersion is { } reported && Version.TryParse(reported, out var version))
                 {
                     SetRunningVersion(version);
@@ -2005,6 +2007,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         Perforce.Stop();
         ProjectTools.Runs.CloseRuns(killProcesses);
         ChangedFiles.StopReviewSync();
+        MarkSync.Cancel();
         ReleaseScratchPad();
         if (_starting is { } starting)
         {

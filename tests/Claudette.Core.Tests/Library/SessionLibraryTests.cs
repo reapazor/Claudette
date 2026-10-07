@@ -30,6 +30,7 @@ public sealed class SessionLibraryTests : IDisposable
             Name = "Fix login",
             AutoName = "Login redirect fix",
             UserName = "Fix login",
+            Mark = "star",
             Model = "opus",
             Effort = "high",
             PermissionMode = "acceptEdits",
@@ -81,6 +82,7 @@ public sealed class SessionLibraryTests : IDisposable
 
         var record = JsonSerializer.Deserialize<SessionRecord>(File.ReadAllText(Path.Combine(folder, "record.json")), JsonFileStore<SessionRecord>.Options)!;
         Assert.Equal("Fix login", record.Name);
+        Assert.Equal("star", record.Mark);
         Assert.Equal(120, record.Tokens.Total);
         Assert.Equal("feature/auth", record.Project!.Branch);
         Assert.True(record.HadUncommittedChanges);

@@ -50,6 +50,16 @@ public sealed class HistoryEntry
 
     public bool IsOpen { get; set; }
 
+    /// <summary>
+    /// The session's mark as stored (DESIGN.md §4, "Marks"): the library record's or this machine's, whichever is newer.
+    /// Kept as written, so opening the session keeps a mark a later Claudette added.
+    /// </summary>
+    public string? MarkKey { get; init; }
+
+    public TabMark? Mark => TabMarks.Parse(MarkKey);
+
+    public string? MarkTip => Mark is { } mark ? TabMarkText.Tip(mark) : null;
+
     /// <summary>Where Claude's replies matched the search, when only they did (DESIGN.md §9, "History").</summary>
     public string? MatchedReply { get; set; }
 
@@ -275,6 +285,8 @@ public sealed partial class HistoryViewModel : ViewModelBase
         var machine = library.MachineName;
         var now = _services.Time.GetUtcNow();
         var open = _shell.AllTabs.Select(t => t.State.SessionId).OfType<string>().ToHashSet();
+        // A copy: the list is built off the UI thread, which owns the state.
+        var marks = new Dictionary<string, SessionMark>(_services.State.SessionMarks);
         try
         {
             _all = await Task.Run(async () =>
@@ -295,7 +307,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
                 IReadOnlyDictionary<string, SessionSummary?> summaries = index is null
                     ? libraryOnly.ToDictionary(p => p, HistoryIndex.ReadSummary, StringComparer.Ordinal)
                     : await index.SummarizeAsync(libraryOnly).ConfigureAwait(false);
-                return Merge(local, stored, summaries, machine, now, open);
+                return Merge(local, stored, summaries, machine, now, open, marks);
             });
         }
         catch (Exception ex)
@@ -310,7 +322,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
     }
 
     private static List<HistoryEntry> Merge(IReadOnlyList<SessionSummary> local, IReadOnlyList<LibraryEntry> stored, IReadOnlyDictionary<string, SessionSummary?> librarySummaries,
-        string machine, DateTimeOffset now, HashSet<string> open)
+        string machine, DateTimeOffset now, HashSet<string> open, Dictionary<string, SessionMark> marks)
     {
         var records = stored.Where(e => !e.IsConflictCopy).GroupBy(e => e.Record.SessionId).ToDictionary(g => g.Key, g => g.First());
         var entries = new List<HistoryEntry>();
@@ -381,6 +393,7 @@ public sealed partial class HistoryViewModel : ViewModelBase
                 IsConflictCopy = isConflict,
                 ConflictLabel = label,
                 IsOpen = open.Contains(id),
+                MarkKey = TabMarks.ForSession(record, marks.GetValueOrDefault(id)),
                 Details = string.Join(" · ", details),
             };
         }

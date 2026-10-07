@@ -297,6 +297,41 @@
       <Setter Property="FontWeight" Value="Bold" />
     </Style>
 
+    <!-- A tab's mark (DESIGN.md §4, "Marks"), drawn by MarkIcon: each in its own color. The check, cross and question
+         mark are lines; the star, flag and pause sign are filled. -->
+    <Style Selector="Path.mark">
+      <Setter Property="Width" Value="10" />
+      <Setter Property="Height" Value="10" />
+      <Setter Property="Stretch" Value="Uniform" />
+      <Setter Property="StrokeThickness" Value="1.5" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="StrokeJoin" Value="Round" />
+    </Style>
+    <Style Selector="Path.mark.check">
+      <Setter Property="Stroke" Value="{DynamicResource OkTextBrush}" />
+    </Style>
+    <Style Selector="Path.mark.cross">
+      <Setter Property="Stroke" Value="{DynamicResource ErrorTextBrush}" />
+    </Style>
+    <Style Selector="Path.mark.question">
+      <Setter Property="Stroke" Value="{DynamicResource WarningTextBrush}" />
+    </Style>
+    <Style Selector="Path.mark.star">
+      <Setter Property="Stroke" Value="{DynamicResource MarkStarBrush}" />
+      <Setter Property="Fill" Value="{DynamicResource MarkStarBrush}" />
+      <Setter Property="StrokeThickness" Value="1" />
+    </Style>
+    <Style Selector="Path.mark.flag">
+      <Setter Property="Stroke" Value="{DynamicResource AccentStatusBrush}" />
+      <Setter Property="Fill" Value="{DynamicResource AccentStatusBrush}" />
+      <Setter Property="StrokeThickness" Value="1.2" />
+    </Style>
+    <Style Selector="Path.mark.pause">
+      <Setter Property="Stroke" Value="{DynamicResource MutedTextBrush}" />
+      <Setter Property="Fill" Value="{DynamicResource MutedTextBrush}" />
+      <Setter Property="StrokeThickness" Value="1" />
+    </Style>
+
     <!-- Composer box -->
     <Style Selector="Border.composer">
       <Setter Property="Background" Value="{DynamicResource ComposerBrush}" />
@@ -426,6 +461,13 @@
       <!-- A cloud: a remote agent in the running tasks list. -->
       <StreamGeometry x:Key="IconToolRemote">M3,9.5 L9,9.5 A2.25,2.25 0 0 0 9.2,5 A3,3 0 0 0 3.4,4.6 A2.45,2.45 0 0 0 3,9.5 Z</StreamGeometry>
       <StreamGeometry x:Key="IconToolDefault">M6,1 L10.5,3.5 L10.5,8.5 L6,11 L1.5,8.5 L1.5,3.5 Z M1.5,3.5 L6,6 L10.5,3.5 M6,6 L6,11</StreamGeometry>
+      <!-- A tab's marks (DESIGN.md §4, "Marks"), drawn by MarkIcon, which names them IconMark and the mark. 12×12. -->
+      <StreamGeometry x:Key="IconMarkCheck">M1.5,6.5 L4.5,9.5 L10.5,2.5</StreamGeometry>
+      <StreamGeometry x:Key="IconMarkCross">M2.5,2.5 L9.5,9.5 M9.5,2.5 L2.5,9.5</StreamGeometry>
+      <StreamGeometry x:Key="IconMarkQuestion">M3.6,3.9 A2.4,2.4 0 1 1 6.9,6.15 C6.15,6.6 6,7 6,7.6 M6,9.9 L6,10.1</StreamGeometry>
+      <StreamGeometry x:Key="IconMarkStar">M6,0.8 L7.38,4.5 L11.33,4.67 L8.24,7.13 L9.29,10.93 L6,8.75 L2.71,10.93 L3.76,7.13 L0.67,4.67 L4.62,4.5 Z</StreamGeometry>
+      <StreamGeometry x:Key="IconMarkFlag">M2.5,11 L2.5,1 M2.5,1.5 L10,1.5 L8,4.25 L10,7 L2.5,7 Z</StreamGeometry>
+      <StreamGeometry x:Key="IconMarkPause">M3,2 L5,2 L5,10 L3,10 Z M7,2 L9,2 L9,10 L7,10 Z</StreamGeometry>
 
       <!-- Claudette's color tokens, per theme. Views use only these, never Fluent's internal resource names. -->
       <ResourceDictionary.ThemeDictionaries>
@@ -448,6 +490,8 @@
           <SolidColorBrush x:Key="ErrorTextBrush" Color="#C42B1C" />
           <SolidColorBrush x:Key="WarningTextBrush" Color="#9D5D00" />
           <SolidColorBrush x:Key="OkTextBrush" Color="#107C10" />
+          <!-- The star a tab can be marked with (DESIGN.md §4, "Marks"): gold, apart from the question mark's amber. -->
+          <SolidColorBrush x:Key="MarkStarBrush" Color="#B8860B" />
           <SolidColorBrush x:Key="AccentStatusBrush" Color="{DynamicResource SystemAccentColor}" />
           <SolidColorBrush x:Key="CautionBorderBrush" Color="#D9A400" />
           <SolidColorBrush x:Key="CautionBackgroundBrush" Color="#FFF6D6" />
@@ -514,6 +558,7 @@
           <SolidColorBrush x:Key="ErrorTextBrush" Color="#FF99A4" />
           <SolidColorBrush x:Key="WarningTextBrush" Color="#FCE100" />
           <SolidColorBrush x:Key="OkTextBrush" Color="#6CCB5F" />
+          <SolidColorBrush x:Key="MarkStarBrush" Color="#F5B83D" />
           <SolidColorBrush x:Key="AccentStatusBrush" Color="{DynamicResource SystemAccentColorLight2}" />
           <SolidColorBrush x:Key="CautionBorderBrush" Color="#8A6D00" />
           <SolidColorBrush x:Key="CautionBackgroundBrush" Color="#2B2610" />

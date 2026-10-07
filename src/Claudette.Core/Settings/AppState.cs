@@ -63,6 +63,13 @@ public sealed class AppState
     public Dictionary<string, string> FolderMappings { get; set; } = [];
 
     /// <summary>
+    /// The marks of sessions on this machine, by session id (DESIGN.md §4, "Marks"), so a session opened from History
+    /// after its tab closed has its mark again. Only sessions whose mark was set or cleared here are kept, and a library
+    /// record written since goes first (<see cref="TabMarks.ForSession"/>).
+    /// </summary>
+    public Dictionary<string, SessionMark> SessionMarks { get; set; } = [];
+
+    /// <summary>
     /// Folders the user said to trust, so Claude Code starts in them, and in what's inside them, without asking about
     /// what their own configuration runs (DESIGN.md §7, "Folder trust"). Null until the first launch that knows about
     /// trust, which trusts the folders already used here: their tabs, and the recent and favorite folders.
@@ -160,6 +167,12 @@ public sealed class TabState
     public string? UserName { get; set; }
 
     public bool IsPinned { get; set; }
+
+    /// <summary>
+    /// The icon the user marked the tab with (DESIGN.md §4, "Marks"), as <see cref="TabMarks.Key"/> writes it; null for
+    /// none. The tab's own state, like its name.
+    /// </summary>
+    public string? Mark { get; set; }
 
     /// <summary>
     /// Copy this tab's session to the session library after each turn, so another machine can open it from History

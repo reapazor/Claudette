@@ -26,6 +26,9 @@ public sealed class SessionRecord
     /// <summary>A name the user chose.</summary>
     public string? UserName { get; set; }
 
+    /// <summary>The icon the user marked the tab with (DESIGN.md §4, "Marks"), as <see cref="TabMarks.Key"/> writes it; null for none.</summary>
+    public string? Mark { get; set; }
+
     public string? Model { get; set; }
 
     public string? Effort { get; set; }

@@ -203,6 +203,7 @@ public sealed partial class TabViewModel
         Name = DisplayName,
         AutoName = State.AutoName,
         UserName = State.UserName,
+        Mark = State.Mark,
         Model = _modelId,
         Effort = Effort,
         PermissionMode = PermissionMode,

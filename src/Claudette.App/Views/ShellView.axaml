@@ -27,6 +27,22 @@
         </ItemsControl>
       </StackPanel>
     </DataTemplate>
+
+    <!-- The Mark submenu of a tab's menu (DESIGN.md §4, "Marks"), in the full sidebar and the rail: each mark with its
+         icon, the tab's own ticked. Each item ticks itself as it's clicked; the menu is made again as the mark changes,
+         so the binding stays one-way. -->
+    <ControlTheme x:Key="MarkMenuItemTheme" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}" x:DataType="vm:MarkMenuItem">
+      <Setter Property="ToggleType" Value="CheckBox" />
+      <Setter Property="IsChecked" Value="{Binding IsOn, Mode=OneWay}" />
+      <Setter Property="Command" Value="{Binding Toggle}" />
+      <Setter Property="CommandParameter" Value="{Binding Mark}" />
+    </ControlTheme>
+    <DataTemplate x:Key="MarkMenuItemTemplate" DataType="vm:MarkMenuItem">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <views:MarkIcon Mark="{Binding Mark}" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+      </StackPanel>
+    </DataTemplate>
   </UserControl.Resources>
 
   <UserControl.Styles>
@@ -196,6 +212,12 @@
                                 <TextBlock Classes="status" Classes.busy="{Binding IsBusyStatus}" Classes.alert="{Binding IsAlertStatus}"
                                            Classes.failed="{Binding IsErrorStatus}" Classes.unread="{Binding IsUnread}"
                                            Text="{Binding StatusGlyph}" ToolTip.Tip="{Binding StatusTip}" HorizontalAlignment="Center" VerticalAlignment="Top" />
+                                <!-- The user's own mark (DESIGN.md §4, "Marks"): under the status icon, level with the second
+                                     line. The border gives the tip somewhere to hover. -->
+                                <Border x:Name="RowMark" Background="Transparent" IsVisible="{Binding HasMark}" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                        Margin="0,0,0,2" ToolTip.Tip="{Binding MarkTip}" AutomationProperties.Name="{Binding MarkTip}">
+                                  <views:MarkIcon Mark="{Binding Mark}" />
+                                </Border>
                                 <StackPanel Grid.Column="1" Spacing="1">
                                   <DockPanel>
                                     <Path DockPanel.Dock="Left" Data="{StaticResource IconPin}" Fill="{DynamicResource MutedTextBrush}" Width="8" Height="10" Stretch="Uniform"
@@ -295,6 +317,10 @@
                                   <MenuItem Header="Rename" Command="{Binding StartRenameCommand}" />
                                   <MenuItem Header="Reset name" Command="{Binding ResetNameCommand}" IsVisible="{Binding HasUserName}" />
                                   <MenuItem Header="{Binding PinMenuText}" Command="{Binding TogglePinCommand}" />
+                                  <!-- An icon of the user's own under the status icon (DESIGN.md §4, "Marks") -->
+                                  <MenuItem Header="Mark" ItemsSource="{Binding MarkMenu}" ItemContainerTheme="{StaticResource MarkMenuItemTheme}"
+                                            ItemTemplate="{StaticResource MarkMenuItemTemplate}" />
+                                  <MenuItem Header="Clear mark" Command="{Binding ClearMarkCommand}" IsVisible="{Binding HasMark}" />
                                   <!-- The item ticks itself as it's clicked, then runs the command, so the binding stays one-way -->
                                   <MenuItem Header="Sync to other machines" ToggleType="CheckBox" IsChecked="{Binding SyncToLibrary, Mode=OneWay}"
                                             Command="{Binding ToggleSyncToLibraryCommand}" />
@@ -420,11 +446,17 @@
                             <TextBlock Classes="status small" Classes.busy="{Binding IsBusyStatus}" Classes.alert="{Binding IsAlertStatus}"
                                        Classes.failed="{Binding IsErrorStatus}" Classes.unread="{Binding IsUnread}"
                                        Text="{Binding StatusGlyph}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,4,0" />
+                            <!-- The user's own mark (DESIGN.md §4, "Marks"), in the corner across from the status icon -->
+                            <views:MarkIcon x:Name="RailMark" Mark="{Binding Mark}" Width="8" Height="8" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="4,0,0,4"
+                                            AutomationProperties.Name="{Binding MarkTip}" />
                           </Panel>
                           <Button.ContextMenu>
                             <ContextMenu>
                               <MenuItem Header="Rename" Command="{Binding StartRenameCommand}" />
                               <MenuItem Header="{Binding PinMenuText}" Command="{Binding TogglePinCommand}" />
+                              <MenuItem Header="Mark" ItemsSource="{Binding MarkMenu}" ItemContainerTheme="{StaticResource MarkMenuItemTheme}"
+                                        ItemTemplate="{StaticResource MarkMenuItemTemplate}" />
+                              <MenuItem Header="Clear mark" Command="{Binding ClearMarkCommand}" IsVisible="{Binding HasMark}" />
                               <MenuItem Header="Sync to other machines" ToggleType="CheckBox" IsChecked="{Binding SyncToLibrary, Mode=OneWay}"
                                         Command="{Binding ToggleSyncToLibraryCommand}" />
                               <MenuItem Header="Sync now" Command="{Binding SyncNowCommand}" IsVisible="{Binding SyncToLibrary}"

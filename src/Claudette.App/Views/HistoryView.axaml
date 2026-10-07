@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Claudette.App.ViewModels"
+             xmlns:views="using:Claudette.App.Views"
              x:Class="Claudette.App.Views.HistoryView"
              x:DataType="vm:HistoryViewModel">
   <!-- DESIGN.md §9, "History" -->
@@ -48,7 +49,14 @@
                         Command="{Binding $parent[UserControl].((vm:HistoryViewModel)DataContext).OpenCommand}" CommandParameter="{Binding}"
                         ToolTip.Tip="Resume in a new tab">
                   <StackPanel Spacing="1">
-                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                    <!-- The session's mark, before its title (DESIGN.md §4, "Marks") -->
+                    <DockPanel>
+                      <Border DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding Mark, Converter={x:Static ObjectConverters.IsNotNull}}" VerticalAlignment="Center"
+                              Margin="0,0,6,0" ToolTip.Tip="{Binding MarkTip}" AutomationProperties.Name="{Binding MarkTip}">
+                        <views:MarkIcon Mark="{Binding Mark}" />
+                      </Border>
+                      <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
                     <TextBlock Classes="muted small" Text="{Binding FirstPrompt}" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasFirstPrompt}" />
                     <TextBlock Classes="small" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasMatchedReply}">
                       <Run Classes="muted" Text="Claude: " />

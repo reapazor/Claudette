@@ -202,6 +202,8 @@ internal sealed class SessionOpener
             SessionId = entry.SessionId,
             AutoName = record?.AutoName ?? entry.Title,
             UserName = fork ? null : record?.UserName,
+            // The session's mark (DESIGN.md §4, "Marks"); a copy is a session of its own, so starts without, as without the name.
+            Mark = fork ? null : entry.MarkKey,
             TranscriptPath = transcriptPath,
             ForkOnNextStart = fork,
             // A session someone synced keeps syncing wherever it's opened, a copy of one too; one that only ever lived
