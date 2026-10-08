@@ -118,6 +118,8 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
     {
         _services = services;
         _host = host;
+        // As saved, until the session's changes are read back (ChangesRead).
+        AllReviewed = host.State.AllFilesReviewed;
     }
 
     private ChangedFiles Changes
@@ -490,12 +492,27 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
     /// Every file Claude changed in the session is ticked as reviewed, and there's at least one: the tab's row shows the
     /// reviewed icon in place of its mark (DESIGN.md §4, "Marks"). Files only you or commands changed, in working tree
     /// vs HEAD, don't count, as they don't untick either. Kept up to date in the background too, from Claude's changes
-    /// alone, so it doesn't wait for the rows.
+    /// alone, so it doesn't wait for the rows. Saved with the tab, so a restored tab has it before it reads its
+    /// conversation back.
     /// </summary>
     [ObservableProperty]
     public partial bool AllReviewed { get; private set; }
 
-    partial void OnAllReviewedChanged(bool value) => _host.AllReviewedChanged();
+    partial void OnAllReviewedChanged(bool value)
+    {
+        if (_host.State.AllFilesReviewed != value)
+        {
+            _host.State.AllFilesReviewed = value;
+            _services.SaveState();
+        }
+        _host.AllReviewedChanged();
+    }
+
+    /// <summary>
+    /// The tab has read its earlier conversation back, or found none: <see cref="AllReviewed"/> goes by the changes
+    /// from now on, rather than by what was saved.
+    /// </summary>
+    internal void ChangesRead() => UpdateAllReviewed();
 
     private bool _allReviewedQueued;
 

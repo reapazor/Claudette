@@ -1185,6 +1185,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             _restoredTranscript = true;
             resume = await RestoreTranscriptAsync();
+            ChangedFiles.ChangesRead();
             if (IsSessionMissing)
             {
                 ErrorMessage = "Its earlier conversation is gone";

@@ -256,6 +256,13 @@ public sealed class TabState
     public List<Diffs.ReviewedFile> ReviewedFiles { get; set; } = [];
 
     /// <summary>
+    /// Every file Claude changed in the session was ticked as reviewed, when it was last worked out: the row shows the
+    /// reviewed icon from this until the tab reads its conversation back, which a restored tab in the background does
+    /// once it's shown (DESIGN.md §4, "Marks").
+    /// </summary>
+    public bool AllFilesReviewed { get; set; }
+
+    /// <summary>
     /// A usage limit stopped the tab's last turn, and it waits for the limit to reset (DESIGN.md §6, "Continuing after a
     /// limit resets"), so a restart keeps waiting.
     /// </summary>

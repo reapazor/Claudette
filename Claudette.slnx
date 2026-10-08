@@ -14,6 +14,7 @@
     <Project Path="tests/Claudette.Usage.Tests/Claudette.Usage.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/Claudette.Demo/Claudette.Demo.csproj" />
     <Project Path="tools/Claudette.FakeClaude/Claudette.FakeClaude.csproj" />
     <Project Path="tools/Claudette.Fixtures/Claudette.Fixtures.csproj" />
     <Project Path="tools/Claudette.MockApi/Claudette.MockApi.csproj" />

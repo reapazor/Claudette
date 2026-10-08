@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>claudette-demo</AssemblyName>
+    <RootNamespace>Claudette.Demo</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Claudette.Core\Claudette.Core.csproj" />
+    <ProjectReference Include="..\..\src\Claudette.Usage\Claudette.Usage.csproj" />
+    <!-- Built next to the tool: the demo's Claude Code, so trying it needs no account and spends no tokens. -->
+    <ProjectReference Include="..\Claudette.FakeClaude\Claudette.FakeClaude.csproj" />
+  </ItemGroup>
+</Project>

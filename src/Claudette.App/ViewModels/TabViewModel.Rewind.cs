@@ -336,6 +336,7 @@ public sealed partial class TabViewModel
             ExpandThinking = State.ExpandThinking,
             // A copy has the same changes, so keeps their marks (DESIGN.md §8, "Reviewed").
             ReviewedFiles = sessionId is null ? [] : Copy(State.ReviewedFiles) ?? [],
+            AllFilesReviewed = sessionId is not null && State.AllFilesReviewed,
             // In the same worktree, with the same extra folders (DESIGN.md §4, "Worktree tabs").
             WorktreeOf = State.WorktreeOf,
             NewWorktree = State.NewWorktree,

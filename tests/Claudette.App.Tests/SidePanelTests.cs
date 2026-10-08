@@ -376,6 +376,7 @@ public class SidePanelTests
         Tick(b);
 
         Assert.True(tab.AllFilesReviewed);
+        Assert.True(tab.State.AllFilesReviewed);
         Assert.True(tab.ShowsMarkIcon);
         Assert.Equal("All changed files reviewed · Marked with a star", tab.MarkTip);
         Assert.Contains(nameof(TabViewModel.AllFilesReviewed), changed);
@@ -389,6 +390,7 @@ public class SidePanelTests
         // Claude changes a reviewed file again.
         EmitEdit(h, "e3", b);
         await TabTestHarness.Eventually(() => !tab.AllFilesReviewed, "Claude's change");
+        Assert.False(tab.State.AllFilesReviewed);
         Assert.Equal("Marked with a star", tab.MarkTip);
         Tick(b);
         Assert.True(tab.AllFilesReviewed);
@@ -453,6 +455,60 @@ public class SidePanelTests
 
         await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle && tab.AllFilesReviewed, "the reviewed icon");
         Assert.Equal(TabMark.Flag, tab.Mark);
+        Assert.True(tab.State.AllFilesReviewed);
+    }
+
+    [Fact]
+    public async Task A_tab_restored_in_the_background_shows_its_saved_reviewed_icon_until_it_reads_its_conversation()
+    {
+        await using var h = new TabTestHarness();
+        var path = Path.Combine(h.WorkFolder, "a.cs");
+        Directory.CreateDirectory(h.WorkFolder);
+        await File.WriteAllTextAsync(path, "b\n", TestContext.Current.CancellationToken);
+        // Claude changed the file again after it was ticked, in a turn this tab never saw finish.
+        h.WriteTranscript("s2", [.. TranscriptEdit("e1", path), .. TranscriptEdit("e2", path)]);
+        h.Services.State.Tabs =
+        [
+            new TabState { Folder = h.WorkFolder, IsPinned = true },
+            new TabState
+            {
+                Folder = h.WorkFolder,
+                IsPinned = true,
+                SessionId = "s2",
+                ReviewedFiles = [new ReviewedFile { Path = path, Change = "e1" }],
+                AllFilesReviewed = true,
+            },
+        ];
+
+        h.Shell.Restore(null);
+        var (first, second) = (h.Shell.AllTabs.First(), h.Shell.AllTabs.Last());
+        await TabTestHarness.Eventually(() => first.Status == TabStatus.Idle && first.IsSettled, "the first tab to start");
+
+        Assert.True(second.AllFilesReviewed);
+        Assert.True(second.ShowsMarkIcon);
+        Assert.Empty(second.Items);
+
+        h.Shell.SelectTab(second.Id);
+
+        await TabTestHarness.Eventually(() => second.Items.Count > 0 && !second.AllFilesReviewed, "the conversation read back");
+        Assert.False(second.State.AllFilesReviewed);
+        Assert.False(second.ShowsMarkIcon);
+    }
+
+    [Fact]
+    public async Task A_tab_whose_conversation_is_gone_loses_its_saved_reviewed_icon()
+    {
+        await using var h = new TabTestHarness();
+        Directory.CreateDirectory(h.WorkFolder);
+        h.Services.State.Tabs = [new TabState { Folder = h.WorkFolder, IsPinned = true, SessionId = "cleaned-up", AllFilesReviewed = true }];
+        h.Shell.Restore(null);
+        var tab = h.Shell.AllTabs.Single();
+
+        await tab.EnsureStartedAsync();
+
+        Assert.True(tab.IsSessionMissing);
+        Assert.False(tab.AllFilesReviewed);
+        Assert.False(tab.State.AllFilesReviewed);
     }
 
     [Fact]
