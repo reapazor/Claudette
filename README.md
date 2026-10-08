@@ -1,5 +1,7 @@
 # Claudette
 
+> This was made for my own usage, its not meant for everyone. Started as an experiment when Anthropic sent me some free cloud time.
+
 **Your friendly neighborhood Claude Code wrapper.** Claudette puts [Claude Code](https://code.claude.com/docs) in a real desktop window: every session in its own tab, every change ready to review, and your plan's usage on screen the whole time, so you never have to run `/usage` again.
 
 It isn't a reimplementation. Each tab runs the real `claude` CLI, with your settings, `CLAUDE.md`, MCP servers, hooks and permissions, and Claudette draws it as proper native UI instead of a terminal. Windows and macOS, built with .NET 10 and Avalonia.
