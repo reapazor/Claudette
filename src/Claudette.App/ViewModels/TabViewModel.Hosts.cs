@@ -41,6 +41,8 @@ public sealed partial class TabViewModel : IProcessMonitorHost, IChangedFilesHos
 
     bool IChangedFilesHost.IsSelected => IsSelected;
 
+    void IChangedFilesHost.AllReviewedChanged() => MarkShownChanged();
+
     // ---- Project tools ---------------------------------------------------------------------------------------------
 
     bool IProjectToolsHost.IsProjectPageShowing => IsSelected && IsSidePanelOpen && IsProjectPage;

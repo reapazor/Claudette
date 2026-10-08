@@ -331,6 +331,12 @@
       <Setter Property="Fill" Value="{DynamicResource MutedTextBrush}" />
       <Setter Property="StrokeThickness" Value="1" />
     </Style>
+    <!-- Over the mark while every changed file is reviewed: a filled disc with the check cut out, so it isn't taken for
+         the check a user can mark a tab with. -->
+    <Style Selector="Path.mark.reviewed">
+      <Setter Property="Fill" Value="{DynamicResource OkTextBrush}" />
+      <Setter Property="StrokeThickness" Value="0" />
+    </Style>
 
     <!-- Composer box -->
     <Style Selector="Border.composer">
@@ -468,6 +474,8 @@
       <StreamGeometry x:Key="IconMarkStar">M6,0.8 L7.38,4.5 L11.33,4.67 L8.24,7.13 L9.29,10.93 L6,8.75 L2.71,10.93 L3.76,7.13 L0.67,4.67 L4.62,4.5 Z</StreamGeometry>
       <StreamGeometry x:Key="IconMarkFlag">M2.5,11 L2.5,1 M2.5,1.5 L10,1.5 L8,4.25 L10,7 L2.5,7 Z</StreamGeometry>
       <StreamGeometry x:Key="IconMarkPause">M3,2 L5,2 L5,10 L3,10 Z M7,2 L9,2 L9,10 L7,10 Z</StreamGeometry>
+      <!-- Not a mark: what covers it while every changed file is reviewed. Filled even-odd, so the check is a hole. -->
+      <StreamGeometry x:Key="IconMarkReviewed">F0 M0.5,6 A5.5,5.5 0 1 1 11.5,6 A5.5,5.5 0 1 1 0.5,6 Z M2.5,6.6 L5.2,9.3 L9.5,4.65 L7.9,3.15 L5.2,6.1 L4.1,5 Z</StreamGeometry>
 
       <!-- Claudette's color tokens, per theme. Views use only these, never Fluent's internal resource names. -->
       <ResourceDictionary.ThemeDictionaries>

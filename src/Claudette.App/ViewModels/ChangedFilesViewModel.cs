@@ -71,6 +71,9 @@ internal interface IChangedFilesHost : ITabAreaHost
 
     /// <summary>Copies the session to the library in the background, for a tab that syncs.</summary>
     void CopyToLibrary();
+
+    /// <summary><see cref="ChangedFilesViewModel.AllReviewed"/> changed: the tab's row shows the reviewed icon, or its mark again.</summary>
+    void AllReviewedChanged();
 }
 
 /// <summary>The tab's changed files and diffs (DESIGN.md §8).</summary>
@@ -125,6 +128,7 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
             {
                 _changes = new ChangedFiles(_services.Time) { Befores = new BeforeContentStore(_services.Paths.BeforeContentDirectory, _services.Time) };
                 _changes.Changed += QueueRefresh;
+                _changes.Changed += QueueAllReviewed;
             }
             return _changes;
         }
@@ -180,12 +184,14 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
         if (_changes is not null)
         {
             _changes.Changed -= QueueRefresh;
+            _changes.Changed -= QueueAllReviewed;
             _changes = null;
         }
         _inspections.Clear();
         // The footers are read back without their files: a transcript has no turns to show.
         _turns.Clear();
         QueueRefresh();
+        QueueAllReviewed();
     }
 
     // ---- Changes per turn (DESIGN.md §8) ---------------------------------------------------------------------------
@@ -475,8 +481,46 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
             row.IsReviewed = Reviewed.IsReviewed(row.Path, Changes.Find(row.Path));
         }
         UpdateSummary();
+        UpdateAllReviewed();
         _services.SaveState();
         QueueReviewSync();
+    }
+
+    /// <summary>
+    /// Every file Claude changed in the session is ticked as reviewed, and there's at least one: the tab's row shows the
+    /// reviewed icon in place of its mark (DESIGN.md §4, "Marks"). Files only you or commands changed, in working tree
+    /// vs HEAD, don't count, as they don't untick either. Kept up to date in the background too, from Claude's changes
+    /// alone, so it doesn't wait for the rows.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool AllReviewed { get; private set; }
+
+    partial void OnAllReviewedChanged(bool value) => _host.AllReviewedChanged();
+
+    private bool _allReviewedQueued;
+
+    /// <summary>
+    /// Works out <see cref="AllReviewed"/> again once the changes recorded together are in, rather than after each: a
+    /// transcript read back records them by the thousand.
+    /// </summary>
+    private void QueueAllReviewed()
+    {
+        if (_allReviewedQueued)
+        {
+            return;
+        }
+        _allReviewedQueued = true;
+        _services.Dispatcher.Post(() =>
+        {
+            _allReviewedQueued = false;
+            UpdateAllReviewed();
+        });
+    }
+
+    private void UpdateAllReviewed()
+    {
+        var files = Changes.Files;
+        AllReviewed = files.Count > 0 && files.All(file => Reviewed.IsReviewed(file.Path, file));
     }
 
     /// <summary>

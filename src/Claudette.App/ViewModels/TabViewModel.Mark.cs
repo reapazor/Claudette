@@ -11,7 +11,10 @@ public sealed record MarkMenuItem(TabMark Mark, bool IsOn, IRelayCommand<TabMark
     public string Name => TabMarkText.Name(Mark);
 }
 
-/// <summary>The tab's mark: an icon of the user's own, under its status icon (DESIGN.md §4, "Marks").</summary>
+/// <summary>
+/// The tab's mark: an icon of the user's own, under its status icon, and the reviewed icon that covers it while every
+/// changed file is reviewed (DESIGN.md §4, "Marks").
+/// </summary>
 public sealed partial class TabViewModel
 {
     /// <summary>How long after the mark changes a tab that syncs writes its record, so trying a few marks writes it once.</summary>
@@ -25,8 +28,26 @@ public sealed partial class TabViewModel
 
     public bool HasMark => Mark is not null;
 
-    /// <summary>The tip on the row's mark: what the icon is, since what it means is the user's.</summary>
-    public string? MarkTip => Mark is { } mark ? TabMarkText.Tip(mark) : null;
+    /// <summary>
+    /// Every file Claude changed in the session is ticked as reviewed (DESIGN.md §8, "Reviewed"): the row shows the
+    /// reviewed icon in place of the mark, which stays the tab's and shows again once a file isn't.
+    /// </summary>
+    public bool AllFilesReviewed => ChangedFiles.AllReviewed;
+
+    /// <summary>The row has an icon under its status icon: the mark, or the reviewed icon over it.</summary>
+    public bool ShowsMarkIcon => HasMark || AllFilesReviewed;
+
+    /// <summary>
+    /// The tip on the row's mark: what the icon is, since what it means is the user's. Over the reviewed icon it says
+    /// so, with the mark it covers.
+    /// </summary>
+    public string? MarkTip => (AllFilesReviewed, Mark) switch
+    {
+        (true, { } mark) => $"{TabMarkText.ReviewedTip} · {TabMarkText.Tip(mark)}",
+        (true, null) => TabMarkText.ReviewedTip,
+        (false, { } mark) => TabMarkText.Tip(mark),
+        _ => null,
+    };
 
     /// <summary>The tab menu's <b>Mark</b> submenu: every mark, with the tab's own ticked.</summary>
     public IReadOnlyList<MarkMenuItem> MarkMenu => [.. TabMarks.All.Select(mark => new MarkMenuItem(mark, mark == Mark, ToggleMarkCommand))];
@@ -48,12 +69,20 @@ public sealed partial class TabViewModel
         State.Mark = mark is { } chosen ? TabMarks.Key(chosen) : null;
         OnPropertyChanged(nameof(Mark));
         OnPropertyChanged(nameof(HasMark));
-        OnPropertyChanged(nameof(MarkTip));
         OnPropertyChanged(nameof(MarkMenu));
+        MarkShownChanged();
         ClearMarkCommand.NotifyCanExecuteChanged();
         RememberMark(changed: true);
         _services.SaveState();
         QueueMarkSync();
+    }
+
+    /// <summary>The mark changed, or whether the reviewed icon covers it.</summary>
+    private void MarkShownChanged()
+    {
+        OnPropertyChanged(nameof(AllFilesReviewed));
+        OnPropertyChanged(nameof(ShowsMarkIcon));
+        OnPropertyChanged(nameof(MarkTip));
     }
 
     /// <summary>

@@ -212,11 +212,11 @@
                                 <TextBlock Classes="status" Classes.busy="{Binding IsBusyStatus}" Classes.alert="{Binding IsAlertStatus}"
                                            Classes.failed="{Binding IsErrorStatus}" Classes.unread="{Binding IsUnread}"
                                            Text="{Binding StatusGlyph}" ToolTip.Tip="{Binding StatusTip}" HorizontalAlignment="Center" VerticalAlignment="Top" />
-                                <!-- The user's own mark (DESIGN.md §4, "Marks"): under the status icon, level with the second
-                                     line. The border gives the tip somewhere to hover. -->
-                                <Border x:Name="RowMark" Background="Transparent" IsVisible="{Binding HasMark}" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                <!-- The user's own mark (DESIGN.md §4, "Marks"), or the reviewed icon over it: under the status
+                                     icon, level with the second line. The border gives the tip somewhere to hover. -->
+                                <Border x:Name="RowMark" Background="Transparent" IsVisible="{Binding ShowsMarkIcon}" HorizontalAlignment="Center" VerticalAlignment="Bottom"
                                         Margin="0,0,0,2" ToolTip.Tip="{Binding MarkTip}" AutomationProperties.Name="{Binding MarkTip}">
-                                  <views:MarkIcon Mark="{Binding Mark}" />
+                                  <views:MarkIcon Mark="{Binding Mark}" IsReviewed="{Binding AllFilesReviewed}" />
                                 </Border>
                                 <StackPanel Grid.Column="1" Spacing="1">
                                   <DockPanel>
@@ -446,9 +446,10 @@
                             <TextBlock Classes="status small" Classes.busy="{Binding IsBusyStatus}" Classes.alert="{Binding IsAlertStatus}"
                                        Classes.failed="{Binding IsErrorStatus}" Classes.unread="{Binding IsUnread}"
                                        Text="{Binding StatusGlyph}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,4,0" />
-                            <!-- The user's own mark (DESIGN.md §4, "Marks"), in the corner across from the status icon -->
-                            <views:MarkIcon x:Name="RailMark" Mark="{Binding Mark}" Width="8" Height="8" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="4,0,0,4"
-                                            AutomationProperties.Name="{Binding MarkTip}" />
+                            <!-- The user's own mark (DESIGN.md §4, "Marks"), or the reviewed icon over it, in the corner across
+                                 from the status icon -->
+                            <views:MarkIcon x:Name="RailMark" Mark="{Binding Mark}" IsReviewed="{Binding AllFilesReviewed}" Width="8" Height="8"
+                                            HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="4,0,0,4" AutomationProperties.Name="{Binding MarkTip}" />
                           </Panel>
                           <Button.ContextMenu>
                             <ContextMenu>

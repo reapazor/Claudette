@@ -67,6 +67,53 @@ public class TabMarkUiTests
     }
 
     [AvaloniaFact]
+    public async Task The_reviewed_icon_covers_the_mark_while_every_changed_file_is_reviewed()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        tab.SetMark(TabMark.Star);
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        var row = window.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("tabrow"));
+        var mark = row.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "RowMark");
+        var icon = mark.GetVisualDescendants().OfType<MarkIcon>().Single();
+        var path = Path.Combine(h.WorkFolder, "a.cs");
+        await File.WriteAllTextAsync(path, "b\n", TestContext.Current.CancellationToken);
+        EmitEdit(h, "e1", path);
+        await UiText.SettleUntilAsync(window, () => tab.ChangedFiles.Files.Count == 1, "the changed file");
+        var star = icon.Data;
+
+        tab.ChangedFiles.ToggleFileReviewedCommand.Execute(tab.ChangedFiles.Files[0]);
+        UiText.Settle(window);
+
+        Assert.True(mark.IsEffectivelyVisible);
+        Assert.Equal("All changed files reviewed · Marked with a star", ToolTip.GetTip(mark));
+        Assert.Contains("reviewed", icon.Classes);
+        Assert.DoesNotContain("star", icon.Classes);
+        Assert.NotNull(icon.Data);
+        Assert.NotSame(star, icon.Data);
+        Assert.Equal(Brush(window, "OkTextBrush"), (icon.Fill as ISolidColorBrush)?.Color);
+
+        // Over no mark too, and in the rail.
+        tab.SetMark(null);
+        UiText.Settle(window);
+        Assert.True(mark.IsEffectivelyVisible);
+        h.Shell.Layout.IsSidebarCollapsed = true;
+        UiText.Settle(window);
+        var railMark = window.GetVisualDescendants().OfType<MarkIcon>().Single(m => m.Name == "RailMark");
+        Assert.True(railMark.IsEffectivelyVisible);
+        Assert.Contains("reviewed", railMark.Classes);
+        Assert.Equal("All changed files reviewed", AutomationProperties.GetName(railMark));
+
+        // Claude changes the file again: the tab's own mark is back.
+        tab.SetMark(TabMark.Star);
+        EmitEdit(h, "e2", path);
+        await UiText.SettleUntilAsync(window, () => !railMark.Classes.Contains("reviewed"), "Claude's change");
+        Assert.Contains("star", railMark.Classes);
+        Assert.Equal("Marked with a star", AutomationProperties.GetName(railMark));
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task The_tab_menu_lists_the_marks_with_the_tabs_own_ticked_and_Clear_mark_while_it_has_one()
     {
         await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
@@ -151,6 +198,31 @@ public class TabMarkUiTests
             var title = list.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == text && t.Parent is DockPanel);
             return (title, (DockPanel)title.Parent!);
         }
+    }
+
+    /// <summary>A successful Edit of <paramref name="path"/>, live.</summary>
+    private static void EmitEdit(TabTestHarness h, string id, string path)
+    {
+        h.Transport.Emit(new JsonObject
+        {
+            ["type"] = "assistant",
+            ["message"] = new JsonObject
+            {
+                ["content"] = new JsonArray(new JsonObject
+                {
+                    ["type"] = "tool_use",
+                    ["id"] = id,
+                    ["name"] = "Edit",
+                    ["input"] = new JsonObject { ["file_path"] = path, ["old_string"] = "a", ["new_string"] = "b" },
+                }),
+            },
+        });
+        h.Transport.Emit(new JsonObject
+        {
+            ["type"] = "user",
+            ["message"] = new JsonObject { ["content"] = new JsonArray(new JsonObject { ["type"] = "tool_result", ["tool_use_id"] = id, ["content"] = "The file has been updated." }) },
+            ["tool_use_result"] = new JsonObject { ["filePath"] = path, ["oldString"] = "a", ["newString"] = "b", ["originalFile"] = "a\n" },
+        });
     }
 
     private static MenuItem[] Items(MenuItem menu) => menu.GetRealizedContainers().OfType<MenuItem>().ToArray();

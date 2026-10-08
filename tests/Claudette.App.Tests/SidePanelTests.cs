@@ -350,6 +350,109 @@ public class SidePanelTests
         await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle && tab.ChangedFiles.Files is [_, { LatestChange: "e3" }], "the changed files");
         Assert.Equal([true, false], tab.ChangedFiles.Files.Select(r => r.IsReviewed));
         Assert.Equal("2 files changed · 1 reviewed", tab.ChangedFiles.Summary);
+        Assert.False(tab.AllFilesReviewed);
+    }
+
+    [Fact]
+    public async Task Once_every_file_Claude_changed_is_ticked_the_reviewed_icon_covers_the_mark_until_one_is_not()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        tab.SetMark(TabMark.Star);
+        var (a, b, c) = (Path.Combine(h.WorkFolder, "a.cs"), Path.Combine(h.WorkFolder, "b.cs"), Path.Combine(h.WorkFolder, "c.cs"));
+        foreach (var path in new[] { a, b, c })
+        {
+            await File.WriteAllTextAsync(path, "b\n", TestContext.Current.CancellationToken);
+        }
+        Assert.False(tab.AllFilesReviewed);
+        EmitEdit(h, "e1", a);
+        EmitEdit(h, "e2", b);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files.Count == 2, "the changed files");
+        var changed = new List<string?>();
+        tab.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        Tick(a);
+        Assert.False(tab.AllFilesReviewed);
+        Tick(b);
+
+        Assert.True(tab.AllFilesReviewed);
+        Assert.True(tab.ShowsMarkIcon);
+        Assert.Equal("All changed files reviewed · Marked with a star", tab.MarkTip);
+        Assert.Contains(nameof(TabViewModel.AllFilesReviewed), changed);
+        // The mark is still the tab's, under the icon.
+        Assert.Equal(TabMark.Star, tab.Mark);
+        tab.SetMark(null);
+        Assert.True(tab.ShowsMarkIcon);
+        Assert.Equal("All changed files reviewed", tab.MarkTip);
+        tab.SetMark(TabMark.Star);
+
+        // Claude changes a reviewed file again.
+        EmitEdit(h, "e3", b);
+        await TabTestHarness.Eventually(() => !tab.AllFilesReviewed, "Claude's change");
+        Assert.Equal("Marked with a star", tab.MarkTip);
+        Tick(b);
+        Assert.True(tab.AllFilesReviewed);
+
+        // A file Claude hadn't changed before.
+        EmitEdit(h, "e4", c);
+        await TabTestHarness.Eventually(() => !tab.AllFilesReviewed, "Claude's change to another file");
+        Tick(c);
+        Assert.True(tab.AllFilesReviewed);
+
+        // Unticking one.
+        Tick(a);
+        Assert.False(tab.AllFilesReviewed);
+        Assert.Equal(TabMark.Star, tab.Mark);
+
+        void Tick(string path) =>
+            tab.ChangedFiles.ToggleFileReviewedCommand.Execute(tab.ChangedFiles.Files.Single(r => r.Path == path));
+    }
+
+    [Fact]
+    public async Task A_tab_in_the_background_loses_the_reviewed_icon_as_Claude_changes_a_file_without_waiting_to_be_shown()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        var path = Path.Combine(h.WorkFolder, "a.cs");
+        await File.WriteAllTextAsync(path, "b\n", TestContext.Current.CancellationToken);
+        EmitEdit(h, "e1", path);
+        await TabTestHarness.Eventually(() => tab.ChangedFiles.Files.Count == 1, "the changed file");
+        tab.ChangedFiles.ToggleFileReviewedCommand.Execute(tab.ChangedFiles.Files[0]);
+        Assert.True(tab.AllFilesReviewed);
+
+        tab.IsSelected = false;
+        EmitEdit(h, "e2", path);
+
+        await TabTestHarness.Eventually(() => !tab.AllFilesReviewed, "Claude's change");
+        // The rows still wait for the tab to be shown.
+        Assert.Equal("e1", tab.ChangedFiles.Files[0].LatestChange);
+    }
+
+    [Fact]
+    public async Task A_restored_tab_whose_files_are_all_reviewed_shows_the_reviewed_icon()
+    {
+        await using var h = new TabTestHarness();
+        var (first, second) = (Path.Combine(h.WorkFolder, "a.cs"), Path.Combine(h.WorkFolder, "b.cs"));
+        await File.WriteAllTextAsync(first, "b\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(second, "b\n", TestContext.Current.CancellationToken);
+        h.WriteTranscript("s1", [.. TranscriptEdit("e1", first), .. TranscriptEdit("e2", second), .. TranscriptEdit("e3", second)]);
+        h.Services.State.Tabs =
+        [
+            new TabState
+            {
+                Folder = h.WorkFolder,
+                IsPinned = true,
+                SessionId = "s1",
+                Mark = "flag",
+                ReviewedFiles = [new ReviewedFile { Path = first, Change = "e1" }, new ReviewedFile { Path = second, Change = "e3" }],
+            },
+        ];
+
+        h.Shell.Restore(null);
+        var tab = h.Shell.AllTabs.Single();
+
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle && tab.AllFilesReviewed, "the reviewed icon");
+        Assert.Equal(TabMark.Flag, tab.Mark);
     }
 
     [Fact]

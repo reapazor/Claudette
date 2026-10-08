@@ -8,6 +8,9 @@ namespace Claudette.App.ViewModels;
 /// </summary>
 public static class TabMarkText
 {
+    /// <summary>The tip on the reviewed icon the row shows in place of the mark while every changed file is reviewed.</summary>
+    public const string ReviewedTip = "All changed files reviewed";
+
     public static string Name(TabMark mark) => mark switch
     {
         TabMark.Check => "Check",
