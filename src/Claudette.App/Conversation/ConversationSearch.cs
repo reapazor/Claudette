@@ -168,6 +168,8 @@ public sealed partial class ConversationSearch : ObservableObject
         McpInputItem input => [input.Title, input.Message],
         PromptItem prompt => [prompt.Outcome, prompt.Request.ToolName, prompt is PlanItem plan ? plan.Plan.ToString() : null],
         TurnSummaryItem summary => [summary.Text],
+        TaskStartItem start => [start.Todo.Title],
+        TasksSummaryItem tasks => [tasks.Text],
         _ => [],
     };
 

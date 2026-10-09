@@ -26,12 +26,10 @@ public sealed class CallUsage
     /// <summary>Counts an assistant message's call. Returns false when it has no usage or repeats one already counted.</summary>
     public bool Add(AssistantMessage message)
     {
-        if (message.Raw.GetObject("message")?.GetObject("usage") is not { } usage)
+        if (TokensOf(message) is not { } total)
         {
             return false;
         }
-        var input = Number(usage["input_tokens"]) + Number(usage["cache_creation_input_tokens"]) + Number(usage["cache_read_input_tokens"]);
-        var total = input + Number(usage["output_tokens"]);
         var key = message.MessageId ?? $"call-{_turnCalls.Count}";
         var changed = !_turnCalls.TryGetValue(key, out var previous) || previous != total;
         _turnCalls[key] = total;
@@ -42,6 +40,20 @@ public sealed class CallUsage
             Model = message.Model ?? Model;
         }
         return changed;
+    }
+
+    /// <summary>
+    /// The tokens of an assistant message's call: what it read (cache included) plus what it wrote. Null when it carries no
+    /// usage. Repeated on each message of the call, so count it once per <see cref="AssistantMessage.MessageId"/>.
+    /// </summary>
+    public static long? TokensOf(AssistantMessage message)
+    {
+        if (message.Raw.GetObject("message")?.GetObject("usage") is not { } usage)
+        {
+            return null;
+        }
+        var input = Number(usage["input_tokens"]) + Number(usage["cache_creation_input_tokens"]) + Number(usage["cache_read_input_tokens"]);
+        return input + Number(usage["output_tokens"]);
     }
 
     /// <summary>The turn ended: its result carries the totals, and each model's context window.</summary>

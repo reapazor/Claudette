@@ -255,6 +255,17 @@
                                   <!-- The model and effort, or what needs attention; at its right, where the tab works (DESIGN.md §4, "Sidebar") -->
                                   <DockPanel>
                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" Margin="6,0,0,0">
+                                      <!-- How far Claude's tasks have got (DESIGN.md §5, "Tasks"): selects the tab and opens the Tasks page -->
+                                      <Button x:Name="TaskProgressBadge" Classes="flat rowbadge" IsVisible="{Binding ShowTaskProgressBadge}" Command="{Binding ShowTasksFromRowCommand}"
+                                              ToolTip.Tip="{Binding TodoList.ProgressTip}" AutomationProperties.Name="{Binding TodoList.ProgressTip}">
+                                        <Border Classes="rowbadge">
+                                          <StackPanel Orientation="Horizontal" Spacing="3">
+                                            <Path Data="{StaticResource IconToolTodo}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="8" Height="8" Stretch="Uniform"
+                                                  StrokeLineCap="Round" StrokeJoin="Round" VerticalAlignment="Center" />
+                                            <TextBlock Classes="muted small" Text="{Binding TodoList.ProgressShort}" />
+                                          </StackPanel>
+                                        </Border>
+                                      </Button>
                                       <!-- The git branch, or the worktree: separate from the name, so renaming keeps it -->
                                       <Button x:Name="BranchBadge" Classes="flat rowbadge" IsVisible="{Binding ShowBranchBadge}"
                                               ToolTip.Tip="{Binding BranchBadgeTip}" AutomationProperties.Name="{Binding BranchBadgeTip}">

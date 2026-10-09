@@ -630,9 +630,12 @@ public sealed partial class ChangedFilesViewModel : ViewModelBase
     /// from before Claude's first change in this session to the file now.
     /// </summary>
     [RelayCommand]
-    private Task OpenToolDiffAsync(ToolUseItem? tool)
+    private Task OpenToolDiffAsync(ToolUseItem? tool) => tool is null ? Task.CompletedTask : OpenChangeDiffAsync(tool.ToolUseId);
+
+    /// <summary>The file a change (its tool call's id) was made to, in the diff view as Changed files shows it.</summary>
+    internal Task OpenChangeDiffAsync(string toolUseId)
     {
-        if (tool is null || Changes.Files.FirstOrDefault(f => f.ToolUseIds.Contains(tool.ToolUseId)) is not { } file)
+        if (Changes.Files.FirstOrDefault(f => f.ToolUseIds.Contains(toolUseId)) is not { } file)
         {
             return Task.CompletedTask;
         }

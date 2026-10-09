@@ -108,6 +108,9 @@ public static class ConversationExport
                 case NoteItem { IsError: true } note:
                     Block($"*{OneLine(note.Text)}*");
                     break;
+                case TaskStartItem start:
+                    Block($"*{OneLine(StartedTask(start))}*");
+                    break;
                 case TurnSummaryItem summary:
                     Block($"<sub>{WebUtility.HtmlEncode(summary.Text)}</sub>");
                     break;
@@ -165,12 +168,19 @@ public static class ConversationExport
                 case NoteItem { IsError: true } note:
                     html.Append("<p class=\"note error\">").Append(Encode(note.Text)).AppendLine("</p>");
                     break;
+                case TaskStartItem start:
+                    html.Append("<p class=\"note\">").Append(Encode(StartedTask(start))).AppendLine("</p>");
+                    break;
                 case TurnSummaryItem summary:
                     html.Append("<p class=\"summary\">").Append(Encode(summary.Text)).AppendLine("</p>");
                     break;
             }
         }
     }
+
+    /// <summary>"Started task #3: Run the migration" (DESIGN.md §5, "Export").</summary>
+    private static string StartedTask(TaskStartItem start) =>
+        start.Todo.NumberText.Length > 0 ? $"Started task {start.Todo.NumberText}: {start.Todo.Content}" : $"Started task: {start.Todo.Content}";
 
     private static string PromptTitle(PromptItem prompt) => prompt switch
     {

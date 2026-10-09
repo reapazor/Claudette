@@ -368,7 +368,9 @@ public class ConversationBuilderTests
               {"content":"Fix bug","activeForm":"Fixing the bug","status":"in_progress"}]}}]}}
             """);
 
-        Assert.Empty(_items);
+        // No card: only the row where the task in progress starts (DESIGN.md §5, "Tasks").
+        var start = Assert.IsType<TaskStartItem>(Assert.Single(_items));
+        Assert.Same(todos.Items[1], start.Todo);
         Assert.Equal(["Write tests", "Fixing the bug"], todos.Items.Select(t => t.DisplayText));
         Assert.Equal("To-do · 1 of 2 done", todos.Summary);
         Assert.True(todos.IsExpanded);

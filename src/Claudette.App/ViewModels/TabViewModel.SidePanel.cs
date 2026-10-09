@@ -189,7 +189,7 @@ public sealed partial class TabViewModel
         {
             return;
         }
-        TodoList.SetPlan(reply.Text, PlanSource.Reply, reply.SentAt);
+        TodoList.ChooseReply(reply.Text, reply.SentAt);
         State.Plan = new ChosenPlan { Text = TodoList.Plan!, WrittenAt = reply.SentAt, ChosenAt = _services.Time.GetUtcNow() };
         _services.SaveState();
         OpenSidePanelPage(SidePanelPage.Tasks);
@@ -206,13 +206,13 @@ public sealed partial class TabViewModel
         {
             return;
         }
-        var approvedLater = TodoList is { HasPlan: true, PlanSource: PlanSource.Approved, PlanAt: { } approved } && approved > chosen.ChosenAt;
+        var approvedLater = TodoList.Plans.Any(p => p is { State: PlanState.Approved, At: { } approved } && approved > chosen.ChosenAt);
         if (approvedLater || !Replies(Items).Any(r => r.Text.Trim() == chosen.Text))
         {
             State.Plan = null;
             return;
         }
-        TodoList.SetPlan(chosen.Text, PlanSource.Reply, chosen.WrittenAt);
+        TodoList.ChooseReply(chosen.Text, chosen.WrittenAt);
     }
 
     /// <summary>Every reply in the conversation, subagents' groups' too.</summary>

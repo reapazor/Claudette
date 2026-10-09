@@ -108,7 +108,7 @@ public class TaskBoardTests
     [Fact]
     public void An_approved_plan_heads_the_list_until_its_cleared()
     {
-        _list.SetPlan("  1. Read\n2. Fix  ");
+        _list.OnPlanAnswered("p1", approved: true, "  1. Read\n2. Fix  ");
 
         Assert.Equal("1. Read\n2. Fix", _list.Plan);
         Assert.True(_list.HasAnything);
@@ -133,11 +133,11 @@ public class TaskBoardTests
         Assert.Equal("## Fix\n1. Read", _list.Plan);
         Assert.Equal(approved, _list.PlanAt);
         Assert.Equal(PlanSource.Approved, _list.PlanSource);
-        Assert.StartsWith("Approved ", _list.PlanTimeText, StringComparison.Ordinal);
+        Assert.StartsWith("Approved ", _list.NewestPlan!.TimeText, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void A_plan_sent_back_to_planning_or_a_subagents_plan_doesnt_head_the_list()
+    public void A_plan_sent_back_to_planning_is_kept_as_a_version_and_a_subagents_plan_isnt_one()
     {
         var builder = new ConversationBuilder([], _list) { Time = _time };
 
@@ -147,7 +147,10 @@ public class TaskBoardTests
         builder.Apply(Assistant(Wire.Tool("a1", "p2", "ExitPlanMode", Json("""{"plan":"2. Fix"}"""))));
         builder.Apply(Results(Wire.Result("p2", "Approved.", parent: "a1", toolUseResult: Json("""{"plan":"2. Fix","isAgent":true}"""))));
 
-        Assert.False(_list.HasPlan);
+        var version = Assert.Single(_list.Plans);
+        Assert.Equal(PlanState.SentBack, version.State);
+        Assert.Equal("1. Read", version.Text);
+        Assert.StartsWith("Sent back ", version.TimeText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -155,11 +158,12 @@ public class TaskBoardTests
     {
         var written = DateTimeOffset.Parse("2026-09-30T16:20:00Z", System.Globalization.CultureInfo.InvariantCulture);
 
-        _list.SetPlan("Here's my plan.", PlanSource.Reply, written);
-        Assert.Equal($"From Claude's reply at {written.ToLocalTime():t}", _list.PlanTimeText);
+        _list.ChooseReply("Here's my plan.", written);
+        Assert.Equal($"From Claude's reply at {written.ToLocalTime():t}", _list.NewestPlan!.TimeText);
 
-        _list.SetPlan("Here's my plan.", PlanSource.Reply, null);
-        Assert.Equal("From Claude's reply", _list.PlanTimeText);
+        // Another reply replaces it, rather than adding a version.
+        _list.ChooseReply("Here's my plan.", null);
+        Assert.Equal("From Claude's reply", Assert.Single(_list.Plans).TimeText);
     }
 
     private static AssistantMessageReceived Assistant(string line)

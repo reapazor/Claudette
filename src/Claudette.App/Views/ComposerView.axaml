@@ -561,13 +561,19 @@
       </Grid>
     </Border>
 
-    <!-- Status line -->
-    <StackPanel Orientation="Horizontal" Spacing="10" Margin="4,0">
-      <TextBlock Classes="muted small" Text="{Binding Folder}" TextTrimming="PathSegmentEllipsis" MaxWidth="520" />
-      <TextBlock Classes="muted small" Text="{Binding StatusTip}" />
-      <Button Classes="flat" Padding="4,0" IsVisible="{Binding CanRestart}" Command="{Binding RestartCommand}">
-        <TextBlock Classes="small" Text="Restart" />
+    <!-- Status line (DESIGN.md §5, "Composer"); at its right, how Claude's plan and tasks are going, which opens the Tasks page -->
+    <DockPanel Margin="4,0">
+      <Button x:Name="TaskStatus" DockPanel.Dock="Right" Classes="flat" Padding="4,0" Margin="10,0,0,0" IsVisible="{Binding TodoList.HasStatus}"
+              Command="{Binding OpenTasksPageCommand}" ToolTip.Tip="Show the Tasks page">
+        <TextBlock Classes="muted small" Text="{Binding TodoList.StatusText}" MaxWidth="360" TextTrimming="CharacterEllipsis" />
       </Button>
-    </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <TextBlock Classes="muted small" Text="{Binding Folder}" TextTrimming="PathSegmentEllipsis" MaxWidth="520" />
+        <TextBlock Classes="muted small" Text="{Binding StatusTip}" />
+        <Button Classes="flat" Padding="4,0" IsVisible="{Binding CanRestart}" Command="{Binding RestartCommand}">
+          <TextBlock Classes="small" Text="Restart" />
+        </Button>
+      </StackPanel>
+    </DockPanel>
   </StackPanel>
 </UserControl>

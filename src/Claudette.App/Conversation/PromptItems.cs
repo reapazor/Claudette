@@ -510,12 +510,62 @@ public sealed partial class PlanItem : PromptItem
         if (request.Input["plan"] is JsonValue plan && plan.GetValueKind() == JsonValueKind.String)
         {
             Plan.Append(plan.GetValue<string>());
+            HasPlan = Plan.ToString().Length > 0;
         }
     }
 
     public ObservableStringBuilder Plan { get; } = new();
 
-    public bool HasPlan => Plan.ToString().Length > 0;
+    /// <summary>The card shows the plan's text rather than saying Claude is ready.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowsPlan))]
+    public partial bool HasPlan { get; private set; }
+
+    /// <summary>The plan's Markdown shows: it has text, and its changes aren't shown instead.</summary>
+    public bool ShowsPlan => HasPlan && !ShowChanges;
+
+    /// <summary>Which version of the session's plan this is (DESIGN.md §5, "Tasks"); 0 before it's known.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Title))]
+    public partial int VersionNumber { get; private set; }
+
+    /// <summary>"Claude's plan", or "Claude's plan · v2" from the second version on.</summary>
+    public string Title => VersionNumber > 1 ? $"Claude's plan · v{VersionNumber}" : "Claude's plan";
+
+    /// <summary>This plan as a line diff against the version before it; null for the first.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasChanges))]
+    public partial DiffView? Changes { get; private set; }
+
+    public bool HasChanges => Changes is not null;
+
+    /// <summary>"Changes from v1".</summary>
+    [ObservableProperty]
+    public partial string ChangesLabel { get; private set; } = "";
+
+    /// <summary>The card shows <see cref="Changes"/> instead of the plan's Markdown.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowsPlan))]
+    public partial bool ShowChanges { get; set; }
+
+    /// <summary>What the user said when they sent it back, for the Tasks page's version; null otherwise.</summary>
+    public string? SentBackFeedback { get; private set; }
+
+    /// <summary>
+    /// The version of the plan this card is (DESIGN.md §5, "Tasks"): its number, its changes from the one before, and its
+    /// text when the request had none (Claude's draft stands in).
+    /// </summary>
+    internal void SetVersion(PlanVersion version)
+    {
+        if (!HasPlan && !string.IsNullOrWhiteSpace(version.Text))
+        {
+            Plan.Append(version.Text);
+            HasPlan = true;
+        }
+        VersionNumber = version.Number;
+        ChangesLabel = version.ChangesLabel;
+        Changes = version.HasPrevious ? version.Changes : null;
+    }
 
     [ObservableProperty]
     public partial bool IsWritingFeedback { get; set; }
@@ -562,6 +612,7 @@ public sealed partial class PlanItem : PromptItem
             return;
         }
         var feedback = Feedback.Trim();
+        SentBackFeedback = feedback.Length == 0 ? null : feedback;
         Request.Deny(feedback.Length == 0
             ? "The user wants to keep planning. Don't make changes yet."
             : $"The user wants to keep planning and said: {feedback}");

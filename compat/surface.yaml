@@ -646,7 +646,13 @@ items:
     usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
     test: TaskBoardTests, TasksPlanTests, RealCliTests
-    fallback: "An approved ExitPlanMode's tool_use_result (toolUseResult in transcripts) carries the plan as plan, which heads the Tasks page however it was approved: on its card, in the Claude app, or before a restore (DESIGN.md §5, \"Tasks\"). A denied one is an error result. Without plan, the call's own input.plan is used (the model passed it before 2.1.285); without either, the plan shows only in the conversation."
+    fallback: "An approved ExitPlanMode's tool_use_result (toolUseResult in transcripts) carries the plan as plan, which heads the Tasks page however it was approved: on its card, in the Claude app, or before a restore (DESIGN.md §5, \"Tasks\"). A denied one is an error result: that version of the plan was sent back, or, with tool_result_meta's interrupted, never answered. Without plan, the call's own input.plan is used (the model passed it before 2.1.285); without either, the plan shows only in the conversation."
+  - id: "Plan mode allows edits only to the plan file"
+    kind: behavior
+    status: undocumented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    test: TasksPlanTests
+    fallback: "In Plan mode Claude writes its plan to a Markdown plan file with Write and Edit, the only file Claude Code lets it change, so the main agent's Write or Edit to a .md file in Plan mode is taken as the plan's draft and shown on the Tasks page as it's written (DESIGN.md §5, \"Tasks\"). If Plan mode starts allowing other edits, another Markdown file could show as the draft until the plan is put up for review, which replaces it with the plan Claude Code passes. If the plan stops being written with these tools, nothing shows until it's put up, as before."
   - id: "permission_denied"
     kind: message
     status: documented
@@ -1380,15 +1386,41 @@ items:
   - id: "Edit"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs
+    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: ChangedFilesTests
+    test: ChangedFilesTests, TaskProgressTests
   - id: "Write"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs
+    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: ChangedFilesTests
+    test: ChangedFilesTests, TasksPlanTests
+  - id: "content"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: TasksPlanTests
+    fallback: Write's input content is the plan's draft in Plan mode (DESIGN.md §5, "Tasks"). Without it the draft isn't shown until the plan is put up for review.
+  - id: "old_string"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/Diff.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: DiffTests, TasksPlanTests
+    fallback: With new_string and replace_all, the Edit card's diff before its result, and an Edit to the plan's draft in Plan mode (DESIGN.md §5, "Tasks"). Without them the card waits for structuredPatch, and the draft stays as it was until the plan is put up.
+  - id: "new_string"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/Diff.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: DiffTests, TasksPlanTests
+  - id: "replace_all"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Conversation/ConversationBuilder.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: TasksPlanTests
   - id: "NotebookEdit"
     kind: field
     status: documented
@@ -1404,9 +1436,9 @@ items:
   - id: "file_path"
     kind: field
     status: documented
-    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs
+    usedIn: src/Claudette.Core/Diffs/ChangedFiles.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
     docs: https://code.claude.com/docs/en/agent-sdk/typescript
-    test: ChangedFilesTests
+    test: ChangedFilesTests, TaskProgressTests
   - id: "filePath"
     kind: field
     status: documented
@@ -1565,8 +1597,8 @@ items:
     kind: field
     status: undocumented
     usedIn: src/Claudette.Core/Protocol/ClaudeMessages.cs, src/Claudette.App/Conversation/ConversationBuilder.cs
-    test: AgentMapTests
-    fallback: Marks an Agent call cut off by an interrupt or a stop (non_execution_kind "interrupted"). Without it, the "[Request interrupted" result text and the stopped task_notification still mark the subagent stopped.
+    test: AgentMapTests, TasksPlanTests
+    fallback: Marks an Agent call cut off by an interrupt or a stop (non_execution_kind "interrupted"), and an ExitPlanMode call cut off before its plan was answered. Without it, the "[Request interrupted" result text and the stopped task_notification still mark the subagent stopped, and a plan cut off reads as sent back until its turn ends, when a plan still waiting is marked not answered.
   - id: "stop_task (subagents)"
     kind: behavior
     status: undocumented

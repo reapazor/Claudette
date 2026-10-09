@@ -11,11 +11,21 @@ public sealed partial class TabViewModel
 {
     partial void OnStatusChanged(TabStatus value) => _shell.OnTabStatusChanged();
 
-    /// <summary>A turn ended while the user may not be looking.</summary>
+    /// <summary>
+    /// A turn ended while the user may not be looking: the first line of the reply, after where Claude's task list stands
+    /// when the turn changed it (DESIGN.md §5, "Tasks").
+    /// </summary>
     private void NotifyTurnFinished(ResultMessage result)
     {
         var reply = result.Result?.Trim();
-        var body = string.IsNullOrEmpty(reply) ? "Claude finished its turn." : Shorten(reply.Split('\n')[0].Trim(), 140);
+        var line = string.IsNullOrEmpty(reply) ? null : reply.Split('\n')[0].Trim();
+        var body = (_conversation.TurnTasksSummary?.Text, line) switch
+        {
+            ({ } tasks, { Length: > 0 } first) => Shorten($"{tasks} · {first}", 140),
+            ({ } tasks, _) => tasks,
+            (null, { Length: > 0 } first) => Shorten(first, 140),
+            _ => "Claude finished its turn.",
+        };
         _services.Notifications.Notify(NotificationKind.TurnFinished, DisplayName, body, Id);
         _shell.Announce($"{DisplayName}: Claude finished.");
     }

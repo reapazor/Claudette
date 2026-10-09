@@ -33,6 +33,8 @@
 "A small ring on each tab in the sidebar fills up with the tab's context window. It turns amber when Claude Code is about to compact the conversation, and red when it's nearly full."
 [x] Show git branch on tab rows
 "The branch each tab's folder has checked out, such as “main”, at the right of its second line. A tab in a worktree shows the worktree's name instead."
+[x] Show task progress on tab rows
+"How many of Claude's tasks are done, such as “3/7”, at the right of each tab's second line, and the task Claude is working on in place of the model while it works."
 [button] Reset to defaults
 [button] Line up
 [button] Page up

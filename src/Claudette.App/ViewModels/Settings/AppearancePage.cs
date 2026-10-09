@@ -45,6 +45,7 @@ public sealed class AppearancePage(SettingsContext context) : SettingsPage(conte
         Entry("Detailed usage header"),
         Entry("Show context on tab rows"),
         Entry("Show git branch on tab rows"),
+        Entry("Show task progress on tab rows"),
         Entry("Density"),
         Entry("Zoom"),
         Entry("Motion"),
@@ -182,6 +183,13 @@ public sealed class AppearancePage(SettingsContext context) : SettingsPage(conte
     {
         get => Settings.Appearance.ShowBranchOnTabs;
         set => Set(value, v => Settings.Appearance.ShowBranchOnTabs = v);
+    }
+
+    /// <summary>How far Claude's tasks have got on each tab's row (DESIGN.md §5, "Tasks").</summary>
+    public bool ShowTaskProgressOnTabs
+    {
+        get => Settings.Appearance.ShowTaskProgressOnTabs;
+        set => Set(value, v => Settings.Appearance.ShowTaskProgressOnTabs = v);
     }
 
     /// <summary>The detailed usage header goes back to its default too, though it's kept with the machine's state.</summary>

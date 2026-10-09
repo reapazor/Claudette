@@ -419,11 +419,21 @@
       <Border Classes="prompt question" Classes.answered="{Binding !IsPending}">
         <StackPanel Spacing="10">
           <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Text="Claude's plan" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
             <ContentControl Grid.Column="1" Content="{Binding}" ContentTemplate="{StaticResource PromptPosition}" VerticalAlignment="Top" />
           </Grid>
-          <md:MarkdownRenderer MarkdownBuilder="{Binding Plan}" IsVisible="{Binding HasPlan}"
+          <!-- From the second version on: what changed from the one before (DESIGN.md §5, "Tasks") -->
+          <ToggleButton Classes="flat" Padding="0" HorizontalAlignment="Left" IsChecked="{Binding ShowChanges}" IsVisible="{Binding HasChanges}"
+                        ToolTip.Tip="Show what changed from the version before, line by line">
+            <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding ChangesLabel}" />
+          </ToggleButton>
+          <md:MarkdownRenderer MarkdownBuilder="{Binding Plan}" IsVisible="{Binding ShowsPlan}"
                                LinkCommand="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenLinkCommand}" />
+          <Border Classes="codeblock" Padding="0" IsVisible="{Binding ShowChanges}">
+            <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Auto">
+              <ItemsControl ItemsSource="{Binding Changes.Lines, FallbackValue={x:Null}}" />
+            </ScrollViewer>
+          </Border>
           <TextBlock Classes="muted" Text="Claude has finished planning and is ready to start making changes." TextWrapping="Wrap" IsVisible="{Binding !HasPlan}" />
           <!-- Auto mode first, as the main button, while the tab can use it (DESIGN.md §7) -->
           <WrapPanel ItemSpacing="8" LineSpacing="6" IsVisible="{Binding IsPending}">
@@ -528,6 +538,35 @@
       </Expander>
     </DataTemplate>
 
+    <!-- Where one of Claude's tasks started (DESIGN.md §5, "Tasks"): a rule with the task in it, which opens the Tasks page -->
+    <DataTemplate DataType="conv:TaskStartItem">
+      <Button Classes="flat taskstart" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="0,2"
+              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenTasksPageCommand}"
+              ToolTip.Tip="Show on the Tasks page" AutomationProperties.Name="{Binding Todo.Title}">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
+          <TextBlock Classes="small" Classes.status="{Binding Todo.IsActive}" Classes.busy="{Binding Todo.IsActive}" Classes.muted="{Binding !Todo.IsActive}"
+                     Text="{Binding Todo.Glyph}" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Classes="small" FontWeight="SemiBold" Text="{Binding Todo.Title}" MaxWidth="560" TextTrimming="CharacterEllipsis"
+                     VerticalAlignment="Center" />
+          <Border Grid.Column="2" Height="1" Background="{DynamicResource DividerBrush}" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="3" Classes="muted small" Text="{Binding TimeText}" VerticalAlignment="Center" />
+        </Grid>
+      </Button>
+    </DataTemplate>
+
+    <!-- Where the task list stands as a turn that changed it ends, with Continue while tasks are left (DESIGN.md §5, "Tasks") -->
+    <DataTemplate DataType="conv:TasksSummaryItem">
+      <WrapPanel ItemSpacing="8" Margin="0,2,0,2">
+        <TextBlock Classes="status small" Classes.ok="{Binding AllDone}" Text="{Binding Glyph}" VerticalAlignment="Center" />
+        <TextBlock Classes="small" Text="{Binding Text}" VerticalAlignment="Center" />
+        <Button Classes="flat" Padding="6,1" VerticalAlignment="Center" IsVisible="{Binding IsContinueOffered}"
+                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ContinueTasksCommand}" CommandParameter="{Binding}"
+                ToolTip.Tip="Ask Claude to carry on with the tasks that are left">
+          <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="Continue" />
+        </Button>
+      </WrapPanel>
+    </DataTemplate>
+
     <DataTemplate DataType="conv:TurnSummaryItem">
       <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,4">
         <TextBlock Classes="muted small" Text="{Binding Text}" Opacity="0.8" VerticalAlignment="Center" />
@@ -595,20 +634,36 @@
             </Button>
           </StackPanel>
         </Border>
-        <!-- Pinned to-do list -->
+        <!-- Pinned to-do list (DESIGN.md §5, "Tasks"): a task that has started goes to where it started -->
         <Border DockPanel.Dock="Top" IsVisible="{Binding TodoList.HasItems}" Background="{DynamicResource SubtleBrush}"
                 BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,4">
           <StackPanel MaxWidth="900" HorizontalAlignment="Stretch">
             <Button Classes="flat row" Command="{Binding TodoList.ToggleExpandedCommand}">
               <TextBlock Classes="muted small" FontWeight="SemiBold" Text="{Binding TodoList.Summary}" />
             </Button>
+            <!-- A reply that reads like the plan for the list Claude just started -->
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="4,0,0,4" IsVisible="{Binding TodoList.HasSuggestion}">
+              <TextBlock Classes="small" Text="{Binding TodoList.SuggestionText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+              <Button Grid.Column="1" Classes="flat" Padding="6,2" VerticalAlignment="Center" Command="{Binding UsePlanSuggestionCommand}"
+                      ToolTip.Tip="Show this reply as the plan on the Tasks page">
+                <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="Use as the plan" />
+              </Button>
+              <Button Grid.Column="2" Classes="flat" Padding="6" VerticalAlignment="Center" Command="{Binding DismissPlanSuggestionCommand}"
+                      ToolTip.Tip="Don't use it as the plan" AutomationProperties.Name="Don't use it as the plan">
+                <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="8" Height="8" Stretch="Uniform" />
+              </Button>
+            </Grid>
             <ItemsControl ItemsSource="{Binding TodoList.Items}" IsVisible="{Binding TodoList.IsExpanded}" Margin="4,0,0,4">
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="conv:TodoItem">
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="{Binding Glyph}" Classes.status="{Binding IsActive}" Classes.busy="{Binding IsActive}" />
-                    <TextBlock Text="{Binding DisplayText}" Classes.done="{Binding IsDone}" FontWeight="{Binding IsActive, Converter={x:Static vm:Converters.BoldIfTrue}}" TextWrapping="Wrap" />
-                  </StackPanel>
+                  <Button Classes="flat taskrow" Padding="0" HorizontalAlignment="Left" IsHitTestVisible="{Binding HasStart}"
+                          Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).GoToTaskCommand}" CommandParameter="{Binding}"
+                          ToolTip.Tip="Go to where it started">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding Glyph}" Classes.status="{Binding IsActive}" Classes.busy="{Binding IsActive}" />
+                      <TextBlock Text="{Binding DisplayText}" Classes.done="{Binding IsDone}" FontWeight="{Binding IsActive, Converter={x:Static vm:Converters.BoldIfTrue}}" TextWrapping="Wrap" />
+                    </StackPanel>
+                  </Button>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>

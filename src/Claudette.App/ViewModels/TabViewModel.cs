@@ -112,6 +112,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         };
         // A prompt the phone answered is withdrawn by Claude Code (DESIGN.md §18, "Remote Control").
         _conversation.WithdrawnOutcome = RemoteControl.WithdrawnPromptOutcome;
+        // In Plan mode Claude's Write or Edit to a Markdown file is the plan's draft (DESIGN.md §5, "Tasks").
+        _conversation.IsInPlanMode = () => PermissionMode == "plan";
+        TodoList.PropertyChanged += OnTodoListChanged;
         _checkIns = new CheckInMonitor(services.Time, () => CheckInSettings, SendCheckInFromTimer, stuck => _services.Dispatcher.Post(() => IsPossiblyStuck = stuck),
             countdown => _services.Dispatcher.Post(() => CheckInCountdown = countdown));
         _autoContinue = CreateAutoContinue();
@@ -375,6 +378,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 rows.Add(new InfoRow("Running tasks", tasks));
             }
+            if (TodoList.InfoText is { } todo)
+            {
+                rows.Add(new InfoRow("Tasks", todo));
+            }
             ProjectTools.AddInfoRows(rows);
             Perforce.AddInfoRows(rows);
             RemoteControl.AddInfoRows(rows);
@@ -449,11 +456,12 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
 
     /// <summary>
     /// The second line of the tab's row in the sidebar (DESIGN.md §4): the model and effort, or what needs attention
-    /// when the tab is waiting on the user or has failed, or when it continues after a usage limit resets.
+    /// when the tab is waiting on the user or has failed, or when it continues after a usage limit resets, or the task
+    /// it's working on (DESIGN.md §5, "Tasks").
     /// </summary>
     public string RowDetail => Status is TabStatus.NeedsInput or TabStatus.Error ? StatusTip
         : Status == TabStatus.Working && IsPossiblyStuck ? "Possibly stuck"
-        : LimitWaitRowDetail ?? ModelBadge;
+        : WorkingTaskText ?? LimitWaitRowDetail ?? ModelBadge;
 
     /// <summary>What went wrong when the tab is in the Error status, shown on its row and info card (DESIGN.md §4).</summary>
     [ObservableProperty]
@@ -788,6 +796,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         Perforce.OnSettingsChanged();
         ProjectTools.OnSettingsChanged();
         OnBranchChanged();
+        OnPropertyChanged(nameof(ShowTaskProgressBadge));
+        OnPropertyChanged(nameof(RowDetail));
     }
 
     /// <summary>
@@ -1678,6 +1688,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             case StateChanged { State: SessionState.Working }:
                 _checkIns.TurnStarted();
                 _autoContinue.TurnStarted();
+                WithdrawContinue();
                 UpdateStatus();
                 break;
             case StateChanged:
@@ -1758,6 +1769,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 {
                     Status = TabStatus.Unread;
                 }
+                // Where the task list stands, with Continue while tasks are left (DESIGN.md §5, "Tasks").
+                OnTurnEndedForTasks();
                 if (!completed.Result.IsError)
                 {
                     NotifyTurnFinished(completed.Result);
@@ -1782,6 +1795,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 State.SessionStartedAt = _services.Time.GetUtcNow();
                 OnPropertyChanged(nameof(InfoRows));
                 TodoList.Clear();
+                _tasksSummary = null;
                 State.Plan = null;
                 State.AutoName = null;
                 _titleRequested = false;

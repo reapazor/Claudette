@@ -186,8 +186,8 @@
         </ListBox>
       </DockPanel>
 
-      <!-- Tasks (DESIGN.md §5, "Tasks"): the plan (approved, or a reply shown as the plan), then each task with its state,
-           owner, what it waits on and times -->
+      <!-- Tasks (DESIGN.md §5, "Tasks"): the plan (its draft, a version put up for review, or a reply shown as the plan),
+           then each task with its state, owner, what it waits on, times, files and tokens -->
       <DockPanel IsVisible="{Binding IsTasksPage}">
         <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="12,0,12,6" Text="{Binding TodoList.Summary}" IsVisible="{Binding TodoList.HasItems}" />
         <!-- The text wraps at the width shown; a plan's code blocks scroll sideways on their own -->
@@ -195,12 +195,27 @@
           <controls:ShownWidth>
             <StackPanel Margin="12,0,12,12" Spacing="10">
               <Border Classes="codeblock" IsVisible="{Binding TodoList.HasPlan}">
-                <StackPanel Spacing="4">
-                  <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Text="Plan" FontWeight="SemiBold" />
-                    <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding TodoList.PlanTimeText}" VerticalAlignment="Center" />
+                <StackPanel Spacing="4" DataContext="{Binding TodoList}" x:DataType="conv:TodoList">
+                  <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                    <TextBlock Text="Plan" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <!-- Its versions: ‹ v2 of 3 › -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" IsVisible="{Binding HasManyPlans}">
+                      <Button Classes="flat" Padding="5,1" Content="‹" Command="{Binding ShowEarlierPlanCommand}"
+                              AutomationProperties.Name="Earlier version of the plan" ToolTip.Tip="The version before" />
+                      <TextBlock Classes="muted small" Text="{Binding ShownPlanPosition}" VerticalAlignment="Center" />
+                      <Button Classes="flat" Padding="5,1" Content="›" Command="{Binding ShowLaterPlanCommand}"
+                              AutomationProperties.Name="Later version of the plan" ToolTip.Tip="The version after" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding ShownPlan.TimeText, FallbackValue={x:Null}}" VerticalAlignment="Center" />
                   </Grid>
-                  <md:MarkdownRenderer MarkdownBuilder="{Binding TodoList.PlanMarkdown}" />
+                  <TextBlock Classes="muted small" TextWrapping="Wrap" Text="{Binding ShownPlan.Feedback, StringFormat='“{0}”', FallbackValue={x:Null}}"
+                             IsVisible="{Binding ShownPlan.HasFeedback, FallbackValue=False}" />
+                  <ToggleButton Classes="flat" Padding="0" HorizontalAlignment="Left" IsChecked="{Binding ShowPlanChanges}"
+                                IsVisible="{Binding ShownPlan.HasPrevious, FallbackValue=False}" ToolTip.Tip="Show what changed from the version before, line by line">
+                    <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding ShownPlan.ChangesLabel, FallbackValue={x:Null}}" />
+                  </ToggleButton>
+                  <md:MarkdownRenderer MarkdownBuilder="{Binding ShownPlan.Markdown, FallbackValue={x:Null}}" IsVisible="{Binding !ShowsPlanChanges}" />
+                  <ItemsControl ItemsSource="{Binding ShownPlan.Changes.Lines, FallbackValue={x:Null}}" IsVisible="{Binding ShowsPlanChanges}" />
                 </StackPanel>
               </Border>
               <ItemsControl ItemsSource="{Binding TodoList.Items}">
@@ -211,17 +226,44 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="conv:TodoItem">
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="8">
                       <TextBlock Text="{Binding Glyph}" Classes.muted="{Binding IsDone}" />
-                      <StackPanel Grid.Column="1" Spacing="2">
-                        <TextBlock TextWrapping="Wrap" Classes.muted="{Binding IsDone}" Classes.strong="{Binding IsActive}">
-                          <Run Classes="muted" Text="{Binding NumberText}" />
-                          <Run Text="{Binding DisplayText}" />
-                        </TextBlock>
-                        <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
-                        <TextBlock Classes="small warning" Text="{Binding BlockedText}" IsVisible="{Binding IsBlocked}" />
-                        <TextBlock Classes="muted small" Text="{Binding DetailText}" IsVisible="{Binding HasDetail}" />
-                      </StackPanel>
+                      <!-- A task that has started goes to where it started in the conversation -->
+                      <Button Grid.Column="1" Classes="flat row taskrow" Padding="0" HorizontalContentAlignment="Stretch" IsHitTestVisible="{Binding HasStart}"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).GoToTaskCommand}" CommandParameter="{Binding}"
+                              ToolTip.Tip="Go to where it started in the conversation">
+                        <StackPanel Spacing="2">
+                          <TextBlock TextWrapping="Wrap" Classes.muted="{Binding IsDone}" Classes.strong="{Binding IsActive}">
+                            <Run Classes="muted" Text="{Binding NumberText}" />
+                            <Run Text="{Binding DisplayText}" />
+                          </TextBlock>
+                          <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+                          <TextBlock Classes="small warning" Text="{Binding BlockedText}" IsVisible="{Binding IsBlocked}" />
+                        </StackPanel>
+                      </Button>
+                      <!-- Who, when, the files changed and the tokens used while it was in progress -->
+                      <WrapPanel Grid.Row="1" Grid.Column="1" ItemSpacing="4" Margin="0,2,0,0" IsVisible="{Binding HasDetailLine}">
+                        <TextBlock Classes="muted small" Text="{Binding DetailText}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
+                        <Button Classes="flat turnfiles" Padding="0" VerticalAlignment="Center" IsVisible="{Binding HasFiles}"
+                                ToolTip.Tip="The files Claude changed while this task was in progress">
+                          <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding FilesLinkText}" />
+                          <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedLeft">
+                              <ItemsControl ItemsSource="{Binding Files}" MinWidth="200" MaxWidth="480">
+                                <ItemsControl.ItemTemplate>
+                                  <DataTemplate DataType="conv:TaskFileRow">
+                                    <Button Classes="flat row" HorizontalContentAlignment="Stretch" ToolTip.Tip="{Binding Path}"
+                                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenTaskFileCommand}" CommandParameter="{Binding}">
+                                      <TextBlock Classes="mono small" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
+                                    </Button>
+                                  </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                              </ItemsControl>
+                            </Flyout>
+                          </Button.Flyout>
+                        </Button>
+                        <TextBlock Classes="muted small" Text="{Binding TokensSuffix}" IsVisible="{Binding HasTokens}" VerticalAlignment="Center" />
+                      </WrapPanel>
                     </Grid>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>

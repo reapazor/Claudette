@@ -796,3 +796,52 @@ public sealed partial class TurnSummaryItem(string text) : ConversationItem
 
     private static long? Number(JsonNode? node) => node.AsWholeNumber();
 }
+
+/// <summary>
+/// Where one of Claude's tasks started (DESIGN.md §5, "Tasks"): a slim row in the conversation, which follows the task
+/// to done and opens the Tasks page.
+/// </summary>
+public sealed partial class TaskStartItem : ConversationItem
+{
+    public TaskStartItem(TodoItem todo)
+    {
+        Todo = todo;
+        StartedAt = todo.StartedAt;
+        todo.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(TodoItem.CompletedAt))
+            {
+                OnPropertyChanged(nameof(TimeText));
+            }
+        };
+    }
+
+    public TodoItem Todo { get; }
+
+    /// <summary>When it started, by the tab's clock or its transcript entry; null when not known.</summary>
+    public DateTimeOffset? StartedAt { get; }
+
+    /// <summary>"Started 14:05", then "Took 4m" once it's done.</summary>
+    public string? TimeText =>
+        Todo.CompletedAt is { } done && StartedAt is { } began ? $"Took {Formats.Duration(done - began)}"
+        : StartedAt is { } started ? $"Started {started.ToLocalTime():t}"
+        : null;
+}
+
+/// <summary>
+/// Where Claude's task list stands as a turn that changed it ends (DESIGN.md §5, "Tasks"), with <b>Continue</b> while
+/// tasks are left.
+/// </summary>
+public sealed partial class TasksSummaryItem(string text, bool allDone) : ConversationItem
+{
+    /// <summary>"All 7 tasks done · 23m", or "4 of 7 tasks left · Next: #4 Run the migration".</summary>
+    public string Text { get; } = text;
+
+    public bool AllDone { get; } = allDone;
+
+    public string Glyph => AllDone ? "✓" : "◐";
+
+    /// <summary><b>Continue</b> shows: this is the latest such row, tasks are left, and no turn has started since.</summary>
+    [ObservableProperty]
+    public partial bool IsContinueOffered { get; set; }
+}

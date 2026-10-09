@@ -56,6 +56,9 @@
     <CheckBox Content="Show git branch on tab rows" IsChecked="{Binding ShowBranchOnTabs}" />
     <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                Text="The branch each tab's folder has checked out, such as “main”, at the right of its second line. A tab in a worktree shows the worktree's name instead." />
+    <CheckBox Content="Show task progress on tab rows" IsChecked="{Binding ShowTaskProgressOnTabs}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="How many of Claude's tasks are done, such as “3/7”, at the right of each tab's second line, and the task Claude is working on in place of the model while it works." />
     <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
   </StackPanel>
 </UserControl>

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Claudette.Core.Diffs;
 using Claudette.Core.Protocol;
 
 namespace Claudette.App.Conversation;
@@ -95,6 +96,19 @@ public sealed record DiffView(IReadOnlyList<DiffLine> Lines, int Added, int Remo
             .Concat(added.Select(l => new DiffLine(DiffLineKind.Added, l, null, null)))
             .ToList();
         return new DiffView(Cap(lines), added.Length, removed.Length);
+    }
+
+    /// <summary>
+    /// The whole of <paramref name="after"/> with what changed from <paramref name="before"/> marked, line by line: a plan
+    /// against its previous version (DESIGN.md §5, "Tasks").
+    /// </summary>
+    public static DiffView FromTexts(string? before, string? after)
+    {
+        var entries = LineDiff.Full(before, after);
+        var lines = entries.Select(e => new DiffLine(
+            e.Op switch { DiffOp.Added => DiffLineKind.Added, DiffOp.Removed => DiffLineKind.Removed, _ => DiffLineKind.Context },
+            e.Text, e.OldNumber, e.NewNumber)).ToList();
+        return new DiffView(Cap(lines), entries.Count(e => e.Op == DiffOp.Added), entries.Count(e => e.Op == DiffOp.Removed));
     }
 
     /// <summary>A new file: every line added.</summary>

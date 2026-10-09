@@ -323,6 +323,12 @@ public sealed class AppearanceSettings
     /// <summary>A badge on each tab's row with the git branch it's on, or its worktree (DESIGN.md §4, "Sidebar").</summary>
     public bool ShowBranchOnTabs { get; set; } = true;
 
+    /// <summary>
+    /// How far Claude's tasks have got on each tab's row, and the task in progress on its second line while it works
+    /// (DESIGN.md §5, "Tasks").
+    /// </summary>
+    public bool ShowTaskProgressOnTabs { get; set; } = true;
+
     /// <summary>How much room the conversation, the sidebar's rows and the composer take (DESIGN.md §14).</summary>
     public Density Density { get; set; } = Density.Comfortable;
 

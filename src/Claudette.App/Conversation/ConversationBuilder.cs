@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Text.Json.Nodes;
+using Claudette.Core.Diffs;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 
@@ -20,6 +21,15 @@ public sealed class ConversationBuilder
     private readonly Func<string?, string?> _modelName;
     private readonly StreamingBlocks _blocks;
     private NoteItem? _retryNote;
+
+    // The plan's draft (DESIGN.md §5, "Tasks"): Write and Edit calls to the plan file in Plan mode, until their results.
+    private readonly Dictionary<string, (string Name, JsonObject Input)> _draftCalls = [];
+
+    // File changes and the task in progress they count toward, until their results.
+    private readonly Dictionary<string, (TodoItem Task, string Path)> _taskFiles = [];
+
+    // The task list changed in the turn under way, so its end says where the list stands. The main agent's builder keeps it.
+    private bool _tasksChangedThisTurn;
 
     // The last entry of the main conversation Claude Code gave an id: where a resume would stop to leave out what comes
     // next (DESIGN.md §5, "Rewind and branch").
@@ -150,6 +160,30 @@ public sealed class ConversationBuilder
         init => _tasks = value;
     }
 
+    /// <summary>
+    /// The tab is in Plan mode, where Claude Code lets Claude change only its plan file: the main agent's Write or Edit to
+    /// a Markdown file is the plan's draft (DESIGN.md §5, "Tasks").
+    /// </summary>
+    public Func<bool>? IsInPlanMode { get; set; }
+
+    /// <summary>The row the latest turn's end added about the task list; null when it added none.</summary>
+    public TasksSummaryItem? TurnTasksSummary { get; private set; }
+
+    private bool IsReplaying => _parent?.IsReplaying ?? _replaying;
+
+    private ConversationBuilder Root => _parent?.Root ?? this;
+
+    /// <summary>This agent's builder and those above it, up to the main agent's: whose task its work counts toward.</summary>
+    private List<object> AgentChain()
+    {
+        var chain = new List<object>();
+        for (var builder = this; builder is not null; builder = builder._parent)
+        {
+            chain.Add(builder);
+        }
+        return chain;
+    }
+
     /// <summary>The turn under way is one Claude Code carries on after a restart, and the conversation says so.</summary>
     private bool _carriedOnNoted;
 
@@ -242,6 +276,10 @@ public sealed class ConversationBuilder
         _tasks?.OnConversationCleared();
         _blocks.Clear();
         _retryNote = null;
+        _draftCalls.Clear();
+        _taskFiles.Clear();
+        _tasksChangedThisTurn = false;
+        TurnTasksSummary = null;
         // A cleared conversation is a new one: nothing before it to go back to.
         _lastEntryUuid = null;
     }
@@ -399,6 +437,8 @@ public sealed class ConversationBuilder
                     queued.IsQueued = false;
                 }
                 _prompts.OnSessionExited();
+                _todoList?.EndWaitingPlans();
+                _tasksChangedThisTurn = false;
                 var code = exited.Exit.ExitCode?.ToString() ?? "unknown";
                 var detail = string.IsNullOrWhiteSpace(exited.Exit.StandardErrorTail) ? "" : $"\n{LastLines(exited.Exit.StandardErrorTail, 5)}";
                 AddNote($"Claude Code exited (code {code}).{detail}", exited.Exit.ExitCode == 0 ? NoteKind.Info : NoteKind.Error);
@@ -420,12 +460,23 @@ public sealed class ConversationBuilder
         {
             Items.Remove(row);
         }
+        if (item is PlanItem plan && _parent is null && _todoList?.OnPlanProposed(request.ToolUseId, plan.HasPlan ? plan.Plan.ToString() : null) is { } version)
+        {
+            // A version of the plan (DESIGN.md §5, "Tasks"): its number and changes on its card, and the draft's text
+            // when the request had none.
+            plan.SetVersion(version);
+        }
         Items.Add(item);
         _agents?.OnPrompt(item);
     }
 
     private void ApplyAssistant(AssistantMessage message)
     {
+        if (_todoList is not null && message.MessageId is { } callId && CallUsage.TokensOf(message) is { } tokens)
+        {
+            // The call's tokens count toward the task in progress (DESIGN.md §5, "What each task did").
+            _todoList.CountCall(callId, tokens, _todoList.TaskFor(AgentChain()));
+        }
         var (streamedText, streamedThinking) = _blocks.TakeStreamed();
         foreach (var block in message.Content)
         {
@@ -453,11 +504,28 @@ public sealed class ConversationBuilder
                     _blocks.Close();
                     // Tasks are the session's, whichever agent makes them; a subagent's TodoWrite list is its own, and
                     // shows as a card in its group (DESIGN.md §5, "Tasks").
-                    if (!(_parent is not null && toolUse.Name == "TodoWrite") && _todoList?.ApplyToolUse(toolUse.Id, toolUse.Name, toolUse.Input) == true)
+                    if (_todoList is not null && !(_parent is not null && toolUse.Name == "TodoWrite"))
                     {
-                        // To-do updates show in the pinned list, not as cards.
-                        _todoToolUses.Add(toolUse.Id);
-                        break;
+                        var startsNewList = toolUse.Name is "TodoWrite" or "TaskCreate" && _todoList.StartsNewList;
+                        if (_todoList.ApplyToolUse(toolUse.Id, toolUse.Name, toolUse.Input, agent: this))
+                        {
+                            // To-do updates show in the pinned list, not as cards; a task that starts gets a row here.
+                            _todoToolUses.Add(toolUse.Id);
+                            foreach (var started in _todoList.Started.ToArray())
+                            {
+                                AddTaskStart(started);
+                            }
+                            if (!IsReplaying)
+                            {
+                                // Reading the list changes nothing.
+                                Root._tasksChangedThisTurn |= toolUse.Name is not ("TaskList" or "TaskGet");
+                                if (startsNewList && _parent is null && _todoList.HasItems)
+                                {
+                                    SuggestPlan();
+                                }
+                            }
+                            break;
+                        }
                     }
                     if (_agents is not null && _agent is not null)
                     {
@@ -483,15 +551,97 @@ public sealed class ConversationBuilder
                         Items.Add(tool);
                         _tasks?.OnToolUse(tool);
                     }
+                    TrackPlanDraft(toolUse);
+                    TrackTaskFile(toolUse);
                     break;
             }
         }
+    }
+
+    /// <summary>A task went in progress: a row where it starts, unless it had one already (DESIGN.md §5, "Tasks").</summary>
+    private void AddTaskStart(TodoItem task)
+    {
+        if (task.Start is not null)
+        {
+            return;
+        }
+        var row = new TaskStartItem(task);
+        task.Start = row;
+        Items.Add(row);
+    }
+
+    /// <summary>
+    /// Claude started a new task list: its latest reply is offered as the plan when it reads like one and is newer than
+    /// the newest plan (DESIGN.md §5, "Suggesting a reply as the plan").
+    /// </summary>
+    private void SuggestPlan()
+    {
+        if (Items.OfType<AssistantTextItem>().LastOrDefault(r => !r.IsStreaming) is not { } reply || !TodoList.LooksLikePlan(reply.Text))
+        {
+            return;
+        }
+        if (_todoList!.NewestPlan is { } plan && (plan.At is not { } at || reply.SentAt is not { } sent || sent <= at))
+        {
+            return;
+        }
+        _todoList.Suggest(reply);
+    }
+
+    /// <summary>The main agent's Write or Edit to a Markdown file in Plan mode: the plan's draft, once it's made. Only live.</summary>
+    private void TrackPlanDraft(ToolUseBlock toolUse)
+    {
+        if (_parent is null && !_replaying && _todoList is not null && toolUse.Name is "Write" or "Edit"
+            && toolUse.Input.GetString("file_path") is { } path && path.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+            && IsInPlanMode?.Invoke() == true)
+        {
+            _draftCalls[toolUse.Id] = (toolUse.Name, toolUse.Input);
+        }
+    }
+
+    /// <summary>A file change counts toward the task in progress, once it's made (DESIGN.md §5, "What each task did").</summary>
+    private void TrackTaskFile(ToolUseBlock toolUse)
+    {
+        if (_todoList is not null && ChangedFiles.IsFileTool(toolUse.Name)
+            && (toolUse.Input.GetString("file_path") ?? toolUse.Input.GetString("notebook_path")) is { } path
+            && _todoList.TaskFor(AgentChain()) is { } task)
+        {
+            _taskFiles[toolUse.Id] = (task, path);
+        }
+    }
+
+    /// <summary>
+    /// The plan as a Write or Edit left it: a Write's content, or an Edit's replacement made to the file as its result had
+    /// it, else to the draft so far. Null when it can't be told.
+    /// </summary>
+    private string? DraftAfter((string Name, JsonObject Input) call, JsonNode? toolUseResult)
+    {
+        if (call.Name == "Write")
+        {
+            return call.Input.GetString("content");
+        }
+        var before = (toolUseResult as JsonObject)?.GetString("originalFile") ?? _todoList?.DraftText;
+        if (before is null || call.Input.GetString("old_string") is not { Length: > 0 } old || call.Input.GetString("new_string") is not { } replacement
+            || before.IndexOf(old, StringComparison.Ordinal) is var at && at < 0)
+        {
+            return null;
+        }
+        return call.Input.GetBool("replace_all") == true
+            ? before.Replace(old, replacement, StringComparison.Ordinal)
+            : string.Concat(before.AsSpan(0, at), replacement, before.AsSpan(at + old.Length));
     }
 
     private void ApplyToolResults(UserMessage message)
     {
         foreach (var result in message.Content.OfType<ToolResultBlock>())
         {
+            if (_draftCalls.Remove(result.ToolUseId, out var draft) && !result.IsError && DraftAfter(draft, message.ToolUseResult) is { } text)
+            {
+                _todoList?.OnPlanDrafted(text);
+            }
+            if (_taskFiles.Remove(result.ToolUseId, out var credited) && !result.IsError)
+            {
+                credited.Task.AddFile(credited.Path, result.ToolUseId);
+            }
             if (_todoToolUses.Remove(result.ToolUseId))
             {
                 _todoList?.ApplyToolResult(result.ToolUseId, result.Text, message.ToolUseResult);
@@ -503,11 +653,15 @@ public sealed class ConversationBuilder
                 {
                     node.OnResult(result.Text, result.IsError, message.ToolUseResult, message.WasInterrupted(result.ToolUseId));
                 }
-                if (tool.Name == "ExitPlanMode" && !result.IsError && _parent is null && ApprovedPlan(tool, message.ToolUseResult) is { } plan)
+                if (tool.Name == "ExitPlanMode" && _parent is null && _todoList is not null)
                 {
-                    // An approved plan heads the Tasks page (DESIGN.md §5, "Tasks"). Its result says so however it was
-                    // approved: on its card, in the Claude app, or before the tab was restored.
-                    _todoList?.SetPlan(plan);
+                    // What became of a version of the plan (DESIGN.md §5, "Tasks"). Its result says so however it was
+                    // answered: on its card, in the Claude app, or before the tab was restored.
+                    var card = Items.OfType<PlanItem>().LastOrDefault(p => p.Request.ToolUseId == result.ToolUseId);
+                    _todoList.OnPlanAnswered(result.ToolUseId, !result.IsError,
+                        result.IsError ? tool.Input.GetString("plan") : ApprovedPlan(tool, message.ToolUseResult),
+                        card?.SentBackFeedback,
+                        interrupted: result.IsError && message.WasInterrupted(result.ToolUseId));
                 }
             }
         }
@@ -542,6 +696,11 @@ public sealed class ConversationBuilder
 
     private void ApplyTurnCompleted(ResultMessage result)
     {
+        var tasksChanged = _tasksChangedThisTurn;
+        _tasksChangedThisTurn = false;
+        TurnTasksSummary = null;
+        // A plan still waiting can't be answered once its turn is over.
+        _todoList?.EndWaitingPlans();
         if (result.TerminalReason == "aborted_streaming")
         {
             AddNote("Stopped.", NoteKind.Warning);
@@ -557,6 +716,12 @@ public sealed class ConversationBuilder
             }
             AddNote(error, NoteKind.Error);
             return;
+        }
+        if (tasksChanged && _todoList?.TurnSummaryText(Now()) is { } tasks)
+        {
+            // Where the task list stands (DESIGN.md §5, "Tasks"), before the footer.
+            TurnTasksSummary = new TasksSummaryItem(tasks, _todoList.AllDone);
+            Items.Add(TurnTasksSummary);
         }
         if (TurnSummaryItem.For(result, _modelName) is { } summary)
         {
