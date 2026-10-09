@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -13,8 +14,8 @@ using Claudette.App.ViewModels;
 namespace Claudette.App.Views;
 
 /// <summary>
-/// A tab's side panel (DESIGN.md §3): what its pages need beyond bindings, which is the menu of the pages that don't
-/// fit, opening a changed file and following a project job's output.
+/// A tab's side panel (DESIGN.md §3): what its pages need beyond bindings, which is the pages' order and dragging their
+/// tabs, the menu of the pages that don't fit, opening a changed file and following a project job's output.
 /// </summary>
 public partial class SidePanelView : UserControl
 {
@@ -32,6 +33,14 @@ public partial class SidePanelView : UserControl
         // Tunnel: the list's items take Enter for themselves.
         ChangedFilesList.AddHandler(KeyDownEvent, OnChangedFileKeyDown, RoutingStrategies.Tunnel);
         MorePages.MenuItems = MorePageItems;
+        // Handled events too: the page tabs handle presses themselves.
+        PageTabs.AddHandler(PointerPressedEvent, OnPageTabPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        PageTabs.AddHandler(PointerMovedEvent, OnPageTabMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
+        PageTabs.AddHandler(PointerReleasedEvent, OnPageTabReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+        foreach (var tab in PageTabButtons)
+        {
+            tab.ContextMenu = PageTabMenu((SidePanelPage)tab.Tag!);
+        }
     }
 
     private TabViewModel? ViewModel => DataContext as TabViewModel;
@@ -41,14 +50,157 @@ public partial class SidePanelView : UserControl
         base.OnDataContextChanged(e);
         if (_tab is not null)
         {
+            _tab.PropertyChanged -= OnTabPropertyChanged;
             _tab.ProjectTools.Runs.PropertyChanged -= OnProjectRunsPropertyChanged;
         }
         _tab = ViewModel;
         if (_tab is not null)
         {
+            _tab.PropertyChanged += OnTabPropertyChanged;
             _tab.ProjectTools.Runs.PropertyChanged += OnProjectRunsPropertyChanged;
         }
+        OrderPageTabs();
         WatchProjectOutput();
+    }
+
+    private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TabViewModel.SidePanelPages))
+        {
+            OrderPageTabs();
+        }
+    }
+
+    // ---- The pages' order (DESIGN.md §3, "Side panel") --------------------------------------------------------------
+
+    private const double DragThreshold = 6;
+
+    /// <summary>The page tab being dragged, or about to be once the pointer moves far enough.</summary>
+    private Button? _dragged;
+    private double _dragStartX;
+    private bool _dragging;
+
+    /// <summary>The pages' tabs, each tagged with its page, in the row's order.</summary>
+    private IEnumerable<Button> PageTabButtons => PageTabs.Children.OfType<Button>().Where(b => b.Tag is SidePanelPage);
+
+    /// <summary>
+    /// Puts the pages' tabs in the order every tab shares, ahead of the button for those that don't fit. Each tab only
+    /// moves to an earlier place, the way a panel's visual children, which drawing and the Tab key follow, are sure to
+    /// move just as its children do.
+    /// </summary>
+    private void OrderPageTabs()
+    {
+        if (_tab is null)
+        {
+            return;
+        }
+        var place = 0;
+        foreach (var page in _tab.SidePanelPages)
+        {
+            if (PageTabButtons.FirstOrDefault(b => (SidePanelPage)b.Tag! == page) is not { } tab)
+            {
+                continue;
+            }
+            var from = PageTabs.Children.IndexOf(tab);
+            if (from != place)
+            {
+                PageTabs.Children.Move(from, place);
+            }
+            place++;
+        }
+    }
+
+    private void OnPageTabPressed(object? sender, PointerPressedEventArgs e)
+    {
+        _dragging = false;
+        _dragged = e.GetCurrentPoint(PageTabs).Properties.IsLeftButtonPressed
+            && (e.Source as Visual)?.FindAncestorOfType<Button>(includeSelf: true) is { Tag: SidePanelPage } tab
+            ? tab
+            : null;
+        _dragStartX = e.GetPosition(PageTabs).X;
+    }
+
+    /// <summary>
+    /// The dragged tab moves as soon as the pointer passes the middle of a neighbor, so the row shows the result live.
+    /// Its page shows, which keeps its tab in the row however many pages don't fit.
+    /// </summary>
+    private void OnPageTabMoved(object? sender, PointerEventArgs e)
+    {
+        if (_dragged is not { Tag: SidePanelPage page } || ViewModel is not { } tab)
+        {
+            return;
+        }
+        var x = e.GetPosition(PageTabs).X;
+        if (!_dragging)
+        {
+            if (Math.Abs(x - _dragStartX) < DragThreshold)
+            {
+                return;
+            }
+            _dragging = true;
+            tab.Page = page;
+        }
+        if (PageAt(_dragged, x) is { } to)
+        {
+            tab.MoveSidePanelPage(page, to);
+        }
+    }
+
+    /// <summary>
+    /// The page in the row whose tab the pointer has passed the middle of, in the direction of travel, or null to stay put.
+    /// </summary>
+    private SidePanelPage? PageAt(Button dragged, double x)
+    {
+        var from = PageTabs.Children.IndexOf(dragged);
+        foreach (var tab in PageTabButtons.Where(b => b.IsVisible && !PageTabs.Overflow.Contains(b)))
+        {
+            var index = PageTabs.Children.IndexOf(tab);
+            var bounds = tab.Bounds;
+            if (index > from && x > bounds.Center.X && x < bounds.Right || index < from && x < bounds.Center.X && x > bounds.Left)
+            {
+                return (SidePanelPage)tab.Tag!;
+            }
+        }
+        return null;
+    }
+
+    private void OnPageTabReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_dragging)
+        {
+            // Releasing the capture un-presses the tab without a click.
+            e.Pointer.Capture(null);
+            e.Handled = true;
+        }
+        _dragged = null;
+        _dragging = false;
+    }
+
+    /// <summary>A page's tab's menu: the keyboard's way to move it, and back to the first order.</summary>
+    private ContextMenu PageTabMenu(SidePanelPage page)
+    {
+        MenuItem Item(string header, Action<TabViewModel> act)
+        {
+            var item = new MenuItem { Header = header };
+            item.Click += (_, _) =>
+            {
+                if (ViewModel is { } tab)
+                {
+                    act(tab);
+                }
+            };
+            return item;
+        }
+        return new ContextMenu
+        {
+            Items =
+            {
+                Item("Move left", tab => tab.MoveSidePanelPage(page, -1)),
+                Item("Move right", tab => tab.MoveSidePanelPage(page, 1)),
+                new Separator(),
+                Item("Reset order", tab => tab.ResetSidePanelPages()),
+            },
+        };
     }
 
     // ---- The pages that don't fit (DESIGN.md §3, "Side panel") ------------------------------------------------------

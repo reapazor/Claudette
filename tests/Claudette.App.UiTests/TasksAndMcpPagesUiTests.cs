@@ -1,7 +1,10 @@
 using System.Text.Json.Nodes;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
 using Avalonia.VisualTree;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
@@ -106,4 +109,34 @@ public class TasksAndMcpPagesUiTests
         await UiText.SettleUntilAsync(window, () => tab.McpServers.Servers.Any(s => s is { Name: "tickets", IsDisabled: true }), "the server off");
         Assert.Contains("mcp_toggle", h.Transport.SentControlSubtypes);
     }
+
+    [AvaloniaFact]
+    public async Task An_mcp_server_row_lights_up_under_the_pointer()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        h.Transport.Answers["mcp_status"] = _ => new JsonObject { ["mcpServers"] = JsonNode.Parse("""[{"name":"tickets","status":"connected"}]""") };
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell }, 1200, 800);
+        h.Transport.Emit("""{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-5-5","permissionMode":"default","mcp_servers":[{"name":"tickets","status":"connected"}]}""");
+        await UiText.SettleUntilAsync(window, () => tab.HasMcpServers, "the servers");
+        tab.IsSidePanelOpen = true;
+        tab.ShowMcpPageCommand.Execute(null);
+        var view = window.GetVisualDescendants().OfType<TabView>().Single();
+        List<Border> Rows() => [.. view.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("mcprow"))];
+        await UiText.SettleUntilAsync(window, () => Rows().Count == 1, "the server's row");
+        var row = Rows()[0];
+        var hover = Assert.IsAssignableFrom<ISolidColorBrush>(window.FindResource(window.ActualThemeVariant, "HoverBrush")).Color;
+        Assert.Equal(Colors.Transparent, Fill(row));
+
+        window.MouseMove(row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value);
+        UiText.Settle(window);
+        Assert.Equal(hover, Fill(row));
+
+        window.MouseMove(new Point(5, 5));
+        UiText.Settle(window);
+        Assert.Equal(Colors.Transparent, Fill(row));
+        window.Close();
+    }
+
+    private static Color? Fill(Border border) => (border.Background as ISolidColorBrush)?.Color;
 }

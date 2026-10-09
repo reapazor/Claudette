@@ -16,32 +16,33 @@
              x:DataType="vm:TabViewModel">
   <DockPanel>
     <!-- The pages, as tabs: the one showing in full text over an accent line, the others muted. Those that don't fit are
-         in the menu of the button after them (DESIGN.md §3, "Side panel"). -->
+         in the menu of the button after them (DESIGN.md §3, "Side panel"). Each is tagged with its page, which the code
+         behind uses to put them in the order every tab shares and to drag them. -->
     <Border DockPanel.Dock="Top" Classes="pagetabs">
       <Grid ColumnDefinitions="*,Auto">
         <controls:PageTabsPanel x:Name="PageTabs" LayoutUpdated="OnPageTabsLayoutUpdated">
-          <Button Classes="pagetab" Classes.selected="{Binding IsFilesPage}" Command="{Binding ShowFilesPageCommand}">
+          <Button Classes="pagetab" Tag="{x:Static vm:SidePanelPage.Files}" Classes.selected="{Binding IsFilesPage}" Command="{Binding ShowFilesPageCommand}">
             <TextBlock Text="Changed Files" Classes.muted="{Binding !IsFilesPage}" />
           </Button>
           <!-- Agents (DESIGN.md §18); a busy dot while a subagent runs -->
-          <Button Classes="pagetab" Classes.selected="{Binding IsAgentsPage}" Command="{Binding ShowAgentsPageCommand}" ToolTip.Tip="{Binding AgentsHeader}">
+          <Button Classes="pagetab" Tag="{x:Static vm:SidePanelPage.Agents}" Classes.selected="{Binding IsAgentsPage}" Command="{Binding ShowAgentsPageCommand}" ToolTip.Tip="{Binding AgentsHeader}">
             <StackPanel Orientation="Horizontal" Spacing="4">
               <TextBlock Text="Agents" Classes.muted="{Binding !IsAgentsPage}" />
               <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding HasActiveAgents}" />
             </StackPanel>
           </Button>
           <!-- Project tools (DESIGN.md §18); a busy dot while a job runs -->
-          <Button Classes="pagetab" Classes.selected="{Binding IsProjectPage}" Command="{Binding ShowProjectPageCommand}" IsVisible="{Binding ProjectTools.HasTools}" ToolTip.Tip="{Binding ProjectTools.HeaderTitle}">
+          <Button Classes="pagetab" Tag="{x:Static vm:SidePanelPage.Project}" Classes.selected="{Binding IsProjectPage}" Command="{Binding ShowProjectPageCommand}" IsVisible="{Binding ProjectTools.HasTools}" ToolTip.Tip="{Binding ProjectTools.HeaderTitle}">
             <StackPanel Orientation="Horizontal" Spacing="4">
               <TextBlock Text="Project" Classes.muted="{Binding !IsProjectPage}" />
               <TextBlock Classes="status busy" Text="●" FontSize="8" VerticalAlignment="Center" IsVisible="{Binding ProjectTools.Runs.IsJobRunning}" />
             </StackPanel>
           </Button>
-          <Button Classes="pagetab" Classes.selected="{Binding IsProcessesPage}" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding ProcessMonitor.IsOn}">
+          <Button Classes="pagetab" Tag="{x:Static vm:SidePanelPage.Processes}" Classes.selected="{Binding IsProcessesPage}" Command="{Binding ShowProcessesPageCommand}" IsVisible="{Binding ProcessMonitor.IsOn}">
             <TextBlock Text="Processes" Classes.muted="{Binding !IsProcessesPage}" />
           </Button>
           <!-- Tasks (DESIGN.md §5, "Tasks"): "2 of 5" done -->
-          <Button Classes="pagetab" Classes.selected="{Binding IsTasksPage}" Command="{Binding ShowTasksPageCommand}" IsVisible="{Binding TodoList.HasAnything}"
+          <Button Classes="pagetab" Tag="{x:Static vm:SidePanelPage.Tasks}" Classes.selected="{Binding IsTasksPage}" Command="{Binding ShowTasksPageCommand}" IsVisible="{Binding TodoList.HasAnything}"
                   ToolTip.Tip="{Binding TodoList.Summary}">
             <StackPanel Orientation="Horizontal" Spacing="4">
               <TextBlock Text="Tasks" Classes.muted="{Binding !IsTasksPage}" />
@@ -49,7 +50,7 @@
             </StackPanel>
           </Button>
           <!-- MCP servers (DESIGN.md §4, "MCP servers"); a warning dot when one failed -->
-          <Button Classes="pagetab" Classes.selected="{Binding IsMcpPage}" Command="{Binding ShowMcpPageCommand}" IsVisible="{Binding HasMcpServers}"
+          <Button Classes="pagetab" Tag="{x:Static vm:SidePanelPage.Mcp}" Classes.selected="{Binding IsMcpPage}" Command="{Binding ShowMcpPageCommand}" IsVisible="{Binding HasMcpServers}"
                   ToolTip.Tip="{Binding McpServers.Attention, TargetNullValue='MCP servers'}">
             <StackPanel Orientation="Horizontal" Spacing="4">
               <TextBlock Text="MCP" Classes.muted="{Binding !IsMcpPage}" />
@@ -58,7 +59,7 @@
             </StackPanel>
           </Button>
           <!-- The project's scratch pad (DESIGN.md §18, "Scratch pad") -->
-          <Button Classes="pagetab" Classes.selected="{Binding IsScratchPadPage}" Command="{Binding ShowScratchPadPageCommand}" ToolTip.Tip="Notes shared by the tabs in this project">
+          <Button Classes="pagetab" Tag="{x:Static vm:SidePanelPage.ScratchPad}" Classes.selected="{Binding IsScratchPadPage}" Command="{Binding ShowScratchPadPageCommand}" ToolTip.Tip="Notes shared by the tabs in this project">
             <TextBlock Text="Scratch Pad" Classes.muted="{Binding !IsScratchPadPage}" />
           </Button>
           <!-- The pages that don't fit, with a dot when one of them shows one; its menu is made as it opens -->
@@ -278,48 +279,46 @@
         </Grid>
         <TextBlock DockPanel.Dock="Top" Classes="small error" Margin="12,0,12,6" Text="{Binding McpServers.Error}" TextWrapping="Wrap" IsVisible="{Binding McpServers.HasError}" />
         <ScrollViewer x:Name="McpScroller" HorizontalScrollBarVisibility="Disabled">
-          <ItemsControl ItemsSource="{Binding McpServers.Servers}" Margin="12,0,16,12">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <StackPanel Spacing="10" />
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
+          <ItemsControl ItemsSource="{Binding McpServers.Servers}" Margin="0,0,0,7">
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="vm:McpServerRow">
-                <StackPanel Spacing="2">
-                  <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="1" Classes="small" Classes.muted="{Binding !IsFailed}" Classes.warning="{Binding IsFailed}" Text="{Binding StateText}" />
-                  </Grid>
-                  <TextBlock Classes="muted small" Text="{Binding Detail}" TextWrapping="Wrap" IsVisible="{Binding HasDetail}" />
-                  <SelectableTextBlock Classes="small error" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
-                  <!-- Signing in, while the user finishes in the browser -->
-                  <StackPanel Spacing="4" IsVisible="{Binding IsSigningIn}">
-                    <TextBlock Classes="muted small" Text="{Binding SignInText}" TextWrapping="Wrap" />
-                    <Button Classes="flat" Padding="0" HorizontalAlignment="Left" ToolTip.Tip="{Binding SignInUrl}"
-                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.OpenSignInPageCommand}" CommandParameter="{Binding}">
-                      <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="Open the sign-in page again" TextDecorations="Underline" />
-                    </Button>
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" IsVisible="{Binding CanPasteAddress}">
-                      <TextBox Text="{Binding PastedAddress}" PlaceholderText="If the page after signing in didn't load, paste its address here"
-                               AutomationProperties.Name="The address the browser ended on" />
-                      <Button Grid.Column="1" Classes="flat" Content="Done"
-                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.FinishSignInCommand}" CommandParameter="{Binding}" />
+                <!-- Lit under the pointer, as a process's row is -->
+                <Border Classes="mcprow">
+                  <StackPanel Spacing="2">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Column="1" Classes="small" Classes.muted="{Binding !IsFailed}" Classes.warning="{Binding IsFailed}" Text="{Binding StateText}" />
                     </Grid>
+                    <TextBlock Classes="muted small" Text="{Binding Detail}" TextWrapping="Wrap" IsVisible="{Binding HasDetail}" />
+                    <SelectableTextBlock Classes="small error" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
+                    <!-- Signing in, while the user finishes in the browser -->
+                    <StackPanel Spacing="4" IsVisible="{Binding IsSigningIn}">
+                      <TextBlock Classes="muted small" Text="{Binding SignInText}" TextWrapping="Wrap" />
+                      <Button Classes="flat" Padding="0" HorizontalAlignment="Left" ToolTip.Tip="{Binding SignInUrl}"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.OpenSignInPageCommand}" CommandParameter="{Binding}">
+                        <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="Open the sign-in page again" TextDecorations="Underline" />
+                      </Button>
+                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" IsVisible="{Binding CanPasteAddress}">
+                        <TextBox Text="{Binding PastedAddress}" PlaceholderText="If the page after signing in didn't load, paste its address here"
+                                 AutomationProperties.Name="The address the browser ended on" />
+                        <Button Grid.Column="1" Classes="flat" Content="Done"
+                                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.FinishSignInCommand}" CommandParameter="{Binding}" />
+                      </Grid>
+                    </StackPanel>
+                    <WrapPanel ItemSpacing="8" IsEnabled="{Binding !IsBusy}">
+                      <Button Classes="flat" Content="Sign in" IsVisible="{Binding CanSignIn}" ToolTip.Tip="Opens the server's sign-in page in your browser"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.SignInCommand}" CommandParameter="{Binding}" />
+                      <Button Classes="flat" Content="Sign out" IsVisible="{Binding CanSignOut}" ToolTip.Tip="Forget this server's sign-in; connecting it again asks you to sign in"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.SignOutCommand}" CommandParameter="{Binding}" />
+                      <Button Classes="flat" Content="Reconnect" IsVisible="{Binding CanReconnect}"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ReconnectCommand}" CommandParameter="{Binding}" />
+                      <Button Classes="flat" Content="Turn off" IsVisible="{Binding !IsDisabled}" ToolTip.Tip="Disconnect it and remove its tools, for this session"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ToggleCommand}" CommandParameter="{Binding}" />
+                      <Button Classes="flat" Content="Turn on" IsVisible="{Binding IsDisabled}"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ToggleCommand}" CommandParameter="{Binding}" />
+                    </WrapPanel>
                   </StackPanel>
-                  <WrapPanel ItemSpacing="8" IsEnabled="{Binding !IsBusy}">
-                    <Button Classes="flat" Content="Sign in" IsVisible="{Binding CanSignIn}" ToolTip.Tip="Opens the server's sign-in page in your browser"
-                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.SignInCommand}" CommandParameter="{Binding}" />
-                    <Button Classes="flat" Content="Sign out" IsVisible="{Binding CanSignOut}" ToolTip.Tip="Forget this server's sign-in; connecting it again asks you to sign in"
-                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.SignOutCommand}" CommandParameter="{Binding}" />
-                    <Button Classes="flat" Content="Reconnect" IsVisible="{Binding CanReconnect}"
-                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ReconnectCommand}" CommandParameter="{Binding}" />
-                    <Button Classes="flat" Content="Turn off" IsVisible="{Binding !IsDisabled}" ToolTip.Tip="Disconnect it and remove its tools, for this session"
-                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ToggleCommand}" CommandParameter="{Binding}" />
-                    <Button Classes="flat" Content="Turn on" IsVisible="{Binding IsDisabled}"
-                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ToggleCommand}" CommandParameter="{Binding}" />
-                  </WrapPanel>
-                </StackPanel>
+                </Border>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
@@ -352,10 +351,15 @@
                         <TextBlock Grid.Column="1" Classes="mono small" Text="{Binding CpuText}" Margin="8,0,0,0" MinWidth="44" TextAlignment="Right" />
                         <TextBlock Grid.Column="2" Classes="mono small muted" Text="{Binding MemoryText}" Margin="8,0,0,0" MinWidth="56" TextAlignment="Right" />
                       </Grid>
-                      <TextBlock Classes="muted small" TextWrapping="Wrap">
-                        <Run Text="{Binding RunningText}" />
-                        <Run Text="{Binding IsDetached, Converter={x:Static vm:Converters.DetachedText}}" />
-                      </TextBlock>
+                      <!-- Its running time, then its arguments cut short on one line, in what room the time leaves -->
+                      <DockPanel>
+                        <TextBlock Classes="muted small" TextWrapping="Wrap">
+                          <Run Text="{Binding RunningText}" />
+                          <Run Text="{Binding IsDetached, Converter={x:Static vm:Converters.DetachedText}}" />
+                        </TextBlock>
+                        <TextBlock Classes="mono small muted" Margin="8,0,0,0" Text="{Binding ShortArguments}" TextTrimming="CharacterEllipsis" MaxLines="1" VerticalAlignment="Center"
+                                   IsVisible="{Binding ShortArguments, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                      </DockPanel>
                       <!-- The tool call that started it, on one line: every process it started shows the same one -->
                       <Button Classes="flat" Padding="0" IsVisible="{Binding HasTool}" HorizontalAlignment="Left" ToolTip.Tip="{Binding ToolText}"
                               Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.ShowProcessToolCommand}" CommandParameter="{Binding}">
@@ -366,6 +370,7 @@
                   <Border.ContextMenu>
                     <ContextMenu x:Name="ProcessMenu">
                       <MenuItem Header="Stop…" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.StopProcessCommand}" CommandParameter="{Binding}" IsEnabled="{Binding !IsRoot}" />
+                      <MenuItem Header="Copy PID" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.CopyPidCommand}" CommandParameter="{Binding}" />
                       <MenuItem Header="Copy command line" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.CopyCommandLineCommand}" CommandParameter="{Binding}" />
                       <MenuItem Header="Reveal executable" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.RevealExecutableCommand}" CommandParameter="{Binding}" />
                       <MenuItem Header="Show in conversation" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.ShowProcessToolCommand}" CommandParameter="{Binding}" IsEnabled="{Binding HasTool}" />

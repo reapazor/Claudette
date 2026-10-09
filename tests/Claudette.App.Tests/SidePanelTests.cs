@@ -45,6 +45,65 @@ public class SidePanelTests
     }
 
     [Fact]
+    public async Task Moving_a_page_moves_it_in_every_tabs_side_panel_and_is_saved()
+    {
+        await using var h = new TabTestHarness();
+        h.Services.State.Tabs = [new TabState { Folder = h.WorkFolder, IsPinned = true }, new TabState { Folder = h.WorkFolder, IsPinned = true }];
+        h.Shell.Restore(null);
+        var (first, second) = (h.Shell.AllTabs.First(), h.Shell.AllTabs.Last());
+        await TabTestHarness.Eventually(() => first.Status == TabStatus.Idle && first.IsSettled, "the first tab to start");
+        Assert.Equal(Enum.GetValues<SidePanelPage>(), second.SidePanelPages);
+        var changed = new List<string?>();
+        second.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        // Dragged onto Agents' place, the scratch pad takes it, and Agents moves over.
+        first.MoveSidePanelPage(SidePanelPage.ScratchPad, SidePanelPage.Agents);
+        SidePanelPage[] moved = [SidePanelPage.Files, SidePanelPage.ScratchPad, SidePanelPage.Agents, SidePanelPage.Project, SidePanelPage.Processes, SidePanelPage.Tasks, SidePanelPage.Mcp];
+        Assert.Equal(moved, second.SidePanelPages);
+        Assert.Contains(nameof(TabViewModel.SidePanelPages), changed);
+        Assert.Equal(moved.Select(p => p.ToString()), h.Services.State.SidePanelPages);
+        Assert.Equal(moved, new ShellViewModel(h.Services, () => { }).Layout.SidePanelPages);
+
+        // Reset order.
+        second.ResetSidePanelPages();
+        Assert.Equal(Enum.GetValues<SidePanelPage>(), first.SidePanelPages);
+        Assert.Null(h.Services.State.SidePanelPages);
+    }
+
+    [Fact]
+    public async Task Move_left_and_right_pass_the_next_page_the_tab_has()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        // No project tools, monitor or MCP servers, and no tasks: Changed Files, Agents and Scratch Pad.
+        Assert.Equal([SidePanelPage.Files, SidePanelPage.Agents, SidePanelPage.ScratchPad], tab.SidePanelPages.Where(tab.HasSidePanelPage));
+
+        tab.MoveSidePanelPage(SidePanelPage.ScratchPad, -1);
+        Assert.Equal([SidePanelPage.Files, SidePanelPage.ScratchPad, SidePanelPage.Agents], tab.SidePanelPages.Where(tab.HasSidePanelPage));
+
+        // Already at either end, it stays.
+        tab.MoveSidePanelPage(SidePanelPage.Files, -1);
+        tab.MoveSidePanelPage(SidePanelPage.Agents, 1);
+        Assert.Equal([SidePanelPage.Files, SidePanelPage.ScratchPad, SidePanelPage.Agents], tab.SidePanelPages.Where(tab.HasSidePanelPage));
+
+        tab.MoveSidePanelPage(SidePanelPage.Files, 1);
+        Assert.Equal([SidePanelPage.ScratchPad, SidePanelPage.Files, SidePanelPage.Agents], tab.SidePanelPages.Where(tab.HasSidePanelPage));
+    }
+
+    [Fact]
+    public async Task A_saved_order_leaves_out_names_it_doesnt_know_and_puts_a_page_it_doesnt_name_after_the_one_it_follows()
+    {
+        await using var h = new TabTestHarness();
+        // Saved before MCP was a page, and with one since taken out.
+        h.Services.State.SidePanelPages = ["ScratchPad", "Tasks", "Gone", "Files", "Agents", "Project", "Processes", "Files"];
+
+        var layout = new ShellViewModel(h.Services, () => { }).Layout;
+
+        Assert.Equal([SidePanelPage.ScratchPad, SidePanelPage.Tasks, SidePanelPage.Mcp, SidePanelPage.Files, SidePanelPage.Agents, SidePanelPage.Project, SidePanelPage.Processes],
+            layout.SidePanelPages);
+    }
+
+    [Fact]
     public async Task A_new_file_from_Write_shows_as_added()
     {
         await using var h = new TabTestHarness();
@@ -707,6 +766,21 @@ public class SidePanelTests
         Assert.StartsWith("1 proc · ", tab.ProcessMonitor.SummaryText, StringComparison.Ordinal);
         Assert.True(tab.ProcessMonitor.HasBusyProcesses);
         Assert.Equal(["claude", "node"], tab.ProcessMonitor.Processes.Select(p => p.Name));
+    }
+
+    [Fact]
+    public async Task A_process_row_shows_its_arguments_short_and_copies_its_PID()
+    {
+        await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true);
+        var tab = await h.OpenTabAsync();
+        h.Trees.Trees[4242].Children.Add((5001, "node"));
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+        await TabTestHarness.Eventually(() => tab.ProcessMonitor.Processes.Count == 2, "a sample");
+        var node = tab.ProcessMonitor.Processes[1];
+
+        Assert.Equal("--serve", node.ShortArguments);
+        await tab.ProcessMonitor.CopyPidCommand.ExecuteAsync(node);
+        Assert.Equal("5001", h.Platform.Clipboard);
     }
 
     [Fact]

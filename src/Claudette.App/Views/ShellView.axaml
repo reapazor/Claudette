@@ -801,7 +801,7 @@
     </Border>
 
     <!-- History (DESIGN.md §9) -->
-    <Border Grid.ColumnSpan="2" Classes="overlay" IsVisible="{Binding IsHistoryOpen}">
+    <Border Grid.ColumnSpan="2" Classes="overlay" IsVisible="{Binding IsHistoryOpen}" PointerPressed="OnHistoryOverlayPressed">
       <ContentControl Content="{Binding History}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,50,0,20">
         <ContentControl.DataTemplates>
           <DataTemplate DataType="vm:HistoryViewModel">

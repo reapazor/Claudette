@@ -718,7 +718,7 @@
         </Border>
 
         <ScrollViewer x:Name="ConversationScroll" HorizontalScrollBarVisibility="Disabled">
-          <!-- Not clipped, so the first message's time and Copy chip can sit over its top edge (DESIGN.md §5). -->
+          <!-- Not clipped, so the first message's time and Copy chip can sit above it (DESIGN.md §5). -->
           <ItemsControl x:Name="ConversationItems" ItemsSource="{Binding Items}" ClipToBounds="False">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>

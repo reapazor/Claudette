@@ -4,11 +4,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
         xmlns:controls="using:Claudette.App.Controls">
-  <!-- The chip with a message's time and Copy button: quiet until the message is hovered or focused. -->
+  <!-- The chip with a message's time and Copy button: quiet until the message is hovered or focused. It's 22 pixels
+       tall and sits above the message, so it doesn't hide the first line, overlapping it by 3 so the pointer can move
+       from the message onto it without leaving the message. -->
   <Style Selector="ContentControl.messagetools">
     <Setter Property="HorizontalAlignment" Value="Right" />
     <Setter Property="VerticalAlignment" Value="Top" />
-    <Setter Property="Margin" Value="0,-10,4,0" />
+    <Setter Property="Margin" Value="0,-19,4,0" />
     <Setter Property="Padding" Value="1" />
     <Setter Property="Background" Value="{DynamicResource DialogBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
@@ -46,12 +48,13 @@
     <Setter Property="MaxWidth" Value="Infinity" />
   </Style>
 
-  <!-- Settings → Appearance → Density (DESIGN.md §14): ShellView takes the "compact" class. -->
+  <!-- Settings → Appearance → Density (DESIGN.md §14): ShellView takes the "compact" class. The top leaves room for
+       the first message's chip, which sits above it. -->
   <Style Selector="ItemsControl#ConversationItems">
-    <Setter Property="Margin" Value="24,16,24,24" />
+    <Setter Property="Margin" Value="24,20,24,24" />
   </Style>
   <Style Selector=".compact ItemsControl#ConversationItems">
-    <Setter Property="Margin" Value="20,10,20,14" />
+    <Setter Property="Margin" Value="20,20,20,14" />
   </Style>
   <!-- The conversation is virtualized (DESIGN.md §5): only the items in view have controls. The panel has no spacing
        of its own, so each item keeps its distance from the next. -->
@@ -348,6 +351,15 @@
     <Setter Property="Padding" Value="12,3,0,3" />
   </Style>
   <Style Selector="Border.processrow:pointerover, Border.processrow.menuopen">
+    <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+  </Style>
+  <!-- An MCP server's row (DESIGN.md §4, "MCP servers"): lit under the pointer, as a process's is, so it's plain which
+       server its buttons are for. The right side keeps its text clear of the scroll bar. -->
+  <Style Selector="Border.mcprow">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Padding" Value="12,5,16,5" />
+  </Style>
+  <Style Selector="Border.mcprow:pointerover">
     <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
   </Style>
   <!-- A project job's output (DESIGN.md §18): dense lines, like a terminal, wrapping clear of the scroll bar -->

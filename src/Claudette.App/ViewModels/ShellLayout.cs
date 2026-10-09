@@ -8,28 +8,32 @@ namespace Claudette.App.ViewModels;
 /// The shell's widths (DESIGN.md §3, §4, "Sidebar"): the sidebar's, collapsed to its rail by the user or by a narrow
 /// window, and the side panel's, which every tab shares. What the user chooses is kept in the app state. Neither has a
 /// most; between them the conversation keeps <see cref="MinConversationWidth"/>, and when the window is too narrow for
-/// both, the side panel gives way first.
+/// both, the side panel gives way first. And the order of the side panel's pages, which every tab shares too.
 /// </summary>
 public sealed partial class ShellLayout : ViewModelBase
 {
     private readonly AppState _state;
     private readonly Action _saveState;
     private readonly Action _sidePanelWidthChanged;
+    private readonly Action _sidePanelPagesChanged;
     private bool _isNarrow;
 
     /// <summary>The shell's width, which the sidebar leaves room in; unbounded until the view reports it.</summary>
     private double _availableWidth = double.PositiveInfinity;
 
-    /// <param name="saveState">Saves <paramref name="state"/> once a width or the sidebar's collapse changes.</param>
+    /// <param name="saveState">Saves <paramref name="state"/> once a width, the sidebar's collapse or the pages' order changes.</param>
     /// <param name="sidePanelWidthChanged">Tells every tab its side panel's width changed.</param>
-    internal ShellLayout(AppState state, Action saveState, Action sidePanelWidthChanged)
+    /// <param name="sidePanelPagesChanged">Tells every tab its side panel's pages changed order.</param>
+    internal ShellLayout(AppState state, Action saveState, Action sidePanelWidthChanged, Action sidePanelPagesChanged)
     {
         _state = state;
         _saveState = saveState;
         _sidePanelWidthChanged = sidePanelWidthChanged;
+        _sidePanelPagesChanged = sidePanelPagesChanged;
         IsSidebarCollapsed = state.SidebarCollapsed;
         SidebarWidth = Math.Max(state.SidebarWidth ?? DefaultSidebarWidth, MinSidebarWidth);
         SidePanelWidth = Math.Max(state.SidePanelWidth ?? DefaultSidePanelWidth, MinSidePanelWidth);
+        SidePanelPages = PageOrder(state.SidePanelPages);
     }
 
     /// <summary>The conversation keeps at least this much room between the sidebar and the side panel (DESIGN.md §3).</summary>
@@ -136,5 +140,66 @@ public sealed partial class ShellLayout : ViewModelBase
     {
         _state.SidePanelWidth = SidePanelWidth;
         _saveState();
+    }
+
+    // ---- Side panel's pages (DESIGN.md §3): one order for every tab's -----------------------------------------
+
+    /// <summary>The side panel's pages in the order their tabs show, as the user dragged them.</summary>
+    [ObservableProperty]
+    public partial IReadOnlyList<SidePanelPage> SidePanelPages { get; private set; }
+
+    partial void OnSidePanelPagesChanged(IReadOnlyList<SidePanelPage> value) => _sidePanelPagesChanged();
+
+    /// <summary>
+    /// Moves <paramref name="page"/> to <paramref name="to"/>'s place, which moves over to make room, and keeps the order.
+    /// Returns whether it moved.
+    /// </summary>
+    public bool MoveSidePanelPage(SidePanelPage page, SidePanelPage to)
+    {
+        List<SidePanelPage> order = [.. SidePanelPages];
+        var (from, index) = (order.IndexOf(page), order.IndexOf(to));
+        if (from == index)
+        {
+            return false;
+        }
+        order.RemoveAt(from);
+        order.Insert(index, page);
+        SidePanelPages = order;
+        _state.SidePanelPages = [.. order.Select(p => p.ToString())];
+        _saveState();
+        return true;
+    }
+
+    /// <summary>Puts the pages back in their first order.</summary>
+    public void ResetSidePanelPages()
+    {
+        SidePanelPages = PageOrder(null);
+        _state.SidePanelPages = null;
+        _saveState();
+    }
+
+    /// <summary>
+    /// The saved order, without the names it doesn't know. A page it doesn't name, one added since it was saved, goes
+    /// after the page it follows by default.
+    /// </summary>
+    private static List<SidePanelPage> PageOrder(IEnumerable<string>? saved)
+    {
+        var order = new List<SidePanelPage>();
+        foreach (var name in saved ?? [])
+        {
+            if (Enum.TryParse<SidePanelPage>(name, out var page) && Enum.IsDefined(page) && !order.Contains(page))
+            {
+                order.Add(page);
+            }
+        }
+        var byDefault = Enum.GetValues<SidePanelPage>();
+        for (var i = 0; i < byDefault.Length; i++)
+        {
+            if (!order.Contains(byDefault[i]))
+            {
+                order.Insert(i == 0 ? 0 : order.IndexOf(byDefault[i - 1]) + 1, byDefault[i]);
+            }
+        }
+        return order;
     }
 }

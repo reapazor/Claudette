@@ -131,6 +131,55 @@ public class SidePanelUiTests
         await UiText.SettleUntilAsync(window, () => !dot.IsVisible, "the dot to go");
     }
 
+    [AvaloniaFact]
+    public async Task Dragging_a_pages_tab_along_the_row_moves_it_in_every_tabs_side_panel()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var (tab, window, view) = await ShowWithTasksAndMcpAsync(h, windowWidth: WideWindow);
+        tab.ResizeSidePanel(RoomForEveryPage);
+        UiText.Settle(window);
+        var row = view.GetVisualDescendants().OfType<PageTabsPanel>().Single();
+
+        // Dropped on the left half of Agents, the scratch pad takes its place and shows.
+        var agents = PageTab(row, "Agents");
+        var from = PageTab(row, "Scratch Pad").TranslatePoint(new Point(10, 10), window)!.Value;
+        var to = agents.TranslatePoint(new Point(agents.Bounds.Width / 4, 10), window)!.Value;
+        window.MouseMove(from);
+        window.MouseDown(from, MouseButton.Left);
+        window.MouseMove(to);
+        window.MouseUp(to, MouseButton.Left);
+        UiText.Settle(window);
+
+        Assert.Equal(["Changed Files", "Scratch Pad", "Agents", "Tasks", "MCP"], PageTabs(row).Select(p => Label(p).Text));
+        Assert.True(tab.IsScratchPadPage);
+        AssertLaidOut(row);
+        Assert.Equal(["Files", "ScratchPad", "Agents", "Project", "Processes", "Tasks", "Mcp"], h.Services.State.SidePanelPages);
+
+        // A tab's menu moves it too, past the next page the tab has.
+        var moveRight = PageTab(row, "Changed Files").ContextMenu!.Items.OfType<MenuItem>().Single(m => m.Header as string == "Move right");
+        moveRight.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        UiText.Settle(window);
+        Assert.Equal(["Scratch Pad", "Changed Files", "Agents", "Tasks", "MCP"], PageTabs(row).Select(p => Label(p).Text));
+        // Drawn, and reached with the Tab key, in the same order.
+        Assert.Equal(row.Children, row.GetVisualChildren());
+    }
+
+    [AvaloniaFact]
+    public async Task A_tabs_side_panel_opens_with_its_pages_in_the_order_every_tab_shares()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        // Moved in another tab, before this one's view is made.
+        h.Shell.Layout.MoveSidePanelPage(SidePanelPage.ScratchPad, SidePanelPage.Files);
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        tab.IsSidePanelOpen = true;
+        UiText.Settle(window);
+        var row = window.GetVisualDescendants().OfType<TabView>().Single().GetVisualDescendants().OfType<PageTabsPanel>().Single();
+
+        Assert.Equal(["Scratch Pad", "Changed Files", "Agents"], PageTabs(row).Select(p => Label(p).Text));
+        AssertLaidOut(row);
+    }
+
     /// <summary>A tab with the Tasks and MCP pages beside Changed Files and Agents, its side panel open at its width.</summary>
     private static async Task<(TabViewModel Tab, Window Window, TabView View)> ShowWithTasksAndMcpAsync(TabTestHarness h, string mcpStatus = "connected", double windowWidth = 1200)
     {

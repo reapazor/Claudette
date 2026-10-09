@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Claudette.App.Conversation;
 using Claudette.App.Services;
 using Claudette.Core;
@@ -52,6 +53,9 @@ public sealed partial class ProcessRow : ObservableObject
     public partial string RunningText { get; set; } = "";
 
     public string? CommandLine => Snapshot.CommandLine;
+
+    /// <summary>Its arguments cut short, ending its second line; the whole command line is in <see cref="Tooltip"/>.</summary>
+    public string? ShortArguments => ProcessArguments.Short(CommandLine, Snapshot.ExecutablePath);
 
     /// <summary>The Bash tool call or background task that started it, when Claudette could tell.</summary>
     [ObservableProperty]
@@ -371,6 +375,10 @@ public sealed partial class ProcessMonitorViewModel : ViewModelBase
                 }
             });
     }
+
+    [RelayCommand]
+    private Task CopyPidAsync(ProcessRow? row) =>
+        row is null ? Task.CompletedTask : _services.Platform.SetClipboardTextAsync(row.Pid.ToString(CultureInfo.InvariantCulture));
 
     [RelayCommand]
     private Task CopyCommandLineAsync(ProcessRow? row) =>

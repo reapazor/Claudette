@@ -45,6 +45,12 @@ public sealed class AppState
     public double? SidePanelWidth { get; set; }
 
     /// <summary>
+    /// The side panel's pages in the order the user dragged them into, by name, or null for the default (DESIGN.md §3).
+    /// One for every tab.
+    /// </summary>
+    public List<string>? SidePanelPages { get; set; }
+
+    /// <summary>
     /// The usage header is drawn taller, with charts of the session and the week (DESIGN.md §6, "Detailed header").
     /// Its chevron and Settings → Appearance both set it. Kept per machine, like the sidebar's collapsed state.
     /// </summary>

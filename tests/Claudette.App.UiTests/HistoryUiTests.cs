@@ -2,7 +2,9 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.VisualTree;
 using Claudette.App.Services;
 using Claudette.App.Tests.Support;
@@ -83,5 +85,43 @@ public class HistoryUiTests
         UiText.Settle(window);
         Assert.Equal(top, Top());
         await search;
+    }
+
+    [AvaloniaFact]
+    public async Task A_click_outside_closes_it_without_opening_anything()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        h.WriteTranscript("s1", new JsonObject
+        {
+            ["type"] = "user",
+            ["sessionId"] = "s1",
+            ["cwd"] = h.WorkFolder,
+            ["timestamp"] = "2026-09-01T00:00:00Z",
+            ["message"] = new JsonObject { ["role"] = "user", ["content"] = "Fix the build" },
+        }.ToJsonString());
+        var window = UiText.Show(new ShellView { DataContext = h.Shell }, 1100, 800);
+        var tabs = h.Shell.AllTabs.Count();
+        h.Shell.OpenHistoryCommand.Execute(null);
+        await UiText.SettleUntilAsync(window, () => !h.Shell.History!.IsLoading, "History to load");
+        UiText.Settle(window);
+
+        // Inside it, even off its controls, it stays.
+        var view = window.GetVisualDescendants().OfType<HistoryView>().Single();
+        var title = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == "History");
+        Click(window, title.TranslatePoint(new Point(title.Bounds.Width + 40, title.Bounds.Height / 2), window)!.Value);
+        Assert.True(h.Shell.IsHistoryOpen);
+
+        // History is 760 wide, centred in the 1100 window: the right edge is outside it.
+        Click(window, new Point(1080, 400));
+        Assert.False(h.Shell.IsHistoryOpen);
+        Assert.Equal(tabs, h.Shell.AllTabs.Count());
+    }
+
+    private static void Click(Window window, Point point)
+    {
+        window.MouseMove(point);
+        window.MouseDown(point, MouseButton.Left);
+        window.MouseUp(point, MouseButton.Left);
+        UiText.Settle(window);
     }
 }

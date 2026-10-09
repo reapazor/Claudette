@@ -5,7 +5,10 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace Claudette.App.ViewModels;
 
-/// <summary>The pages of the side panel (DESIGN.md §3).</summary>
+/// <summary>
+/// The pages of the side panel (DESIGN.md §3), in their first order; <see cref="ShellLayout.SidePanelPages"/> is the order
+/// the user dragged them into, which keeps their names.
+/// </summary>
 public enum SidePanelPage
 {
     Files,
@@ -19,8 +22,8 @@ public enum SidePanelPage
 
 /// <summary>
 /// The side panel (DESIGN.md §3): Changed files, Agents, Tasks, Project when the tab has project tools, MCP when the
-/// session has MCP servers, Processes when the monitor is on, and the project's scratch pad. Which page shows, and how
-/// wide it is.
+/// session has MCP servers, Processes when the monitor is on, and the project's scratch pad. Which page shows, how wide
+/// it is and the pages' order.
 /// </summary>
 public sealed partial class TabViewModel
 {
@@ -158,6 +161,42 @@ public sealed partial class TabViewModel
     }
 
     internal void OnSidePanelWidthChanged() => OnPropertyChanged(nameof(SidePanelWidth));
+
+    /// <summary>
+    /// The side panel's pages in the order their tabs show: the same for every tab, set by dragging a page's tab
+    /// (DESIGN.md §3, "Side panel").
+    /// </summary>
+    public IReadOnlyList<SidePanelPage> SidePanelPages => _shell.Layout.SidePanelPages;
+
+    internal void OnSidePanelPagesChanged() => OnPropertyChanged(nameof(SidePanelPages));
+
+    /// <summary>Dragging a page's tab past the middle of another's: it takes that one's place.</summary>
+    public void MoveSidePanelPage(SidePanelPage page, SidePanelPage to) => _shell.Layout.MoveSidePanelPage(page, to);
+
+    /// <summary>A page's tab's <b>Move left</b> and <b>Move right</b>: past the next page this tab has that way.</summary>
+    public void MoveSidePanelPage(SidePanelPage page, int offset)
+    {
+        var shown = SidePanelPages.Where(HasSidePanelPage).ToList();
+        var from = shown.IndexOf(page);
+        var to = from + offset;
+        if (from >= 0 && to >= 0 && to < shown.Count)
+        {
+            _shell.Layout.MoveSidePanelPage(page, shown[to]);
+        }
+    }
+
+    /// <summary>A page's tab's <b>Reset order</b>.</summary>
+    public void ResetSidePanelPages() => _shell.Layout.ResetSidePanelPages();
+
+    /// <summary>Whether this tab's side panel has the page: those that come and go show their tabs as these say.</summary>
+    public bool HasSidePanelPage(SidePanelPage page) => page switch
+    {
+        SidePanelPage.Project => ProjectTools.HasTools,
+        SidePanelPage.Processes => ProcessMonitor.IsOn,
+        SidePanelPage.Tasks => TodoList.HasAnything,
+        SidePanelPage.Mcp => HasMcpServers,
+        _ => true,
+    };
 
     [RelayCommand]
     private void ShowFilesPage() => Page = SidePanelPage.Files;

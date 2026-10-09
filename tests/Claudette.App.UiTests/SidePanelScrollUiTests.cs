@@ -118,7 +118,7 @@ public class SidePanelScrollUiTests
     }
 
     [AvaloniaFact]
-    public async Task A_processes_name_wraps_its_numbers_stay_clear_of_the_scroll_bar_and_its_command_line_is_in_its_tooltip()
+    public async Task A_processes_name_wraps_its_numbers_stay_clear_of_the_scroll_bar_and_its_arguments_stay_on_one_line()
     {
         await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true, dispatcher: new AvaloniaUiDispatcher());
         var tab = await h.OpenTabAsync();
@@ -140,7 +140,10 @@ public class SidePanelScrollUiTests
         Assert.True(name.Bounds.Height > name.FontSize * 3, "the name wraps");
         Assert.InRange(RightEdge(memory, viewer), viewer.Viewport.Width - 24, viewer.Viewport.Width - 16);
 
-        Assert.DoesNotContain(viewer.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.Contains("--serve", StringComparison.Ordinal) == true);
+        // Its arguments, cut short, end its second line; the whole command line is in its tooltip.
+        var arguments = viewer.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == "--serve");
+        Assert.True(arguments.Bounds.Height < arguments.FontSize * 2, "the arguments stay on one line");
+        Assert.True(RightEdge(arguments, viewer) <= viewer.Viewport.Width, $"The arguments end at {RightEdge(arguments, viewer)}, past {viewer.Viewport.Width}");
         var row = name.GetVisualAncestors().OfType<Border>().First(b => ToolTip.GetTip(b) is not null);
         Assert.Contains($"{LongName} --serve", ToolTip.GetTip(row) as string, StringComparison.Ordinal);
         window.Close();

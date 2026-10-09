@@ -478,6 +478,15 @@ public partial class ShellView : UserControl
         }
     }
 
+    /// <summary>A click outside History closes it without opening anything.</summary>
+    private void OnHistoryOverlayPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (ReferenceEquals(e.Source, sender))
+        {
+            ViewModel?.CloseHistory();
+        }
+    }
+
     /// <summary>The Settings window, modal, where <paramref name="opening"/> says, with the selected tab's project pages.</summary>
     private async Task ShowSettingsAsync(SettingsOpening opening)
     {

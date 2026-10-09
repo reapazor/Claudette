@@ -34,6 +34,12 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             {
                 tab.OnSidePanelWidthChanged();
             }
+        }, () =>
+        {
+            foreach (var tab in AllTabs)
+            {
+                tab.OnSidePanelPagesChanged();
+            }
         });
         _services.Notifications.SelectedTabId = () => SelectedTab?.Id;
         // The worktrees open tabs work in are never cleaned up (DESIGN.md §4, "Cleaning up worktrees").
