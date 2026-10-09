@@ -15,8 +15,32 @@ namespace Claudette.App.Tests.Support;
 /// <summary>Plays Claude Code's side of one session for view model tests.</summary>
 internal sealed class ScriptedTransport : IClaudeTransport
 {
-    private ScriptedProcess _process = new();
+    private ScriptedProcess _process;
     private readonly List<JsonObject> _sent = [];
+    private readonly List<(ScriptedProcess Process, JsonObject Message)> _sentBy = [];
+
+    /// <summary>Every pretend process so far, in the order they started: the first tab's is 0.</summary>
+    private readonly List<ScriptedProcess> _processes = [];
+
+    public ScriptedTransport() => _process = NewProcess();
+
+    private ScriptedProcess NewProcess()
+    {
+        var process = new ScriptedProcess();
+        lock (_processes)
+        {
+            _processes.Add(process);
+        }
+        return process;
+    }
+
+    private ScriptedProcess Process(int index)
+    {
+        lock (_processes)
+        {
+            return _processes[index];
+        }
+    }
 
     /// <summary>
     /// After the pretend process exited, stands in for the next one, so a tab can restart (after a sign-in, say).
@@ -26,7 +50,7 @@ internal sealed class ScriptedTransport : IClaudeTransport
     {
         if (_process.HasExited)
         {
-            _process = new ScriptedProcess();
+            _process = NewProcess();
         }
     }
 
@@ -34,7 +58,7 @@ internal sealed class ScriptedTransport : IClaudeTransport
     /// A new pretend process for the next session, while the current one carries on with its own: a second tab
     /// running alongside the first. What's emitted from now on goes to the new one.
     /// </summary>
-    public void StartNextProcess() => _process = new ScriptedProcess();
+    public void StartNextProcess() => _process = NewProcess();
 
     /// <summary>
     /// The current pretend process, as the session starting now sees it. Stopping it ends only that process, so a tab
@@ -89,6 +113,7 @@ internal sealed class ScriptedTransport : IClaudeTransport
         lock (_sent)
         {
             _sent.Add(message);
+            _sentBy.Add((process, message));
         }
         if (message["type"]?.GetValue<string>() == "control_request")
         {
@@ -120,6 +145,36 @@ internal sealed class ScriptedTransport : IClaudeTransport
     public void Emit(JsonObject message) => _process.Write(message.ToJsonString());
 
     public void Emit(string line) => _process.Write(line);
+
+    /// <summary>
+    /// Emits on the pretend process started <paramref name="index"/>th (0 for the first), for tests with several tabs
+    /// running, with <see cref="ScriptedSessionFactory.ProcessPerSession"/>.
+    /// </summary>
+    public void EmitTo(int index, JsonObject message) => Process(index).Write(message.ToJsonString());
+
+    /// <inheritdoc cref="EmitTo(int, JsonObject)"/>
+    public void EmitTo(int index, string line) => Process(index).Write(line);
+
+    /// <summary>What the session on the <paramref name="index"/>th pretend process sent.</summary>
+    public IReadOnlyList<JsonObject> SentTo(int index)
+    {
+        var process = Process(index);
+        lock (_sent)
+        {
+            return [.. _sentBy.Where(s => s.Process == process).Select(s => s.Message)];
+        }
+    }
+
+    /// <summary>The user messages the <paramref name="index"/>th pretend process was sent, as text.</summary>
+    public IEnumerable<string> SentUserTextsTo(int index) => SentTo(index).Where(m => m["type"]?.GetValue<string>() == "user").Select(UserText);
+
+    /// <summary>A user message's text: its string content, or its text blocks joined by new lines.</summary>
+    public static string UserText(JsonObject message) => message["message"]!["content"] switch
+    {
+        JsonValue value => value.GetValue<string>(),
+        JsonArray blocks => string.Join("\n", blocks.OfType<JsonObject>().Where(b => b["type"]?.GetValue<string>() == "text").Select(b => b["text"]!.GetValue<string>())),
+        _ => "",
+    };
 
     /// <summary>A complete turn: init, a text reply and a result with usage.</summary>
     public void EmitTurn(string reply = "ok", string model = "claude-opus-5-5", string sessionId = "s1")

@@ -112,6 +112,31 @@ public sealed partial class ShellViewModel
                 AsyncCommand("New tab in a worktree", () => OpenWorktreeTabAsync(tab.GroupFolder));
             }
             AsyncCommand("Export conversation…", () => tab.ExportConversationCommand.ExecuteAsync(null));
+            // DESIGN.md §18, "Threads".
+            if (tab.CanMakeThread)
+            {
+                Command("Make this tab a thread", () => MakeThread(tab));
+            }
+            if (tab.IsThread)
+            {
+                AsyncCommand("New sub-thread", () => NewSubThreadAsync(tab));
+                if (CanOpenWorktreeTab(tab))
+                {
+                    AsyncCommand("New sub-thread in a worktree", () => NewSubThreadInWorktreeAsync(tab));
+                }
+                Command(tab.AskBeforeSendingToSubThreads ? "Stop asking before sending to sub-threads" : "Ask before sending to sub-threads",
+                    () => tab.ToggleAskBeforeSendingToSubThreadsCommand.Execute(null));
+                Command("Stop being a thread", () => StopBeingThread(tab));
+            }
+            foreach (var thread in ThreadsFor(tab))
+            {
+                Command($"Assign to thread: {thread.DisplayName}", () => AssignToThread(tab, thread));
+            }
+            if (tab.IsSubThread)
+            {
+                Command("Go to thread", () => GoToThread(tab));
+                Command("Detach from thread", () => DetachFromThread(tab));
+            }
             if (tab.RestartCommand.CanExecute(null))
             {
                 AsyncCommand("Restart Claude Code", () => tab.RestartCommand.ExecuteAsync(null));

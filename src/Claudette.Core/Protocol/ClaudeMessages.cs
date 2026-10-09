@@ -91,6 +91,9 @@ public sealed record UserMessage(
     /// <summary>A prompt the host sent, echoed back (<c>--replay-user-messages</c>), not a tool's result.</summary>
     public bool IsReplay => Raw.GetBool("isReplay") == true;
 
+    /// <summary>Who the message is from, when Claude Code says (<c>origin</c>); null when it doesn't.</summary>
+    public MessageOrigin? Origin => MessageOrigin.Read(Raw.GetObject("origin"));
+
     /// <summary>
     /// The text of a prompt (<see cref="IsReplay"/>): its content when that's a string, else its text blocks joined by
     /// new lines. Null when the message has no content.

@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Claudette.Core.Diffs;
 using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
+using Claudette.Core.Threads;
 
 namespace Claudette.App.Conversation;
 
@@ -196,8 +197,19 @@ public sealed class ConversationBuilder
     /// <summary>Takes a prompt's card away: Claude Code cancelled it before it ran (DESIGN.md §5, "Queued messages").</summary>
     public void Remove(UserMessageItem prompt) => Items.Remove(prompt);
 
-    public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null, bool isAutoContinue = false) =>
-        AddUser(new UserMessageItem(text, suffixText, isCheckIn, isAutoContinue) { Images = images ?? [], ResumeAt = _lastEntryUuid }, Now());
+    /// <param name="label">Who it's from when it isn't the user, over a message Claudette passes on for a thread (DESIGN.md §18, "Threads").</param>
+    /// <param name="isFromThread">Claudette sends it for a thread or its sub-threads, not the user.</param>
+    /// <param name="threadNote">The note on threads sent after it, which the card mentions.</param>
+    public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null, bool isAutoContinue = false,
+        string? label = null, bool isFromThread = false, string? threadNote = null) =>
+        AddUser(new UserMessageItem(text, suffixText, isCheckIn, isAutoContinue)
+        {
+            Images = images ?? [],
+            ResumeAt = _lastEntryUuid,
+            Label = label,
+            IsFromThread = isFromThread,
+            ThreadNote = threadNote,
+        }, Now());
 
     /// <summary>
     /// A prompt from a transcript, sent at <paramref name="sentAt"/>: null when its entry has no time. Its entry's
@@ -320,6 +332,18 @@ public sealed class ConversationBuilder
             case ToolResultsReceived results:
                 ApplyToolResults(results.Message);
                 _lastEntryUuid = results.Message.Uuid ?? _lastEntryUuid;
+                break;
+
+            case PromptReplayed peer when peer.Message.Origin is { IsPeer: true } origin:
+                // A message another of the user's sessions sent this one (DESIGN.md §18, "Threads"): no card waits for
+                // it, so it gets its own, as its sender wrote it.
+                AddUser(new UserMessageItem(origin.Body ?? peer.Message.PromptText ?? "")
+                {
+                    Label = $"From the session {origin.Name ?? "another session"}",
+                    Uuid = peer.Message.Uuid,
+                    ResumeAt = _lastEntryUuid,
+                }, Now());
+                _lastEntryUuid = peer.Message.Uuid ?? _lastEntryUuid;
                 break;
 
             case PromptReplayed replayed when replayed.Message.Uuid is { } uuid:
@@ -648,7 +672,10 @@ public sealed class ConversationBuilder
             }
             else if (_toolUses.TryGetValue(result.ToolUseId, out var tool))
             {
-                tool.ApplyResult(result.Text, result.IsError, message.ToolUseResult);
+                // A thread's message Claudette delivered itself reads as a refusal to Claude Code, but it went
+                // (DESIGN.md §18, "Threads").
+                var failed = result.IsError && !(tool.Name == SendMessageCall.ToolName && ThreadMessages.IsDeliveryAnswer(result.Text));
+                tool.ApplyResult(result.Text, failed, message.ToolUseResult);
                 if (tool is SubagentItem && _agents?.Find(result.ToolUseId) is { } node)
                 {
                     node.OnResult(result.Text, result.IsError, message.ToolUseResult, message.WasInterrupted(result.ToolUseId));

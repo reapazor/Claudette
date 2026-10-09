@@ -113,6 +113,8 @@
               <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding ShowAllText}" TextDecorations="Underline" />
             </Button>
             <SelectableTextBlock Classes="muted small" Text="{Binding SuffixText}" TextWrapping="Wrap" IsVisible="{Binding HasSuffix}" />
+            <!-- What Claude was told about its sub-threads with this message (DESIGN.md §18, "Threads") -->
+            <TextBlock Classes="muted small" Text="{Binding ThreadNoteText}" ToolTip.Tip="{Binding ThreadNote}" IsVisible="{Binding HasThreadNote}" />
             <!-- Waiting its turn behind Claude's work (DESIGN.md §5, "Queued messages") -->
             <StackPanel Classes="queued" Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsQueued}">
               <TextBlock Classes="muted small" Text="{Binding QueuedText}" VerticalAlignment="Center" />
@@ -664,6 +666,49 @@
                       <TextBlock Text="{Binding DisplayText}" Classes.done="{Binding IsDone}" FontWeight="{Binding IsActive, Converter={x:Static vm:Converters.BoldIfTrue}}" TextWrapping="Wrap" />
                     </StackPanel>
                   </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <!-- A thread's strip (DESIGN.md §18, "Threads"): its Claude's messages waiting to be let go to sub-threads, and
+             the sub-threads waiting on the user, with Allow and Deny for a permission prompt -->
+        <Border x:Name="ThreadStrip" DockPanel.Dock="Bottom" Classes="threadstrip" IsVisible="{Binding HasThreadStrip}">
+          <StackPanel MaxWidth="900" Spacing="6">
+            <ItemsControl ItemsSource="{Binding ThreadApprovals}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:ThreadSendApproval">
+                  <StackPanel Spacing="6" Margin="0,2">
+                    <TextBlock FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
+                    <Border Classes="threadmessage">
+                      <ScrollViewer>
+                        <SelectableTextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                      </ScrollViewer>
+                    </Border>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <Button Classes="accent" Content="Send" Command="{Binding SendCommand}" />
+                      <Button Content="Don't send" Command="{Binding DontSendCommand}" />
+                    </StackPanel>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <ItemsControl ItemsSource="{Binding WaitingSubThreads}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:WaitingSubThread">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,2">
+                    <TextBlock TextWrapping="Wrap" VerticalAlignment="Center">
+                      <Run FontWeight="SemiBold" Text="{Binding Name, StringFormat={}{0}:}" />
+                      <Run Text="{Binding Text}" />
+                    </TextBlock>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                      <Button Classes="accent" Content="Allow" Command="{Binding AllowCommand}" IsVisible="{Binding CanAnswer}" />
+                      <Button Content="Deny" Command="{Binding DenyCommand}" IsVisible="{Binding CanAnswer}" />
+                      <Button Classes="flat" Content="Go to tab" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).GoToSubThreadCommand}"
+                              CommandParameter="{Binding}" />
+                    </StackPanel>
+                  </Grid>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>

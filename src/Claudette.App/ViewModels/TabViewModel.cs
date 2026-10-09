@@ -12,6 +12,7 @@ using Claudette.Core.Protocol;
 using Claudette.Core.Sessions;
 using Claudette.Core.Settings;
 using Claudette.Core.Status;
+using Claudette.Core.Threads;
 using Claudette.Core.Transcripts;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -461,7 +462,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     /// </summary>
     public string RowDetail => Status is TabStatus.NeedsInput or TabStatus.Error ? StatusTip
         : Status == TabStatus.Working && IsPossiblyStuck ? "Possibly stuck"
-        : WorkingTaskText ?? LimitWaitRowDetail ?? ModelBadge;
+        : WorkingTaskText ?? LimitWaitRowDetail ?? ThreadRowDetail ?? ModelBadge;
 
     /// <summary>What went wrong when the tab is in the Error status, shown on its row and info card (DESIGN.md §4).</summary>
     [ObservableProperty]
@@ -875,7 +876,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         var text = PastedText.Join(typed, pastes);
         _autoContinue.UserSent();
         var stamp = NewStamp(fromUser: true);
-        var card = _conversation.AddUserMessage(text, suffixText, images: images);
+        // What a thread's Claude should know about its sub-threads goes after the message, not after a command
+        // (DESIGN.md §18, "Threads").
+        var threadNote = OutgoingMessages.IsSlashCommand(text) ? null : TakeThreadNote();
+        var card = _conversation.AddUserMessage(text, suffixText, images: images, threadNote: threadNote);
+        suffixText = threadNote is null ? suffixText : suffixText is null ? threadNote : $"{suffixText}\n\n{threadNote}";
         card.SentId = stamp.Uuid;
         card.TypedText = pastes.Count > 0 ? typed : null;
         card.PastedTexts = pastes;
@@ -953,6 +958,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             var held = TakeAllHeld();
             var receipt = await _session.InterruptAsync(cancelQueued: true);
             TakeBack([.. held, .. receipt.Cancelled]);
+            // A thread waiting on this tab hears it was stopped (DESIGN.md §18, "Threads").
+            OnThreadWorkEnded(SubThreadOutcome.Stopped);
         }
         catch (Exception ex)
         {
@@ -969,6 +976,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     {
         if (message is { IsHeld: true } held && TakeBackHeld(held))
         {
+            OnThreadWorkEnded(SubThreadOutcome.Stopped);
             return;
         }
         if (message is not { IsQueued: true, SentId: { } id } || _session is null)
@@ -1002,7 +1010,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         {
             _conversation.Remove(card);
             _awaitingReply.RemoveAll(p => p.Stamp?.Uuid == card.SentId);
-            if (card.IsCheckIn || card.IsAutoContinue)
+            if (card.HasThreadNote)
+            {
+                ThreadNoteTakenBack();
+            }
+            if (card.IsCheckIn || card.IsAutoContinue || card.IsFromThread)
             {
                 continue;
             }
@@ -1248,7 +1260,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 await NoteWhetherWorktreeExistsAsync();
             }
-            var options = await Perforce.WithPerforceAsync(await ProjectTools.WithNoteAsync(new ClaudeLaunchOptions
+            var withPerforce = await Perforce.WithPerforceAsync(await ProjectTools.WithNoteAsync(new ClaudeLaunchOptions
             {
                 WorkingDirectory = Folder,
                 Resume = resume,
@@ -1275,6 +1287,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 // The presence file, among others: no pushes to the phone while Claudette is in front (DESIGN.md §10).
                 EnvironmentOverrides = environment,
             }));
+            // Every tab has the threads' hook, so making it a thread later needs no restart (DESIGN.md §18, "Threads").
+            var options = withPerforce with { Hooks = [.. withPerforce.Hooks, ThreadHook()] };
             // Closed while the start was under way: nothing is started for a tab that's gone.
             _closing.Token.ThrowIfCancellationRequested();
             var session = await sessions.StartAsync(options, _closing.Token);
@@ -1782,6 +1796,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 RemoteControl.OnTurnCompleted(session);
                 // The files this turn changed, on its footer (DESIGN.md §8, "Changes per turn").
                 ChangedFiles.EndTurn(Items.LastOrDefault() as TurnSummaryItem);
+                // A thread waiting on this tab hears how the turn ended, before the thread's next message goes (DESIGN.md §18, "Threads").
+                OnTurnEndedForThread(completed.Result);
                 // A message held until the turn ended goes now (DESIGN.md §5, "Queued messages").
                 SendNextHeld();
                 if (_restartForExtraFolders)
@@ -1814,6 +1830,9 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 // Held messages can't go to a Claude Code that's gone: they come back to the composer.
                 TakeBack(TakeAllHeld());
                 ErrorMessage = exited.Exit.ExitCode == 0 ? null : ExitErrorMessage(exited.Exit);
+                // What it was doing for a thread ended with it (DESIGN.md §18, "Threads").
+                _threadMessagesSent = 0;
+                OnThreadWorkEnded(SubThreadOutcome.Failed, ErrorMessage ?? "Claude Code exited.");
                 Status = exited.Exit.ExitCode == 0 ? TabStatus.Exited : TabStatus.Error;
                 OnPropertyChanged(nameof(CanRestart));
                 _services.Notifications.ClearTab(Id, NotificationKind.NeedsInput);

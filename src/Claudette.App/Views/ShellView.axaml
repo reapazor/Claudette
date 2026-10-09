@@ -37,6 +37,12 @@
       <Setter Property="Command" Value="{Binding Toggle}" />
       <Setter Property="CommandParameter" Value="{Binding Mark}" />
     </ControlTheme>
+    <!-- Assign to thread: one entry per thread in the group (DESIGN.md §18, "Threads"). -->
+    <ControlTheme x:Key="ThreadMenuItemTheme" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}" x:DataType="vm:ThreadMenuItem">
+      <Setter Property="Header" Value="{Binding Name}" />
+      <Setter Property="Command" Value="{Binding Assign}" />
+      <Setter Property="CommandParameter" Value="{Binding Thread}" />
+    </ControlTheme>
     <DataTemplate x:Key="MarkMenuItemTemplate" DataType="vm:MarkMenuItem">
       <StackPanel Orientation="Horizontal" Spacing="8">
         <views:MarkIcon Mark="{Binding Mark}" VerticalAlignment="Center" />
@@ -68,6 +74,10 @@
     <!-- Only the badge's own label: its flyout's text is inside the button too. -->
     <Style Selector="Button.side.update TextBlock.badge">
       <Setter Property="Foreground" Value="{DynamicResource AccentStatusBrush}" />
+    </Style>
+    <!-- A thread's sub-threads sit indented under it (DESIGN.md §18, "Threads"). -->
+    <Style Selector="StackPanel.subthread">
+      <Setter Property="Margin" Value="12,0,0,0" />
     </Style>
     <Style Selector="Border#SidebarEdge:pointerover">
       <Setter Property="Background" Value="{DynamicResource DividerBrush}" />
@@ -201,7 +211,7 @@
                       </ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="vm:TabViewModel">
-                          <StackPanel Spacing="1">
+                          <StackPanel Spacing="1" Classes.subthread="{Binding IsSubThread}">
                             <Button Classes="tab tabrow" Classes.selected="{Binding IsSelected}" Classes.bypass="{Binding IsBypassMode}"
                                     Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).SelectCommand}" CommandParameter="{Binding}"
                                     DoubleTapped="OnTabDoubleTapped" ToolTip.ShowDelay="600" ToolTip.Placement="Right">
@@ -226,6 +236,11 @@
                                     <Border DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding SyncToLibrary}" VerticalAlignment="Center" Margin="0,0,5,0"
                                             ToolTip.Tip="Synced to the session library" AutomationProperties.Name="Synced to the session library">
                                       <Path Data="{StaticResource IconSync}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="9" Height="9" Stretch="Uniform" />
+                                    </Border>
+                                    <!-- A thread (DESIGN.md §18, "Threads"), with how many sub-threads it has as the tip -->
+                                    <Border x:Name="ThreadIcon" DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding IsThread}" VerticalAlignment="Center" Margin="0,0,5,0"
+                                            ToolTip.Tip="{Binding ThreadTip}" AutomationProperties.Name="{Binding ThreadTip}">
+                                      <Path Data="{StaticResource IconThread}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" Width="9" Height="9" Stretch="Uniform" />
                                     </Border>
                                     <!-- Works in a git worktree of its own (DESIGN.md §4, "Worktree tabs"); in the branch badge while that shows -->
                                     <Border DockPanel.Dock="Left" Background="Transparent" IsVisible="{Binding ShowWorktreeIcon}" VerticalAlignment="Center" Margin="0,0,5,0"
@@ -350,6 +365,21 @@
                                   </MenuItem>
                                   <MenuItem Header="Duplicate tab" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).DuplicateTabCommand}" CommandParameter="{Binding}"
                                             ToolTip.Tip="A new tab that carries this session on as a copy" />
+                                  <!-- Threads (DESIGN.md §18): a tab whose Claude hands work to others in its group -->
+                                  <MenuItem Header="Thread">
+                                    <MenuItem Header="Make this tab a thread" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MakeThreadCommand}" CommandParameter="{Binding}" IsVisible="{Binding CanMakeThread}"
+                                              ToolTip.Tip="Its Claude can hand work to other tabs in this folder, its sub-threads, and gets their results back" />
+                                    <MenuItem Header="New sub-thread" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewSubThreadCommand}" CommandParameter="{Binding}" IsVisible="{Binding IsThread}" />
+                                    <MenuItem Header="New sub-thread in a worktree" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewSubThreadInWorktreeCommand}" CommandParameter="{Binding}" IsVisible="{Binding IsThread}" />
+                                    <MenuItem Header="Assign to thread" ItemsSource="{Binding AssignableThreads}" ItemContainerTheme="{StaticResource ThreadMenuItemTheme}" IsVisible="{Binding CanBeAssigned}" />
+                                    <MenuItem Header="Go to thread" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).GoToThreadCommand}" CommandParameter="{Binding}" IsVisible="{Binding IsSubThread}" />
+                                    <MenuItem Header="Detach from thread" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).DetachFromThreadCommand}" CommandParameter="{Binding}" IsVisible="{Binding IsSubThread}" />
+                                    <MenuItem Header="Ask before sending to sub-threads" ToggleType="CheckBox" IsChecked="{Binding AskBeforeSendingToSubThreads, Mode=OneWay}"
+                                              Command="{Binding ToggleAskBeforeSendingToSubThreadsCommand}" IsVisible="{Binding IsThread}" />
+                                    <MenuItem Header="Stop being a thread" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).StopBeingThreadCommand}" CommandParameter="{Binding}" IsVisible="{Binding IsThread}"
+                                              ToolTip.Tip="Its sub-threads carry on as ordinary tabs" />
+                                  </MenuItem>
+
                                   <MenuItem Header="Export conversation…" Command="{Binding ExportConversationCommand}"
                                             ToolTip.Tip="Save the conversation as a Markdown file or a web page" />
                                   <!-- Started without the folder's own configuration (DESIGN.md §7, "Folder trust") -->
@@ -484,6 +514,21 @@
                                 </MenuItem>
                               <MenuItem Header="Duplicate tab" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).DuplicateTabCommand}" CommandParameter="{Binding}"
                                         ToolTip.Tip="A new tab that carries this session on as a copy" />
+                              <!-- Threads (DESIGN.md §18): a tab whose Claude hands work to others in its group -->
+                              <MenuItem Header="Thread">
+                                <MenuItem Header="Make this tab a thread" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).MakeThreadCommand}" CommandParameter="{Binding}" IsVisible="{Binding CanMakeThread}"
+                                          ToolTip.Tip="Its Claude can hand work to other tabs in this folder, its sub-threads, and gets their results back" />
+                                <MenuItem Header="New sub-thread" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewSubThreadCommand}" CommandParameter="{Binding}" IsVisible="{Binding IsThread}" />
+                                <MenuItem Header="New sub-thread in a worktree" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).NewSubThreadInWorktreeCommand}" CommandParameter="{Binding}" IsVisible="{Binding IsThread}" />
+                                <MenuItem Header="Assign to thread" ItemsSource="{Binding AssignableThreads}" ItemContainerTheme="{StaticResource ThreadMenuItemTheme}" IsVisible="{Binding CanBeAssigned}" />
+                                <MenuItem Header="Go to thread" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).GoToThreadCommand}" CommandParameter="{Binding}" IsVisible="{Binding IsSubThread}" />
+                                <MenuItem Header="Detach from thread" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).DetachFromThreadCommand}" CommandParameter="{Binding}" IsVisible="{Binding IsSubThread}" />
+                                <MenuItem Header="Ask before sending to sub-threads" ToggleType="CheckBox" IsChecked="{Binding AskBeforeSendingToSubThreads, Mode=OneWay}"
+                                          Command="{Binding ToggleAskBeforeSendingToSubThreadsCommand}" IsVisible="{Binding IsThread}" />
+                                <MenuItem Header="Stop being a thread" Command="{Binding $parent[UserControl].((vm:ShellViewModel)DataContext).StopBeingThreadCommand}" CommandParameter="{Binding}" IsVisible="{Binding IsThread}"
+                                          ToolTip.Tip="Its sub-threads carry on as ordinary tabs" />
+                              </MenuItem>
+
                               <MenuItem Header="Export conversation…" Command="{Binding ExportConversationCommand}"
                                         ToolTip.Tip="Save the conversation as a Markdown file or a web page" />
                               <!-- Started without the folder's own configuration (DESIGN.md §7, "Folder trust") -->

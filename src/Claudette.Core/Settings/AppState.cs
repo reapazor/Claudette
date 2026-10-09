@@ -273,6 +273,21 @@ public sealed class TabState
     /// page again. Null when there's none, and after <c>/clear</c>.
     /// </summary>
     public ChosenPlan? Plan { get; set; }
+
+    /// <summary>The tab is a thread: other tabs in its group are its sub-threads (DESIGN.md §18, "Threads").</summary>
+    public bool IsThread { get; set; }
+
+    /// <summary>A thread asks the user before its Claude's message goes to a sub-thread. On by default.</summary>
+    public bool AskBeforeSendingToSubThreads { get; set; } = true;
+
+    /// <summary>The <see cref="Id"/> of the thread this tab is a sub-thread of; null for one that isn't.</summary>
+    public string? ThreadId { get; set; }
+
+    /// <summary>
+    /// For a thread, the sub-threads its Claude was last told about, one name per line ("" for none); null when it was
+    /// never told, or was told it's no longer a thread. The next message carries a note when they differ.
+    /// </summary>
+    public string? ThreadNote { get; set; }
 }
 
 /// <summary>A reply the user chose as a tab's plan (DESIGN.md §5, "Tasks").</summary>

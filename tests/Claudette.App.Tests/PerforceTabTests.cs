@@ -47,7 +47,8 @@ public class PerforceTabTests
         Assert.Contains("Perforce workspace", launch.AppendSystemPrompt, StringComparison.Ordinal);
         Assert.Contains("ssl:perforce:1666", launch.AppendSystemPrompt, StringComparison.Ordinal);
         Assert.Contains("matt-ws", launch.AppendSystemPrompt, StringComparison.Ordinal);
-        var hook = Assert.Single(launch.Hooks);
+        // Every tab also has the threads' hook on SendMessage (DESIGN.md §18, "Threads").
+        var hook = Assert.Single(launch.Hooks, r => r.Matcher == "Bash");
         Assert.Equal(("PreToolUse", "Bash", PerforceService.HookTimeout), (hook.Event, hook.Matcher, hook.Timeout));
         var initialize = h.Transport.Sent.First(m => m["request"]?["subtype"]?.GetValue<string>() == "initialize");
         Assert.Equal("Bash", initialize["request"]!["hooks"]!["PreToolUse"]![0]!["matcher"]!.GetValue<string>());
@@ -66,7 +67,7 @@ public class PerforceTabTests
         Assert.False(new AppSettings().Perforce.Enabled);
         Assert.Empty(p4.Runs);
         Assert.Null(h.Factory.Launches.Single().AppendSystemPrompt);
-        Assert.Empty(h.Factory.Launches.Single().Hooks);
+        Assert.DoesNotContain(h.Factory.Launches.Single().Hooks, hook => hook.Matcher == "Bash");
         Assert.DoesNotContain(tab.InfoRows, r => r.Label == "Perforce");
     }
 
@@ -80,7 +81,7 @@ public class PerforceTabTests
         await h.OpenTabAsync();
 
         Assert.Single(p4.Runs, r => r.Command == "info");
-        Assert.Empty(h.Factory.Launches.Single().Hooks);
+        Assert.DoesNotContain(h.Factory.Launches.Single().Hooks, hook => hook.Matcher == "Bash");
         Assert.Equal(0, p4.StatusChecks);
     }
 

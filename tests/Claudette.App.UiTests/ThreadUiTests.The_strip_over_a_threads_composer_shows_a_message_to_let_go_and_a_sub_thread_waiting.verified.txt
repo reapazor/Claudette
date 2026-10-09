@@ -1,0 +1,8 @@
+﻿"Send this to Art page?"
+"Build the gallery next, with the same cards as the art page."
+[button] Send
+[button] Don't send
+"Art page: Allow this command? npm test"
+[button] Allow
+[button] Deny
+[button] Go to tab

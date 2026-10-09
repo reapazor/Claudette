@@ -19,7 +19,8 @@ public sealed partial class ShellViewModel
         group is null ? Task.CompletedTask : OpenWorktreeTabAsync(group.Folder);
 
     /// <summary>Opens a new tab that works in a new worktree of <paramref name="folder"/>'s repository, and selects it.</summary>
-    public async Task OpenWorktreeTabAsync(string folder)
+    /// <param name="opened">Runs on the new tab before it's selected and started, such as making it a sub-thread.</param>
+    public async Task OpenWorktreeTabAsync(string folder, Action<TabViewModel>? opened = null)
     {
         if (!Directory.Exists(folder))
         {
@@ -49,6 +50,7 @@ public sealed partial class ShellViewModel
         };
         var tab = new TabViewModel(_services, this, state, isRestored: false);
         AddTab(tab);
+        opened?.Invoke(tab);
         SelectedTab = tab;
         SaveTabs();
         await tab.EnsureStartedAsync();

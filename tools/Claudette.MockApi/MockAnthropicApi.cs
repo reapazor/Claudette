@@ -51,6 +51,10 @@ public sealed record RecordedImage(string MediaType, int Bytes, int? Width, int?
 /// </item>
 /// <item><c>LONG_AGENT</c>: one subagent that runs <c>sleep 30</c>, for stopping it; in the background with <c>BACKGROUND</c>.</item>
 /// <item><c>AGENT_REPLY &lt;text&gt;</c>: replies with the text (how the subagents above answer).</item>
+/// <item>
+/// <c>SEND_MESSAGE &lt;to&gt; | &lt;message&gt;</c>: a SendMessage tool call, then done, for threads (DESIGN.md §18). The
+/// message can script the recipient, such as <c>AGENT_REPLY The art page is done.</c>
+/// </item>
 /// <item>Requests with no tools that mention "title": <c>{"title": "Mock session title"}</c>.</item>
 /// <item>Anything else: <c>pong</c>.</item>
 /// </list>
@@ -316,6 +320,10 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
                 return new Plan("long-agent", [ToolUse(agentTool, AgentInput("Long job", "general-purpose", "RUN_BASH sleep 30", background: text.Contains("BACKGROUND", StringComparison.Ordinal)))]);
             }
         }
+        if (SendPattern().Match(text) is { Success: true } send && tools.Contains("SendMessage"))
+        {
+            return new Plan("tool-send", [ToolUse("SendMessage", new JsonObject { ["to"] = send.Groups[1].Value.Trim(), ["message"] = send.Groups[2].Value.Trim() })]);
+        }
         if (AgentReplyPattern().Match(text) is { Success: true } reply)
         {
             return new Plan("agent-reply", [TextBlock(reply.Groups[1].Value.Trim())]);
@@ -436,6 +444,9 @@ public sealed partial class MockAnthropicApi : IAsyncDisposable
 
     [GeneratedRegex(@"RUN_BASH (.+)")]
     private static partial Regex BashPattern();
+
+    [GeneratedRegex(@"SEND_MESSAGE (.+?) \| (.+)")]
+    private static partial Regex SendPattern();
 
     [GeneratedRegex(@"AGENT_REPLY (.+)")]
     private static partial Regex AgentReplyPattern();

@@ -15,7 +15,7 @@ public sealed class ProtocolDiagnostics
     {
         ["assistant"] = Fields("aborted", "error", "is_api_error_message", "local_command_outcome", "local_command_source", "message", "parent_tool_use_id",
             "session_id", "subagent_type", "task_description", "timestamp", "type", "uuid"),
-        ["user"] = Fields("isReplay", "isSynthetic", "message", "parent_tool_use_id", "session_id", "subagent_type", "task_description", "timestamp",
+        ["user"] = Fields("isReplay", "isSynthetic", "message", "origin", "parent_tool_use_id", "session_id", "subagent_type", "task_description", "timestamp",
             "tool_result_meta", "tool_use_result", "type", "uuid"),
         ["result"] = Fields("api_error_status", "duration_api_ms", "duration_ms", "errors", "fast_mode_disabled_reason", "fast_mode_state",
             "first_content_frame_ms", "is_error", "local_command", "modelUsage", "num_turns", "permission_denials", "process_turn_index",

@@ -191,6 +191,29 @@
     <Setter Property="CornerRadius" Value="14" />
   </Style>
 
+  <!-- A thread's strip over the composer (DESIGN.md §18, "Threads"): messages waiting to be let go to its sub-threads,
+       and the sub-threads waiting on the user. In the caution colors, as a prompt is. -->
+  <Style Selector="Border.threadstrip">
+    <Setter Property="Background" Value="{DynamicResource CautionBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource CautionBorderBrush}" />
+    <Setter Property="BorderThickness" Value="0,1,0,0" />
+    <Setter Property="Padding" Value="16,6" />
+  </Style>
+  <Style Selector=".compact Border.threadstrip">
+    <Setter Property="Padding" Value="16,3" />
+  </Style>
+  <Style Selector="Border.threadmessage">
+    <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="8,6" />
+    <Setter Property="MaxHeight" Value="160" />
+  </Style>
+  <Style Selector=".claude Border.threadmessage">
+    <Setter Property="CornerRadius" Value="12" />
+  </Style>
+
   <!-- Send and Stop. In the Claude style they're round, with an arrow for Send, as in the Claude apps, and a drawn
        square for Stop: the ■ character sits off-center in a circle, by its font's ascent and descent. The icons fill
        the button and have no border, so nothing puts them off the middle (IconSendArrow in App.axaml says why). -->

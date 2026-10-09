@@ -173,8 +173,30 @@ public sealed partial class UserMessageItem(string text, string? suffixText = nu
     /// <summary>Sent by Claudette once a usage limit reset (DESIGN.md §6, "Continuing after a limit resets").</summary>
     public bool IsAutoContinue { get; } = isAutoContinue;
 
-    /// <summary>The label over a message Claudette sent by itself, or null for one the user sent.</summary>
-    public string? AutomaticLabel => IsCheckIn ? "Automatic check-in" : IsAutoContinue ? "Automatic continue after the usage limit reset" : null;
+    /// <summary>
+    /// Who a message came from when it wasn't the user (DESIGN.md §18, "Threads"): <i>"From the thread Plan"</i> on a
+    /// sub-thread's, <i>"From the sub-threads"</i> on a thread's report, or <i>"From the session api-worker"</i>.
+    /// </summary>
+    public string? Label { get; init; }
+
+    /// <summary>Claudette passed it on for a thread or its sub-threads: taken back, it doesn't go into the composer.</summary>
+    public bool IsFromThread { get; init; }
+
+    /// <summary>The label over a message Claudette sent by itself or passed on, or null for one the user sent.</summary>
+    public string? AutomaticLabel => Label ?? (IsCheckIn ? "Automatic check-in" : IsAutoContinue ? "Automatic continue after the usage limit reset" : null);
+
+    /// <summary>
+    /// The note on threads Claudette sent after the message (DESIGN.md §18, "Threads"): the card says so in a line, with
+    /// the note as its tip.
+    /// </summary>
+    public string? ThreadNote { get; init; }
+
+    public bool HasThreadNote => ThreadNote is not null;
+
+    /// <summary>The line under a message that carried a note on threads.</summary>
+    public string ThreadNoteText => ThreadNote == Core.Threads.ThreadMessages.NoLongerAThread
+        ? "Told Claude this tab is no longer a thread"
+        : "Told Claude about its sub-threads";
 
     /// <summary>Attached images, shown as thumbnails (DESIGN.md §5, "Attachments").</summary>
     public IReadOnlyList<MessageImage> Images { get; init; } = [];

@@ -38,6 +38,7 @@ public sealed partial class TabViewModel
         var (card, message) = _held[0];
         _held.RemoveAt(0);
         card.IsHeld = false;
+        OnHeldMessageSent(card);
         _ = SendRawAsync(message.Text, message.Images, message.Suffix, message.Stamp);
     }
 
@@ -54,6 +55,7 @@ public sealed partial class TabViewModel
         _held.RemoveAt(index);
         held.IsHeld = false;
         held.IsQueued = IsWorking;
+        OnHeldMessageSent(held);
         return SendRawAsync(message.Text, message.Images, message.Suffix, message.Stamp);
     }
 

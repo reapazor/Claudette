@@ -33,20 +33,25 @@ public sealed partial class TabViewModel
     /// <summary>A permission prompt, question or plan is waiting (DESIGN.md §7).</summary>
     private void NotifyNeedsInput(PermissionRequest request)
     {
-        var body = Items.OfType<PromptItem>().LastOrDefault(p => ReferenceEquals(p.Request, request)) switch
-        {
-            PermissionItem permission => (permission.Command ?? permission.Detail) is { } what
-                ? $"{permission.Title} {Shorten(what, 120)}"
-                : permission.Title,
-            QuestionItem => (request.Input["questions"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault()?.GetString("question") is { } question
-                ? $"Claude has a question: {Shorten(question, 120)}"
-                : "Claude has a question.",
-            PlanItem => "Claude has a plan for you to review.",
-            _ => "Claude is waiting for you.",
-        };
+        var body = Items.OfType<PromptItem>().LastOrDefault(p => ReferenceEquals(p.Request, request)) is { } prompt
+            ? PromptText(prompt)
+            : "Claude is waiting for you.";
         _services.Notifications.Notify(NotificationKind.NeedsInput, DisplayName, body, Id);
         _shell.Announce($"{DisplayName}: {body}");
     }
+
+    /// <summary>What a waiting prompt asks, in a line: its notification's text, and a sub-thread's in its thread's strip.</summary>
+    private static string PromptText(PromptItem prompt) => prompt switch
+    {
+        PermissionItem permission => (permission.Command ?? permission.Detail) is { } what
+            ? $"{permission.Title} {Shorten(what, 120)}"
+            : permission.Title,
+        QuestionItem => (prompt.Request.Input["questions"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault()?.GetString("question") is { } question
+            ? $"Claude has a question: {Shorten(question, 120)}"
+            : "Claude has a question.",
+        PlanItem => "Claude has a plan for you to review.",
+        _ => "Claude is waiting for you.",
+    };
 
     /// <summary>Claude Code stopped with an error, or couldn't start.</summary>
     private void NotifyProcessError(string body)

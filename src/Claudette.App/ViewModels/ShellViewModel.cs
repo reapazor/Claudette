@@ -244,6 +244,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         {
             AddTab(new TabViewModel(_services, this, tabState, isRestored: true));
         }
+        // Each sub-thread joins its thread again (DESIGN.md §18, "Threads").
+        LinkThreads();
         foreach (var tab in AllTabs)
         {
             if (snapshot?.Drafts.GetValueOrDefault(tab.Id) is { } draft)
@@ -303,7 +305,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     /// each starts syncing or not as Settings → Sessions says (DESIGN.md §9, "Session library"), and connected to the
     /// Claude app or not as Settings → Claude Code says (DESIGN.md §18, "Remote Control").
     /// </summary>
-    public Task OpenFolderAsync(string folder)
+    /// <param name="opened">Runs on the new tab before it's selected and started, such as making it a sub-thread.</param>
+    public Task OpenFolderAsync(string folder, Action<TabViewModel>? opened = null)
     {
         if (!Directory.Exists(folder))
         {
@@ -319,6 +322,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         };
         var tab = new TabViewModel(_services, this, state, isRestored: false);
         AddTab(tab);
+        opened?.Invoke(tab);
         SelectedTab = tab;
         SaveTabs();
         return tab.EnsureStartedAsync();
@@ -505,6 +509,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task RemoveTabAsync(TabViewModel tab, bool killProcesses = true)
     {
+        LeaveThreadsOnClose(tab);
         var ordered = AllTabs.ToList();
         var index = ordered.IndexOf(tab);
         var group = Groups.FirstOrDefault(g => g.Tabs.Contains(tab));
@@ -604,7 +609,10 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     [RelayCommand]
     private void MoveTabDown(TabViewModel? tab) => MoveTab(tab, 1);
 
-    /// <summary>Moves a tab within its group, keeping pinned tabs first.</summary>
+    /// <summary>
+    /// Moves a tab within its group, keeping pinned tabs first. A thread moves with its sub-threads, past the next tab
+    /// or thread, and a sub-thread moves among its thread's (DESIGN.md §18, "Threads").
+    /// </summary>
     private void MoveTab(TabViewModel? tab, int offset)
     {
         var group = Groups.FirstOrDefault(g => tab is not null && g.Tabs.Contains(tab));
@@ -612,13 +620,27 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         {
             return;
         }
-        var from = group.Tabs.IndexOf(tab);
+        if (tab.ThreadHead is { } head)
+        {
+            var siblings = group.Tabs.Where(t => t.ThreadHead == head).ToList();
+            var next = siblings.IndexOf(tab) + offset;
+            if (next < 0 || next >= siblings.Count)
+            {
+                return;
+            }
+            group.Tabs.Move(group.Tabs.IndexOf(tab), group.Tabs.IndexOf(siblings[next]));
+            SaveTabs();
+            return;
+        }
+        var blocks = Blocks(group);
+        var from = blocks.FindIndex(b => b[0] == tab);
         var to = from + offset;
-        if (to < 0 || to >= group.Tabs.Count || group.Tabs[to].IsPinned != tab.IsPinned)
+        if (from < 0 || to < 0 || to >= blocks.Count || blocks[to][0].IsPinned != tab.IsPinned)
         {
             return;
         }
-        group.Tabs.Move(from, to);
+        (blocks[from], blocks[to]) = (blocks[to], blocks[from]);
+        Reorder(group, [.. blocks.SelectMany(b => b)]);
         SaveTabs();
     }
 
@@ -641,6 +663,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             return false;
         }
         group.Tabs.Move(from, to);
+        KeepSubThreadsUnderThreads(group);
         SaveTabs();
         return true;
     }
@@ -667,6 +690,7 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             group.Tabs.Remove(tab);
             var index = tab.IsPinned ? group.Tabs.Count(t => t.IsPinned) : group.Tabs.Count(t => t.IsPinned);
             group.Tabs.Insert(index, tab);
+            KeepSubThreadsUnderThreads(group);
             if (SelectedTab != tab)
             {
                 SelectedTab = tab;

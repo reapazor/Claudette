@@ -45,6 +45,20 @@ public static class HookOutputs
 {
     /// <summary>Lets the tool call go ahead as it is: no decision, no changed input.</summary>
     public static JsonObject Continue() => new() { ["continue"] = true };
+
+    /// <summary>
+    /// Stops a PreToolUse call: the tool doesn't run, and Claude gets <paramref name="reason"/> as the tool's result, an
+    /// error (checked against 2.1.284).
+    /// </summary>
+    public static JsonObject Deny(string reason) => new()
+    {
+        ["hookSpecificOutput"] = new JsonObject
+        {
+            ["hookEventName"] = "PreToolUse",
+            ["permissionDecision"] = "deny",
+            ["permissionDecisionReason"] = reason,
+        },
+    };
 }
 
 /// <summary>The registered hooks: the <c>hooks</c> field of <c>initialize</c>, and the callbacks by id.</summary>
