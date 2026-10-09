@@ -13,7 +13,7 @@
              xmlns:tools="using:Claudette.Core.ProjectTools"
              x:Class="Claudette.App.Views.ComposerView"
              x:DataType="vm:TabViewModel">
-  <StackPanel Classes="composerarea" MaxWidth="948">
+  <StackPanel Classes="composerarea">
 
     <!-- Working line (DESIGN.md §5): a twinkling glyph, a fun verb, the turn's time and tokens -->
     <Panel x:Name="WorkingLine" Margin="4,0,4,-2" IsVisible="{Binding IsWorkingLineShown}">
@@ -517,9 +517,15 @@
                     <ItemsControl ItemsSource="{Binding InfoRows}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="vm:InfoRow">
-                          <Grid ColumnDefinitions="88,*" Margin="0,1">
+                          <Grid ColumnDefinitions="88,*,Auto" ColumnSpacing="4" Margin="0,1">
                             <TextBlock Classes="muted small" Text="{Binding Label}" />
                             <SelectableTextBlock Grid.Column="1" Classes="small" Text="{Binding Value}" TextWrapping="Wrap" />
+                            <!-- The session's ID and the name it's reached by (DESIGN.md §4, "Tab info card") -->
+                            <Button Grid.Column="2" Classes="flat" Padding="4,0" VerticalAlignment="Top" IsVisible="{Binding CanCopy}"
+                                    AutomationProperties.Name="{Binding Label, StringFormat='Copy {0}'}"
+                                    Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).CopyInfoRowCommand}" CommandParameter="{Binding}">
+                              <TextBlock Classes="small" Text="Copy" />
+                            </Button>
                           </Grid>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>

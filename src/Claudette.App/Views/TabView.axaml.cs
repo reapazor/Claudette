@@ -28,9 +28,6 @@ public partial class TabView : UserControl
     /// </summary>
     private bool _readerScrolling;
 
-    /// <summary>The conversation keeps at least this much room beside the side panel, however wide it was dragged.</summary>
-    private const double MinConversationWidth = 360;
-
     /// <summary>Where a drag of the side panel's edge started, and the width then; null when not resizing.</summary>
     private double? _resizeFrom;
     private double _resizeStartWidth;
@@ -59,7 +56,8 @@ public partial class TabView : UserControl
         SidePanelEdge.PointerReleased += (_, e) => EndSidePanelResize(e.Pointer);
         SidePanelEdge.PointerCaptureLost += (_, _) => EndSidePanelResize(null);
         SidePanelEdge.DoubleTapped += (_, _) => ViewModel?.ResetSidePanelWidth();
-        SizeChanged += (_, e) => SidePanel.MaxWidth = Math.Max(ShellLayout.MinSidePanelWidth, e.NewSize.Width - MinConversationWidth);
+        // However wide it was dragged, the side panel leaves the conversation its least (DESIGN.md §3, "Side panel").
+        SizeChanged += (_, e) => SidePanel.MaxWidth = Math.Max(ShellLayout.MinSidePanelWidth, e.NewSize.Width - ShellLayout.MinConversationWidth);
     }
 
     private TabViewModel? ViewModel => DataContext as TabViewModel;

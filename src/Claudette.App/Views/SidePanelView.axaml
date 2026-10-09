@@ -80,7 +80,7 @@
       <DockPanel IsVisible="{Binding IsFilesPage}">
         <StackPanel DockPanel.Dock="Top" Margin="12,0,12,6" Spacing="4">
           <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Classes="muted small" Text="{Binding ChangedFiles.Summary}" VerticalAlignment="Center" />
+            <TextBlock Classes="muted small" Text="{Binding ChangedFiles.Summary}" TextWrapping="Wrap" VerticalAlignment="Center" />
             <Button Grid.Column="1" Classes="flat" Command="{Binding ChangedFiles.RefreshCommand}">
               <TextBlock Classes="small" Text="Refresh" />
             </Button>
@@ -90,10 +90,10 @@
             <TextBlock Classes="small" Text="Working tree vs HEAD" />
           </CheckBox>
         </StackPanel>
-        <!-- Every page scrolls both ways (DESIGN.md §3, "Side panel"): a row's name and counts stay in view, and its path
-             is shown whole and scrolls sideways. -->
+        <!-- Every page wraps at the width shown (DESIGN.md §3, "Side panel"): a row's name and path wrap, and its counts
+             stay at its right edge. -->
         <ListBox x:Name="ChangedFilesList" ItemsSource="{Binding ChangedFiles.Files}" Background="Transparent"
-                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  Tapped="OnChangedFileTapped" DoubleTapped="OnChangedFileDoubleTapped">
           <ListBox.ItemTemplate>
             <DataTemplate DataType="vm:ChangedFileRow">
@@ -104,13 +104,11 @@
                           AutomationProperties.Name="Reviewed" ToolTip.Tip="Reviewed. Unticks when Claude changes the file again." />
                 <TextBlock Grid.Column="1" Classes="mono" FontWeight="SemiBold" Text="{Binding Status}" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsDeleted}" />
                 <StackPanel Grid.Column="2">
-                  <controls:ShownWidth>
-                    <Grid ColumnDefinitions="*,Auto">
-                      <TextBlock Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
-                      <TextBlock Grid.Column="1" Classes="mono small muted" Text="{Binding Stats}" VerticalAlignment="Top" Margin="6,2,0,0" />
-                    </Grid>
-                  </controls:ShownWidth>
-                  <TextBlock Classes="muted small" Text="{Binding DisplayPath}" />
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="{Binding FileName}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Column="1" Classes="mono small muted" Text="{Binding Stats}" VerticalAlignment="Top" Margin="6,2,0,0" />
+                  </Grid>
+                  <TextBlock Classes="muted small" Text="{Binding DisplayPath}" TextWrapping="Wrap" />
                 </StackPanel>
                 <Grid.ContextMenu>
                   <ContextMenu>
@@ -175,12 +173,13 @@
           <TextBlock Classes="muted small" Text="{Binding ProjectTools.Runs.SelectedRun.OutputNote, FallbackValue={x:Null}}" TextWrapping="Wrap"
                      IsVisible="{Binding ProjectTools.Runs.SelectedRun.OutputNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}, FallbackValue=False}" />
         </StackPanel>
-        <ListBox x:Name="ProjectOutputList" ItemsSource="{Binding ProjectTools.Runs.SelectedRun.Output, FallbackValue={x:Null}}" Background="Transparent" Margin="8,0,8,8"
-                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+        <!-- Long log lines wrap; the item's padding keeps them clear of the scroll bar -->
+        <ListBox x:Name="ProjectOutputList" ItemsSource="{Binding ProjectTools.Runs.SelectedRun.Output, FallbackValue={x:Null}}" Background="Transparent" Margin="8,0,0,8"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  IsVisible="{Binding ProjectTools.Runs.HasSelectedRun}" AutomationProperties.Name="Output">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="x:String">
-              <TextBlock Classes="mono small" Text="{Binding}" />
+              <TextBlock Classes="mono small" Text="{Binding}" TextWrapping="Wrap" />
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
@@ -189,87 +188,85 @@
       <!-- Tasks (DESIGN.md §5, "Tasks"): the plan (its draft, a version put up for review, or a reply shown as the plan),
            then each task with its state, owner, what it waits on, times, files and tokens -->
       <DockPanel IsVisible="{Binding IsTasksPage}">
-        <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="12,0,12,6" Text="{Binding TodoList.Summary}" IsVisible="{Binding TodoList.HasItems}" />
+        <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="12,0,12,6" Text="{Binding TodoList.Summary}" TextWrapping="Wrap" IsVisible="{Binding TodoList.HasItems}" />
         <!-- The text wraps at the width shown; a plan's code blocks scroll sideways on their own -->
-        <ScrollViewer x:Name="TasksScroller" HorizontalScrollBarVisibility="Auto">
-          <controls:ShownWidth>
-            <StackPanel Margin="12,0,12,12" Spacing="10">
-              <Border Classes="codeblock" IsVisible="{Binding TodoList.HasPlan}">
-                <StackPanel Spacing="4" DataContext="{Binding TodoList}" x:DataType="conv:TodoList">
-                  <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
-                    <TextBlock Text="Plan" FontWeight="SemiBold" VerticalAlignment="Center" />
-                    <!-- Its versions: ‹ v2 of 3 › -->
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" IsVisible="{Binding HasManyPlans}">
-                      <Button Classes="flat" Padding="5,1" Content="‹" Command="{Binding ShowEarlierPlanCommand}"
-                              AutomationProperties.Name="Earlier version of the plan" ToolTip.Tip="The version before" />
-                      <TextBlock Classes="muted small" Text="{Binding ShownPlanPosition}" VerticalAlignment="Center" />
-                      <Button Classes="flat" Padding="5,1" Content="›" Command="{Binding ShowLaterPlanCommand}"
-                              AutomationProperties.Name="Later version of the plan" ToolTip.Tip="The version after" />
-                    </StackPanel>
-                    <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding ShownPlan.TimeText, FallbackValue={x:Null}}" VerticalAlignment="Center" />
-                  </Grid>
-                  <TextBlock Classes="muted small" TextWrapping="Wrap" Text="{Binding ShownPlan.Feedback, StringFormat='“{0}”', FallbackValue={x:Null}}"
-                             IsVisible="{Binding ShownPlan.HasFeedback, FallbackValue=False}" />
-                  <ToggleButton Classes="flat" Padding="0" HorizontalAlignment="Left" IsChecked="{Binding ShowPlanChanges}"
-                                IsVisible="{Binding ShownPlan.HasPrevious, FallbackValue=False}" ToolTip.Tip="Show what changed from the version before, line by line">
-                    <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding ShownPlan.ChangesLabel, FallbackValue={x:Null}}" />
-                  </ToggleButton>
-                  <md:MarkdownRenderer MarkdownBuilder="{Binding ShownPlan.Markdown, FallbackValue={x:Null}}" IsVisible="{Binding !ShowsPlanChanges}" />
-                  <ItemsControl ItemsSource="{Binding ShownPlan.Changes.Lines, FallbackValue={x:Null}}" IsVisible="{Binding ShowsPlanChanges}" />
-                </StackPanel>
-              </Border>
-              <ItemsControl ItemsSource="{Binding TodoList.Items}">
-                <ItemsControl.ItemsPanel>
-                  <ItemsPanelTemplate>
-                    <StackPanel Spacing="8" />
-                  </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate DataType="conv:TodoItem">
-                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="8">
-                      <TextBlock Text="{Binding Glyph}" Classes.muted="{Binding IsDone}" />
-                      <!-- A task that has started goes to where it started in the conversation -->
-                      <Button Grid.Column="1" Classes="flat row taskrow" Padding="0" HorizontalContentAlignment="Stretch" IsHitTestVisible="{Binding HasStart}"
-                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).GoToTaskCommand}" CommandParameter="{Binding}"
-                              ToolTip.Tip="Go to where it started in the conversation">
-                        <StackPanel Spacing="2">
-                          <TextBlock TextWrapping="Wrap" Classes.muted="{Binding IsDone}" Classes.strong="{Binding IsActive}">
-                            <Run Classes="muted" Text="{Binding NumberText}" />
-                            <Run Text="{Binding DisplayText}" />
-                          </TextBlock>
-                          <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
-                          <TextBlock Classes="small warning" Text="{Binding BlockedText}" IsVisible="{Binding IsBlocked}" />
-                        </StackPanel>
+        <ScrollViewer x:Name="TasksScroller" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="12,0,16,12" Spacing="10">
+            <Border Classes="codeblock" IsVisible="{Binding TodoList.HasPlan}">
+              <StackPanel Spacing="4" DataContext="{Binding TodoList}" x:DataType="conv:TodoList">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                  <TextBlock Text="Plan" FontWeight="SemiBold" VerticalAlignment="Center" />
+                  <!-- Its versions: ‹ v2 of 3 › -->
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" IsVisible="{Binding HasManyPlans}">
+                    <Button Classes="flat" Padding="5,1" Content="‹" Command="{Binding ShowEarlierPlanCommand}"
+                            AutomationProperties.Name="Earlier version of the plan" ToolTip.Tip="The version before" />
+                    <TextBlock Classes="muted small" Text="{Binding ShownPlanPosition}" VerticalAlignment="Center" />
+                    <Button Classes="flat" Padding="5,1" Content="›" Command="{Binding ShowLaterPlanCommand}"
+                            AutomationProperties.Name="Later version of the plan" ToolTip.Tip="The version after" />
+                  </StackPanel>
+                  <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding ShownPlan.TimeText, FallbackValue={x:Null}}" VerticalAlignment="Center" />
+                </Grid>
+                <TextBlock Classes="muted small" TextWrapping="Wrap" Text="{Binding ShownPlan.Feedback, StringFormat='“{0}”', FallbackValue={x:Null}}"
+                           IsVisible="{Binding ShownPlan.HasFeedback, FallbackValue=False}" />
+                <ToggleButton Classes="flat" Padding="0" HorizontalAlignment="Left" IsChecked="{Binding ShowPlanChanges}"
+                              IsVisible="{Binding ShownPlan.HasPrevious, FallbackValue=False}" ToolTip.Tip="Show what changed from the version before, line by line">
+                  <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding ShownPlan.ChangesLabel, FallbackValue={x:Null}}" />
+                </ToggleButton>
+                <md:MarkdownRenderer MarkdownBuilder="{Binding ShownPlan.Markdown, FallbackValue={x:Null}}" IsVisible="{Binding !ShowsPlanChanges}" />
+                <ItemsControl ItemsSource="{Binding ShownPlan.Changes.Lines, FallbackValue={x:Null}}" IsVisible="{Binding ShowsPlanChanges}" />
+              </StackPanel>
+            </Border>
+            <ItemsControl ItemsSource="{Binding TodoList.Items}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Spacing="8" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="conv:TodoItem">
+                  <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="8">
+                    <TextBlock Text="{Binding Glyph}" Classes.muted="{Binding IsDone}" />
+                    <!-- A task that has started goes to where it started in the conversation -->
+                    <Button Grid.Column="1" Classes="flat row taskrow" Padding="0" HorizontalContentAlignment="Stretch" IsHitTestVisible="{Binding HasStart}"
+                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).GoToTaskCommand}" CommandParameter="{Binding}"
+                            ToolTip.Tip="Go to where it started in the conversation">
+                      <StackPanel Spacing="2">
+                        <TextBlock TextWrapping="Wrap" Classes.muted="{Binding IsDone}" Classes.strong="{Binding IsActive}">
+                          <Run Classes="muted" Text="{Binding NumberText}" />
+                          <Run Text="{Binding DisplayText}" />
+                        </TextBlock>
+                        <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+                        <TextBlock Classes="small warning" Text="{Binding BlockedText}" IsVisible="{Binding IsBlocked}" />
+                      </StackPanel>
+                    </Button>
+                    <!-- Who, when, the files changed and the tokens used while it was in progress -->
+                    <WrapPanel Grid.Row="1" Grid.Column="1" ItemSpacing="4" Margin="0,2,0,0" IsVisible="{Binding HasDetailLine}">
+                      <TextBlock Classes="muted small" Text="{Binding DetailText}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
+                      <Button Classes="flat turnfiles" Padding="0" VerticalAlignment="Center" IsVisible="{Binding HasFiles}"
+                              ToolTip.Tip="The files Claude changed while this task was in progress">
+                        <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding FilesLinkText}" />
+                        <Button.Flyout>
+                          <Flyout Placement="BottomEdgeAlignedLeft">
+                            <ItemsControl ItemsSource="{Binding Files}" MinWidth="200" MaxWidth="480">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="conv:TaskFileRow">
+                                  <Button Classes="flat row" HorizontalContentAlignment="Stretch" ToolTip.Tip="{Binding Path}"
+                                          Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenTaskFileCommand}" CommandParameter="{Binding}">
+                                    <TextBlock Classes="mono small" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
+                                  </Button>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </Flyout>
+                        </Button.Flyout>
                       </Button>
-                      <!-- Who, when, the files changed and the tokens used while it was in progress -->
-                      <WrapPanel Grid.Row="1" Grid.Column="1" ItemSpacing="4" Margin="0,2,0,0" IsVisible="{Binding HasDetailLine}">
-                        <TextBlock Classes="muted small" Text="{Binding DetailText}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
-                        <Button Classes="flat turnfiles" Padding="0" VerticalAlignment="Center" IsVisible="{Binding HasFiles}"
-                                ToolTip.Tip="The files Claude changed while this task was in progress">
-                          <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding FilesLinkText}" />
-                          <Button.Flyout>
-                            <Flyout Placement="BottomEdgeAlignedLeft">
-                              <ItemsControl ItemsSource="{Binding Files}" MinWidth="200" MaxWidth="480">
-                                <ItemsControl.ItemTemplate>
-                                  <DataTemplate DataType="conv:TaskFileRow">
-                                    <Button Classes="flat row" HorizontalContentAlignment="Stretch" ToolTip.Tip="{Binding Path}"
-                                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).OpenTaskFileCommand}" CommandParameter="{Binding}">
-                                      <TextBlock Classes="mono small" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
-                                    </Button>
-                                  </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                              </ItemsControl>
-                            </Flyout>
-                          </Button.Flyout>
-                        </Button>
-                        <TextBlock Classes="muted small" Text="{Binding TokensSuffix}" IsVisible="{Binding HasTokens}" VerticalAlignment="Center" />
-                      </WrapPanel>
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </StackPanel>
-          </controls:ShownWidth>
+                      <TextBlock Classes="muted small" Text="{Binding TokensSuffix}" IsVisible="{Binding HasTokens}" VerticalAlignment="Center" />
+                    </WrapPanel>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
         </ScrollViewer>
       </DockPanel>
 
@@ -280,54 +277,52 @@
           <Button Grid.Column="1" Classes="flat" Content="Refresh" Command="{Binding McpServers.RefreshCommand}" />
         </Grid>
         <TextBlock DockPanel.Dock="Top" Classes="small error" Margin="12,0,12,6" Text="{Binding McpServers.Error}" TextWrapping="Wrap" IsVisible="{Binding McpServers.HasError}" />
-        <ScrollViewer x:Name="McpScroller" HorizontalScrollBarVisibility="Auto">
-          <controls:ShownWidth>
-            <ItemsControl ItemsSource="{Binding McpServers.Servers}" Margin="12,0,12,12">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <StackPanel Spacing="10" />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="vm:McpServerRow">
-                  <StackPanel Spacing="2">
-                    <Grid ColumnDefinitions="*,Auto">
-                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                      <TextBlock Grid.Column="1" Classes="small" Classes.muted="{Binding !IsFailed}" Classes.warning="{Binding IsFailed}" Text="{Binding StateText}" />
+        <ScrollViewer x:Name="McpScroller" HorizontalScrollBarVisibility="Disabled">
+          <ItemsControl ItemsSource="{Binding McpServers.Servers}" Margin="12,0,16,12">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="10" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:McpServerRow">
+                <StackPanel Spacing="2">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1" Classes="small" Classes.muted="{Binding !IsFailed}" Classes.warning="{Binding IsFailed}" Text="{Binding StateText}" />
+                  </Grid>
+                  <TextBlock Classes="muted small" Text="{Binding Detail}" TextWrapping="Wrap" IsVisible="{Binding HasDetail}" />
+                  <SelectableTextBlock Classes="small error" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
+                  <!-- Signing in, while the user finishes in the browser -->
+                  <StackPanel Spacing="4" IsVisible="{Binding IsSigningIn}">
+                    <TextBlock Classes="muted small" Text="{Binding SignInText}" TextWrapping="Wrap" />
+                    <Button Classes="flat" Padding="0" HorizontalAlignment="Left" ToolTip.Tip="{Binding SignInUrl}"
+                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.OpenSignInPageCommand}" CommandParameter="{Binding}">
+                      <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="Open the sign-in page again" TextDecorations="Underline" />
+                    </Button>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" IsVisible="{Binding CanPasteAddress}">
+                      <TextBox Text="{Binding PastedAddress}" PlaceholderText="If the page after signing in didn't load, paste its address here"
+                               AutomationProperties.Name="The address the browser ended on" />
+                      <Button Grid.Column="1" Classes="flat" Content="Done"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.FinishSignInCommand}" CommandParameter="{Binding}" />
                     </Grid>
-                    <TextBlock Classes="muted small" Text="{Binding Detail}" TextWrapping="Wrap" IsVisible="{Binding HasDetail}" />
-                    <SelectableTextBlock Classes="small error" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
-                    <!-- Signing in, while the user finishes in the browser -->
-                    <StackPanel Spacing="4" IsVisible="{Binding IsSigningIn}">
-                      <TextBlock Classes="muted small" Text="{Binding SignInText}" TextWrapping="Wrap" />
-                      <Button Classes="flat" Padding="0" HorizontalAlignment="Left" ToolTip.Tip="{Binding SignInUrl}"
-                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.OpenSignInPageCommand}" CommandParameter="{Binding}">
-                        <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="Open the sign-in page again" TextDecorations="Underline" />
-                      </Button>
-                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" IsVisible="{Binding CanPasteAddress}">
-                        <TextBox Text="{Binding PastedAddress}" PlaceholderText="If the page after signing in didn't load, paste its address here"
-                                 AutomationProperties.Name="The address the browser ended on" />
-                        <Button Grid.Column="1" Classes="flat" Content="Done"
-                                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.FinishSignInCommand}" CommandParameter="{Binding}" />
-                      </Grid>
-                    </StackPanel>
-                    <WrapPanel ItemSpacing="8" IsEnabled="{Binding !IsBusy}">
-                      <Button Classes="flat" Content="Sign in" IsVisible="{Binding CanSignIn}" ToolTip.Tip="Opens the server's sign-in page in your browser"
-                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.SignInCommand}" CommandParameter="{Binding}" />
-                      <Button Classes="flat" Content="Sign out" IsVisible="{Binding CanSignOut}" ToolTip.Tip="Forget this server's sign-in; connecting it again asks you to sign in"
-                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.SignOutCommand}" CommandParameter="{Binding}" />
-                      <Button Classes="flat" Content="Reconnect" IsVisible="{Binding CanReconnect}"
-                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ReconnectCommand}" CommandParameter="{Binding}" />
-                      <Button Classes="flat" Content="Turn off" IsVisible="{Binding !IsDisabled}" ToolTip.Tip="Disconnect it and remove its tools, for this session"
-                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ToggleCommand}" CommandParameter="{Binding}" />
-                      <Button Classes="flat" Content="Turn on" IsVisible="{Binding IsDisabled}"
-                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ToggleCommand}" CommandParameter="{Binding}" />
-                    </WrapPanel>
                   </StackPanel>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </controls:ShownWidth>
+                  <WrapPanel ItemSpacing="8" IsEnabled="{Binding !IsBusy}">
+                    <Button Classes="flat" Content="Sign in" IsVisible="{Binding CanSignIn}" ToolTip.Tip="Opens the server's sign-in page in your browser"
+                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.SignInCommand}" CommandParameter="{Binding}" />
+                    <Button Classes="flat" Content="Sign out" IsVisible="{Binding CanSignOut}" ToolTip.Tip="Forget this server's sign-in; connecting it again asks you to sign in"
+                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.SignOutCommand}" CommandParameter="{Binding}" />
+                    <Button Classes="flat" Content="Reconnect" IsVisible="{Binding CanReconnect}"
+                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ReconnectCommand}" CommandParameter="{Binding}" />
+                    <Button Classes="flat" Content="Turn off" IsVisible="{Binding !IsDisabled}" ToolTip.Tip="Disconnect it and remove its tools, for this session"
+                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ToggleCommand}" CommandParameter="{Binding}" />
+                    <Button Classes="flat" Content="Turn on" IsVisible="{Binding IsDisabled}"
+                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).McpServers.ToggleCommand}" CommandParameter="{Binding}" />
+                  </WrapPanel>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
         </ScrollViewer>
       </DockPanel>
 
@@ -338,38 +333,38 @@
 
       <!-- Processes (DESIGN.md §4, "Process monitor") -->
       <DockPanel IsVisible="{Binding IsProcessesPage}">
-        <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="12,0,12,6" Text="{Binding ProcessMonitor.SummaryText, TargetNullValue='Only Claude Code is running.'}" />
-        <!-- Each process's name and numbers stay in view; its command line is shown whole and scrolls sideways -->
+        <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="12,0,12,6" Text="{Binding ProcessMonitor.SummaryText, TargetNullValue='Only Claude Code is running.'}" TextWrapping="Wrap" />
+        <!-- A process's text wraps at the width shown and its numbers line up at the right edge, however deep it's nested;
+             only a row nested past the edge scrolls sideways. Its command line is in its tooltip. -->
         <ScrollViewer x:Name="ProcessesScroller" HorizontalScrollBarVisibility="Auto">
-          <ItemsControl ItemsSource="{Binding ProcessMonitor.Processes}" Margin="8,0,8,8">
+          <ItemsControl ItemsSource="{Binding ProcessMonitor.Processes}" Margin="0,0,0,8">
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="vm:ProcessRow">
-                <Border Padding="4,3" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
-                  <StackPanel Margin="{Binding Indent, Converter={x:Static vm:Converters.LeftMargin}}" Spacing="1">
-                    <controls:ShownWidth>
-                      <StackPanel Spacing="1">
-                        <Grid ColumnDefinitions="*,Auto,Auto">
-                          <TextBlock TextTrimming="CharacterEllipsis">
-                            <Run Text="{Binding Name}" FontWeight="SemiBold" />
-                            <Run Classes="muted" Text="{Binding Pid}" FontSize="11" />
-                          </TextBlock>
-                          <TextBlock Grid.Column="1" Classes="mono small" Text="{Binding CpuText}" Margin="8,0,0,0" MinWidth="44" TextAlignment="Right" />
-                          <TextBlock Grid.Column="2" Classes="mono small muted" Text="{Binding MemoryText}" Margin="8,0,0,0" MinWidth="56" TextAlignment="Right" />
-                        </Grid>
-                        <TextBlock Classes="muted small" TextTrimming="CharacterEllipsis">
-                          <Run Text="{Binding RunningText}" />
-                          <Run Text="{Binding IsDetached, Converter={x:Static vm:Converters.DetachedText}}" />
+                <!-- Lit under the pointer, as a changed file's row is, and while its menu is open -->
+                <Border Classes="processrow" Classes.menuopen="{Binding #ProcessMenu.IsOpen}" ToolTip.Tip="{Binding Tooltip}">
+                  <controls:ShownWidth Margin="{Binding Indent, Converter={x:Static vm:Converters.LeftMargin}}">
+                    <StackPanel Spacing="1">
+                      <Grid ColumnDefinitions="*,Auto,Auto">
+                        <TextBlock TextWrapping="Wrap">
+                          <Run Text="{Binding Name}" FontWeight="SemiBold" />
+                          <Run Classes="muted" Text="{Binding Pid}" FontSize="11" />
                         </TextBlock>
-                      </StackPanel>
-                    </controls:ShownWidth>
-                    <TextBlock Classes="mono muted small" Text="{Binding CommandLine}" IsVisible="{Binding HasCommandLine}" />
-                    <Button Classes="flat" Padding="0" IsVisible="{Binding HasTool}" HorizontalAlignment="Left"
-                            Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.ShowProcessToolCommand}" CommandParameter="{Binding}">
-                      <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding ToolText}" />
-                    </Button>
-                  </StackPanel>
+                        <TextBlock Grid.Column="1" Classes="mono small" Text="{Binding CpuText}" Margin="8,0,0,0" MinWidth="44" TextAlignment="Right" />
+                        <TextBlock Grid.Column="2" Classes="mono small muted" Text="{Binding MemoryText}" Margin="8,0,0,0" MinWidth="56" TextAlignment="Right" />
+                      </Grid>
+                      <TextBlock Classes="muted small" TextWrapping="Wrap">
+                        <Run Text="{Binding RunningText}" />
+                        <Run Text="{Binding IsDetached, Converter={x:Static vm:Converters.DetachedText}}" />
+                      </TextBlock>
+                      <!-- The tool call that started it, on one line: every process it started shows the same one -->
+                      <Button Classes="flat" Padding="0" IsVisible="{Binding HasTool}" HorizontalAlignment="Left" ToolTip.Tip="{Binding ToolText}"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.ShowProcessToolCommand}" CommandParameter="{Binding}">
+                        <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding ToolText}" TextTrimming="CharacterEllipsis" MaxLines="1" />
+                      </Button>
+                    </StackPanel>
+                  </controls:ShownWidth>
                   <Border.ContextMenu>
-                    <ContextMenu>
+                    <ContextMenu x:Name="ProcessMenu">
                       <MenuItem Header="Stop…" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.StopProcessCommand}" CommandParameter="{Binding}" IsEnabled="{Binding !IsRoot}" />
                       <MenuItem Header="Copy command line" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.CopyCommandLineCommand}" CommandParameter="{Binding}" />
                       <MenuItem Header="Reveal executable" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.RevealExecutableCommand}" CommandParameter="{Binding}" />

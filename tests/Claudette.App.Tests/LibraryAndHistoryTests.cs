@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
 using Claudette.Core.Development;
@@ -97,6 +98,93 @@ public class LibraryAndHistoryTests
         await SearchAsync(h, history, "vulkan rename");
         Assert.Empty(history.Groups);
         Assert.True(history.IsEmpty);
+    }
+
+    [Fact]
+    public async Task History_shows_sessions_as_it_reads_them_the_first_time_it_opens()
+    {
+        var dispatcher = new HistoryHoldingDispatcher();
+        await using var h = new TabTestHarness(dispatcher: dispatcher);
+        try
+        {
+            WriteSession(h, "old", "2026-09-28T08:00:00Z");
+            WriteSession(h, "newest", "2026-09-28T10:00:00Z");
+            WriteSession(h, "middle", "2026-09-28T09:00:00Z");
+            h.Shell.OpenHistoryCommand.Execute(null);
+            var history = h.Shell.History!;
+
+            // The most recently written is read first, and shows while the rest are still to read.
+            await TabTestHarness.Eventually(() => history.Rows.Count > 0, "the first session");
+            Assert.Equal(["work", "newest"], InlineDispatcher.Read(() => RowNames(history)));
+            Assert.True(history.IsLoading);
+            Assert.False(history.IsFirstLoad);
+
+            dispatcher.Release();
+            await TabTestHarness.Eventually(() => !history.IsLoading, "History to load");
+            Assert.Equal(["work", "newest", "middle", "old"], RowNames(history));
+        }
+        finally
+        {
+            dispatcher.Release();
+        }
+    }
+
+    [Fact]
+    public async Task A_refresh_replaces_History_once_the_new_list_is_whole()
+    {
+        var dispatcher = new HistoryHoldingDispatcher();
+        dispatcher.Release();
+        await using var h = new TabTestHarness(dispatcher: dispatcher);
+        WriteSession(h, "s1", "2026-09-28T08:00:00Z");
+        h.Shell.OpenHistoryCommand.Execute(null);
+        var history = h.Shell.History!;
+        await TabTestHarness.Eventually(() => !history.IsLoading, "History to load");
+        var shown = dispatcher.HistoryPosts;
+        Assert.True(shown > 0);
+
+        WriteSession(h, "s2", "2026-09-28T09:00:00Z");
+        await history.RefreshCommand.ExecuteAsync(null);
+
+        // Nothing shown part way: the list stayed as it was until the new one replaced it.
+        Assert.Equal(shown, dispatcher.HistoryPosts);
+        Assert.Equal(["work", "s2", "s1"], RowNames(history));
+    }
+
+    /// <summary>A session written when it was last active, as Claude Code writes them.</summary>
+    private static void WriteSession(TabTestHarness h, string sessionId, string time)
+    {
+        var path = h.WriteTranscript(sessionId, UserLine(sessionId, $"Prompt for {sessionId}", h.WorkFolder, time));
+        File.SetLastWriteTimeUtc(path, DateTimeOffset.Parse(time, CultureInfo.InvariantCulture).UtcDateTime);
+    }
+
+    /// <summary>History's list as the view shows it: each folder's heading, then its sessions.</summary>
+    private static string[] RowNames(HistoryViewModel history) =>
+        [.. history.Rows.Select(r => r is HistoryHeading heading ? heading.Label : ((HistoryEntry)r).SessionId)];
+
+    /// <summary>
+    /// Runs work at once, as <see cref="InlineDispatcher"/> does, and counts the shows History posts as it reads
+    /// sessions. Until <see cref="Release"/>, each holds the scan that posted it, so a test sees History part read.
+    /// </summary>
+    private sealed class HistoryHoldingDispatcher : IUiDispatcher
+    {
+        private readonly InlineDispatcher _inner = new();
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _historyPosts;
+
+        public int HistoryPosts => Volatile.Read(ref _historyPosts);
+
+        public void Post(Action action)
+        {
+            _inner.Post(action);
+            // Its lambdas' closures are nested in the view model.
+            if (action.Method.DeclaringType is { } type && (type == typeof(HistoryViewModel) || type.DeclaringType == typeof(HistoryViewModel)))
+            {
+                Interlocked.Increment(ref _historyPosts);
+                _released.Task.Wait();
+            }
+        }
+
+        public void Release() => _released.TrySetResult();
     }
 
     [Fact]
@@ -839,12 +927,12 @@ public class LibraryAndHistoryTests
         ["timestamp"] = "2026-09-28T10:01:00Z",
     }.ToJsonString();
 
-    private static string UserLine(string sessionId, string text, string cwd) => new JsonObject
+    private static string UserLine(string sessionId, string text, string cwd, string time = "2026-09-28T10:00:00Z") => new JsonObject
     {
         ["type"] = "user",
         ["message"] = new JsonObject { ["role"] = "user", ["content"] = text },
         ["cwd"] = cwd,
         ["sessionId"] = sessionId,
-        ["timestamp"] = "2026-09-28T10:00:00Z",
+        ["timestamp"] = time,
     }.ToJsonString();
 }

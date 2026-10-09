@@ -115,6 +115,8 @@
             <SelectableTextBlock Classes="muted small" Text="{Binding SuffixText}" TextWrapping="Wrap" IsVisible="{Binding HasSuffix}" />
             <!-- What Claude was told about its sub-threads with this message (DESIGN.md §18, "Threads") -->
             <TextBlock Classes="muted small" Text="{Binding ThreadNoteText}" ToolTip.Tip="{Binding ThreadNote}" IsVisible="{Binding HasThreadNote}" />
+            <!-- What Claude was told about the sessions and agents it names (DESIGN.md §5, "Autocomplete") -->
+            <TextBlock Classes="muted small" Text="{Binding MentionNoteText}" ToolTip.Tip="{Binding MentionNote}" IsVisible="{Binding HasMentionNote}" />
             <!-- Waiting its turn behind Claude's work (DESIGN.md §5, "Queued messages") -->
             <StackPanel Classes="queued" Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsQueued}">
               <TextBlock Classes="muted small" Text="{Binding QueuedText}" VerticalAlignment="Center" />
@@ -639,7 +641,7 @@
         <!-- Pinned to-do list (DESIGN.md §5, "Tasks"): a task that has started goes to where it started -->
         <Border DockPanel.Dock="Top" IsVisible="{Binding TodoList.HasItems}" Background="{DynamicResource SubtleBrush}"
                 BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,4">
-          <StackPanel MaxWidth="900" HorizontalAlignment="Stretch">
+          <StackPanel Classes="column" HorizontalAlignment="Stretch">
             <Button Classes="flat row" Command="{Binding TodoList.ToggleExpandedCommand}">
               <TextBlock Classes="muted small" FontWeight="SemiBold" Text="{Binding TodoList.Summary}" />
             </Button>
@@ -675,7 +677,7 @@
         <!-- A thread's strip (DESIGN.md §18, "Threads"): its Claude's messages waiting to be let go to sub-threads, and
              the sub-threads waiting on the user, with Allow and Deny for a permission prompt -->
         <Border x:Name="ThreadStrip" DockPanel.Dock="Bottom" Classes="threadstrip" IsVisible="{Binding HasThreadStrip}">
-          <StackPanel MaxWidth="900" Spacing="6">
+          <StackPanel Classes="column" Spacing="6">
             <ItemsControl ItemsSource="{Binding ThreadApprovals}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="vm:ThreadSendApproval">
@@ -717,7 +719,7 @@
 
         <ScrollViewer x:Name="ConversationScroll" HorizontalScrollBarVisibility="Disabled">
           <!-- Not clipped, so the first message's time and Copy chip can sit over its top edge (DESIGN.md §5). -->
-          <ItemsControl x:Name="ConversationItems" ItemsSource="{Binding Items}" MaxWidth="900" ClipToBounds="False">
+          <ItemsControl x:Name="ConversationItems" ItemsSource="{Binding Items}" ClipToBounds="False">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
                 <!-- The messages a screen above and below the view stay built (CacheLength), not only those in it. A
@@ -731,7 +733,7 @@
         </ScrollViewer>
       </DockPanel>
 
-      <Button x:Name="JumpToLatest" Content="↓ Jump to latest" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,24,12"
+      <Button x:Name="JumpToLatest" Classes="accent jumplatest" Content="↓ Jump to latest" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,24,12"
               IsVisible="False" Click="OnJumpToLatest" />
 
       <!-- Model switch confirmation (DESIGN.md §5) -->

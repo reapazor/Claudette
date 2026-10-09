@@ -12,10 +12,10 @@ public enum CompletionKind
     File,
 }
 
-/// <summary>An entry of the composer's autocomplete popup: a slash command, or a file or folder.</summary>
+/// <summary>An entry of the composer's autocomplete popup: a slash command, a file or folder, or a session or agent.</summary>
 public sealed partial class CompletionItem : ObservableObject
 {
-    /// <summary>The command name, or the path relative to the working folder (folders end in <c>/</c>).</summary>
+    /// <summary>The command name, the path relative to the working folder (folders end in <c>/</c>), or a session's name.</summary>
     public required string Value { get; init; }
 
     /// <summary><c>/compact</c>, or a file's name.</summary>
@@ -29,6 +29,9 @@ public sealed partial class CompletionItem : ObservableObject
 
     public bool IsFolder { get; init; }
 
+    /// <summary>A session or agent to mention by name (DESIGN.md §5, "Autocomplete"), not a path.</summary>
+    public bool IsName { get; init; }
+
     public string IconKey { get; init; } = Conversation.ToolIcons.Default;
 
     [ObservableProperty]
@@ -37,27 +40,41 @@ public sealed partial class CompletionItem : ObservableObject
 
 /// <summary>
 /// The composer's autocomplete (DESIGN.md §5, "Composer"): <c>/</c> at the start of a message lists slash commands,
-/// and <c>@</c> lists the working folder's files and folders, filtered as you type. Keyboard first: the view passes
-/// the text and caret on every change, and arrow keys, Enter, Tab and Esc while it's open.
+/// and <c>@</c> lists other sessions and agents Claude can message, then the working folder's files and folders,
+/// filtered as you type. Keyboard first: the view passes the text and caret on every change, and arrow keys, Enter,
+/// Tab and Esc while it's open.
 /// </summary>
 public sealed partial class ComposerCompletions : ObservableObject
 {
     private const int MaxItems = 50;
 
+    /// <summary>The most sessions and agents listed ahead of the files.</summary>
+    private const int MaxTargets = 8;
+
     private readonly Func<SlashCommandCatalog> _commands;
     private readonly Func<ProjectFileIndex> _files;
     private readonly IUiDispatcher _dispatcher;
+    private readonly Func<IReadOnlyList<MentionTarget>>? _targets;
+    private readonly Action? _mentionStarted;
     private string _text = "";
     private ComposerToken? _token;
     private (CompletionKind Kind, int Start)? _dismissed;
     private int _version;
     private string? _shownQuery;
+    private int? _mentionStart;
+    private IReadOnlyList<CompletionItem> _targetItems = [];
+    private (IReadOnlyList<CompletionItem> Items, string EmptyMessage, string Query)? _shownFiles;
 
-    public ComposerCompletions(Func<SlashCommandCatalog> commands, Func<ProjectFileIndex> files, IUiDispatcher dispatcher)
+    /// <param name="targets">The sessions and agents an <c>@</c> can name.</param>
+    /// <param name="mentionStarted">An <c>@</c> was typed: a chance to look for sessions again, then <see cref="RefreshTargets"/>.</param>
+    public ComposerCompletions(Func<SlashCommandCatalog> commands, Func<ProjectFileIndex> files, IUiDispatcher dispatcher,
+        Func<IReadOnlyList<MentionTarget>>? targets = null, Action? mentionStarted = null)
     {
         _commands = commands;
         _files = files;
         _dispatcher = dispatcher;
+        _targets = targets;
+        _mentionStarted = mentionStarted;
     }
 
     [ObservableProperty]
@@ -67,7 +84,7 @@ public sealed partial class ComposerCompletions : ObservableObject
     [NotifyPropertyChangedFor(nameof(Header))]
     public partial CompletionKind Kind { get; set; }
 
-    public string Header => Kind == CompletionKind.SlashCommand ? "Commands" : "Files and folders";
+    public string Header => Kind == CompletionKind.SlashCommand ? "Commands" : _targetItems.Count > 0 ? "Sessions and files" : "Files and folders";
 
     public ObservableCollection<CompletionItem> Items { get; } = [];
 
@@ -111,6 +128,7 @@ public sealed partial class ComposerCompletions : ObservableObject
         if ((slash ?? mention) is not { } token)
         {
             _dismissed = null;
+            _mentionStart = null;
             Close();
             return;
         }
@@ -129,9 +147,47 @@ public sealed partial class ComposerCompletions : ObservableObject
         }
         else
         {
+            if (_mentionStart != token.Start)
+            {
+                _mentionStart = token.Start;
+                _mentionStarted?.Invoke();
+            }
+            _targetItems = TargetItems(token.Query);
+            OnPropertyChanged(nameof(Header));
             _ = ShowFilesAsync(token.Query);
         }
     }
+
+    /// <summary>The sessions and agents changed: an open <c>@</c> list shows them as they are now.</summary>
+    public void RefreshTargets()
+    {
+        if (!IsOpen || Kind != CompletionKind.File || _token is not { } token)
+        {
+            return;
+        }
+        _targetItems = TargetItems(token.Query);
+        OnPropertyChanged(nameof(Header));
+        if (_shownFiles is { } files)
+        {
+            Show(files.Items, files.EmptyMessage, files.Query);
+        }
+    }
+
+    private CompletionItem[] TargetItems(string query) => _targets is null ? [] :
+        [.. SessionMentions.Match(_targets(), query, MaxTargets).Select(t => new CompletionItem
+        {
+            Value = t.Name,
+            Title = t.Name,
+            Detail = t.Kind switch
+            {
+                MentionKind.SubThread => "Sub-thread",
+                MentionKind.Tab => "Tab",
+                MentionKind.Subagent => t.About is { Length: > 0 } type ? $"Subagent · {type}" : "Subagent",
+                _ => t.About is { Length: > 0 } folder ? $"Session · {folder}" : "Session",
+            },
+            IsName = true,
+            IconKey = t.Kind == MentionKind.Subagent ? "IconToolAgent" : "IconThread",
+        })];
 
     /// <summary>Up and Down: moves the highlight, wrapping around.</summary>
     public void MoveSelection(int delta)
@@ -156,7 +212,7 @@ public sealed partial class ComposerCompletions : ObservableObject
         }
         var edit = Kind == CompletionKind.SlashCommand
             ? ComposerTokens.ReplaceSlashCommand(_text, token, item.Value)
-            : ComposerTokens.ReplaceMention(_text, token, item.Value);
+            : ComposerTokens.ReplaceMention(_text, token, item.Value, isName: item.IsName);
         Close();
         return edit;
     }
@@ -175,6 +231,8 @@ public sealed partial class ComposerCompletions : ObservableObject
     {
         _version++;
         _shownQuery = null;
+        _shownFiles = null;
+        _targetItems = [];
         _token = null;
         IsOpen = false;
         Kind = CompletionKind.None;
@@ -257,6 +315,12 @@ public sealed partial class ComposerCompletions : ObservableObject
 
     private void Show(IReadOnlyList<CompletionItem> items, string emptyMessage, string query)
     {
+        if (Kind == CompletionKind.File)
+        {
+            // Sessions and agents go ahead of the files: there are few of them.
+            _shownFiles = (items, emptyMessage, query);
+            items = [.. _targetItems, .. items];
+        }
         // A refresh of the same query keeps the highlight where it was; new typing starts again at the best match.
         var selected = query == _shownQuery ? SelectedItem?.Value : null;
         _shownQuery = query;

@@ -149,6 +149,46 @@ public sealed class HistoryIndexTests : IDisposable
     }
 
     [Fact]
+    public async Task A_scan_tells_found_about_each_session_newest_written_first()
+    {
+        var written = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        // Written last isn't always active last: found goes by the file, so History reads the top of its list first.
+        File.SetLastWriteTimeUtc(WriteTranscript("a", "first", Prompt("first", "2026-01-03T00:00:00Z")), written);
+        File.SetLastWriteTimeUtc(WriteTranscript("b", "second", Prompt("second", "2026-01-01T00:00:00Z")), written.AddDays(2));
+        File.SetLastWriteTimeUtc(WriteTranscript("a", "third", Prompt("third", "2026-01-02T00:00:00Z")), written.AddDays(1));
+        WriteTranscript("a", "empty");
+        var found = new List<string>();
+
+        var sessions = await _index.ScanAsync(s => found.Add(s.SessionId), Ct);
+
+        Assert.Equal(["second", "third", "first"], found);
+        Assert.Equal(["first", "third", "second"], sessions.Select(s => s.SessionId));
+    }
+
+    [Fact]
+    public async Task Many_transcripts_read_at_once_each_keep_their_own_summary()
+    {
+        var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var prompts = Enumerable.Range(0, 64).ToDictionary(i => $"s{i:00}", i => i + 1);
+        var paths = prompts.Select(p => WriteTranscript($"p{p.Value % 4}", p.Key,
+            [.. Enumerable.Range(0, p.Value).Select(n => Prompt($"{p.Key} prompt {n}", start.AddMinutes(n).ToString("O", System.Globalization.CultureInfo.InvariantCulture)))])).ToArray();
+
+        var first = await _index.ScanAsync(Ct);
+
+        Assert.Equal(64, first.Count);
+        Assert.All(first, s => Assert.Equal(($"{s.SessionId} prompt 0", prompts[s.SessionId]), (s.FirstPrompt, s.MessageCount)));
+
+        // Each read on from where it stopped, or again for those past the ones kept for that.
+        foreach (var path in paths)
+        {
+            File.AppendAllText(path, Prompt("one more", start.AddDays(1).ToString("O", System.Globalization.CultureInfo.InvariantCulture)) + "\n");
+        }
+        var grown = await _index.ScanAsync(Ct);
+
+        Assert.All(grown, s => Assert.Equal(($"{s.SessionId} prompt 0", prompts[s.SessionId] + 1), (s.FirstPrompt, s.MessageCount)));
+    }
+
+    [Fact]
     public async Task An_unchanged_file_is_not_read_again()
     {
         var path = WriteTranscript("p", "s1", Prompt("alpha", "2026-01-01T00:00:00Z"));
@@ -217,6 +257,16 @@ public sealed class HistoryIndexTests : IDisposable
         File.SetLastWriteTimeUtc(library, written);
         Assert.Equal("from the library", (await _index.SummarizeAsync([library], Ct))[library]!.FirstPrompt);
         Assert.Null((await _index.SummarizeAsync([_root.Combine("library", "gone.jsonl")], Ct)).Values.Single());
+    }
+
+    [Fact]
+    public async Task A_transcript_named_twice_is_summarized_once()
+    {
+        var library = _root.Write("library/s9.jsonl", Prompt("from the library", "2026-01-01T00:00:00Z") + "\n");
+
+        var summaries = await _index.SummarizeAsync([library, library], Ct);
+
+        Assert.Equal("from the library", Assert.Single(summaries).Value!.FirstPrompt);
     }
 
     [Fact]

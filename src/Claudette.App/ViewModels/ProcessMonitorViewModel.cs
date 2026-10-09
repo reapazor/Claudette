@@ -53,8 +53,6 @@ public sealed partial class ProcessRow : ObservableObject
 
     public string? CommandLine => Snapshot.CommandLine;
 
-    public bool HasCommandLine => !string.IsNullOrEmpty(CommandLine);
-
     /// <summary>The Bash tool call or background task that started it, when Claudette could tell.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasTool), nameof(ToolText))]

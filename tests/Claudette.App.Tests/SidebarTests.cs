@@ -52,14 +52,18 @@ public class SidebarTests
     }
 
     [Fact]
-    public async Task Resizing_the_sidebar_is_kept_within_limits_and_saved()
+    public async Task Resizing_the_sidebar_stops_at_its_least_and_where_the_conversation_would_get_too_narrow_and_is_saved()
     {
         await using var h = new TabTestHarness();
+        h.Shell.Layout.SetAvailableWidth(2000);
 
         h.Shell.Layout.ResizeSidebar(40);
         Assert.Equal(ShellLayout.MinSidebarWidth, h.Shell.Layout.SidebarWidth);
-        h.Shell.Layout.ResizeSidebar(2000);
-        Assert.Equal(ShellLayout.MaxSidebarWidth, h.Shell.Layout.SidebarWidth);
+        // No most of its own.
+        h.Shell.Layout.ResizeSidebar(1500);
+        Assert.Equal(1500, h.Shell.Layout.SidebarWidth);
+        h.Shell.Layout.ResizeSidebar(5000);
+        Assert.Equal(2000 - ShellLayout.MinConversationWidth, h.Shell.Layout.SidebarWidth);
 
         h.Shell.Layout.ResizeSidebar(300);
         Assert.Null(h.Services.State.SidebarWidth);
@@ -67,6 +71,44 @@ public class SidebarTests
 
         Assert.Equal(300, h.Services.State.SidebarWidth);
         Assert.Equal(300, new ShellViewModel(h.Services, () => { }).Layout.SidebarDisplayWidth);
+    }
+
+    [Fact]
+    public async Task The_sidebar_leaves_room_for_the_selected_tabs_side_panel_and_gives_way_after_it()
+    {
+        await using var h = new TabTestHarness();
+        var first = await h.OpenTabAsync();
+        var layout = h.Shell.Layout;
+        layout.SetAvailableWidth(2000);
+        layout.ResizeSidebar(1000);
+
+        // The side panel open, the sidebar leaves it its least beside the conversation's.
+        first.IsSidePanelOpen = true;
+        Assert.True(layout.IsSidePanelShown);
+        Assert.Equal(1000, layout.SidebarDisplayWidth);
+        layout.SetAvailableWidth(1400);
+        Assert.Equal(1400 - ShellLayout.MinConversationWidth - ShellLayout.MinSidePanelWidth, layout.SidebarDisplayWidth);
+
+        // The window wide again, the width the user dragged comes back.
+        layout.SetAvailableWidth(2000);
+        Assert.Equal(1000, layout.SidebarDisplayWidth);
+        Assert.Equal(1000, layout.SidebarWidth);
+
+        // A tab without its side panel open gives the sidebar that room; the first one, selected again, takes it back.
+        layout.SetAvailableWidth(1200);
+        // (Its folder is gone, so it starts no session.)
+        var second = new TabViewModel(h.Services, h.Shell, new TabState { Folder = Path.Combine(h.Root, "elsewhere") }, isRestored: false);
+        var group = new TabGroupViewModel(second.Folder, TabGroupViewModel.Palette[1].Color, isCollapsed: false);
+        group.Tabs.Add(second);
+        h.Shell.Groups.Add(group);
+        h.Shell.SelectedTab = second;
+        Assert.False(layout.IsSidePanelShown);
+        Assert.Equal(1200 - ShellLayout.MinConversationWidth, layout.SidebarDisplayWidth);
+        h.Shell.SelectedTab = first;
+        Assert.True(layout.IsSidePanelShown);
+        Assert.Equal(1200 - ShellLayout.MinConversationWidth - ShellLayout.MinSidePanelWidth, layout.SidebarDisplayWidth);
+        first.IsSidePanelOpen = false;
+        Assert.Equal(1200 - ShellLayout.MinConversationWidth, layout.SidebarDisplayWidth);
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -18,7 +19,8 @@ namespace Claudette.Core.History;
 /// <item>Summaries are cached by path, length and last-write time, so a rescan only reads files that changed. A file
 /// that only grew, as a session's transcript does each turn, is read on from where the last read stopped.</item>
 /// <item>Transcripts can be tens of MB, so they're read line by line, and a line is only parsed as JSON when a cheap
-/// substring check says it might hold a prompt, an assistant text or a title.</item>
+/// substring check says it might hold a prompt, an assistant text or a title. Several files are read at once, the most
+/// recently written first.</item>
 /// <item>The format is internal to Claude Code (DESIGN.md §13, "Transcripts"): unknown entries are skipped, and a file
 /// that can't be read is left out of this scan and tried again on the next.</item>
 /// </list>
@@ -39,6 +41,9 @@ public sealed class HistoryIndex(string projectsDirectory)
     /// <summary>How many bytes before a read's end are kept, to check the file still has them before reading on.</summary>
     private const int TailLength = 64;
 
+    /// <summary>How many files are read at once, leaving a core for the UI.</summary>
+    internal static readonly int Readers = Math.Clamp(Environment.ProcessorCount - 1, 1, 8);
+
     private readonly SemaphoreSlim _scanLock = new(1, 1);
     private readonly Dictionary<string, CacheEntry> _cache = new(StringComparer.Ordinal);
 
@@ -48,12 +53,19 @@ public sealed class HistoryIndex(string projectsDirectory)
     public string ProjectsDirectory { get; } = projectsDirectory;
 
     /// <summary>Every non-empty session, newest first. Only one scan runs at a time; later callers wait for it.</summary>
-    public async Task<IReadOnlyList<SessionSummary>> ScanAsync(CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<SessionSummary>> ScanAsync(CancellationToken cancellationToken = default) => ScanAsync(found: null, cancellationToken);
+
+    /// <summary>
+    /// Every non-empty session, newest first, telling <paramref name="found"/> about each one as it's read, on the scan's
+    /// thread. The most recently written files are read first, so History can show the top of its list before the rest
+    /// is read. Only one scan runs at a time; later callers wait for it.
+    /// </summary>
+    public async Task<IReadOnlyList<SessionSummary>> ScanAsync(Action<SessionSummary>? found, CancellationToken cancellationToken = default)
     {
         await _scanLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await Task.Run(() => Scan(cancellationToken), cancellationToken).ConfigureAwait(false);
+            return await Task.Run(() => Scan(found, cancellationToken), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -72,18 +84,20 @@ public sealed class HistoryIndex(string projectsDirectory)
         {
             return await Task.Run(() =>
             {
-                var summaries = new Dictionary<string, SessionSummary?>(StringComparer.Ordinal);
-                foreach (var path in transcriptPaths)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var file = new FileInfo(path);
-                    summaries[path] = file.Exists ? Cached(_otherCache, file, cancellationToken) : null;
-                }
-                foreach (var gone in _otherCache.Keys.Where(k => !summaries.ContainsKey(k)).ToArray())
+                var files = transcriptPaths.Select(path => (Path: path, File: new FileInfo(path))).ToArray();
+                // Each file once, however many paths name it: two readers mustn't carry on the same cached read.
+                var read = ReadAll(_otherCache, files.Select(f => f.File).DistinctBy(f => f.FullName, StringComparer.Ordinal).ToArray(), cancellationToken)
+                    .ToDictionary(r => r.File.FullName, r => r.Summary, StringComparer.Ordinal);
+                foreach (var gone in _otherCache.Keys.Where(k => !read.ContainsKey(k)).ToArray())
                 {
                     _otherCache.Remove(gone);
                 }
                 Forget(_otherCache);
+                var summaries = new Dictionary<string, SessionSummary?>(StringComparer.Ordinal);
+                foreach (var (path, file) in files)
+                {
+                    summaries[path] = read[file.FullName];
+                }
                 return (IReadOnlyDictionary<string, SessionSummary?>)summaries;
             }, cancellationToken).ConfigureAwait(false);
         }
@@ -111,20 +125,21 @@ public sealed class HistoryIndex(string projectsDirectory)
         return Read(file, file.Length, file.LastWriteTimeUtc, resume: null, CancellationToken.None).Summary;
     }
 
-    private IReadOnlyList<SessionSummary> Scan(CancellationToken cancellationToken)
+    private IReadOnlyList<SessionSummary> Scan(Action<SessionSummary>? found, CancellationToken cancellationToken)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        // Newest written first, the top of History. The times come with the enumeration, so sorting reads nothing.
+        var files = EnumerateTranscripts().OrderByDescending(f => f.LastWriteTimeUtc).ToArray();
         var summaries = new List<SessionSummary>();
-        foreach (var file in EnumerateTranscripts())
+        foreach (var (_, summary) in ReadAll(_cache, files, cancellationToken))
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            seen.Add(file.FullName);
-            if (Cached(_cache, file, cancellationToken) is { } summary)
+            if (summary is not null)
             {
                 summaries.Add(summary);
+                found?.Invoke(summary);
             }
         }
 
+        var seen = files.Select(f => f.FullName).ToHashSet(StringComparer.Ordinal);
         foreach (var gone in _cache.Keys.Where(k => !seen.Contains(k)).ToArray())
         {
             _cache.Remove(gone);
@@ -177,32 +192,59 @@ public sealed class HistoryIndex(string projectsDirectory)
     }
 
     /// <summary>
-    /// The file's summary from <paramref name="cache"/>, reading it if it changed: from where the last read stopped when
-    /// it only grew. If the file changes while it's read, the next scan sees a different length or time and reads again.
+    /// Each file's summary, from <paramref name="cache"/> or read again, in <paramref name="files"/>' order as each is
+    /// ready. <see cref="Readers"/> files are read at once; only the calling thread touches the cache.
     /// </summary>
-    private static SessionSummary? Cached(Dictionary<string, CacheEntry> cache, FileInfo file, CancellationToken cancellationToken)
+    private static IEnumerable<(FileInfo File, SessionSummary? Summary)> ReadAll(Dictionary<string, CacheEntry> cache, IReadOnlyList<FileInfo> files, CancellationToken cancellationToken)
     {
-        // From the enumeration, so no extra call per file.
-        var length = file.Length;
-        var lastWrite = file.LastWriteTimeUtc;
-        if (cache.TryGetValue(file.FullName, out var cached) && cached.Length == length && cached.LastWriteUtc == lastWrite)
+        var work = files.Select(f => (File: f, Cached: cache.GetValueOrDefault(f.FullName))).ToArray();
+        // One file at a time to each reader, since they differ so much in size.
+        var results = Partitioner.Create(work, EnumerablePartitionerOptions.NoBuffering)
+            .AsParallel()
+            .AsOrdered()
+            .WithDegreeOfParallelism(Readers)
+            .WithMergeOptions(ParallelMergeOptions.NotBuffered)
+            .WithCancellation(cancellationToken)
+            .Select(w => (w.File, Entry: Refresh(w.File, w.Cached, cancellationToken)));
+        foreach (var (file, entry) in results)
         {
-            return cached.Summary;
+            if (entry is null)
+            {
+                // Not cached, so the next scan tries again. The read may have carried the cached builder on, so the
+                // cached entry is no longer right either.
+                cache.Remove(file.FullName);
+            }
+            else
+            {
+                cache[file.FullName] = entry;
+            }
+            yield return (file, entry?.Summary);
         }
+    }
+
+    /// <summary>
+    /// The file's entry: <paramref name="cached"/> if the file hasn't changed, otherwise read, from where the last read
+    /// stopped when it only grew. Null when it can't be read. If the file changes while it's read, the next scan sees a
+    /// different length or time and reads again.
+    /// </summary>
+    private static CacheEntry? Refresh(FileInfo file, CacheEntry? cached, CancellationToken cancellationToken)
+    {
         try
         {
+            // From the enumeration in a scan, so no extra call per file.
+            var length = file.Length;
+            var lastWrite = file.LastWriteTimeUtc;
+            if (cached is not null && cached.Length == length && cached.LastWriteUtc == lastWrite)
+            {
+                return cached;
+            }
             var resume = cached is { Builder: not null } && length > cached.Length && lastWrite >= cached.LastWriteUtc ? cached : null;
-            // The builder carries on from the cached one, so it's no longer that entry's: a failed read leaves nothing.
-            cache.Remove(file.FullName);
-            cached = Read(file, length, lastWrite, resume, cancellationToken);
+            return Read(file, length, lastWrite, resume, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Not cached, so the next scan tries again.
             return null;
         }
-        cache[file.FullName] = cached;
-        return cached.Summary;
     }
 
     /// <summary>Keeps what's needed to read on only for the most recently written files: older ones rarely grow.</summary>

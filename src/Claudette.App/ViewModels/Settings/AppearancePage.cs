@@ -47,6 +47,7 @@ public sealed class AppearancePage(SettingsContext context) : SettingsPage(conte
         Entry("Show git branch on tab rows"),
         Entry("Show task progress on tab rows"),
         Entry("Density"),
+        Entry("Full-width conversation"),
         Entry("Zoom"),
         Entry("Motion"),
         Entry("Reduce motion", pageText: "Motion"),
@@ -77,6 +78,13 @@ public sealed class AppearancePage(SettingsContext context) : SettingsPage(conte
     {
         get => Settings.Appearance.Density;
         set => Set(value, v => Settings.Appearance.Density = v);
+    }
+
+    /// <summary>The conversation and the composer fill the tab's width rather than stopping at a readable one (DESIGN.md §14).</summary>
+    public bool FullWidthConversation
+    {
+        get => Settings.Appearance.FullWidthConversation;
+        set => Set(value, v => Settings.Appearance.FullWidthConversation = v);
     }
 
     // ---- Fonts (DESIGN.md §14, "Appearance") ----------------------------------------------------------------------

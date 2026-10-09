@@ -171,8 +171,11 @@ public sealed class GeneralSettings
 {
     public bool ConfirmCloseWorkingTab { get; set; } = true;
 
-    /// <summary>Also send tab renames to Claude Code, so <c>claude --resume &lt;name&gt;</c> sees them.</summary>
-    public bool RenameInClaudeCode { get; set; }
+    /// <summary>
+    /// Name each tab's session in Claude Code after the tab, its generated name or the user's (DESIGN.md §13, "Session
+    /// naming"): other sessions message it by that name, and <c>claude --resume &lt;name&gt;</c> finds it.
+    /// </summary>
+    public bool RenameInClaudeCode { get; set; } = true;
 
     /// <summary>Check GitHub for new Claudette releases at launch and every few hours (DESIGN.md §2, "Updating Claudette").</summary>
     public bool CheckForAppUpdates { get; set; } = true;
@@ -331,6 +334,12 @@ public sealed class AppearanceSettings
 
     /// <summary>How much room the conversation, the sidebar's rows and the composer take (DESIGN.md §14).</summary>
     public Density Density { get; set; } = Density.Comfortable;
+
+    /// <summary>
+    /// The conversation and the composer fill the tab's width, rather than stopping at a width that's easy to read
+    /// (DESIGN.md §14). Off by default.
+    /// </summary>
+    public bool FullWidthConversation { get; set; }
 
     /// <summary>Settings → Appearance → Motion (DESIGN.md §3, "Accessibility").</summary>
     public MotionSetting Motion { get; set; } = MotionSetting.System;

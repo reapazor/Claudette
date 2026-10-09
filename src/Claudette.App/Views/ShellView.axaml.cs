@@ -61,9 +61,9 @@ public partial class ShellView : UserControl
         {
             return;
         }
-        // Measured against the whole view, which doesn't move as the edge does.
+        // Measured against the whole view, which doesn't move as the edge does, from the width it shows.
         _resizeFrom = e.GetPosition(this).X;
-        _resizeStartWidth = shell.Layout.SidebarWidth;
+        _resizeStartWidth = shell.Layout.SidebarDisplayWidth;
         e.Pointer.Capture(SidebarEdge);
         e.Handled = true;
     }

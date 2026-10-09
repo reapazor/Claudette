@@ -87,6 +87,16 @@ items:
     usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.cs
     docs: https://code.claude.com/docs/en/sessions
     test: RealCliTests
+  - id: "--name"
+    kind: flag
+    status: documented
+    usedIn: src/Claudette.Core/Sessions/ClaudeLaunchOptions.cs, src/Claudette.App/ViewModels/TabViewModel.cs, src/Claudette.App/ViewModels/TabViewModel.Messaging.cs
+    docs: https://code.claude.com/docs/en/cli-reference
+    test: ClaudeEnvironmentTests, MessagingTests, SessionNameRealCliTests
+    # DESIGN.md §13, "Session naming": what other sessions message a tab's session by, and claude --resume finds it by.
+    # A session resumed without it goes back to a name Claude Code makes from the folder (claudette-3f), so every start
+    # passes it (checked against 2.1.284). It writes custom-title and agent-name entries to the transcript. Claude Code
+    # doesn't check a -p session's --name against other sessions' at startup, so two tabs with one name share it.
   - id: "--no-session-persistence"
     kind: flag
     status: documented
@@ -936,9 +946,9 @@ items:
   - id: "rename_session"
     kind: control
     status: undocumented
-    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs
-    test: RealCliTests
-    fallback: Only used when "rename in Claude Code" is on; the name is kept in Claudette either way.
+    usedIn: src/Claudette.Core/Sessions/ClaudeSession.cs, src/Claudette.App/ViewModels/TabViewModel.Messaging.cs
+    test: RealCliTests, MessagingTests, SessionNameRealCliTests
+    fallback: "Names a running tab's session after the tab when its name changes, while Settings → General → Name each tab's session in Claude Code after the tab is on (DESIGN.md §13). In 2.1.284 it changes the name other sessions message it by at once, gives a name another session has a variant (Art page-joyful-stearns), and writes custom-title and agent-name entries. If it failed, the tab keeps its name in Claudette, and its session takes it with --name at its next start."
 
   # --- Composer: slash commands, @ mentions and attachments (DESIGN.md §5) --------------------------------
   - id: "slash_commands"
@@ -1059,6 +1069,13 @@ items:
     fallback: Restored tabs could show subagent messages at the top level, and History could count them.
 
   # --- Files and behavior ------------------------------------------------------------------------------
+  - id: "sessions/<pid>.json"
+    kind: file
+    status: undocumented
+    usedIn: src/Claudette.Core/Sessions/LiveSessions.cs, src/Claudette.App/Services/LiveSessionsService.cs, src/Claudette.App/ViewModels/TabViewModel.Messaging.cs
+    docs: https://code.claude.com/docs/en/cross-session-messaging
+    test: LiveSessionsTests, MessagingTests, SessionNameRealCliTests
+    fallback: "Claude Code keeps an entry for each running session in its config folder's sessions/<pid>.json, which /list-agents reads too (checked against 2.1.284). Claudette reads pid, sessionId, name, nameSource (derived for a name Claude Code made up), cwd and status, for the info card's Reached as row and the other sessions the composer's @ lists (DESIGN.md §13, §5). The folder's .key files are messaging keys and are never read. Without it, the info card has no Reached as row, and the @ list has Claudette's own tabs (by the name each tab's session was given) and the tab's subagents; Claude can still find other sessions with ListAgents."
   - id: "settings.local.json"
     kind: file
     status: documented
@@ -1854,9 +1871,9 @@ items:
   - id: "SendMessage"
     kind: behavior
     status: documented
-    usedIn: src/Claudette.Core/Threads/SendMessageCall.cs, src/Claudette.App/ViewModels/TabViewModel.Thread.cs, src/Claudette.App/Conversation/ConversationBuilder.cs, tools/Claudette.MockApi/MockAnthropicApi.cs
+    usedIn: src/Claudette.Core/Threads/SendMessageCall.cs, src/Claudette.Core/Composer/SessionMentions.cs, src/Claudette.App/ViewModels/TabViewModel.Thread.cs, src/Claudette.App/Conversation/ConversationBuilder.cs, tools/Claudette.MockApi/MockAnthropicApi.cs
     docs: https://code.claude.com/docs/en/cross-session-messaging
-    test: ThreadTests, ThreadRealCliTests
+    test: ThreadTests, ThreadRealCliTests, SessionMentionTests, MessagingTests
     fallback: "The tool a thread's Claude hands work to its sub-threads with, offered in -p sessions (checked against 2.1.284). Its input's to, message and notify_when_idle are read from the PreToolUse hook (Claude Code also adds recipient and content, the same values). If it went away or changed shape, the hook would let every call through and threads would do nothing; the tabs still work."
   - id: "PreToolUse hook on SendMessage before the recipient is looked up"
     kind: behavior

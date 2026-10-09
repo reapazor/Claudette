@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Claudette.App.Services;
 using Claudette.Core;
 using Claudette.Core.History;
@@ -282,121 +283,197 @@ public sealed partial class HistoryViewModel : ViewModelBase
         Error = null;
         var library = _services.Library;
         var index = library.History;
-        var machine = library.MachineName;
-        var now = _services.Time.GetUtcNow();
-        var open = _shell.AllTabs.Select(t => t.State.SessionId).OfType<string>().ToHashSet();
-        // A copy: the list is built off the UI thread, which owns the state.
-        var marks = new Dictionary<string, SessionMark>(_services.State.SessionMarks);
+        var context = new EntryContext(library.MachineName, _services.Time.GetUtcNow(),
+            _shell.AllTabs.Select(t => t.State.SessionId).OfType<string>().ToHashSet(),
+            // A copy: the list is built off the UI thread, which owns the state.
+            new Dictionary<string, SessionMark>(_services.State.SessionMarks));
+        var sessionLibrary = library.Library;
+        // With nothing listed yet, sessions show as they're read. A refresh keeps the list in place until the new one is whole.
+        var reading = _reading = _all.Count == 0 ? new Reading() : null;
+        IReadOnlyList<HistoryEntry> all;
         try
         {
-            _all = await Task.Run(async () =>
+            all = await Task.Run(async () =>
             {
-                var local = index is null ? [] : await index.ScanAsync().ConfigureAwait(false);
-                IReadOnlyList<LibraryEntry> stored;
-                try
-                {
-                    stored = library.Library.List();
-                }
-                catch (Exception)
-                {
-                    stored = [];
-                }
+                // Before the scan: the records name the sessions it finds, and say when another machine used one since.
+                var stored = ListLibrary(sessionLibrary);
+                var records = Records(stored);
+                Action<SessionSummary>? found = reading is null
+                    ? null
+                    : summary => Found(reading, LocalEntry(summary, records.GetValueOrDefault(summary.SessionId), context));
+                var local = index is null ? [] : await index.ScanAsync(found).ConfigureAwait(false);
                 // Sessions only in the library are summarized from its copies, cached as Claude Code's own are.
                 var localIds = local.Select(s => s.SessionId).ToHashSet(StringComparer.Ordinal);
                 var libraryOnly = stored.Where(e => e.IsConflictCopy || !localIds.Contains(e.Record.SessionId)).Select(e => e.TranscriptPath).ToArray();
                 IReadOnlyDictionary<string, SessionSummary?> summaries = index is null
                     ? libraryOnly.ToDictionary(p => p, HistoryIndex.ReadSummary, StringComparer.Ordinal)
                     : await index.SummarizeAsync(libraryOnly).ConfigureAwait(false);
-                return Merge(local, stored, summaries, machine, now, open, marks);
+                return Merge(local, stored, records, summaries, context);
             });
         }
         catch (Exception ex)
         {
             Error = $"Couldn't read the session history: {ex.Message}";
-            _all = [];
+            all = [];
         }
+        // Before the whole list, so a show still waiting can't put back part of it.
+        reading?.Done = true;
+        _all = all;
         // Fill the list before saying it's loaded, so nothing sees "loaded" with an empty list.
         SearchWait.Cancel();
         await (Filtering = FilterAsync());
         IsLoading = false;
     }
 
-    private static List<HistoryEntry> Merge(IReadOnlyList<SessionSummary> local, IReadOnlyList<LibraryEntry> stored, IReadOnlyDictionary<string, SessionSummary?> librarySummaries,
-        string machine, DateTimeOffset now, HashSet<string> open, Dictionary<string, SessionMark> marks)
+    private static IReadOnlyList<LibraryEntry> ListLibrary(SessionLibrary library)
     {
-        var records = stored.Where(e => !e.IsConflictCopy).GroupBy(e => e.Record.SessionId).ToDictionary(g => g.Key, g => g.First());
-        var entries = new List<HistoryEntry>();
-        var seen = new HashSet<string>();
-
-        foreach (var summary in local)
+        try
         {
-            seen.Add(summary.SessionId);
-            records.TryGetValue(summary.SessionId, out var libraryEntry);
-            var record = libraryEntry?.Record;
-            var lastUsedElsewhere = record is not null && record.Machine != machine && record.LastUsed > summary.LastActivity;
-            entries.Add(Entry(summary.SessionId, record?.Name ?? summary.Title, summary.FirstPrompt ?? record?.FirstPrompt, summary.Folder ?? record?.Folder,
-                lastUsedElsewhere ? record!.Machine : machine, lastUsedElsewhere ? record!.LastUsed : summary.LastActivity,
-                summary.MessageCount, summary.GitBranch, summary.TranscriptPath, record, libraryEntry?.TranscriptPath, isConflict: false, label: null,
-                continuedElsewhere: lastUsedElsewhere, prompts: summary.Prompts));
+            return library.List();
         }
+        catch (Exception)
+        {
+            return [];
+        }
+    }
 
+    // ---- Showing sessions as they're read ----------------------------------------------------------------------
+
+    /// <summary>
+    /// A load that shows sessions as the scan finds them (DESIGN.md §9, "History"): the first, which has no list to
+    /// keep in place. The scan adds to <see cref="Found"/> on its thread; the UI thread takes them from there.
+    /// </summary>
+    private sealed class Reading
+    {
+        private int _showQueued;
+
+        public ConcurrentQueue<HistoryEntry> Found { get; } = new();
+
+        /// <summary>The load's whole list has replaced what was shown.</summary>
+        public bool Done { get; set; }
+
+        /// <summary>True for the first caller since the last <see cref="Showing"/>, which queues the show.</summary>
+        public bool ClaimShow() => Interlocked.Exchange(ref _showQueued, 1) == 0;
+
+        public void Showing() => Volatile.Write(ref _showQueued, 0);
+    }
+
+    private Reading? _reading;
+
+    /// <summary>On the scan's thread: shows the session soon, along with any others found by then.</summary>
+    private void Found(Reading reading, HistoryEntry entry)
+    {
+        reading.Found.Enqueue(entry);
+        if (reading.ClaimShow())
+        {
+            _services.Dispatcher.Post(() => Show(reading));
+        }
+    }
+
+    private void Show(Reading reading)
+    {
+        reading.Showing();
+        if (!ReferenceEquals(reading, _reading) || reading.Done)
+        {
+            return;
+        }
+        var found = new List<HistoryEntry>();
+        while (reading.Found.TryDequeue(out var entry))
+        {
+            found.Add(entry);
+        }
+        if (found.Count == 0)
+        {
+            return;
+        }
+        _all = [.. _all.Concat(found).OrderByDescending(e => e.LastActivity)];
+        Filtering = FilterAsync();
+    }
+
+    private static List<HistoryEntry> Merge(IReadOnlyList<SessionSummary> local, IReadOnlyList<LibraryEntry> stored, Dictionary<string, LibraryEntry> records,
+        IReadOnlyDictionary<string, SessionSummary?> librarySummaries, EntryContext context)
+    {
+        var entries = local.Select(s => LocalEntry(s, records.GetValueOrDefault(s.SessionId), context)).ToList();
+        var seen = local.Select(s => s.SessionId).ToHashSet();
         foreach (var libraryEntry in stored)
         {
-            var record = libraryEntry.Record;
-            if (!libraryEntry.IsConflictCopy && seen.Contains(record.SessionId))
+            if (!libraryEntry.IsConflictCopy && seen.Contains(libraryEntry.Record.SessionId))
             {
                 continue;
             }
-            // A session only in the library, from another machine (or older than Claude Code's own cleanup).
-            var summary = librarySummaries.GetValueOrDefault(libraryEntry.TranscriptPath);
-            var title = record.Name ?? summary?.Title ?? summary?.FirstPrompt ?? "Untitled session";
-            entries.Add(Entry(record.SessionId, libraryEntry.IsConflictCopy ? $"{title} ({libraryEntry.ConflictLabel})" : title,
-                summary?.FirstPrompt ?? record.FirstPrompt, record.Folder, record.Machine, record.LastUsed,
-                summary?.MessageCount ?? 0, record.Project?.Branch, localTranscript: null, record, libraryEntry.TranscriptPath,
-                libraryEntry.IsConflictCopy, libraryEntry.ConflictLabel, prompts: summary?.Prompts));
+            entries.Add(LibraryOnlyEntry(libraryEntry, librarySummaries.GetValueOrDefault(libraryEntry.TranscriptPath), context));
         }
         return entries.OrderByDescending(e => e.LastActivity).ToList();
+    }
 
-        HistoryEntry Entry(string id, string? title, string? prompt, string? folder, string lastMachine, DateTimeOffset last, int messages, string? branch,
-            string? localTranscript, SessionRecord? record, string? libraryTranscript, bool isConflict, string? label, bool continuedElsewhere = false,
-            string? prompts = null)
+    /// <summary>What a load's entries are made with.</summary>
+    private sealed record EntryContext(string Machine, DateTimeOffset Now, HashSet<string> Open, Dictionary<string, SessionMark> Marks);
+
+    /// <summary>The library's entries by session id, leaving out conflict copies.</summary>
+    private static Dictionary<string, LibraryEntry> Records(IReadOnlyList<LibraryEntry> stored) =>
+        stored.Where(e => !e.IsConflictCopy).GroupBy(e => e.Record.SessionId).ToDictionary(g => g.Key, g => g.First());
+
+    /// <summary>A session in Claude Code's storage on this machine, with its library entry if it has one.</summary>
+    private static HistoryEntry LocalEntry(SessionSummary summary, LibraryEntry? libraryEntry, EntryContext context)
+    {
+        var record = libraryEntry?.Record;
+        var lastUsedElsewhere = record is not null && record.Machine != context.Machine && record.LastUsed > summary.LastActivity;
+        return Entry(summary.SessionId, record?.Name ?? summary.Title, summary.FirstPrompt ?? record?.FirstPrompt, summary.Folder ?? record?.Folder,
+            lastUsedElsewhere ? record!.Machine : context.Machine, lastUsedElsewhere ? record!.LastUsed : summary.LastActivity,
+            summary.MessageCount, summary.GitBranch, summary.TranscriptPath, record, libraryEntry?.TranscriptPath, isConflict: false, label: null,
+            context, continuedElsewhere: lastUsedElsewhere, prompts: summary.Prompts);
+    }
+
+    /// <summary>A session only in the library, from another machine (or older than Claude Code's own cleanup).</summary>
+    private static HistoryEntry LibraryOnlyEntry(LibraryEntry libraryEntry, SessionSummary? summary, EntryContext context)
+    {
+        var record = libraryEntry.Record;
+        var title = record.Name ?? summary?.Title ?? summary?.FirstPrompt ?? "Untitled session";
+        return Entry(record.SessionId, libraryEntry.IsConflictCopy ? $"{title} ({libraryEntry.ConflictLabel})" : title,
+            summary?.FirstPrompt ?? record.FirstPrompt, record.Folder, record.Machine, record.LastUsed,
+            summary?.MessageCount ?? 0, record.Project?.Branch, localTranscript: null, record, libraryEntry.TranscriptPath,
+            libraryEntry.IsConflictCopy, libraryEntry.ConflictLabel, context, prompts: summary?.Prompts);
+    }
+
+    private static HistoryEntry Entry(string id, string? title, string? prompt, string? folder, string lastMachine, DateTimeOffset last, int messages, string? branch,
+        string? localTranscript, SessionRecord? record, string? libraryTranscript, bool isConflict, string? label, EntryContext context,
+        bool continuedElsewhere = false, string? prompts = null)
+    {
+        var who = lastMachine == context.Machine ? "This machine" : lastMachine;
+        var details = new List<string> { who, Formats.Ago(context.Now - last) };
+        if (messages > 0)
         {
-            var who = lastMachine == machine ? "This machine" : lastMachine;
-            var details = new List<string> { who, Formats.Ago(now - last) };
-            if (messages > 0)
-            {
-                details.Add($"{messages} message{(messages == 1 ? "" : "s")}");
-            }
-            if (branch is not null)
-            {
-                details.Add(branch);
-            }
-            if (open.Contains(id))
-            {
-                details.Add("open in a tab");
-            }
-            return new HistoryEntry
-            {
-                SessionId = id,
-                Title = title is { Length: > 0 } ? title : prompt ?? "Untitled session",
-                FirstPrompt = prompt,
-                Prompts = prompts,
-                Folder = folder,
-                Machine = who,
-                LastActivity = last,
-                MessageCount = messages,
-                Branch = branch,
-                LocalTranscript = localTranscript,
-                ContinuedElsewhere = continuedElsewhere,
-                Record = record,
-                LibraryTranscript = libraryTranscript,
-                IsConflictCopy = isConflict,
-                ConflictLabel = label,
-                IsOpen = open.Contains(id),
-                MarkKey = TabMarks.ForSession(record, marks.GetValueOrDefault(id)),
-                Details = string.Join(" · ", details),
-            };
+            details.Add($"{messages} message{(messages == 1 ? "" : "s")}");
         }
+        if (branch is not null)
+        {
+            details.Add(branch);
+        }
+        if (context.Open.Contains(id))
+        {
+            details.Add("open in a tab");
+        }
+        return new HistoryEntry
+        {
+            SessionId = id,
+            Title = title is { Length: > 0 } ? title : prompt ?? "Untitled session",
+            FirstPrompt = prompt,
+            Prompts = prompts,
+            Folder = folder,
+            Machine = who,
+            LastActivity = last,
+            MessageCount = messages,
+            Branch = branch,
+            LocalTranscript = localTranscript,
+            ContinuedElsewhere = continuedElsewhere,
+            Record = record,
+            LibraryTranscript = libraryTranscript,
+            IsConflictCopy = isConflict,
+            ConflictLabel = label,
+            IsOpen = context.Open.Contains(id),
+            MarkKey = TabMarks.ForSession(record, context.Marks.GetValueOrDefault(id)),
+            Details = string.Join(" · ", details),
+        };
     }
 
     /// <summary>

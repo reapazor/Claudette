@@ -200,8 +200,10 @@ public sealed class ConversationBuilder
     /// <param name="label">Who it's from when it isn't the user, over a message Claudette passes on for a thread (DESIGN.md §18, "Threads").</param>
     /// <param name="isFromThread">Claudette sends it for a thread or its sub-threads, not the user.</param>
     /// <param name="threadNote">The note on threads sent after it, which the card mentions.</param>
+    /// <param name="mentionNote">The note on the sessions and agents it names, sent after it, which the card mentions.</param>
+    /// <param name="mentioned">Their names, for the card's line about the note.</param>
     public UserMessageItem AddUserMessage(string text, string? suffixText = null, bool isCheckIn = false, IReadOnlyList<MessageImage>? images = null, bool isAutoContinue = false,
-        string? label = null, bool isFromThread = false, string? threadNote = null) =>
+        string? label = null, bool isFromThread = false, string? threadNote = null, string? mentionNote = null, IReadOnlyList<string>? mentioned = null) =>
         AddUser(new UserMessageItem(text, suffixText, isCheckIn, isAutoContinue)
         {
             Images = images ?? [],
@@ -209,6 +211,8 @@ public sealed class ConversationBuilder
             Label = label,
             IsFromThread = isFromThread,
             ThreadNote = threadNote,
+            MentionNote = mentionNote,
+            Mentioned = mentioned ?? [],
         }, Now());
 
     /// <summary>

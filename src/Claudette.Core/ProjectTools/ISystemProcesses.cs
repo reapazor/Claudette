@@ -27,6 +27,12 @@ public interface ISystemProcesses
     /// and its PID was reused.
     /// </summary>
     void KillTree(SystemProcess process);
+
+    /// <summary>
+    /// Whether a process with <paramref name="pid"/> is running: a Claude Code session's entry outlives a session that
+    /// crashed (DESIGN.md §13, "Session naming"). One that can't tell says it is.
+    /// </summary>
+    bool IsRunning(int pid) => true;
 }
 
 public static class SystemProcessNames

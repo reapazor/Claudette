@@ -78,6 +78,23 @@ public sealed class SystemProcesses : ISystemProcesses
         }
     }
 
+    public bool IsRunning(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false; // No process has that PID.
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or NotSupportedException)
+        {
+            return true; // There is one, but not ours to look at.
+        }
+    }
+
     /// <summary>When the process with <paramref name="pid"/> started, or null if it can't be read.</summary>
     internal static DateTimeOffset? StartTimeOf(int pid)
     {

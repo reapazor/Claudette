@@ -78,7 +78,8 @@ public sealed partial class TabViewModel
     }
 
     /// <summary>The <c>/</c> and <c>@</c> popup.</summary>
-    public ComposerCompletions Completions => _completions ??= new ComposerCompletions(() => SlashCommands, () => FileIndex, _services.Dispatcher);
+    public ComposerCompletions Completions => _completions ??= new ComposerCompletions(() => SlashCommands, () => FileIndex, _services.Dispatcher,
+        MentionTargets, _services.LiveSessions.Refresh);
 
     /// <summary>The session's slash commands: from <c>initialize</c>, then each turn's <c>system/init</c>.</summary>
     internal SlashCommandCatalog SlashCommands

@@ -94,11 +94,12 @@ public static class ComposerTokens
     /// Replaces the mention token with <paramref name="path"/>. A folder (ending in <c>/</c>) is left open, without a
     /// space after it, so its contents can be picked next; a file gets a space.
     /// </summary>
-    public static ComposerEdit ReplaceMention(string text, ComposerToken token, string path)
+    /// <param name="isName">It's a session's or agent's name (<see cref="SessionMentions"/>), not a path: kept as it is, quoted when it has whitespace.</param>
+    public static ComposerEdit ReplaceMention(string text, ComposerToken token, string path, bool isName = false)
     {
         var end = token.Start + token.Length;
-        var isFolder = path.EndsWith('/');
-        var mention = Mention(path, closeQuote: !isFolder);
+        var isFolder = !isName && path.EndsWith('/');
+        var mention = isName ? (path.Any(char.IsWhiteSpace) ? $"@\"{path}\"" : "@" + path) : Mention(path, closeQuote: !isFolder);
         var suffix = isFolder ? "" : " ";
         var rest = text[end..];
         if (!isFolder && rest.StartsWith(' '))

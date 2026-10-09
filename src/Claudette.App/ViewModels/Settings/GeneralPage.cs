@@ -26,7 +26,7 @@ public sealed partial class GeneralPage : SettingsPage
     [
         Entry("Start Claudette when I log in"),
         Entry("Confirm before closing a tab where Claude is working"),
-        Entry("Also rename the session in Claude Code when I rename a tab"),
+        Entry("Name each tab's session in Claude Code after the tab"),
         Entry("Show Claude's service status"),
         Entry("Messages sent while Claude works", pageText: "Messages sent while Claude works"),
         Entry("Remove worktrees once their work is merged", pageText: "Remove worktrees once everything in them is merged"),

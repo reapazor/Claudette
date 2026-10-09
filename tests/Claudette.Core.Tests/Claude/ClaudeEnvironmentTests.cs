@@ -94,6 +94,16 @@ public class ClaudeEnvironmentTests
     }
 
     [Fact]
+    public void A_name_is_what_other_sessions_message_it_by()
+    {
+        var args = ClaudeArguments.ForStreamingSession(new ClaudeLaunchOptions { WorkingDirectory = ".", Resume = "abc", Name = "Art page" });
+        var without = ClaudeArguments.ForStreamingSession(new ClaudeLaunchOptions { WorkingDirectory = "." });
+
+        Assert.Equal(["--name", "Art page"], args.SkipWhile(a => a != "--name").Take(2));
+        Assert.DoesNotContain("--name", without);
+    }
+
+    [Fact]
     public void Rewinding_branching_hooks_and_a_fallback_model_add_their_flags()
     {
         var args = ClaudeArguments.ForStreamingSession(new ClaudeLaunchOptions

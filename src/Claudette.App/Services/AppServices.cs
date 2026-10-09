@@ -135,6 +135,7 @@ public sealed class AppServices : IAsyncDisposable
         Perforce = new PerforceService(this, credentials ?? new UnavailableCredentialStore());
         ProjectTools = new ProjectToolsService(this, systemProcesses, unrealRegistry ?? NoUnrealEngineRegistry.Instance, projectToolPaths ?? ProjectToolPaths.ForCurrentUser());
         ServiceStatus = new ServiceStatusService(this);
+        LiveSessions = new LiveSessionsService(this, systemProcesses);
         UpdaterFactory = path => new ClaudeUpdater(path, Paths.UtilityDirectory, _launcher, Time, UserEnvironment.Probe,
             environmentOverrides: RemoteControl.ClaudeVariables, userEnvironment: UserEnvironment);
         SettingsChanged += (_, _) =>
@@ -305,6 +306,9 @@ public sealed class AppServices : IAsyncDisposable
     /// The window starts it at launch; tabs report API errors to it.
     /// </summary>
     public ServiceStatusService ServiceStatus { get; }
+
+    /// <summary>The Claude Code sessions running on this machine, and the names they're reached by (DESIGN.md §13).</summary>
+    public LiveSessionsService LiveSessions { get; }
 
     /// <summary>Makes the updater for a <c>claude</c> path (DESIGN.md §12). Tests replace it.</summary>
     internal Func<string, IClaudeUpdater> UpdaterFactory { get; set; }
@@ -624,6 +628,7 @@ public sealed class AppServices : IAsyncDisposable
         Notifications.Dispose();
         RemoteControl.Dispose();
         ServiceStatus.Dispose();
+        LiveSessions.Dispose();
         if (ClaudeUpdates is not null)
         {
             await ClaudeUpdates.DisposeAsync();

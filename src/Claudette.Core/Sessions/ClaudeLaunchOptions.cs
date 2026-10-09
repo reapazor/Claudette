@@ -14,6 +14,12 @@ public sealed record ClaudeLaunchOptions
     /// <summary>A session ID, or the path of a <c>.jsonl</c> transcript, to resume.</summary>
     public string? Resume { get; init; }
 
+    /// <summary>
+    /// <c>--name</c>: the session's name, which other sessions message it by and <c>claude --resume</c> finds it by
+    /// (DESIGN.md §13, "Session naming"). A resumed session doesn't keep the name it had, so it's given on every start.
+    /// </summary>
+    public string? Name { get; init; }
+
     /// <summary>With <see cref="Resume"/>: continue as a new session (a copy) instead of the original (DESIGN.md §9, "One machine at a time").</summary>
     public bool ForkSession { get; init; }
 
@@ -132,6 +138,7 @@ public static class ClaudeArguments
             AddOption(args, "--add-dir", directory);
         }
         AddOption(args, "--resume", options.Resume);
+        AddOption(args, "--name", options.Name);
         if (options.ForkSession && options.Resume is not null)
         {
             args.Add("--fork-session");

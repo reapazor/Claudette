@@ -22,6 +22,30 @@
     <Setter Property="IsHitTestVisible" Value="True" />
   </Style>
 
+  <!-- "Jump to latest" (DESIGN.md §5): an accent pill lifted off the conversation. A plain button's fill is see-through
+       in the dark theme, so the text under it showed through and it was hard to find. -->
+  <Style Selector="Button.jumplatest">
+    <Setter Property="CornerRadius" Value="16" />
+    <Setter Property="Padding" Value="14,6" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Button.jumplatest /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="BoxShadow" Value="0 2 10 0 #59000000" />
+  </Style>
+
+  <!-- The conversation's column: 900 pixels at most, so its lines stay easy to read, as are the to-do list and a
+       thread's strip over and under it, and the composer across the conversation's margins. Settings → Appearance →
+       Full-width conversation (DESIGN.md §14): ShellView takes the "fullwidth" class, and they fill the tab. -->
+  <Style Selector="ItemsControl#ConversationItems, StackPanel.column">
+    <Setter Property="MaxWidth" Value="900" />
+  </Style>
+  <Style Selector="StackPanel.composerarea">
+    <Setter Property="MaxWidth" Value="948" />
+  </Style>
+  <Style Selector=".fullwidth ItemsControl#ConversationItems, .fullwidth StackPanel.column, .fullwidth StackPanel.composerarea">
+    <Setter Property="MaxWidth" Value="Infinity" />
+  </Style>
+
   <!-- Settings → Appearance → Density (DESIGN.md §14): ShellView takes the "compact" class. -->
   <Style Selector="ItemsControl#ConversationItems">
     <Setter Property="Margin" Value="24,16,24,24" />
@@ -313,9 +337,22 @@
   <Style Selector="Grid.changedfile.reviewed > TextBlock, Grid.changedfile.reviewed > StackPanel">
     <Setter Property="Opacity" Value="0.5" />
   </Style>
-  <!-- A project job's output (DESIGN.md §18): dense lines, like a terminal -->
+  <!-- Fluent's padding, with the right side wide enough to keep a row's counts clear of the scroll bar -->
+  <Style Selector="ListBox#ChangedFilesList ListBoxItem">
+    <Setter Property="Padding" Value="12,9,16,12" />
+  </Style>
+  <!-- A process's row (DESIGN.md §4): lit under the pointer, so it's plain it has a menu, and while the menu is open, so
+       it's plain which process the menu is for. Its numbers keep clear of the scroll bar on their own (Controls/ShownWidth). -->
+  <Style Selector="Border.processrow">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Padding" Value="12,3,0,3" />
+  </Style>
+  <Style Selector="Border.processrow:pointerover, Border.processrow.menuopen">
+    <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+  </Style>
+  <!-- A project job's output (DESIGN.md §18): dense lines, like a terminal, wrapping clear of the scroll bar -->
   <Style Selector="ListBox#ProjectOutputList ListBoxItem">
-    <Setter Property="Padding" Value="4,0" />
+    <Setter Property="Padding" Value="4,0,16,0" />
     <Setter Property="MinHeight" Value="0" />
   </Style>
   <!-- The running tasks list (DESIGN.md §5, "Running tasks"), under the chip in the composer bar -->

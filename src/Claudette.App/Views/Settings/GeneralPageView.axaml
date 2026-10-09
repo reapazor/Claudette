@@ -13,8 +13,10 @@
     <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0" Text="{Binding StartAtLoginNote}" IsVisible="{Binding HasStartAtLoginNote}" />
     <TextBlock Classes="small warning" TextWrapping="Wrap" Margin="28,-8,0,0" Text="{Binding StartAtLoginError}" IsVisible="{Binding HasStartAtLoginError}" />
     <CheckBox Content="Confirm before closing a tab where Claude is working" IsChecked="{Binding ConfirmCloseWorkingTab}" />
-    <CheckBox Content="Also rename the session in Claude Code when I rename a tab" IsChecked="{Binding RenameInClaudeCode}" />
-    <TextBlock Classes="muted small" TextWrapping="Wrap" Text="Then claude --resume &lt;name&gt; in a terminal finds the session by the same name." Margin="28,-8,0,0" />
+    <!-- Session naming (DESIGN.md §13): what other sessions message a tab's session by -->
+    <CheckBox Content="Name each tab's session in Claude Code after the tab" IsChecked="{Binding RenameInClaudeCode}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="Other Claude Code sessions message it by that name, and claude --resume &lt;name&gt; in a terminal finds it. Otherwise Claude Code names it after its folder, such as claudette-3f." />
     <!-- Claude's service status (DESIGN.md §18, "Service status") -->
     <CheckBox Content="Show Claude's service status" IsChecked="{Binding ShowServiceStatus}" />
     <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"

@@ -25,6 +25,7 @@ public class SettingsDefaultsTests
         s.Appearance.CodeFont = "Fira Code";
         s.Appearance.ShowContextOnTabs = false;
         s.Appearance.Density = Density.Compact;
+        s.Appearance.FullWidthConversation = true;
         s.DiffTool.Kind = "custom";
         s.DiffTool.CustomCommand = "meld {left} {right}";
         s.Advanced.ExtraArguments = "--verbose";
@@ -56,6 +57,7 @@ public class SettingsDefaultsTests
         Assert.True(settings.Appearance.ShowContextOnTabs);
         Assert.Equal(Density.Comfortable, s.Appearance.Density);
         Assert.Equal(Density.Comfortable, settings.Appearance.Density);
+        Assert.False(s.Appearance.FullWidthConversation);
         Assert.Equal("builtIn", s.DiffTool.Kind);
         Assert.Equal("", s.Advanced.ExtraArguments);
         Assert.False(s.Advanced.LogProtocol);
@@ -97,6 +99,26 @@ public class SettingsDefaultsTests
         settings.Appearance.ResetCommand.Execute(null);
 
         Assert.False(h.Shell.IsCompact);
+    }
+
+    [Fact]
+    public async Task Full_width_conversation_is_off_by_default_and_applies_at_once()
+    {
+        await using var h = new TabTestHarness();
+        var settings = new SettingsViewModel(h.Services, null) { SearchText = "full-width" };
+        Assert.False(settings.Appearance.FullWidthConversation);
+        Assert.False(h.Shell.IsFullWidth);
+        Assert.Contains(settings.SearchResults, r => r is { Category: "Appearance", Label: "Full-width conversation" });
+
+        settings.Appearance.FullWidthConversation = true;
+
+        Assert.True(h.Services.Settings.Appearance.FullWidthConversation);
+        // The shell takes the "fullwidth" class, whose styles lift the conversation's and the composer's widest.
+        Assert.True(h.Shell.IsFullWidth);
+
+        settings.Appearance.ResetCommand.Execute(null);
+
+        Assert.False(h.Shell.IsFullWidth);
     }
 
     [Fact]

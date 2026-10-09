@@ -221,6 +221,41 @@ public class SidePanelUiTests
     }
 
     [AvaloniaFact]
+    public async Task The_side_panel_gives_way_before_the_sidebar_and_the_conversation_keeps_its_room()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell }, 1200);
+        tab.IsSidePanelOpen = true;
+        UiText.Settle(window);
+        var sidebar = window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "Sidebar");
+        var sidebarEdge = window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "SidebarEdge");
+        var view = window.GetVisualDescendants().OfType<TabView>().Single();
+        var panel = view.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "SidePanel");
+        double Conversation() => view.Bounds.Width - panel.Bounds.Width;
+
+        // The sidebar dragged as far as it goes takes the side panel down to its least, and no further.
+        Drag(window, sidebarEdge, 2000);
+        Assert.Equal(1200 - ShellLayout.MinConversationWidth - ShellLayout.MinSidePanelWidth, sidebar.Bounds.Width);
+        Assert.Equal(ShellLayout.MinSidePanelWidth, panel.Bounds.Width);
+        Assert.Equal(ShellLayout.MinConversationWidth, Conversation(), 1);
+
+        // A wider window gives the side panel its own width back; the sidebar keeps the width it was dragged to.
+        window.Width = 1600;
+        UiText.Settle(window);
+        Assert.Equal(1200 - ShellLayout.MinConversationWidth - ShellLayout.MinSidePanelWidth, sidebar.Bounds.Width);
+        Assert.Equal(ShellLayout.DefaultSidePanelWidth, panel.Bounds.Width);
+
+        // Narrower again, the side panel gives way first, then the sidebar, and the conversation keeps its room.
+        window.Width = 1100;
+        UiText.Settle(window);
+        Assert.Equal(ShellLayout.MinSidePanelWidth, panel.Bounds.Width);
+        Assert.Equal(1100 - ShellLayout.MinConversationWidth - ShellLayout.MinSidePanelWidth, sidebar.Bounds.Width);
+        Assert.Equal(ShellLayout.MinConversationWidth, Conversation(), 1);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task A_changed_files_box_ticks_it_as_reviewed_without_opening_the_diff()
     {
         await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
@@ -349,6 +384,44 @@ public class SidePanelUiTests
             Directory.Delete(folder, recursive: true);
         }
     }
+
+    [AvaloniaFact]
+    public async Task A_process_row_lights_up_under_the_pointer_and_while_its_menu_is_open()
+    {
+        await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true, dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        tab.IsSidePanelOpen = true;
+        tab.OpenSidePanelPage(SidePanelPage.Processes);
+        h.Time.Advance(TimeSpan.FromSeconds(10));
+        // The panel's pages are only in the visual tree once it has been laid out open.
+        UiText.Settle(window);
+        var view = window.GetVisualDescendants().OfType<TabView>().Single();
+        List<Border> Rows() => [.. view.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("processrow"))];
+        await UiText.SettleUntilAsync(window, () => Rows().Count > 0, "the processes");
+        var row = Rows()[0];
+        var hover = Assert.IsAssignableFrom<ISolidColorBrush>(window.FindResource(window.ActualThemeVariant, "HoverBrush")).Color;
+        Assert.Equal(Colors.Transparent, Fill(row));
+
+        window.MouseMove(row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value);
+        UiText.Settle(window);
+        Assert.Equal(hover, Fill(row));
+
+        window.MouseMove(new Point(5, 5));
+        UiText.Settle(window);
+        Assert.Equal(Colors.Transparent, Fill(row));
+
+        // Its menu open, the row stays lit, so it's plain which process the menu is for.
+        row.ContextMenu!.Open(row);
+        UiText.Settle(window);
+        Assert.Equal(hover, Fill(row));
+        row.ContextMenu.Close();
+        UiText.Settle(window);
+        Assert.Equal(Colors.Transparent, Fill(row));
+        window.Close();
+    }
+
+    private static Color? Fill(Border border) => (border.Background as ISolidColorBrush)?.Color;
 
     private static List<CheckBox> Boxes(ListBox list) =>
         list.GetVisualDescendants().OfType<CheckBox>().Where(c => c.Classes.Contains("reviewed")).ToList();

@@ -22,6 +22,8 @@
 "Motion"
 [choice] "Follow the system"
 "Leave a font empty for the default. A font that isn't installed on this machine falls back to the default."
+[ ] Full-width conversation
+"The conversation and the message box fill the tab's width. Off, they stop at a width that's easy to read, in the middle of a wide window."
 [ ] Show thinking expanded
 [x] Show fun words while Claude works
 "A twinkling line above the message box, such as “Noodling… 42s · 3.1k tokens”. Off, it says “Working…”. Verbs added to spinnerVerbs in Claude Code's settings show here too."

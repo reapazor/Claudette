@@ -1,8 +1,11 @@
 using System.Text.Json.Nodes;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.VisualTree;
 using Claudette.App.Controls;
 using Claudette.App.Services;
@@ -13,39 +16,57 @@ using Claudette.App.Views;
 namespace Claudette.App.UiTests;
 
 /// <summary>
-/// Every page of the side panel scrolls both ways (DESIGN.md §3, "Side panel"): a row's name and numbers stay in view,
-/// long lines (a path, a command line, a log line) are shown whole and scroll sideways, and text wraps at the width shown.
+/// Every page of the side panel wraps its text at the width shown, clear of the scroll bar (DESIGN.md §3, "Side panel"):
+/// a path, a process's name and a log line wrap, and a row's numbers line up at its right edge. Only a tree's row nested
+/// past the edge scrolls sideways.
 /// </summary>
 public class SidePanelScrollUiTests
 {
     private static readonly string LongName = "very_long_" + string.Concat(Enumerable.Repeat("unbreakable_", 30));
 
     [AvaloniaFact]
-    public void A_rows_summary_stays_in_view_while_its_long_text_scrolls_sideways()
+    public void A_tree_rows_text_wraps_clear_of_the_scroll_bar()
     {
-        var stats = new TextBlock { Text = "+12 −3" };
-        var summary = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Children = { new TextBlock { Text = "Program.cs" } } };
+        var name = new TextBlock { Text = LongName, TextWrapping = TextWrapping.Wrap };
+        var stats = new TextBlock { Text = "50 MB" };
+        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Children = { name, stats } };
         Grid.SetColumn(stats, 1);
-        summary.Children.Add(stats);
-        var viewer = new ScrollViewer
-        {
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Content = new StackPanel { Margin = new Thickness(8, 0), Children = { new ShownWidth { Child = summary }, new TextBlock { Text = LongName } } },
-        };
+        // Rows enough to scroll up and down, so there's a scroll bar to keep clear of.
+        var rows = new StackPanel { Margin = new Thickness(8, 0, 0, 0), Children = { new ShownWidth { Child = row } } };
+        rows.Children.AddRange(Enumerable.Range(0, 40).Select(i => new TextBlock { Text = $"row {i}" }));
+        var viewer = new ScrollViewer { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, Content = rows };
         var window = UiText.Show(viewer, 300, 200);
 
-        Assert.True(viewer.Extent.Width > viewer.Viewport.Width + 100, "the long line scrolls");
-        Assert.InRange(RightEdge(stats, viewer), viewer.Viewport.Width - 20, viewer.Viewport.Width);
-
-        // Scrolled sideways, the summary keeps its width.
-        viewer.Offset = new Vector(150, 0);
-        UiText.Settle(window);
-        Assert.Equal(viewer.Viewport.Width - 8, summary.Bounds.Width, 1);
+        Assert.Equal(viewer.Viewport.Width, viewer.Extent.Width, 1);
+        Assert.True(name.Bounds.Height > name.FontSize * 3, "the long name wraps");
+        var bar = viewer.GetVisualDescendants().OfType<ScrollBar>().Single(b => b.Orientation == Orientation.Vertical);
+        Assert.True(bar.IsVisible, "the scroll bar shows");
+        Assert.InRange(RightEdge(stats, viewer), LeftEdge(bar, viewer) - 6, LeftEdge(bar, viewer));
         window.Close();
     }
 
     [AvaloniaFact]
-    public async Task A_project_runs_long_log_lines_scroll_sideways()
+    public void Only_a_tree_row_nested_past_the_edge_scrolls_sideways()
+    {
+        var deep = new ShownWidth { Margin = new Thickness(250, 0, 0, 0), Child = new TextBlock { Text = LongName, TextWrapping = TextWrapping.Wrap } };
+        var viewer = new ScrollViewer { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, Content = new StackPanel { Children = { deep } } };
+        var window = UiText.Show(viewer, 300, 200);
+
+        // Its text wraps at the least width, and the row goes past the edge.
+        var text = deep.Child!;
+        Assert.InRange(text.Bounds.Width, deep.Minimum - 20, deep.Minimum);
+        Assert.True(viewer.Extent.Width > viewer.Viewport.Width + 50, "the row scrolls sideways");
+
+        // Scrolled sideways, it keeps its width.
+        var width = text.Bounds.Width;
+        viewer.Offset = new Vector(70, 0);
+        UiText.Settle(window);
+        Assert.Equal(width, text.Bounds.Width, 1);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task A_project_runs_long_log_lines_wrap()
     {
         var launcher = new FakeLauncher();
         await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher(), launcher: launcher);
@@ -60,13 +81,17 @@ public class SidePanelScrollUiTests
         await UiText.SettleUntilAsync(window, () => run.Output.Count > 0, "the output");
         UiText.Settle(window);
 
-        var viewer = Viewer(window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "ProjectOutputList"));
-        Assert.True(viewer.Extent.Width > viewer.Viewport.Width + 100, "the log line scrolls sideways");
+        var output = window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "ProjectOutputList");
+        var viewer = Viewer(output);
+        var line = output.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text?.Contains(LongName, StringComparison.Ordinal) == true);
+        Assert.Equal(viewer.Viewport.Width, viewer.Extent.Width, 1);
+        Assert.True(line.Bounds.Height > line.FontSize * 3, "the log line wraps");
+        Assert.InRange(RightEdge(line, viewer), viewer.Viewport.Width - 24, viewer.Viewport.Width - 16);
         window.Close();
     }
 
     [AvaloniaFact]
-    public async Task A_changed_files_path_scrolls_sideways_while_its_name_and_counts_stay_in_view()
+    public async Task A_changed_files_path_wraps_while_its_counts_stay_at_the_right_edge()
     {
         await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
         var tab = await h.OpenTabAsync();
@@ -85,13 +110,15 @@ public class SidePanelScrollUiTests
 
         var viewer = Viewer(list);
         var counts = list.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == "+1 −1");
-        Assert.True(viewer.Extent.Width > viewer.Viewport.Width + 100, "the path scrolls sideways");
-        Assert.InRange(RightEdge(counts, viewer), 0, viewer.Viewport.Width);
+        var path = list.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text?.Contains("a_folder_with_a_long_name", StringComparison.Ordinal) == true);
+        Assert.Equal(viewer.Viewport.Width, viewer.Extent.Width, 1);
+        Assert.True(path.Bounds.Height > path.FontSize * 3, "the path wraps");
+        Assert.InRange(RightEdge(counts, viewer), viewer.Viewport.Width - 24, viewer.Viewport.Width - 16);
         window.Close();
     }
 
     [AvaloniaFact]
-    public async Task A_processes_command_line_scrolls_sideways_while_its_numbers_stay_in_view()
+    public async Task A_processes_name_wraps_its_numbers_stay_clear_of_the_scroll_bar_and_its_command_line_is_in_its_tooltip()
     {
         await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true, dispatcher: new AvaloniaUiDispatcher());
         var tab = await h.OpenTabAsync();
@@ -103,12 +130,19 @@ public class SidePanelScrollUiTests
         // The panel's pages are only in the visual tree once it has been laid out open.
         UiText.Settle(window);
         var viewer = window.GetVisualDescendants().OfType<ScrollViewer>().Single(v => v.Name == "ProcessesScroller");
-        await UiText.SettleUntilAsync(window, () => viewer.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == $"{LongName} --serve"), "the process");
+        TextBlock? Name() => viewer.GetVisualDescendants().OfType<TextBlock>().SingleOrDefault(t => t.Inlines?.OfType<Run>().Any(r => r.Text == LongName) == true);
+        await UiText.SettleUntilAsync(window, () => Name() is not null, "the process");
         UiText.Settle(window);
 
         var memory = viewer.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == "50 MB");
-        Assert.True(viewer.Extent.Width > viewer.Viewport.Width + 100, "the command line scrolls sideways");
-        Assert.InRange(RightEdge(memory, viewer), viewer.Viewport.Width - 40, viewer.Viewport.Width);
+        var name = Name()!;
+        Assert.Equal(viewer.Viewport.Width, viewer.Extent.Width, 1);
+        Assert.True(name.Bounds.Height > name.FontSize * 3, "the name wraps");
+        Assert.InRange(RightEdge(memory, viewer), viewer.Viewport.Width - 24, viewer.Viewport.Width - 16);
+
+        Assert.DoesNotContain(viewer.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.Contains("--serve", StringComparison.Ordinal) == true);
+        var row = name.GetVisualAncestors().OfType<Border>().First(b => ToolTip.GetTip(b) is not null);
+        Assert.Contains($"{LongName} --serve", ToolTip.GetTip(row) as string, StringComparison.Ordinal);
         window.Close();
     }
 
@@ -136,13 +170,12 @@ public class SidePanelScrollUiTests
         UiText.Settle(window);
 
         var viewer = window.GetVisualDescendants().OfType<ScrollViewer>().Single(v => v.Name == "TasksScroller");
-        Assert.Equal(ScrollBarVisibility.Auto, viewer.HorizontalScrollBarVisibility);
         Assert.Equal(viewer.Viewport.Width, viewer.Extent.Width, 1);
         window.Close();
     }
 
     [AvaloniaFact]
-    public async Task Every_page_scrolls_sideways_when_it_has_to()
+    public async Task Only_the_trees_scroll_sideways()
     {
         await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
         var tab = await h.OpenTabAsync();
@@ -154,7 +187,8 @@ public class SidePanelScrollUiTests
         var view = window.GetVisualDescendants().OfType<TabView>().Single();
         var panel = view.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "SidePanel");
 
-        // Every page's scroll viewer and list, shown or not: none is left unable to scroll sideways.
+        // Every page's scroll viewer and list, shown or not. One that scrolls sideways gives its text all the width it
+        // likes, so the text never wraps; only the trees do, for rows nested past the edge.
         var scrolling = panel.GetVisualDescendants().OfType<Control>()
             .Where(c => c is ScrollViewer or ListBox or TreeView && c.TemplatedParent is null)
             .ToList();
@@ -168,7 +202,8 @@ public class SidePanelScrollUiTests
         foreach (var control in scrolling)
         {
             var sideways = control is ScrollViewer viewer ? viewer.HorizontalScrollBarVisibility : ScrollViewer.GetHorizontalScrollBarVisibility(control);
-            Assert.True(sideways != ScrollBarVisibility.Disabled, $"{control.GetType().Name} {control.Name} can't scroll sideways");
+            var tree = control is TreeView || control.Name == "ProcessesScroller";
+            Assert.True(sideways == (tree ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled), $"{control.GetType().Name} {control.Name} scrolls sideways: {sideways}");
         }
         window.Close();
     }
@@ -176,6 +211,8 @@ public class SidePanelScrollUiTests
     private static ScrollViewer Viewer(Control list) => list.GetVisualDescendants().OfType<ScrollViewer>().First();
 
     private static double RightEdge(Control control, Visual to) => control.TranslatePoint(new Point(control.Bounds.Width, 0), to)!.Value.X;
+
+    private static double LeftEdge(Control control, Visual to) => control.TranslatePoint(default, to)!.Value.X;
 
     private static JsonObject Edit(string id, string path) => new()
     {

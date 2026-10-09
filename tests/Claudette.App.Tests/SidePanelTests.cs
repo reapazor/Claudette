@@ -12,7 +12,7 @@ namespace Claudette.App.Tests;
 public class SidePanelTests
 {
     [Fact]
-    public async Task Resizing_the_side_panel_resizes_every_tabs_within_limits_and_is_saved()
+    public async Task Resizing_the_side_panel_resizes_every_tabs_down_to_its_least_and_is_saved()
     {
         await using var h = new TabTestHarness();
         h.Services.State.Tabs = [new TabState { Folder = h.WorkFolder, IsPinned = true }, new TabState { Folder = h.WorkFolder, IsPinned = true }];
@@ -26,8 +26,9 @@ public class SidePanelTests
 
         first.ResizeSidePanel(40);
         Assert.Equal(ShellLayout.MinSidePanelWidth, second.SidePanelWidth);
+        // No most of its own: each tab's view shows it as far as leaves the conversation room.
         first.ResizeSidePanel(5000);
-        Assert.Equal(ShellLayout.MaxSidePanelWidth, second.SidePanelWidth);
+        Assert.Equal(5000, second.SidePanelWidth);
         Assert.Contains(nameof(TabViewModel.SidePanelWidth), changed);
 
         // Kept when the drag ends, for every tab and the next launch.

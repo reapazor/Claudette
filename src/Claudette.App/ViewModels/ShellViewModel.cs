@@ -40,10 +40,12 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         _services.Worktrees.OpenTabs = () => [.. AllTabs.Select(t => t.State)];
         IsCompact = services.Settings.Appearance.Density == Density.Compact;
         IsClaudeStyle = services.Settings.Appearance.Style == AppStyle.Claude;
+        IsFullWidth = services.Settings.Appearance.FullWidthConversation;
         _services.SettingsChanged += (_, _) =>
         {
             IsCompact = _services.Settings.Appearance.Density == Density.Compact;
             IsClaudeStyle = _services.Settings.Appearance.Style == AppStyle.Claude;
+            IsFullWidth = _services.Settings.Appearance.FullWidthConversation;
             foreach (var tab in AllTabs)
             {
                 tab.OnSettingsChanged();
@@ -787,6 +789,13 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
     /// </summary>
     [ObservableProperty]
     public partial bool IsClaudeStyle { get; private set; }
+
+    /// <summary>
+    /// Settings → Appearance → Full-width conversation (DESIGN.md §14): the view takes the <c>fullwidth</c> class, whose
+    /// styles let the conversation, the composer and the strips over them fill the tab rather than stop at 900 pixels.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsFullWidth { get; private set; }
 
     // ---- Sidebar and side panel (DESIGN.md §3, §4, "Sidebar") -------------------------------------------------
 

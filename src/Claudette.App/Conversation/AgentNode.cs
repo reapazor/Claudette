@@ -83,6 +83,12 @@ public sealed partial class AgentNode : ObservableObject
     /// <summary>Claude Code's id for the running subagent (<c>task_started</c>), which <c>stop_task</c> takes.</summary>
     public string? TaskId { get; private set; }
 
+    /// <summary>
+    /// The subagent's agent ID, which <c>SendMessage</c> reaches it by (DESIGN.md §5, "Autocomplete"): its task's ID
+    /// while it runs, then its result's <c>agentId</c>.
+    /// </summary>
+    public string? AgentId { get; private set; }
+
     /// <summary>Live, rather than read back from a transcript: running time and Stop only mean something then.</summary>
     public bool IsLive { get; }
 
@@ -318,6 +324,7 @@ public sealed partial class AgentNode : ObservableObject
             Model = result.GetString("resolvedModel") ?? Model;
             if (result.GetString("agentId") is { } agentId)
             {
+                AgentId = agentId;
                 _map.IndexTask(agentId, this);
             }
             if (result.GetString("status") is "async_launched" or "remote_launched")
@@ -359,6 +366,7 @@ public sealed partial class AgentNode : ObservableObject
     internal void OnTaskStarted(string taskId, JsonObject raw)
     {
         TaskId = taskId;
+        AgentId ??= taskId;
         if (raw.GetBool("is_backgrounded") == true)
         {
             IsBackground = true;

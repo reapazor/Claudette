@@ -198,6 +198,26 @@ public sealed partial class UserMessageItem(string text, string? suffixText = nu
         ? "Told Claude this tab is no longer a thread"
         : "Told Claude about its sub-threads";
 
+    /// <summary>
+    /// The note on the sessions and agents the message names, sent after it (DESIGN.md §5, "Autocomplete"): the card says
+    /// so in a line, with the note as its tip.
+    /// </summary>
+    public string? MentionNote { get; init; }
+
+    /// <summary>The names of the sessions and agents the message names.</summary>
+    public IReadOnlyList<string> Mentioned { get; init; } = [];
+
+    public bool HasMentionNote => MentionNote is not null;
+
+    /// <summary>The line under a message that named sessions or agents.</summary>
+    public string MentionNoteText => Mentioned.Count switch
+    {
+        0 => "Told Claude how to reach who it names",
+        1 => $"Told Claude how to reach {Mentioned[0]}",
+        2 => $"Told Claude how to reach {Mentioned[0]} and {Mentioned[1]}",
+        _ => $"Told Claude how to reach {Mentioned[0]} and {Mentioned.Count - 1} others",
+    };
+
     /// <summary>Attached images, shown as thumbnails (DESIGN.md §5, "Attachments").</summary>
     public IReadOnlyList<MessageImage> Images { get; init; } = [];
 

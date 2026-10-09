@@ -35,8 +35,8 @@
       <Border Classes="prompt" IsVisible="{Binding HasConflict}">
         <StackPanel Spacing="8">
           <TextBlock TextWrapping="Wrap" Text="{Binding ConflictText}" />
-          <ScrollViewer Classes="theirtext" HorizontalScrollBarVisibility="Auto">
-            <SelectableTextBlock Classes="mono small" Text="{Binding TheirText}" AutomationProperties.Name="Their text" />
+          <ScrollViewer Classes="theirtext" HorizontalScrollBarVisibility="Disabled">
+            <SelectableTextBlock Classes="mono small" Text="{Binding TheirText}" TextWrapping="Wrap" AutomationProperties.Name="Their text" />
           </ScrollViewer>
           <WrapPanel ItemSpacing="8" LineSpacing="6" IsEnabled="{Binding !IsResolving}">
             <Button Classes="accent" Content="Keep both" Command="{Binding KeepBothCommand}" ToolTip.Tip="Yours, then what only theirs has" />

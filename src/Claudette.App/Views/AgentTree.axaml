@@ -47,7 +47,7 @@
   <Panel>
     <TextBlock Classes="muted small" Margin="12,4" TextWrapping="Wrap" IsVisible="{Binding !HasAgents}"
                Text="When Claude hands work to subagents, they show here as a tree under the agent that started them." />
-    <TreeView x:Name="Tree" Classes="agents" Background="Transparent" Margin="4,0" IsVisible="{Binding HasAgents}"
+    <TreeView x:Name="Tree" Classes="agents" Background="Transparent" Margin="4,0,0,0" IsVisible="{Binding HasAgents}"
               ScrollViewer.HorizontalScrollBarVisibility="Auto"
               ItemsSource="{Binding Agents.Roots}" SelectedItem="{Binding SelectedAgent, Mode=TwoWay}"
               KeyDown="OnTreeKeyDown" AutomationProperties.Name="Agents">
@@ -59,7 +59,8 @@
       </TreeView.ItemsPanel>
       <TreeView.ItemTemplate>
         <TreeDataTemplate DataType="conv:AgentNode" ItemsSource="{Binding Children}">
-          <!-- A row stays within the width shown, however deep: only rows nested past that scroll sideways (DESIGN.md §3) -->
+          <!-- A row stays within the width shown, clear of the scroll bar, however deep: only rows nested past that scroll
+               sideways (DESIGN.md §3) -->
           <controls:ShownWidth>
             <Border Classes="agentrow" Classes.waiting="{Binding IsWaiting}" ToolTip.Tip="{Binding Tooltip}">
               <Grid ColumnDefinitions="16,*,Auto,Auto">

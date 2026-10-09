@@ -40,6 +40,9 @@
     </Grid>
     <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,-4,0,0"
                Text="Leave a font empty for the default. A font that isn't installed on this machine falls back to the default." />
+    <CheckBox Content="Full-width conversation" IsChecked="{Binding FullWidthConversation}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="The conversation and the message box fill the tab's width. Off, they stop at a width that's easy to read, in the middle of a wide window." />
     <CheckBox Content="Show thinking expanded" IsChecked="{Binding ExpandThinking}" />
     <CheckBox Content="Show fun words while Claude works" IsChecked="{Binding FunWorkingWords}" />
     <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"

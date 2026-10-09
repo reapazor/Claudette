@@ -544,6 +544,39 @@ public class MainWindowTests
         Assert.Equal(comfortable.Composer, composer.Bounds.Height, precision: 3);
     }
 
+    [AvaloniaFact]
+    public async Task Full_width_conversation_lets_the_conversation_and_the_composer_fill_the_tab()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        tab.ComposerText = "Fix the build";
+        await tab.SendCommand.ExecuteAsync(null);
+        h.Transport.EmitTurn("Done.");
+        var window = UiText.Show(new ShellView { DataContext = h.Shell }, width: 1800);
+        await UiText.SettleUntilAsync(window, () => UiText.Describe(window).Contains("Done.", StringComparison.Ordinal), "the reply");
+        var scroll = window.GetVisualDescendants().OfType<ScrollViewer>().Single(s => s.Name == "ConversationScroll");
+        var conversation = window.GetVisualDescendants().OfType<ItemsControl>().Single(c => c.Name == "ConversationItems");
+        var composer = window.GetVisualDescendants().OfType<StackPanel>().Single(p => p.Classes.Contains("composerarea"));
+        // Off by default: a column that's easy to read, in the middle of a wide window.
+        Assert.Equal(900, conversation.Bounds.Width, precision: 3);
+        Assert.Equal(948, composer.Bounds.Width, precision: 3);
+
+        h.Services.Settings.Appearance.FullWidthConversation = true;
+        h.Services.SaveSettings();
+        UiText.Settle(window);
+
+        Assert.Contains("fullwidth", window.GetVisualDescendants().OfType<ShellView>().Single().Classes);
+        Assert.Equal(scroll.Viewport.Width - conversation.Margin.Left - conversation.Margin.Right, conversation.Bounds.Width, precision: 3);
+        Assert.True(composer.Bounds.Width > 948, $"The composer is {composer.Bounds.Width} px wide, as before.");
+
+        h.Services.Settings.Appearance.FullWidthConversation = false;
+        h.Services.SaveSettings();
+        UiText.Settle(window);
+
+        Assert.Equal(900, conversation.Bounds.Width, precision: 3);
+        Assert.Equal(948, composer.Bounds.Width, precision: 3);
+    }
+
     /// <summary>What the menu does with a click on a check item: it ticks or unticks the item, then raises Click.</summary>
     private static void ClickMenuItem(Window window, MenuItem item)
     {

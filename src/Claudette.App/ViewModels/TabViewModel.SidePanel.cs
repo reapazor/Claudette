@@ -52,6 +52,16 @@ public sealed partial class TabViewModel
         }
         ProjectTools.Runs.UpdateShownRun();
         ProcessMonitor.OnSidePanelOpenChanged();
+        TellLayoutAboutSidePanel();
+    }
+
+    /// <summary>The selected tab's side panel is what the sidebar leaves room for (DESIGN.md §4, "Sidebar").</summary>
+    private void TellLayoutAboutSidePanel()
+    {
+        if (IsSelected)
+        {
+            _shell.Layout.IsSidePanelShown = IsSidePanelOpen;
+        }
     }
 
     /// <summary>Which page of the side panel shows.</summary>

@@ -54,7 +54,8 @@ public sealed partial class SuffixChip(QuickSuffix suffix, bool isKept) : Observ
 public sealed record SuffixMenuItem(QuickSuffix Suffix, int? Number, string? Shortcut, bool IsOn);
 
 /// <summary>One row of the tab info card (DESIGN.md §4).</summary>
-public sealed record InfoRow(string Label, string Value);
+/// <param name="CanCopy">The tab info's card has <b>Copy</b> for it: an ID or name to paste elsewhere.</param>
+public sealed record InfoRow(string Label, string Value, bool CanCopy = false);
 
 /// <summary>A row of the token breakdown popover.</summary>
 /// <summary>
@@ -135,6 +136,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         Attachments.CollectionChanged += (_, _) => DraftChanged();
         PastedTexts.CollectionChanged += (_, _) => DraftChanged();
         services.Drafts.StashChanged += OnStashChanged;
+        services.LiveSessions.Changed += OnLiveSessionsChanged;
         Context.RefreshTokens();
         RestoreLimitWait();
         // Project tools (DESIGN.md §18): the project and the folder's own actions and links, as soon as they're read.
@@ -234,17 +236,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         var name = RenameText.Trim();
         State.UserName = name.Length == 0 || name == State.AutoName ? null : name;
         NameChanged();
-        if (State.UserName is { } userName && _services.Settings.General.RenameInClaudeCode && _session is not null)
-        {
-            try
-            {
-                await _session.RenameSessionAsync(userName);
-            }
-            catch (Exception)
-            {
-                // Optional sync; the name is kept in Claudette either way.
-            }
-        }
+        await _claudeNameSync;
     }
 
     [RelayCommand]
@@ -264,6 +256,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         _services.SaveState();
         // The usage history keeps the tab's last name, for its rows once it's closed (DESIGN.md §6).
         _services.Usage?.OnTabRenamed(Id, DisplayName);
+        // Other sessions message it by the tab's name (DESIGN.md §13, "Session naming").
+        SyncClaudeName();
     }
 
     // ---- Pinning (DESIGN.md §4) ---------------------------------------------------------------------------
@@ -359,6 +353,15 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 rows.Add(new InfoRow("Started", started.ToLocalTime().ToString("g")));
             }
+            // What claude --resume takes, and what other sessions message it by (DESIGN.md §13, "Session naming").
+            if (State.SessionId is { } sessionId)
+            {
+                rows.Add(new InfoRow("Session", sessionId, CanCopy: true));
+            }
+            if (ReachedAs is { } reachedAs)
+            {
+                rows.Add(new InfoRow("Reached as", reachedAs, CanCopy: true));
+            }
             rows.Add(new InfoRow("Tokens", $"{Context.TokensShort} · {State.Tokens.Turns} turns"));
             if (RunningVersion is { } running)
             {
@@ -414,6 +417,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
     partial void OnIsSelectedChanged(bool value)
     {
         Working.SetShown(value);
+        TellLayoutAboutSidePanel();
         if (value)
         {
             ChangedFiles.RefreshIfStale();
@@ -799,6 +803,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         OnBranchChanged();
         OnPropertyChanged(nameof(ShowTaskProgressBadge));
         OnPropertyChanged(nameof(RowDetail));
+        // Naming sessions after their tabs turned on: a running one takes its name now (DESIGN.md §13).
+        SyncClaudeName();
     }
 
     /// <summary>
@@ -879,22 +885,31 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         // What a thread's Claude should know about its sub-threads goes after the message, not after a command
         // (DESIGN.md §18, "Threads").
         var threadNote = OutgoingMessages.IsSlashCommand(text) ? null : TakeThreadNote();
-        var card = _conversation.AddUserMessage(text, suffixText, images: images, threadNote: threadNote);
-        suffixText = threadNote is null ? suffixText : suffixText is null ? threadNote : $"{suffixText}\n\n{threadNote}";
+        // A mention of another session or agent reaches Claude as its name, with how to message it (DESIGN.md §5,
+        // "Autocomplete"); the card keeps what was typed.
+        var mentions = OutgoingMessages.IsSlashCommand(text) ? null : ResolveMentions(text);
+        var mentionNote = mentions is null ? null : SessionMentions.Note(mentions.Mentioned);
+        var card = _conversation.AddUserMessage(text, suffixText, images: images, threadNote: threadNote, mentionNote: mentionNote,
+            mentioned: mentions?.Mentioned.Select(m => m.Name).ToArray());
+        foreach (var note in new[] { threadNote, mentionNote })
+        {
+            suffixText = note is null ? suffixText : suffixText is null ? note : $"{suffixText}\n\n{note}";
+        }
         card.SentId = stamp.Uuid;
         card.TypedText = pastes.Count > 0 ? typed : null;
         card.PastedTexts = pastes;
         _recall.Add(typed);
         _firstPrompt ??= text.Length > 0 ? text : suffixText;
+        var sent = mentions?.Text ?? text;
         if (HoldsWhileWorking)
         {
             // Held until the turn ends, as Settings → General says (DESIGN.md §5, "Queued messages").
-            Hold(card, new PendingMessage(text, images, suffixText, stamp));
+            Hold(card, new PendingMessage(sent, images, suffixText, stamp));
             return;
         }
         // Sent while Claude works, it waits its turn (DESIGN.md §5, "Queued messages").
         card.IsQueued = IsWorking;
-        await SendRawAsync(text, images, suffixText, stamp);
+        await SendRawAsync(sent, images, suffixText, stamp);
         _ = RequestTitleAsync();
     }
 
@@ -1264,6 +1279,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             {
                 WorkingDirectory = Folder,
                 Resume = resume,
+                // What other sessions message it by: Claude Code doesn't keep it when a session resumes (DESIGN.md §13).
+                Name = NameForClaudeCode,
                 ForkSession = fork,
                 ResumeSessionAt = resumeAt,
                 ResumeDropsTurn = resumeAt is null ? null : State.ResumeDropsTurn,
@@ -1298,6 +1315,8 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
             _session = session;
+            _claudeName = options.Name;
+            _services.LiveSessions.Refresh();
             if (!fork)
             {
                 State.ResumeAt = null;
@@ -1711,7 +1730,13 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             case TurnStarted started:
                 _turnsStarted++;
                 HasMcpServers = started.Init.McpServerCount > 0;
-                State.SessionId = started.Init.SessionId;
+                if (State.SessionId != started.Init.SessionId)
+                {
+                    // A new session, a copy's or after /clear: the info card shows its ID, and the name it's reached by.
+                    State.SessionId = started.Init.SessionId;
+                    OnPropertyChanged(nameof(InfoRows));
+                    _services.LiveSessions.Refresh();
+                }
                 OnWorkingFolderReported(started.Init.Cwd);
                 if (_forkAwaitingId)
                 {
@@ -1823,6 +1848,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 break;
             case SessionExited exited:
                 _session = null;
+                _claudeName = null;
                 RemoteControl.Reset();
                 SetRunningVersion(null);
                 _checkIns.TurnEnded();
@@ -2024,6 +2050,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         FlushDraft();
         await _closing.CancelAsync();
         _services.Drafts.StashChanged -= OnStashChanged;
+        _services.LiveSessions.Changed -= OnLiveSessionsChanged;
         _checkIns.Dispose();
         _autoContinue.Dispose();
         foreach (var timer in _copied.Values)
