@@ -348,10 +348,26 @@
        it's plain which process the menu is for. Its numbers keep clear of the scroll bar on their own (Controls/ShownWidth). -->
   <Style Selector="Border.processrow">
     <Setter Property="Background" Value="Transparent" />
-    <Setter Property="Padding" Value="12,3,0,3" />
+    <Setter Property="Padding" Value="4,3,0,3" />
   </Style>
   <Style Selector="Border.processrow:pointerover, Border.processrow.menuopen">
     <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+  </Style>
+  <!-- Its arrow, before the name, when processes run under it: as tall as the row, so it's easy to hit, and drawn beside
+       the name's first line. Rows without one keep its room, so names line up under their parent's. -->
+  <Style Selector="Button.processfold">
+    <Setter Property="Padding" Value="0,5,0,0" />
+    <Setter Property="VerticalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Top" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.processfold Path">
+    <Setter Property="Stroke" Value="{DynamicResource MutedTextBrush}" />
+    <Setter Property="StrokeThickness" Value="1.4" />
+    <Setter Property="Width" Value="9" />
+    <Setter Property="Height" Value="9" />
+    <Setter Property="Stretch" Value="Uniform" />
   </Style>
   <!-- An MCP server's row (DESIGN.md §4, "MCP servers"): lit under the pointer, as a process's is, so it's plain which
        server its buttons are for. The right side keeps its text clear of the scroll bar. -->

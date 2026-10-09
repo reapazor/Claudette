@@ -421,6 +421,9 @@ internal sealed class FakeProcessTree(int rootPid, TimeProvider time) : ProcessT
 {
     public List<(int Pid, string Name)> Children { get; } = [];
 
+    /// <summary>The parent of a child that isn't directly under <c>claude</c>, by its PID.</summary>
+    public Dictionary<int, int> Parents { get; } = [];
+
     public bool Killed { get; private set; }
 
     public List<int> Stopped { get; } = [];
@@ -430,7 +433,7 @@ internal sealed class FakeProcessTree(int rootPid, TimeProvider time) : ProcessT
         new ProcessSnapshot { Pid = RootPid, ParentPid = 1, Name = "claude", IsRoot = true, MemoryBytes = 100 << 20, CpuPercent = 1, FirstSeen = time.GetUtcNow() },
         .. Children.Select(c => new ProcessSnapshot
         {
-            Pid = c.Pid, ParentPid = RootPid, Name = c.Name, MemoryBytes = 50 << 20, CpuPercent = 20,
+            Pid = c.Pid, ParentPid = Parents.GetValueOrDefault(c.Pid, RootPid), Name = c.Name, MemoryBytes = 50 << 20, CpuPercent = 20,
             CommandLine = includeCommandLines ? $"{c.Name} --serve" : null, FirstSeen = time.GetUtcNow(),
         }),
     ];

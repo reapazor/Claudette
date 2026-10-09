@@ -41,6 +41,8 @@ public partial class SidePanelView : UserControl
         {
             tab.ContextMenu = PageTabMenu((SidePanelPage)tab.Tag!);
         }
+        // Tunnel, so an Alt+click on a process's arrow is taken before the arrow clicks.
+        ProcessesScroller.AddHandler(PointerPressedEvent, OnProcessPressed, RoutingStrategies.Tunnel);
     }
 
     private TabViewModel? ViewModel => DataContext as TabViewModel;
@@ -299,6 +301,22 @@ public partial class SidePanelView : UserControl
             && source.FindAncestorOfType<Button>(includeSelf: true) is null
             ? source.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as ChangedFileRow
             : null;
+
+    // ---- Processes (DESIGN.md §4, "Process monitor") ---------------------------------------------------------------
+
+    /// <summary>Alt+click on a process's arrow expands or collapses every level under it too.</summary>
+    private void OnProcessPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Alt)
+            && e.GetCurrentPoint(ProcessesScroller).Properties.IsLeftButtonPressed
+            && (e.Source as Visual)?.FindAncestorOfType<Button>(includeSelf: true) is { DataContext: ProcessRow row } arrow
+            && arrow.Classes.Contains("processfold")
+            && ViewModel is { } tab)
+        {
+            tab.ProcessMonitor.ToggleProcessAllLevels(row);
+            e.Handled = true;
+        }
+    }
 
     // ---- A project job's output (DESIGN.md §18) --------------------------------------------------------------------
 

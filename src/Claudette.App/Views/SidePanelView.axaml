@@ -342,30 +342,42 @@
                 <!-- Lit under the pointer, as a changed file's row is, and while its menu is open -->
                 <Border Classes="processrow" Classes.menuopen="{Binding #ProcessMenu.IsOpen}" ToolTip.Tip="{Binding Tooltip}">
                   <controls:ShownWidth Margin="{Binding Indent, Converter={x:Static vm:Converters.LeftMargin}}">
-                    <StackPanel Spacing="1">
-                      <Grid ColumnDefinitions="*,Auto,Auto">
-                        <TextBlock TextWrapping="Wrap">
-                          <Run Text="{Binding Name}" FontWeight="SemiBold" />
-                          <Run Classes="muted" Text="{Binding Pid}" FontSize="11" />
-                        </TextBlock>
-                        <TextBlock Grid.Column="1" Classes="mono small" Text="{Binding CpuText}" Margin="8,0,0,0" MinWidth="44" TextAlignment="Right" />
-                        <TextBlock Grid.Column="2" Classes="mono small muted" Text="{Binding MemoryText}" Margin="8,0,0,0" MinWidth="56" TextAlignment="Right" />
-                      </Grid>
-                      <!-- Its running time, then its arguments cut short on one line, in what room the time leaves -->
-                      <DockPanel>
-                        <TextBlock Classes="muted small" TextWrapping="Wrap">
-                          <Run Text="{Binding RunningText}" />
-                          <Run Text="{Binding IsDetached, Converter={x:Static vm:Converters.DetachedText}}" />
-                        </TextBlock>
-                        <TextBlock Classes="mono small muted" Margin="8,0,0,0" Text="{Binding ShortArguments}" TextTrimming="CharacterEllipsis" MaxLines="1" VerticalAlignment="Center"
-                                   IsVisible="{Binding ShortArguments, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                      </DockPanel>
-                      <!-- The tool call that started it, on one line: every process it started shows the same one -->
-                      <Button Classes="flat" Padding="0" IsVisible="{Binding HasTool}" HorizontalAlignment="Left" ToolTip.Tip="{Binding ToolText}"
-                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.ShowProcessToolCommand}" CommandParameter="{Binding}">
-                        <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding ToolText}" TextTrimming="CharacterEllipsis" MaxLines="1" />
+                    <Grid ColumnDefinitions="14,*">
+                      <!-- Its arrow, when processes run under it; Alt+click takes every level under it along -->
+                      <Button Classes="flat processfold" IsVisible="{Binding HasChildren}" AutomationProperties.Name="{Binding ToggleText}"
+                              Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.ToggleProcessCommand}" CommandParameter="{Binding}">
+                        <Panel>
+                          <Path Data="{StaticResource IconChevronDown}" IsVisible="{Binding IsExpanded}" />
+                          <Path Data="{StaticResource IconChevronRight}" IsVisible="{Binding !IsExpanded}" />
+                        </Panel>
                       </Button>
-                    </StackPanel>
+                      <StackPanel Grid.Column="1" Spacing="1">
+                        <Grid ColumnDefinitions="*,Auto,Auto">
+                          <!-- Collapsed, it counts the processes under it, and its numbers are theirs with its own -->
+                          <TextBlock TextWrapping="Wrap">
+                            <Run Text="{Binding Name}" FontWeight="SemiBold" />
+                            <Run Classes="muted" Text="{Binding Pid}" FontSize="11" />
+                            <Run Classes="muted" Text="{Binding CollapsedText}" FontSize="11" />
+                          </TextBlock>
+                          <TextBlock Grid.Column="1" Classes="mono small" Text="{Binding CpuText}" Margin="8,0,0,0" MinWidth="44" TextAlignment="Right" />
+                          <TextBlock Grid.Column="2" Classes="mono small muted" Text="{Binding MemoryText}" Margin="8,0,0,0" MinWidth="56" TextAlignment="Right" />
+                        </Grid>
+                        <!-- Its running time, then its arguments cut short on one line, in what room the time leaves -->
+                        <DockPanel>
+                          <TextBlock Classes="muted small" TextWrapping="Wrap">
+                            <Run Text="{Binding RunningText}" />
+                            <Run Text="{Binding IsDetached, Converter={x:Static vm:Converters.DetachedText}}" />
+                          </TextBlock>
+                          <TextBlock Classes="mono small muted" Margin="8,0,0,0" Text="{Binding ShortArguments}" TextTrimming="CharacterEllipsis" MaxLines="1" VerticalAlignment="Center"
+                                     IsVisible="{Binding ShortArguments, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        </DockPanel>
+                        <!-- The tool call that started it, on one line: every process it started shows the same one -->
+                        <Button Classes="flat" Padding="0" IsVisible="{Binding HasTool}" HorizontalAlignment="Left" ToolTip.Tip="{Binding ToolText}"
+                                Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.ShowProcessToolCommand}" CommandParameter="{Binding}">
+                          <TextBlock Classes="small" Foreground="{DynamicResource AccentStatusBrush}" Text="{Binding ToolText}" TextTrimming="CharacterEllipsis" MaxLines="1" />
+                        </Button>
+                      </StackPanel>
+                    </Grid>
                   </controls:ShownWidth>
                   <Border.ContextMenu>
                     <ContextMenu x:Name="ProcessMenu">
@@ -374,6 +386,10 @@
                       <MenuItem Header="Copy command line" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.CopyCommandLineCommand}" CommandParameter="{Binding}" />
                       <MenuItem Header="Reveal executable" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.RevealExecutableCommand}" CommandParameter="{Binding}" />
                       <MenuItem Header="Show in conversation" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.ShowProcessToolCommand}" CommandParameter="{Binding}" IsEnabled="{Binding HasTool}" />
+                      <!-- Every level under the row -->
+                      <Separator IsVisible="{Binding HasChildren}" />
+                      <MenuItem Header="Expand all" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.ExpandAllProcessesCommand}" CommandParameter="{Binding}" IsVisible="{Binding HasChildren}" />
+                      <MenuItem Header="Collapse all" Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ProcessMonitor.CollapseAllProcessesCommand}" CommandParameter="{Binding}" IsVisible="{Binding HasChildren}" />
                     </ContextMenu>
                   </Border.ContextMenu>
                 </Border>

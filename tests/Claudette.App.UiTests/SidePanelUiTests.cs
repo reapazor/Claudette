@@ -470,6 +470,48 @@ public class SidePanelUiTests
         window.Close();
     }
 
+    [AvaloniaFact]
+    public async Task A_process_with_children_has_an_arrow_that_collapses_them_and_Alt_click_takes_every_level()
+    {
+        await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true, dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        // claude → bash → node → esbuild, and rg beside bash.
+        var tree = h.Trees.Trees[4242];
+        tree.Children.AddRange([(5001, "bash"), (5002, "node"), (5003, "esbuild"), (5004, "rg")]);
+        tree.Parents[5002] = 5001;
+        tree.Parents[5003] = 5002;
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        tab.IsSidePanelOpen = true;
+        tab.OpenSidePanelPage(SidePanelPage.Processes);
+        h.Time.Advance(TimeSpan.FromSeconds(10));
+        // The panel's pages are only in the visual tree once it has been laid out open.
+        UiText.Settle(window);
+        var view = window.GetVisualDescendants().OfType<TabView>().Single();
+        Button Arrow(string name) => view.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("processfold") && b.DataContext is ProcessRow row && row.Name == name);
+        IEnumerable<string> Shown() => tab.ProcessMonitor.Processes.Select(p => p.Name);
+        await UiText.SettleUntilAsync(window, () => view.GetVisualDescendants().OfType<Button>().Count(b => b.Classes.Contains("processfold")) == 4, "the processes");
+
+        // node, two levels under claude, starts collapsed; rg has nothing under it, so no arrow.
+        Assert.Equal(["claude", "bash", "node", "rg"], Shown());
+        Assert.True(Arrow("bash").IsEffectivelyVisible);
+        Assert.Equal("Expand", AutomationProperties.GetName(Arrow("node")));
+        Assert.False(Arrow("rg").IsEffectivelyVisible);
+
+        Click(window, Arrow("bash"));
+        Assert.Equal(["claude", "bash", "rg"], Shown());
+        Assert.Equal("Expand", AutomationProperties.GetName(Arrow("bash")));
+
+        // Alt+click opens every level under it, node's too.
+        var at = Arrow("bash").TranslatePoint(new Point(Arrow("bash").Bounds.Width / 2, 6), window)!.Value;
+        window.MouseMove(at, RawInputModifiers.Alt);
+        window.MouseDown(at, MouseButton.Left, RawInputModifiers.Alt);
+        window.MouseUp(at, MouseButton.Left, RawInputModifiers.Alt);
+        UiText.Settle(window);
+        Assert.Equal(["claude", "bash", "node", "esbuild", "rg"], Shown());
+        Assert.Equal("Collapse", AutomationProperties.GetName(Arrow("node")));
+        window.Close();
+    }
+
     private static Color? Fill(Border border) => (border.Background as ISolidColorBrush)?.Color;
 
     private static List<CheckBox> Boxes(ListBox list) =>

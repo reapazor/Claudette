@@ -384,6 +384,12 @@ An optional view of the processes each tab has started, such as test runs, dev s
   - Running time, then the process's arguments, cut short.
   - **Command line.** The row ends its second line with the arguments, on one line in the room the running time leaves, ending in "…" where they run out of it: without the program, which the row names, and with each path down to its last part, as an option's value too, so `node C:\app\node_modules\vite\bin\vite.js --port 5173` shows `vite.js --port 5173`. The whole command line, which can run to many lines, is in the row's tooltip rather than on the row, so the tree stays compact. Hover the row for it, or use **Copy command line**. Can be hidden in Settings, because command lines sometimes contain tokens or passwords; then neither shows. How it's built: `ProcessArguments` (`Claudette.Platform`) cuts them short.
   - Each process keeps its row from sample to sample, updated in place, so the list doesn't flash every couple of seconds and a selected row stays selected.
+  - A process whose parent isn't listed, such as a project job's or a detached one, sits at the top level beside `claude`.
+  - **Collapsing.** A process with others under it has an arrow before its name, as in VS Code's file tree, that collapses them.
+    - Collapsed, the row counts them after its PID (`+4`), and its CPU and memory include theirs, so collapsing never hides a busy process. Its tooltip says so.
+    - Nothing more than two levels under `claude` shows at first: a process two levels down starts collapsed.
+    - Alt+click (Option+click on macOS) on an arrow expands or collapses every level under it too, as **Expand all** and **Collapse all** in the row's menu do.
+    - A process stays as it was left until it exits. Another program given its PID later starts as any process at its depth does.
 - **Project jobs.** A project action's job, such as a build ([§18](#project-tools)), is tracked from its own process and listed with the tab's, as a top-level process beside `claude`. **Stop** on one of its processes stops it within the job's tree.
 - **Link to the conversation.** When a process belongs to a Bash tool call or a background task, its row shows which one, on one line (hover for all of it), and clicking it scrolls to that card in the conversation. Claude Code's `task_started` events give the task ID and tool call ID, and Claudette matches them to the new process. A process that's gone is forgotten, so another program given its PID later isn't linked to the old call.
 - **Actions**, in a row's right-click menu. A row lights up under the pointer, as a changed file's does, so it's plain it has one, and stays lit while its menu is open, so it's plain which process the menu is for.
@@ -391,6 +397,7 @@ An optional view of the processes each tab has started, such as test runs, dev s
   - **Copy PID.**
   - **Copy command line.**
   - **Reveal executable.**
+  - **Expand all** and **Collapse all**, on a process with others under it: every level under it.
 - **Sampling.** Every 2 seconds while the panel is visible (Settings → Processes → Refresh), and every 10 seconds when only the summary is showing. No sampling runs when the monitor is off.
 - **How processes are tracked.** Tracking is always on, even with the monitor off, because tab cleanup relies on it; only sampling is off.
   - **Windows.**

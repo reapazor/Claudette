@@ -813,6 +813,117 @@ public class SidePanelTests
     }
 
     [Fact]
+    public async Task A_process_collapses_the_processes_under_it_and_counts_them_in_its_numbers()
+    {
+        await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true);
+        var tab = await h.OpenTabAsync();
+        var tree = h.Trees.Trees[4242];
+        // claude → bash → node → esbuild → worker, each child at 20% and 50 MB.
+        tree.Children.AddRange([(5001, "bash"), (5002, "node"), (5003, "esbuild"), (5004, "worker")]);
+        tree.Parents[5002] = 5001;
+        tree.Parents[5003] = 5002;
+        tree.Parents[5004] = 5003;
+        var monitor = tab.ProcessMonitor;
+        IEnumerable<string> Shown() => monitor.Processes.Select(p => p.Name);
+        ProcessRow Row(string name) => monitor.Processes.Single(p => p.Name == name);
+
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+        await TabTestHarness.Eventually(() => monitor.Processes.Count > 0, "a sample");
+
+        // Nothing more than two levels under claude shows at first: node starts collapsed, with what's under it in its numbers.
+        Assert.Equal(["claude", "bash", "node"], Shown());
+        Assert.True(Row("bash").IsExpanded);
+        var node = Row("node");
+        Assert.True(node.HasChildren);
+        Assert.False(node.IsExpanded);
+        Assert.Equal("+2", node.CollapsedText);
+        Assert.Equal($"{60:0.#}%", node.CpuText);
+        Assert.Equal("150 MB", node.MemoryText);
+        Assert.EndsWith("Its CPU and memory include the 2 processes collapsed under it.", node.Tooltip, StringComparison.Ordinal);
+        Assert.Equal("", Row("bash").CollapsedText);
+        Assert.Equal($"{20:0.#}%", Row("bash").CpuText);
+
+        // Its arrow shows the next level, which starts collapsed too.
+        monitor.ToggleProcessCommand.Execute(node);
+        Assert.Equal(["claude", "bash", "node", "esbuild"], Shown());
+        Assert.Same(node, Row("node"));
+        Assert.Equal("", node.CollapsedText);
+        Assert.Equal($"{20:0.#}%", node.CpuText);
+        Assert.Equal("+1", Row("esbuild").CollapsedText);
+        Assert.False(Row("esbuild").IsExpanded);
+
+        // Collapsed stays collapsed from sample to sample.
+        monitor.ToggleProcessCommand.Execute(Row("bash"));
+        Assert.Equal(["claude", "bash"], Shown());
+        Assert.Equal("+3", Row("bash").CollapsedText);
+        Assert.Equal("200 MB", Row("bash").MemoryText);
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+        var sampled = h.Time.GetUtcNow();
+        await TabTestHarness.Eventually(() => monitor.Processes[0].Snapshot.FirstSeen == sampled, "the next sample");
+        Assert.Equal(["claude", "bash"], Shown());
+
+        // Expand all opens every level under the row; Collapse all closes them, so expanding it again shows one level.
+        monitor.ExpandAllProcessesCommand.Execute(Row("bash"));
+        Assert.Equal(["claude", "bash", "node", "esbuild", "worker"], Shown());
+        Assert.False(Row("worker").HasChildren);
+        monitor.CollapseAllProcessesCommand.Execute(Row("bash"));
+        monitor.ToggleProcessCommand.Execute(Row("bash"));
+        Assert.Equal(["claude", "bash", "node"], Shown());
+        Assert.False(Row("node").IsExpanded);
+
+        // The arrow's Alt+click: every level under it.
+        monitor.ToggleProcessAllLevels(Row("node"));
+        Assert.Equal(["claude", "bash", "node", "esbuild", "worker"], Shown());
+    }
+
+    [Fact]
+    public async Task A_collapsed_process_is_forgotten_once_it_exits()
+    {
+        await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true);
+        var tab = await h.OpenTabAsync();
+        var tree = h.Trees.Trees[4242];
+        tree.Children.AddRange([(5001, "bash"), (5002, "node")]);
+        tree.Parents[5002] = 5001;
+        var monitor = tab.ProcessMonitor;
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+        await TabTestHarness.Eventually(() => monitor.Processes.Count == 3, "a sample");
+        monitor.ToggleProcessCommand.Execute(monitor.Processes[1]);
+        Assert.Equal(["claude", "bash"], monitor.Processes.Select(p => p.Name));
+
+        tree.Children.Clear();
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+        await TabTestHarness.Eventually(() => monitor.Processes.Count == 1, "the processes to exit");
+
+        // Another program given its PID starts as any process at its depth does.
+        tree.Children.AddRange([(5001, "make"), (5002, "cc")]);
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+        await TabTestHarness.Eventually(() => monitor.Processes.Count == 3, "the new processes");
+        Assert.Equal(["claude", "make", "cc"], monitor.Processes.Select(p => p.Name));
+    }
+
+    [Fact]
+    public async Task A_process_whose_parent_isnt_listed_sits_beside_claude()
+    {
+        await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true);
+        var tab = await h.OpenTabAsync();
+        var tree = h.Trees.Trees[4242];
+        tree.Children.AddRange([(5001, "node"), (6001, "vite"), (6002, "esbuild")]);
+        // vite's parent exited; esbuild runs under it.
+        tree.Parents[6001] = 999;
+        tree.Parents[6002] = 6001;
+        h.Time.Advance(ProcessSampler.SummaryInterval);
+        await TabTestHarness.Eventually(() => tab.ProcessMonitor.Processes.Count == 4, "a sample");
+
+        Assert.Equal(["claude", "node", "vite", "esbuild"], tab.ProcessMonitor.Processes.Select(p => p.Name));
+        Assert.Equal([0.0, 14, 0, 14], tab.ProcessMonitor.Processes.Select(p => p.Indent));
+
+        // Collapsing claude leaves it beside claude.
+        tab.ProcessMonitor.ToggleProcessCommand.Execute(tab.ProcessMonitor.Processes[0]);
+        Assert.Equal(["claude", "vite", "esbuild"], tab.ProcessMonitor.Processes.Select(p => p.Name));
+        Assert.Equal("+1", tab.ProcessMonitor.Processes[0].CollapsedText);
+    }
+
+    [Fact]
     public async Task The_header_totals_the_tabs_processes_while_the_monitor_is_on()
     {
         await using var h = new TabTestHarness(s => s.Processes.ShowMonitor = true);

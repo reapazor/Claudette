@@ -41,13 +41,37 @@ public sealed partial class ProcessRow : ObservableObject
     [ObservableProperty]
     public partial double Indent { get; set; }
 
+    /// <summary>Processes run under it, so it has an arrow that collapses them.</summary>
+    [ObservableProperty]
+    public partial bool HasChildren { get; set; }
+
+    /// <summary>The processes under it show; otherwise its arrow points right and its numbers include theirs.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ToggleText))]
+    public partial bool IsExpanded { get; set; }
+
+    /// <summary>What its arrow does, for screen readers.</summary>
+    public string ToggleText => IsExpanded ? "Collapse" : "Expand";
+
+    /// <summary>The processes collapsed under it, at every level, whose CPU and memory it shows with its own.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CollapsedText), nameof(CpuText), nameof(MemoryText), nameof(Tooltip))]
+    public partial IReadOnlyList<ProcessSnapshot> Collapsed { get; set; } = [];
+
+    /// <summary>How many are collapsed under it, for example <c>+4</c> after its PID.</summary>
+    public string CollapsedText => Collapsed.Count > 0 ? $"+{Collapsed.Count}" : "";
+
     public bool IsRoot => Snapshot.IsRoot;
 
     public bool IsDetached => Snapshot.IsDetached;
 
-    public string CpuText => Snapshot.CpuPercent is { } cpu ? $"{cpu:0.#}%" : "…";
+    /// <summary>Unknown until a sample has measured it, or one of the processes collapsed under it.</summary>
+    public string CpuText =>
+        Snapshot.CpuPercent is null && Collapsed.All(s => s.CpuPercent is null)
+            ? "…"
+            : $"{Snapshot.CpuPercent.GetValueOrDefault() + Collapsed.Sum(s => s.CpuPercent.GetValueOrDefault()):0.#}%";
 
-    public string MemoryText => ProcessSummary.FormatMemory(Snapshot.MemoryBytes);
+    public string MemoryText => ProcessSummary.FormatMemory(Snapshot.MemoryBytes + Collapsed.Sum(s => s.MemoryBytes));
 
     [ObservableProperty]
     public partial string RunningText { get; set; } = "";
@@ -66,7 +90,14 @@ public sealed partial class ProcessRow : ObservableObject
 
     public string? ToolText => Tool is null ? null : $"{Tool.Name}: {Tool.Summary}";
 
-    public string Tooltip => $"{Name} (PID {Pid}){(IsDetached ? ", detached" : "")}\n{CommandLine ?? Snapshot.ExecutablePath ?? ""}";
+    public string Tooltip =>
+        $"{Name} (PID {Pid}){(IsDetached ? ", detached" : "")}\n{CommandLine ?? Snapshot.ExecutablePath ?? ""}"
+        + Collapsed.Count switch
+        {
+            0 => "",
+            1 => "\nIts CPU and memory include the process collapsed under it.",
+            var count => $"\nIts CPU and memory include the {count} processes collapsed under it.",
+        };
 }
 
 /// <summary>What the process monitor needs from its tab.</summary>
@@ -100,11 +131,22 @@ public sealed partial class ProcessMonitorViewModel : ViewModelBase
     /// <summary>A child process using more than this much CPU gives the tab an activity icon.</summary>
     private const double ActiveCpuPercent = 5;
 
+    /// <summary>A process this deep starts collapsed, so nothing more than two levels under <c>claude</c> shows until asked.</summary>
+    private const int CollapsedDepth = 2;
+
     private readonly AppServices _services;
     private readonly IProcessMonitorHost _host;
     private ProcessTree? _tree;
     private ProcessSampler? _sampler;
     private readonly Dictionary<int, string> _processTools = [];
+
+    /// <summary>Whether each process's children show, from when it's first seen until it exits.</summary>
+    private readonly Dictionary<int, bool> _expanded = [];
+
+    /// <summary>The latest sample as a tree, which the rows are shown from again as a process expands or collapses.</summary>
+    private List<ProcessNode> _roots = [];
+
+    private Dictionary<int, ProcessNode> _nodes = [];
 
     internal ProcessMonitorViewModel(AppServices services, IProcessMonitorHost host)
     {
@@ -178,6 +220,7 @@ public sealed partial class ProcessMonitorViewModel : ViewModelBase
             _sampler = null;
             SummaryText = null;
             HasBusyProcesses = false;
+            (_roots, _nodes) = ([], []);
             Processes.Clear();
             if (LatestSummary is not null)
             {
@@ -232,43 +275,58 @@ public sealed partial class ProcessMonitorViewModel : ViewModelBase
             }
         }
 
-        var byPid = new Dictionary<int, ProcessSnapshot>();
-        foreach (var snapshot in snapshots)
+        _roots = ProcessNode.Tree(snapshots);
+        _nodes = _roots.SelectMany(root => root.Descendants.Prepend(root)).ToDictionary(node => node.Snapshot.Pid);
+        // A process is expanded or collapsed from when it's first seen, and forgotten once it's gone.
+        foreach (var gone in _expanded.Keys.Where(pid => !_nodes.ContainsKey(pid)).ToArray())
         {
-            byPid.TryAdd(snapshot.Pid, snapshot);
+            _expanded.Remove(gone);
         }
-        var depth = new Dictionary<int, int>();
-        int Depth(ProcessSnapshot s)
+        foreach (var node in _nodes.Values)
         {
-            if (s.IsRoot || depth.Count > 500)
-            {
-                return 0;
-            }
-            if (depth.TryGetValue(s.Pid, out var known))
-            {
-                return known;
-            }
-            depth[s.Pid] = 1;
-            return depth[s.Pid] = byPid.TryGetValue(s.ParentPid, out var parent) && parent.Pid != s.Pid ? Depth(parent) + 1 : 1;
+            _expanded.TryAdd(node.Snapshot.Pid, node.Depth < CollapsedDepth);
         }
+        ShowRows();
+    }
+
+    /// <summary>The latest sample's tree as rows, leaving out what's under a collapsed process.</summary>
+    private void ShowRows()
+    {
+        var shown = new List<ProcessNode>();
+        void Show(ProcessNode node)
+        {
+            shown.Add(node);
+            if (_expanded.GetValueOrDefault(node.Snapshot.Pid, true))
+            {
+                node.Children.ForEach(Show);
+            }
+        }
+        _roots.ForEach(Show);
+        UpdateRows([.. shown.Select(node => node.Snapshot)]);
+
         var now = _services.Time.GetUtcNow();
         var toolsById = _processTools.Count == 0 ? [] : _host.ToolItems.ToDictionary(t => t.ToolUseId);
-        UpdateRows(Ordered(snapshots).Select(snapshot => (
-            snapshot,
-            Indent: Depth(snapshot) * 14.0,
-            Running: snapshot.StartTime is { } started ? Formats.Duration(now - started) : "",
-            Tool: _processTools.TryGetValue(snapshot.Pid, out var toolId) && toolsById.TryGetValue(toolId, out var tool) ? tool : null)).ToList());
+        for (var i = 0; i < shown.Count; i++)
+        {
+            var (row, node, snapshot) = (Processes[i], shown[i], shown[i].Snapshot);
+            row.Indent = node.Depth * 14.0;
+            row.HasChildren = node.Children.Count > 0;
+            row.IsExpanded = _expanded.GetValueOrDefault(snapshot.Pid, true);
+            row.Collapsed = row.IsExpanded ? [] : [.. node.Descendants.Select(under => under.Snapshot)];
+            row.RunningText = snapshot.StartTime is { } started ? Formats.Duration(now - started) : "";
+            row.Tool = _processTools.TryGetValue(snapshot.Pid, out var toolId) && toolsById.TryGetValue(toolId, out var tool) ? tool : null;
+        }
     }
 
     /// <summary>
     /// Brings the rows to <paramref name="wanted"/>, keeping each process's row from sample to sample: only what changed
     /// is updated, moved, added or removed, so the list doesn't flash, and a selected row stays selected.
     /// </summary>
-    private void UpdateRows(List<(ProcessSnapshot Snapshot, double Indent, string Running, ToolUseItem? Tool)> wanted)
+    private void UpdateRows(List<ProcessSnapshot> wanted)
     {
         for (var i = 0; i < wanted.Count; i++)
         {
-            var (snapshot, indent, running, tool) = wanted[i];
+            var snapshot = wanted[i];
             var at = -1;
             for (var j = i; j < Processes.Count; j++)
             {
@@ -278,11 +336,9 @@ public sealed partial class ProcessMonitorViewModel : ViewModelBase
                     break;
                 }
             }
-            ProcessRow row;
             if (at < 0)
             {
-                row = new ProcessRow(snapshot);
-                Processes.Insert(i, row);
+                Processes.Insert(i, new ProcessRow(snapshot));
             }
             else
             {
@@ -290,12 +346,8 @@ public sealed partial class ProcessMonitorViewModel : ViewModelBase
                 {
                     Processes.Move(at, i);
                 }
-                row = Processes[i];
-                row.Snapshot = snapshot;
+                Processes[i].Snapshot = snapshot;
             }
-            row.Indent = indent;
-            row.RunningText = running;
-            row.Tool = tool;
         }
         while (Processes.Count > wanted.Count)
         {
@@ -303,31 +355,51 @@ public sealed partial class ProcessMonitorViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Depth-first from the root, so children sit under their parent.</summary>
-    private static IEnumerable<ProcessSnapshot> Ordered(IReadOnlyList<ProcessSnapshot> snapshots)
+    /// <summary>A row's arrow: shows or hides the processes under it.</summary>
+    [RelayCommand]
+    private void ToggleProcess(ProcessRow? row) => SetExpanded(row, row is { IsExpanded: false }, allLevels: false);
+
+    /// <summary>Alt+click on a row's arrow: every level under it expands or collapses with it.</summary>
+    internal void ToggleProcessAllLevels(ProcessRow row) => SetExpanded(row, !row.IsExpanded, allLevels: true);
+
+    [RelayCommand]
+    private void ExpandAllProcesses(ProcessRow? row) => SetExpanded(row, true, allLevels: true);
+
+    [RelayCommand]
+    private void CollapseAllProcesses(ProcessRow? row) => SetExpanded(row, false, allLevels: true);
+
+    private void SetExpanded(ProcessRow? row, bool expanded, bool allLevels)
     {
-        var byParent = snapshots.ToLookup(s => s.ParentPid);
-        var pids = snapshots.Select(s => s.Pid).ToHashSet();
-        var visited = new HashSet<int>();
-        IEnumerable<ProcessSnapshot> Walk(ProcessSnapshot s)
+        if (row is null || !_nodes.TryGetValue(row.Pid, out var node))
         {
-            if (!visited.Add(s.Pid))
-            {
-                yield break;
-            }
-            yield return s;
-            foreach (var child in byParent[s.Pid].Where(c => c.Pid != s.Pid).OrderBy(c => c.Pid).SelectMany(Walk))
-            {
-                yield return child;
-            }
+            return;
         }
-        // Roots: the claude process, then anything whose parent isn't in the list (detached processes).
-        foreach (var top in snapshots.Where(s => s.IsRoot).Concat(snapshots.Where(s => !s.IsRoot && !pids.Contains(s.ParentPid))))
+        foreach (var under in allLevels ? node.Descendants.Prepend(node) : [node])
         {
-            foreach (var s in Walk(top))
-            {
-                yield return s;
-            }
+            _expanded[under.Snapshot.Pid] = expanded;
+        }
+        ShowRows();
+    }
+
+    /// <summary>One process in a sample's tree, with the processes it started.</summary>
+    private sealed record ProcessNode(ProcessSnapshot Snapshot, int Depth, List<ProcessNode> Children)
+    {
+        /// <summary>Every process under it, at every level, depth-first.</summary>
+        public IEnumerable<ProcessNode> Descendants => Children.SelectMany(child => child.Descendants.Prepend(child));
+
+        /// <summary>
+        /// The tree: the <c>claude</c> process, then anything whose parent isn't in the sample (a project job, detached
+        /// processes) beside it, each with its children in PID order.
+        /// </summary>
+        public static List<ProcessNode> Tree(IReadOnlyList<ProcessSnapshot> snapshots)
+        {
+            var byParent = snapshots.ToLookup(s => s.ParentPid);
+            var pids = snapshots.Select(s => s.Pid).ToHashSet();
+            var visited = new HashSet<int>();
+            ProcessNode Walk(ProcessSnapshot s, int depth) =>
+                new(s, depth, [.. byParent[s.Pid].OrderBy(c => c.Pid).Where(c => visited.Add(c.Pid)).Select(c => Walk(c, depth + 1))]);
+            var tops = snapshots.Where(s => s.IsRoot).Concat(snapshots.Where(s => !s.IsRoot && !pids.Contains(s.ParentPid)));
+            return [.. tops.Where(s => visited.Add(s.Pid)).Select(s => Walk(s, 0))];
         }
     }
 
