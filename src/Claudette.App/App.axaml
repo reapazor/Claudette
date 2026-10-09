@@ -424,6 +424,8 @@
       <StreamGeometry x:Key="IconSettings">M1,3 L11,3 M1,9 L11,9 M4,1 L4,5 M8,7 L8,11</StreamGeometry>
       <StreamGeometry x:Key="IconHistory">M6,1 A5,5 0 1 1 1.67,3.5 M1.2,1.2 L1.67,3.5 L4,3.2 M6,3.5 L6,6 L8,7.2</StreamGeometry>
       <StreamGeometry x:Key="IconSidebar">M1.5,2 L10.5,2 L10.5,10 L1.5,10 Z M4.5,2 L4.5,10</StreamGeometry>
+      <!-- The sidebar's icon mirrored: the header's button for the side panel (DESIGN.md §3). -->
+      <StreamGeometry x:Key="IconSidePanel">M1.5,2 L10.5,2 L10.5,10 L1.5,10 Z M7.5,2 L7.5,10</StreamGeometry>
       <StreamGeometry x:Key="IconChevronDown">M3,4.5 L6,7.5 L9,4.5</StreamGeometry>
       <StreamGeometry x:Key="IconChevronRight">M4.5,3 L7.5,6 L4.5,9</StreamGeometry>
       <StreamGeometry x:Key="IconChevronUp">M3,7.5 L6,4.5 L9,7.5</StreamGeometry>

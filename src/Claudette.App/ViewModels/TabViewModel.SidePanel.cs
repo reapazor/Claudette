@@ -29,7 +29,11 @@ public sealed partial class TabViewModel
     /// on (DESIGN.md §3).
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SidePanelToggleText))]
     public partial bool IsSidePanelOpen { get; set; }
+
+    /// <summary>The header's side panel button: its tip and name.</summary>
+    public string SidePanelToggleText => IsSidePanelOpen ? "Hide the side panel" : "Show the side panel";
 
     partial void OnIsSidePanelOpenChanged(bool value)
     {

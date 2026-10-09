@@ -219,6 +219,14 @@
                       ToolTip.Tip="{Binding Account.HeaderPlanTip}" AutomationProperties.Name="{Binding Account.HeaderPlanName}">
                 <TextBlock Classes="muted" Text="{Binding Account.HeaderPlan}" VerticalAlignment="Center" />
               </Button>
+              <!-- Shows or hides the selected tab's side panel (DESIGN.md §3), as the sidebar's own button does the sidebar -->
+              <Button Name="SidePanelToggle" Classes="flat" Padding="8" VerticalAlignment="Center"
+                      IsVisible="{Binding Shell.SelectedTab, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}"
+                      Command="{Binding Shell.SelectedTab.ToggleSidePanelCommand, FallbackValue={x:Null}}"
+                      ToolTip.Tip="{Binding Shell.SelectedTab.SidePanelToggleText, FallbackValue=''}"
+                      AutomationProperties.Name="{Binding Shell.SelectedTab.SidePanelToggleText, FallbackValue=''}">
+                <Path Data="{StaticResource IconSidePanel}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="13" Height="13" Stretch="Uniform" />
+              </Button>
             </StackPanel>
 
             <!-- The detailed header (DESIGN.md §6): charts of the session and the week, the burn rate and the busiest

@@ -98,6 +98,39 @@ public class MainWindowTests
         Assert.True(totals.TranslatePoint(default, window)!.Value.X < account.TranslatePoint(default, window)!.Value.X);
     }
 
+    /// <summary>The header's button after the plan shows and hides the selected tab's side panel (DESIGN.md §3).</summary>
+    [AvaloniaFact]
+    public async Task The_button_after_the_plan_shows_and_hides_the_side_panel()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        await h.OpenTabAsync();
+        var tab = h.Shell.SelectedTab!;
+        var main = new MainWindowViewModel(h.Services);
+        main.UseShell(h.Shell);
+        main.Account.Status = new AuthStatus(true, "claude.ai", null, "me@example.com", null, "max", null, null);
+
+        var window = new MainWindow { DataContext = main, Width = 1200, Height = 800 };
+        window.Show();
+        await UiText.SettleUntilAsync(window, () => window.GetVisualDescendants().OfType<Button>().Any(b => b is { Name: "SidePanelToggle", IsEffectivelyVisible: true }), "the button");
+        var toggle = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "SidePanelToggle");
+        var plan = window.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Plan usage");
+        var sidePanel = window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "SidePanel");
+
+        Assert.True(plan.IsEffectivelyVisible);
+        Assert.True(toggle.TranslatePoint(default, window)!.Value.X > plan.TranslatePoint(default, window)!.Value.X);
+        Assert.Equal("Show the side panel", ToolTip.GetTip(toggle));
+        Assert.False(sidePanel.IsEffectivelyVisible);
+
+        Click(window, toggle);
+        Assert.True(tab.IsSidePanelOpen);
+        Assert.True(sidePanel.IsEffectivelyVisible);
+        Assert.Equal("Hide the side panel", AutomationProperties.GetName(toggle));
+
+        Click(window, toggle);
+        Assert.False(tab.IsSidePanelOpen);
+        Assert.False(sidePanel.IsEffectivelyVisible);
+    }
+
     [AvaloniaFact]
     public async Task The_chevron_draws_the_usage_header_taller_with_charts()
     {
