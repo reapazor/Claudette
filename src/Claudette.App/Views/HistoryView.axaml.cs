@@ -18,6 +18,10 @@ public partial class HistoryView : UserControl
         SearchBox.Focus();
     }
 
+    /// <summary>A project picked from "+N more": the list closes once the pick has gone through.</summary>
+    private void OnMoreProjectPicked(object? sender, RoutedEventArgs e) =>
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => MoreProjectsButton.Flyout?.Hide());
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);

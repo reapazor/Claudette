@@ -68,10 +68,12 @@ It isn't a reimplementation. Each tab runs the real `claude` CLI, with your sett
 
 ### Pick up anywhere
 
-- **History** lists past sessions by folder and searches through Claude's replies, not just your prompts.
+- **History** lists past sessions by project, with a chip for each project to narrow it to one, and searches through Claude's replies, not just your prompts. **History for this folder**, on a sidebar group, opens it on that project.
 - **The session library** syncs the sessions you choose through any folder Dropbox, Google Drive or OneDrive keeps up to date. Open one on your laptop and carry on from where your desktop stopped.
 - **Remote Control:** connect a tab to the Claude app and keep the conversation going from your phone while your computer does the work. Claudette keeps it awake meanwhile.
 - **A scratch pad per project** for the commands, notes and snippets worth keeping, shared by every tab in that project and synced with the rest.
+
+![History narrowed to the starfall project by its chip: its two open tabs' sessions and three older ones, one from a worktree, with the other projects' chips and +2 more beside it](docs/screenshots/history-claude-dark.png)
 
 ### It knows your project
 
@@ -121,7 +123,7 @@ You need [Claude Code](https://code.claude.com/docs) installed. Claudette finds 
 
 ### Try it without an account
 
-`tools/Claudette.Demo` builds a demo, the one in these screenshots: three game projects (Unreal in C++, Unity in C#, and Godot), seven tabs including a thread with two sub-threads, and a plan usage history, with a stand-in for Claude Code. It needs no account and spends no tokens.
+`tools/Claudette.Demo` builds a demo, the one in these screenshots: three game projects (Unreal in C++, Unity in C#, and Godot), seven tabs including a thread with two sub-threads, past sessions for History, and a plan usage history, with a stand-in for Claude Code. It needs no account and spends no tokens.
 
 ```sh
 dotnet run --project tools/Claudette.Demo -- <empty folder>

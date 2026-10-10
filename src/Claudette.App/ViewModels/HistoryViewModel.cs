@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Claudette.App.Services;
 using Claudette.Core;
+using Claudette.Core.Git;
 using Claudette.Core.History;
 using Claudette.Core.Library;
 using Claudette.Core.Settings;
@@ -25,6 +26,15 @@ public sealed class HistoryEntry
 
     /// <summary>The session's folder: on this machine for local sessions, on the other machine for library-only ones.</summary>
     public string? Folder { get; init; }
+
+    /// <summary>
+    /// The project it's listed under: its folder, or for a worktree Claude Code made, the repository's main checkout
+    /// (DESIGN.md §9, "History").
+    /// </summary>
+    public string? ProjectFolder { get; init; }
+
+    /// <summary><see cref="ProjectFolder"/> normalized, to group by; empty when the folder isn't known.</summary>
+    public string ProjectKey { get; init; } = "";
 
     /// <summary>"This machine", or the machine that last used it.</summary>
     public required string Machine { get; init; }
@@ -84,6 +94,31 @@ public sealed record HistoryGroup(string Label, string? Folder, IReadOnlyList<Hi
 public sealed record HistoryHeading(string Label, string? Folder);
 
 /// <summary>
+/// A project among History's chips (DESIGN.md §9, "History"): a folder, with the worktrees Claude Code made in it.
+/// Picking one lists only its sessions.
+/// </summary>
+public sealed partial class HistoryProject(string key, string? folder) : ViewModelBase
+{
+    /// <summary>The folder normalized, as <see cref="HistoryEntry.ProjectKey"/>; empty for sessions whose folder isn't known.</summary>
+    public string Key { get; } = key;
+
+    public string? Folder { get; } = folder;
+
+    public string Label { get; } = HistoryViewModel.ProjectLabel(folder);
+
+    /// <summary>How many of its sessions the search matches.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AccessibleName))]
+    public partial int Count { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsSelected { get; set; }
+
+    /// <summary>Its chip to a screen reader, which would otherwise read the name and a bare number: "starfall, 5 sessions".</summary>
+    public string AccessibleName => HistoryViewModel.ChipName(Label, Count);
+}
+
+/// <summary>
 /// History (DESIGN.md §9): past sessions grouped by folder, from Claude Code's own storage on this machine (so it
 /// includes terminal sessions) and from the session library (which can include other machines). Opening one resumes it
 /// in a new tab.
@@ -94,10 +129,19 @@ public sealed partial class HistoryViewModel : ViewModelBase
     private readonly ShellViewModel _shell;
     private IReadOnlyList<HistoryEntry> _all = [];
 
-    public HistoryViewModel(AppServices services, ShellViewModel shell)
+    /// <param name="project">A folder to list only the project of, as <b>History for this folder</b> does; null for every project.</param>
+    public HistoryViewModel(AppServices services, ShellViewModel shell, string? project = null)
     {
         _services = services;
         _shell = shell;
+        if (project is not null)
+        {
+            // Its chip shows straight away, and stays even if the project has no sessions yet.
+            var selected = new HistoryProject(ProjectKey(project), GitWorktrees.MainCheckoutOf(project) ?? project) { IsSelected = true };
+            _projects[selected.Key] = selected;
+            SelectedProject = selected;
+            LayOutChips();
+        }
         _ = LoadAsync();
     }
 
@@ -233,6 +277,122 @@ public sealed partial class HistoryViewModel : ViewModelBase
 
     private string[] Words() => Search.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
+    // ---- Projects (DESIGN.md §9, "History") --------------------------------------------------------------------
+
+    /// <summary>How many projects have a chip of their own; the rest are under <see cref="MoreText"/>.</summary>
+    public const int ChipCount = 5;
+
+    /// <summary>Every project made so far, by key, so a chip keeps its place and focus as History updates.</summary>
+    private readonly Dictionary<string, HistoryProject> _projects = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Every project, the most recently used first.</summary>
+    private IReadOnlyList<HistoryProject> _projectOrder = [];
+
+    /// <summary>The project listed, or null for every project.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAllSelected))]
+    public partial HistoryProject? SelectedProject { get; private set; }
+
+    public bool IsAllSelected => SelectedProject is null;
+
+    /// <summary>How many sessions the search matches in every project, for the All chip.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AllAccessibleName))]
+    public partial int AllCount { get; private set; }
+
+    public string AllAccessibleName => ChipName("All projects", AllCount);
+
+    internal static string ChipName(string label, int count) => $"{label}, {count} session{(count == 1 ? "" : "s")}";
+
+    /// <summary>The most recently used projects, and the selected one, which takes the last place when it isn't among them.</summary>
+    [ObservableProperty]
+    public partial IReadOnlyList<HistoryProject> Chips { get; private set; } = [];
+
+    /// <summary>The projects without a chip, under <see cref="MoreText"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMoreProjects), nameof(MoreText))]
+    public partial IReadOnlyList<HistoryProject> MoreProjects { get; private set; } = [];
+
+    public bool HasMoreProjects => MoreProjects.Count > 0;
+
+    public string MoreText => $"+{MoreProjects.Count} more";
+
+    /// <summary>Lists only <paramref name="project"/>'s sessions; null, or the selected project again, lists every project's.</summary>
+    [RelayCommand]
+    private void SelectProject(HistoryProject? project)
+    {
+        if (ReferenceEquals(project, SelectedProject))
+        {
+            project = null;
+        }
+        SelectedProject?.IsSelected = false;
+        SelectedProject = project;
+        project?.IsSelected = true;
+        LayOutChips();
+        // Straight away, with any search still waiting for typing to pause.
+        SearchWait.Cancel();
+        Filtering = FilterAsync();
+    }
+
+    /// <summary>The projects a filtering found, in order, with how many sessions the search matches in each.</summary>
+    private void ShowProjects(IReadOnlyList<(string Key, string? Folder)> found, Dictionary<string, int> counts, int total)
+    {
+        var order = new List<HistoryProject>(found.Count + 1);
+        foreach (var (key, folder) in found)
+        {
+            if (!_projects.TryGetValue(key, out var project))
+            {
+                _projects[key] = project = new HistoryProject(key, folder);
+            }
+            order.Add(project);
+        }
+        // History opened on a project with no sessions yet: it keeps its chip, so it's clear what's listed.
+        if (SelectedProject is { } selected && !order.Contains(selected))
+        {
+            order.Add(selected);
+        }
+        foreach (var project in order)
+        {
+            project.Count = counts.GetValueOrDefault(project.Key);
+        }
+        AllCount = total;
+        _projectOrder = order;
+        LayOutChips();
+    }
+
+    private void LayOutChips()
+    {
+        var chips = _projectOrder.Take(ChipCount).ToList();
+        // A project picked from "+N more" takes the last chip's place while it's selected, so the selection always shows.
+        if (SelectedProject is { } selected && !chips.Contains(selected))
+        {
+            if (chips.Count == ChipCount)
+            {
+                chips[^1] = selected;
+            }
+            else
+            {
+                chips.Add(selected);
+            }
+        }
+        var more = _projectOrder.Where(p => !chips.Contains(p)).ToArray();
+        // Replaced only when they change, so the chips aren't built again, losing focus, on every keystroke.
+        if (!chips.SequenceEqual(Chips))
+        {
+            Chips = chips;
+        }
+        if (!more.SequenceEqual(MoreProjects))
+        {
+            MoreProjects = more;
+        }
+    }
+
+    /// <summary>The project a folder is in: the folder itself, or for a worktree Claude Code made, its main checkout; normalized.</summary>
+    internal static string ProjectKey(string? folder) =>
+        folder is null ? "" : FolderHistory.Normalize(GitWorktrees.MainCheckoutOf(folder) ?? folder);
+
+    internal static string ProjectLabel(string? folder) => folder is null ? "Unknown folder" : Formats.FolderName(folder);
+
     /// <summary>The sessions the search matches, by folder, most recent first.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
@@ -258,6 +418,12 @@ public sealed partial class HistoryViewModel : ViewModelBase
     public partial string? Error { get; set; }
 
     public bool IsEmpty => !IsLoading && Groups.Count == 0;
+
+    /// <summary>What <see cref="IsEmpty"/> says: a project with no sessions yet says so.</summary>
+    [ObservableProperty]
+    public partial string EmptyText { get; private set; } = NoSessions;
+
+    private const string NoSessions = "No sessions found.";
 
     [RelayCommand]
     private async Task OpenAsync(HistoryEntry? entry)
@@ -445,9 +611,15 @@ public sealed partial class HistoryViewModel : ViewModelBase
         {
             details.Add($"{messages} message{(messages == 1 ? "" : "s")}");
         }
-        if (branch is not null)
+        // A worktree Claude Code made is listed under its repository, so it says which; its own branch goes without saying.
+        var worktree = folder is not null && GitWorktrees.MainCheckoutOf(folder) is not null ? Formats.FolderName(folder) : null;
+        if (branch is not null && (worktree is null || branch != GitWorktrees.BranchPrefix + worktree))
         {
             details.Add(branch);
+        }
+        if (worktree is not null)
+        {
+            details.Add($"worktree {worktree}");
         }
         if (context.Open.Contains(id))
         {
@@ -460,6 +632,8 @@ public sealed partial class HistoryViewModel : ViewModelBase
             FirstPrompt = prompt,
             Prompts = prompts,
             Folder = folder,
+            ProjectFolder = folder is null ? null : GitWorktrees.MainCheckoutOf(folder) ?? folder,
+            ProjectKey = ProjectKey(folder),
             Machine = who,
             LastActivity = last,
             MessageCount = messages,
@@ -477,8 +651,9 @@ public sealed partial class HistoryViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Search by title, prompt text and folder, plus the sessions <see cref="SearchRepliesCommand"/> found; grouped by
-    /// folder, most recent first. The matching runs off the UI thread; a later filtering wins over an earlier one.
+    /// Search by title, prompt text and folder, plus the sessions <see cref="SearchRepliesCommand"/> found, in the
+    /// selected project; grouped by project, most recent first. The matching runs off the UI thread; a later filtering
+    /// wins over an earlier one.
     /// </summary>
     private async Task FilterAsync()
     {
@@ -486,21 +661,30 @@ public sealed partial class HistoryViewModel : ViewModelBase
         var words = Words();
         var all = _all;
         var replies = new Dictionary<HistoryEntry, string>(_replyMatches);
-        var (groups, matched) = await Task.Run(() => Match(all, words, replies));
+        var project = SelectedProject;
+        var filtered = await Task.Run(() => Match(all, words, replies, project?.Key));
         if (version != _filterVersion)
         {
             return;
         }
         foreach (var entry in all)
         {
-            entry.MatchedReply = matched.GetValueOrDefault(entry);
+            entry.MatchedReply = filtered.Matched.GetValueOrDefault(entry);
         }
-        Groups = groups;
-        Rows = [.. groups.SelectMany(g => g.Entries.Prepend<object>(new HistoryHeading(g.Label, g.Folder)))];
+        ShowProjects(filtered.Projects, filtered.Counts, filtered.Total);
+        EmptyText = project is not null && words.Length == 0 ? $"No sessions in {project.Label} yet." : NoSessions;
+        Groups = filtered.Groups;
+        Rows = [.. filtered.Groups.SelectMany(g => g.Entries.Prepend<object>(new HistoryHeading(g.Label, g.Folder)))];
     }
 
-    private static (IReadOnlyList<HistoryGroup> Groups, Dictionary<HistoryEntry, string> Matched) Match(
-        IReadOnlyList<HistoryEntry> all, string[] words, Dictionary<HistoryEntry, string> replies)
+    /// <summary>What a filtering found.</summary>
+    /// <param name="Projects">Every project, matched or not, the most recently used first.</param>
+    /// <param name="Counts">The sessions the search matches, by project.</param>
+    /// <param name="Total">The sessions the search matches in every project.</param>
+    private sealed record Filtered(IReadOnlyList<HistoryGroup> Groups, Dictionary<HistoryEntry, string> Matched,
+        IReadOnlyList<(string Key, string? Folder)> Projects, Dictionary<string, int> Counts, int Total);
+
+    private static Filtered Match(IReadOnlyList<HistoryEntry> all, string[] words, Dictionary<HistoryEntry, string> replies, string? project)
     {
         var matched = new Dictionary<HistoryEntry, string>();
         var matches = all.Where(e =>
@@ -516,15 +700,17 @@ public sealed partial class HistoryViewModel : ViewModelBase
             }
             return false;
         }).ToArray();
+        var counts = matches.CountBy(e => e.ProjectKey, StringComparer.OrdinalIgnoreCase).ToDictionary(StringComparer.OrdinalIgnoreCase);
+        // In the order of each project's latest session, since the list is newest first: the chips hold still as the search changes.
+        var projects = all.DistinctBy(e => e.ProjectKey, StringComparer.OrdinalIgnoreCase).Select(e => (e.ProjectKey, e.ProjectFolder)).ToArray();
+        var shown = project is null ? matches : matches.Where(e => string.Equals(e.ProjectKey, project, StringComparison.OrdinalIgnoreCase));
         var groups = new List<HistoryGroup>();
-        foreach (var group in matches.GroupBy(e => e.Folder is null ? "" : FolderHistory.Normalize(e.Folder), StringComparer.OrdinalIgnoreCase)
-                     .OrderByDescending(g => g.Max(e => e.LastActivity)))
+        foreach (var group in shown.GroupBy(e => e.ProjectKey, StringComparer.OrdinalIgnoreCase).OrderByDescending(g => g.Max(e => e.LastActivity)))
         {
-            var folder = group.First().Folder;
-            var label = folder is null ? "Unknown folder" : Formats.FolderName(folder);
-            groups.Add(new HistoryGroup(label, folder, group.ToArray()));
+            var folder = group.First().ProjectFolder;
+            groups.Add(new HistoryGroup(ProjectLabel(folder), folder, group.ToArray()));
         }
-        return (groups, matched);
+        return new Filtered(groups, matched, projects, counts, matches.Length);
     }
 
     private static bool MatchesWithoutReplies(HistoryEntry e, string[] words) => words.All(w =>

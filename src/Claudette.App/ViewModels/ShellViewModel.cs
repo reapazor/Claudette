@@ -405,6 +405,18 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
         History = new HistoryViewModel(_services, this);
     }
 
+    /// <summary><b>History for this folder</b>, in a group's menu: History listing only that project's sessions.</summary>
+    [RelayCommand]
+    private void OpenHistoryForGroup(TabGroupViewModel? group)
+    {
+        if (group is null)
+        {
+            return;
+        }
+        Picker = null;
+        History = new HistoryViewModel(_services, this, group.Folder);
+    }
+
     public void CloseHistory() => History = null;
 
     /// <summary>Resumes a past session in a new tab, with its earlier conversation loaded (<see cref="SessionOpener"/>).</summary>

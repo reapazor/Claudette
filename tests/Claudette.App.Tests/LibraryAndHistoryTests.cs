@@ -150,10 +150,119 @@ public class LibraryAndHistoryTests
         Assert.Equal(["work", "s2", "s1"], RowNames(history));
     }
 
-    /// <summary>A session written when it was last active, as Claude Code writes them.</summary>
-    private static void WriteSession(TabTestHarness h, string sessionId, string time)
+    [Fact]
+    public async Task History_chips_narrow_the_list_to_a_project_with_worktrees_under_their_repository()
     {
-        var path = h.WriteTranscript(sessionId, UserLine(sessionId, $"Prompt for {sessionId}", h.WorkFolder, time));
+        await using var h = new TabTestHarness();
+        var api = Path.Combine(Path.GetDirectoryName(h.WorkFolder)!, "api");
+        var worktree = Path.Combine(h.WorkFolder, ".claude", "worktrees", "brisk-otter");
+        WriteSession(h, "w1", "2026-09-28T08:00:00Z", prompt: "Fix the parser");
+        WriteSession(h, "a1", "2026-09-28T09:00:00Z", api, prompt: "Add retries");
+        WriteSession(h, "a2", "2026-09-28T07:00:00Z", api, prompt: "Rename the parser");
+        WriteSession(h, "wt", "2026-09-28T10:00:00Z", worktree, prompt: "Try a new parser", branch: "worktree-brisk-otter");
+        h.Shell.OpenHistoryCommand.Execute(null);
+        var history = h.Shell.History!;
+        await TabTestHarness.Eventually(() => !history.IsLoading, "History to load");
+
+        // Every project, by its latest session: the worktree's session is the repository's.
+        Assert.True(history.IsAllSelected);
+        Assert.Equal(["work", "api"], history.Chips.Select(c => c.Label));
+        Assert.Equal([2, 2], history.Chips.Select(c => c.Count));
+        Assert.Equal(4, history.AllCount);
+        Assert.False(history.HasMoreProjects);
+        Assert.Equal(["work", "wt", "w1", "api", "a1", "a2"], RowNames(history));
+        var fromWorktree = history.Groups[0].Entries[0];
+        Assert.Equal(worktree, fromWorktree.Folder);
+        // Its branch is the worktree's own, so the worktree says both.
+        Assert.EndsWith("worktree brisk-otter", fromWorktree.Details, StringComparison.Ordinal);
+        Assert.DoesNotContain("worktree-brisk-otter", fromWorktree.Details, StringComparison.Ordinal);
+
+        var apiChip = history.Chips[1];
+        history.SelectProjectCommand.Execute(apiChip);
+        await history.Filtering;
+        Assert.Same(apiChip, history.SelectedProject);
+        Assert.True(apiChip.IsSelected);
+        Assert.Equal(["api", "a1", "a2"], RowNames(history));
+
+        // The counts follow the search; the chips hold their places.
+        await SearchAsync(h, history, "parser");
+        Assert.Equal(["api", "a2"], RowNames(history));
+        Assert.Equal(["work", "api"], history.Chips.Select(c => c.Label));
+        Assert.Equal([2, 1], history.Chips.Select(c => c.Count));
+        Assert.Equal(3, history.AllCount);
+
+        // The selected chip again, like All, lists every project.
+        history.SelectProjectCommand.Execute(apiChip);
+        await history.Filtering;
+        Assert.True(history.IsAllSelected);
+        Assert.False(apiChip.IsSelected);
+        Assert.Equal(["work", "wt", "w1", "api", "a2"], RowNames(history));
+    }
+
+    [Fact]
+    public async Task Projects_past_the_chips_are_under_more_and_one_picked_from_there_takes_the_last_chip()
+    {
+        await using var h = new TabTestHarness();
+        var parent = Path.GetDirectoryName(h.WorkFolder)!;
+        for (var i = 1; i <= 7; i++)
+        {
+            WriteSession(h, $"s{i}", $"2026-09-28T{10 - i:00}:00:00Z", Path.Combine(parent, $"project{i}"));
+        }
+        h.Shell.OpenHistoryCommand.Execute(null);
+        var history = h.Shell.History!;
+        await TabTestHarness.Eventually(() => !history.IsLoading, "History to load");
+
+        Assert.Equal(["project1", "project2", "project3", "project4", "project5"], history.Chips.Select(c => c.Label));
+        Assert.Equal(["project6", "project7"], history.MoreProjects.Select(c => c.Label));
+        Assert.Equal("+2 more", history.MoreText);
+
+        var seventh = history.MoreProjects[1];
+        history.SelectProjectCommand.Execute(seventh);
+        await history.Filtering;
+        Assert.Equal(["project1", "project2", "project3", "project4", "project7"], history.Chips.Select(c => c.Label));
+        Assert.Equal(["project5", "project6"], history.MoreProjects.Select(c => c.Label));
+        Assert.Equal(["project7", "s7"], RowNames(history));
+
+        history.SelectProjectCommand.Execute(null);
+        await history.Filtering;
+        Assert.Equal(["project1", "project2", "project3", "project4", "project5"], history.Chips.Select(c => c.Label));
+    }
+
+    [Fact]
+    public async Task History_for_a_group_lists_only_its_project_and_says_when_it_has_no_sessions()
+    {
+        await using var h = new TabTestHarness();
+        await h.OpenTabAsync();
+        var api = Path.Combine(Path.GetDirectoryName(h.WorkFolder)!, "api");
+        WriteSession(h, "a1", "2026-09-28T09:00:00Z", api);
+
+        h.Shell.OpenHistoryForGroupCommand.Execute(h.Shell.Groups.Single());
+        var history = h.Shell.History!;
+        // Its chip is there before anything is read.
+        Assert.Equal("work", history.SelectedProject?.Label);
+        Assert.Equal(["work"], history.Chips.Select(c => c.Label));
+        await TabTestHarness.Eventually(() => !history.IsLoading, "History to load");
+
+        Assert.True(history.IsEmpty);
+        Assert.Equal("No sessions in work yet.", history.EmptyText);
+        Assert.Equal(["api", "work"], history.Chips.Select(c => c.Label));
+        Assert.Equal([1, 0], history.Chips.Select(c => c.Count));
+
+        history.SelectProjectCommand.Execute(null);
+        await history.Filtering;
+        Assert.Equal(["api", "a1"], RowNames(history));
+        Assert.Equal(["api"], history.Chips.Select(c => c.Label));
+    }
+
+    /// <summary>A session written when it was last active, as Claude Code writes them.</summary>
+    private static void WriteSession(TabTestHarness h, string sessionId, string time, string? folder = null, string? prompt = null, string? branch = null)
+    {
+        var line = JsonNode.Parse(UserLine(sessionId, prompt ?? $"Prompt for {sessionId}", folder ?? h.WorkFolder, time))!;
+        if (branch is not null)
+        {
+            line["gitBranch"] = branch;
+        }
+        var path = h.WriteTranscript(sessionId, line.ToJsonString());
         File.SetLastWriteTimeUtc(path, DateTimeOffset.Parse(time, CultureInfo.InvariantCulture).UtcDateTime);
     }
 

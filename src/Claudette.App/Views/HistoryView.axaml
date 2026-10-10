@@ -5,6 +5,30 @@
              x:Class="Claudette.App.Views.HistoryView"
              x:DataType="vm:HistoryViewModel">
   <!-- DESIGN.md §9, "History" -->
+  <UserControl.Styles>
+    <!-- The project chips: outlined, the selected one tinted with the accent. -->
+    <Style Selector="Button.projectchip">
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.projectchip /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+    </Style>
+    <Style Selector="Button.projectchip.selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SelectedRowBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentStatusBrush}" />
+    </Style>
+    <Style Selector=".claude Button.projectchip">
+      <Setter Property="Padding" Value="10,2" />
+      <Setter Property="CornerRadius" Value="12" />
+    </Style>
+    <!-- A long name is cut short; the chip's tip has the folder. -->
+    <Style Selector="Button.projectchip TextBlock.chipname">
+      <Setter Property="MaxWidth" Value="140" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+  </UserControl.Styles>
+
   <Border Classes="dialog" Width="760" MaxHeight="620" Padding="0">
     <Grid RowDefinitions="Auto,*,Auto">
       <StackPanel Margin="16,14,16,8" Spacing="8">
@@ -13,6 +37,64 @@
           <Button Grid.Column="1" Classes="flat" Content="Refresh" Command="{Binding RefreshCommand}" />
         </Grid>
         <TextBox x:Name="SearchBox" Text="{Binding Search}" PlaceholderText="Search by title or prompt; Enter searches Claude's replies too" />
+        <!-- The projects: All, the most recently used, and the rest under "+N more", each with the sessions the search matches -->
+        <WrapPanel ItemSpacing="4" LineSpacing="4">
+          <Button Classes="flat projectchip" Classes.selected="{Binding IsAllSelected}" Command="{Binding SelectProjectCommand}" CommandParameter="{x:Null}"
+                  AutomationProperties.Name="{Binding AllAccessibleName}"
+                  ToolTip.Tip="Every project's sessions">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <TextBlock Text="All" />
+              <TextBlock Classes="muted small" Text="{Binding AllCount}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <ItemsControl x:Name="ProjectChips" ItemsSource="{Binding Chips}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="4" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:HistoryProject">
+                <Button Classes="flat projectchip" Classes.selected="{Binding IsSelected}" ToolTip.Tip="{Binding Folder}" AutomationProperties.Name="{Binding AccessibleName}"
+                        Command="{Binding $parent[UserControl].((vm:HistoryViewModel)DataContext).SelectProjectCommand}" CommandParameter="{Binding}">
+                  <StackPanel Orientation="Horizontal" Spacing="5">
+                    <TextBlock Classes="chipname" Text="{Binding Label}" />
+                    <TextBlock Classes="muted small" Text="{Binding Count}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Button x:Name="MoreProjectsButton" Classes="flat projectchip" IsVisible="{Binding HasMoreProjects}" AutomationProperties.Name="{Binding MoreText}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <TextBlock Text="{Binding MoreText}" />
+              <Path Data="{StaticResource IconChevronDown}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.4" Width="9" Height="9"
+                    Stretch="Uniform" VerticalAlignment="Center" />
+            </StackPanel>
+            <Button.Flyout>
+              <Flyout Placement="BottomEdgeAlignedLeft">
+                <ScrollViewer MaxHeight="360">
+                  <ItemsControl ItemsSource="{Binding MoreProjects}" MinWidth="300" MaxWidth="440">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="vm:HistoryProject">
+                        <Button Classes="flat row" HorizontalContentAlignment="Stretch" ToolTip.Tip="{Binding Folder}" AutomationProperties.Name="{Binding AccessibleName}" Click="OnMoreProjectPicked"
+                                Command="{Binding $parent[ItemsControl].((vm:HistoryViewModel)DataContext).SelectProjectCommand}" CommandParameter="{Binding}">
+                          <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="1">
+                              <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                              <TextBlock Classes="muted small" Text="{Binding Folder}" TextTrimming="PathSegmentEllipsis" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding Count}" VerticalAlignment="Center" Margin="12,0,4,0" />
+                          </Grid>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+        </WrapPanel>
       </StackPanel>
 
       <Grid Grid.Row="1" RowDefinitions="Auto,*">
@@ -20,7 +102,7 @@
           <!-- Only before the first list: a refresh keeps the list where it is until the new one replaces it. -->
           <TextBlock Classes="muted" Margin="8" Text="Reading your sessions…" IsVisible="{Binding IsFirstLoad}" />
           <TextBlock Classes="error" Margin="8" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
-          <TextBlock Classes="muted" Margin="8" Text="No sessions found." IsVisible="{Binding IsEmpty}" />
+          <TextBlock Classes="muted" Margin="8" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
           <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0">
             <!-- Disabled rather than hidden while it searches, so the row, and the list under it, don't move. -->
             <Button Classes="flat" Content="Search Claude's replies too" Command="{Binding SearchRepliesCommand}"

@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
 Takes the README's screenshots (Windows): the demo from claudette-demo in each style and theme, with the main window,
-the diff view, the thread's Tasks page and agent map, and the detailed usage header of each.
+the diff view, the thread's Tasks page and agent map, the detailed usage header and History of each.
 
 .DESCRIPTION
 For Standard and Claude, dark and light: makes the demo content afresh, starts the Debug build of Claudette on it
@@ -11,6 +11,8 @@ icon, opens the Grappling hook tab's Changed files, and captures the window as <
 - selects the Move to the Input System thread, opens its side panel on Tasks and captures the window as
   tasks-<style>-<theme>.png, then on Agents, with the first subagent selected, as agents-<style>-<theme>.png;
 - expands the usage header and captures the top of the window as header-<style>-<theme>.png;
+- collapses it again, selects Grappling hook, opens History, picks starfall's chip and captures the window as
+  history-<style>-<theme>.png;
 and closes Claudette by its window, as a user would.
 
 Captures go through PrintWindow, so other windows over Claudette's don't matter, and clicks through UI Automation.
@@ -128,6 +130,16 @@ function Find-ByText([IntPtr] $hwnd, [string] $text) {
     $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $named)
     if ($all.Count -le $index) { throw "Found $($all.Count) controls named '$text'." }
     $all[$index]
+}
+
+# The first control whose name starts with $prefix, such as History's chip for a project, "starfall, 5 sessions"; or null.
+function Find-ByPrefix([IntPtr] $hwnd, [string] $prefix) {
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+    $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+    foreach ($element in $all) {
+        if ($element.Current.Name.StartsWith($prefix, [StringComparison]::Ordinal)) { return $element }
+    }
+    $null
 }
 
 # Clicks the control named $text, or the nearest one around it that can be clicked.
@@ -251,6 +263,18 @@ foreach ($style in 'standard', 'claude') {
             Start-Sleep -Seconds 3
             $sidebarTop = (Find-ByText $window 'New tab').Current.BoundingRectangle.Top
             [WindowShot]::Save($window, (Join-Path $Out "header-$style-$theme.png"), [int] ($sidebarTop - 10 * [WindowShot]::Scale($window)))
+
+            # History from a starfall tab, narrowed to starfall by its chip: its tabs' sessions and older ones, one in a worktree.
+            Invoke-ByText $window 'Collapse the usage header'
+            Start-Sleep -Seconds 1
+            Invoke-ByText $window 'Grappling hook'
+            Start-Sleep -Seconds 2
+            Invoke-ByText $window 'History'
+            Wait-Until { Find-ByPrefix $window 'starfall, ' } 'History to list starfall' 20
+            Start-Sleep -Seconds 2
+            Invoke-Element (Find-ByPrefix $window 'starfall, ') 'starfall'
+            Start-Sleep -Seconds 2
+            [WindowShot]::Save($window, (Join-Path $Out "history-$style-$theme.png"), 0)
         }
         finally {
             # Closed by its window, so it stops each tab's Claude Code as it would for a user.

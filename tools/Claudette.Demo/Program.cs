@@ -7,10 +7,12 @@
 //                   seven tabs over three game projects (Unreal in C++, Unity in C#, Godot): the first with a long
 //                   conversation and changed files, one with every file reviewed, and a thread with two sub-threads,
 //                   a plan, a task list part-way done and three subagents; and a plan usage history that ends now
-//   claude-config/  for CLAUDE_CONFIG_DIR: the tabs' transcripts, with the subagents' beside them
+//   claude-config/  for CLAUDE_CONFIG_DIR: the tabs' transcripts, with the subagents' beside them, and past sessions
+//                   for History: more in each project, one in a worktree of starfall, and four older projects
 //   usage.json      for FAKE_CLAUDE_USAGE: the plan usage fake-claude reports, where the history ends
-//   projects/       three git repositories, with Claude's changes in their working trees. --projects puts them
-//                   elsewhere: the conversation shows their paths, so a short one such as C:\Demo reads better.
+//   projects/       three git repositories, with Claude's changes in their working trees, and the older projects'
+//                   empty folders. --projects puts them elsewhere: the conversation shows their paths, so a short one
+//                   such as C:\Demo reads better.
 // then prints the environment to run Claudette with. A folder it would replace must be empty or one it made.
 //
 // tools/Claudette.Demo/screenshots.ps1 takes the README's screenshots with it, on Windows.
@@ -81,6 +83,7 @@ Directory.CreateDirectory(paths.DataDirectory);
 Directory.CreateDirectory(paths.SettingsDirectory);
 
 var tabs = DemoContent.Write(projects, transcripts);
+var sessionMarks = DemoHistory.Write(projects, transcripts);
 DemoUsage.Write(paths.UsageDatabase, usage, DateTimeOffset.UtcNow, tabs);
 
 var settings = new AppSettings();
@@ -103,6 +106,7 @@ await new JsonFileStore<AppState>(paths.StateFile).SaveAsync(new AppState
     SidePanelWidth = 420,
     SidePanelPages = ["Files", "Agents", "Tasks", "Project", "Processes", "Mcp", "ScratchPad"],
     TrustedFolders = [.. tabs.Select(t => t.Folder).Distinct()],
+    SessionMarks = sessionMarks,
     Window = new WindowPlacement(60, 40, 1480, 920, IsMaximized: false),
 });
 
