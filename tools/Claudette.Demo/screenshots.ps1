@@ -1,15 +1,17 @@
 <#
 .SYNOPSIS
-Takes the README's screenshots (Windows): the demo from claudette-demo in each style and theme, with the main window
-and the diff view of each.
+Takes the README's screenshots (Windows): the demo from claudette-demo in each style and theme, with the main window,
+the diff view, the thread's Tasks page and agent map, and the detailed usage header of each.
 
 .DESCRIPTION
 For Standard and Claude, dark and light: makes the demo content afresh, starts the Debug build of Claudette on it
 (fake-claude as Claude Code, so no account and no tokens), visits every tab so each shows its model and any reviewed
-icon, opens Changed files, and captures the window as <style>-<theme>.png. Then it opens the diff of
-PaymentMethods.tsx from its Edit card and captures that window as diff-<style>-<theme>.png, expands the usage header
-and captures the top of the window as header-<style>-<theme>.png, and closes Claudette by its window, as a user
-would.
+icon, opens the Grappling hook tab's Changed files, and captures the window as <style>-<theme>.png. Then it:
+- opens the diff of StarfallCharacter.cpp from an Edit card and captures that window as diff-<style>-<theme>.png;
+- selects the Move to the Input System thread, opens its side panel on Tasks and captures the window as
+  tasks-<style>-<theme>.png, then on Agents, with the first subagent selected, as agents-<style>-<theme>.png;
+- expands the usage header and captures the top of the window as header-<style>-<theme>.png;
+and closes Claudette by its window, as a user would.
 
 Captures go through PrintWindow, so other windows over Claudette's don't matter, and clicks through UI Automation.
 
@@ -130,7 +132,10 @@ function Find-ByText([IntPtr] $hwnd, [string] $text) {
 
 # Clicks the control named $text, or the nearest one around it that can be clicked.
 function Invoke-ByText([IntPtr] $hwnd, [string] $text) {
-    $element = Find-ByText $hwnd $text
+    Invoke-Element (Find-ByText $hwnd $text) $text
+}
+
+function Invoke-Element($element, [string] $what) {
     $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
     while ($element) {
         $pattern = $null
@@ -140,7 +145,39 @@ function Invoke-ByText([IntPtr] $hwnd, [string] $text) {
         }
         $element = $walker.GetParent($element)
     }
-    throw "Nothing to click around '$text'."
+    throw "Nothing to click around '$what'."
+}
+
+# Clicks the control named $button on the same row as the first text named $row that has one, such as an Edit card's
+# Open diff: which of those buttons is which depends on what the conversation has scrolled into view.
+function Invoke-OnRow([IntPtr] $hwnd, [string] $row, [string] $button) {
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+    $named = { param($name) $root.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+        (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $name))) }
+    $buttons = & $named $button
+    foreach ($text in & $named $row) {
+        $line = $text.Current.BoundingRectangle
+        foreach ($candidate in $buttons) {
+            $box = $candidate.Current.BoundingRectangle
+            if ([Math]::Abs(($box.Top + $box.Bottom) / 2 - ($line.Top + $line.Bottom) / 2) -lt $line.Height) {
+                Invoke-Element $candidate $button
+                return
+            }
+        }
+    }
+    throw "No '$button' on a row with '$row'."
+}
+
+# Selects the item at $index (from 0) of the tree named $tree, such as a node of the agent map.
+function Select-TreeItem([IntPtr] $hwnd, [string] $tree, [int] $index) {
+    $type = { param($t) New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, $t) }
+    $named = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $tree)
+    $found = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd).FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+        (New-Object System.Windows.Automation.AndCondition($named, (& $type ([System.Windows.Automation.ControlType]::Tree)))))
+    if (-not $found) { throw "Found no tree named '$tree'." }
+    $items = $found.FindAll([System.Windows.Automation.TreeScope]::Descendants, (& $type ([System.Windows.Automation.ControlType]::TreeItem)))
+    if ($items.Count -le $index) { throw "The tree '$tree' has $($items.Count) items." }
+    $items[$index].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
 }
 
 function Wait-Until([scriptblock] $condition, [string] $what, [int] $seconds = 60) {
@@ -180,18 +217,34 @@ foreach ($style in 'standard', 'claude') {
             Start-Sleep -Seconds $SettleSeconds
 
             # A tab loads its session when it's first shown: visit each, then come back to the first.
-            foreach ($text in 'Flaky cart total test', 'Idempotent refunds', 'Upgrade to .NET 10', 'Pool particle emitters', 'Apple Pay on checkout', 'Files (3)') {
+            $tabs = 'Stamina drains twice on clients', 'Inventory loses items on save', 'Move to the Input System', 'UI on the Input System',
+                'Gamepad rumble', 'Pool particle emitters', 'Grappling hook', 'Files (5)'
+            foreach ($text in $tabs) {
                 Invoke-ByText $window $text
                 Start-Sleep -Seconds 2
             }
             [WindowShot]::Save($window, (Join-Path $Out "$style-$theme.png"), 0)
 
-            Invoke-ByText $window 'Open diff#2'
+            Invoke-OnRow $window (Join-Path $Projects 'starfall\Source\Starfall\Player\StarfallCharacter.cpp') 'Open diff'
             Wait-Until { [WindowShot]::OtherWindow($claudette.Id, $window) -ne [IntPtr]::Zero } 'the diff view' 20
             $diff = [WindowShot]::OtherWindow($claudette.Id, $window)
             [WindowShot]::Resize($diff, 1000, 470)
             Start-Sleep -Seconds 2
             [WindowShot]::Save($diff, (Join-Path $Out "diff-$style-$theme.png"), 0)
+
+            # The thread: its plan and tasks, then its subagents with the first one's details.
+            Invoke-ByText $window 'Move to the Input System'
+            Start-Sleep -Seconds 2
+            Invoke-ByText $window 'Show the side panel'
+            Start-Sleep -Seconds 1
+            Invoke-ByText $window 'Tasks'
+            Start-Sleep -Seconds 2
+            [WindowShot]::Save($window, (Join-Path $Out "tasks-$style-$theme.png"), 0)
+            Invoke-ByText $window 'Agents'
+            Start-Sleep -Seconds 1
+            Select-TreeItem $window 'Agents' 1
+            Start-Sleep -Seconds 2
+            [WindowShot]::Save($window, (Join-Path $Out "agents-$style-$theme.png"), 0)
 
             # The detailed usage header, down to its edge: just above the sidebar's first button.
             Invoke-ByText $window 'Expand the usage header'

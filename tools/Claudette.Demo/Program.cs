@@ -4,9 +4,10 @@
 //
 // Makes, in <folder> (replacing what an earlier run made there):
 //   home/           for CLAUDETTE_HOME: settings with fake-claude as Claude Code and the theme and style asked for,
-//                   five tabs over three projects (the first with a long conversation and changed files, one with
-//                   every file reviewed), and a plan usage history that ends now
-//   claude-config/  for CLAUDE_CONFIG_DIR: the tabs' transcripts
+//                   seven tabs over three game projects (Unreal in C++, Unity in C#, Godot): the first with a long
+//                   conversation and changed files, one with every file reviewed, and a thread with two sub-threads,
+//                   a plan, a task list part-way done and three subagents; and a plan usage history that ends now
+//   claude-config/  for CLAUDE_CONFIG_DIR: the tabs' transcripts, with the subagents' beside them
 //   usage.json      for FAKE_CLAUDE_USAGE: the plan usage fake-claude reports, where the history ends
 //   projects/       three git repositories, with Claude's changes in their working trees. --projects puts them
 //                   elsewhere: the conversation shows their paths, so a short one such as C:\Demo reads better.
@@ -98,6 +99,9 @@ await new JsonFileStore<AppState>(paths.StateFile).SaveAsync(new AppState
     Tabs = tabs,
     SelectedTabId = tabs[0].Id,
     SidebarWidth = 300,
+    // Wide enough for the plan on the Tasks page, with Tasks beside Agents so both pages' tabs show.
+    SidePanelWidth = 420,
+    SidePanelPages = ["Files", "Agents", "Tasks", "Project", "Processes", "Mcp", "ScratchPad"],
     TrustedFolders = [.. tabs.Select(t => t.Folder).Distinct()],
     Window = new WindowPlacement(60, 40, 1480, 920, IsMaximized: false),
 });

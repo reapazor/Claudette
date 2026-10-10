@@ -6,18 +6,35 @@
 
 It isn't a reimplementation. Each tab runs the real `claude` CLI, with your settings, `CLAUDE.md`, MCP servers, hooks and permissions, and Claudette draws it as proper native UI instead of a terminal. Windows and macOS, built with .NET 10 and Avalonia.
 
-![Claudette: five tabs over three projects, a long conversation with tool calls and a code block, the Changed files panel, and the plan usage header](docs/screenshots/standard-dark.png)
+![Claudette: seven tabs over three game projects, a C++ conversation with tool calls and a code block, the Changed files panel, and the plan usage header](docs/screenshots/standard-dark.png)
 
 ## Why you'll want it
 
 ### Run a dozen sessions without losing track of any
 
 - **One tab per session**, grouped by project folder in a sidebar that fits long names, a status line and as many tabs as you like. Each group gets its own color.
-- **See where each tab stands at a glance:** busy, needs input, failed or idle, plus its git branch or worktree, its model and effort, and a ring that fills up with its context window.
+- **See where each tab stands at a glance:** busy, needs input, failed or idle, plus its git branch or worktree, its model and effort, how far its task list has got (`2/7`), and a ring that fills up with its context window.
 - **Mark tabs your way** with a check, cross, question mark, star, flag or pause sign. Once every file a tab changed is reviewed, it gets a green **reviewed** badge on its own.
 - **`Ctrl+J` jumps to the next tab waiting for you**, so a permission prompt never sits unanswered behind another tab. `Ctrl+Shift+P` opens a command palette for everything else.
 - **Worktree tabs** give a session its own git worktree and branch, so parallel tabs in one repository never trip over each other's edits. Claudette runs your setup steps in each new worktree, and can clean up the ones you've merged.
+- **Sessions that know each other.** Each tab's session goes by the tab's name in Claude Code, so other sessions can message it by name. Type `@` in the composer to name another tab, another Claude Code session on this machine or one of the tab's subagents, and Claude is told how to reach it.
 - **Pinned tabs come back** every time you launch, resuming exactly where they left off.
+
+### Plans, tasks and threads
+
+- **Follow the plan.** The Tasks page shows Claude's plan as it writes it in Plan mode, keeps every version with **Changes from** the one before, and lists the tasks Claude makes from it.
+- **Watch the tasks get done:** each task with who's on it, how long it took, the files it changed and the tokens it used. A rule in the conversation marks where each one starts, the status line and the tab's row say how far the list has got, and a turn that ends with tasks left offers **Continue**.
+- **Threads** spread one job over several tabs. Make a tab a thread, and its Claude hands work to the other tabs in its project, its sub-threads, with Claude Code's own `SendMessage`. You approve each message first (or turn that off), each sub-thread stays a whole tab you can watch, steer and answer, and their results come back to the thread in one message, so the thread spends one turn on them, not one each. A sub-thread's permission prompt shows in the thread too, to answer from there.
+
+![A thread moving a Unity game to the Input System: its two sub-threads under it in the sidebar, the plan it approved (v2, with Changes from v1), its tasks two of seven done with who has each, and the SendMessage calls that handed work to the sub-threads](docs/screenshots/tasks-standard-dark.png)
+
+### Watch the agents work
+
+- **The agent map** shows Claude's subagents as a tree while they fan out, nested as they nest, with what each is doing right now. Select one for what it was asked, what it returned, its time, tool calls and tokens, or stop it. It sits in the side panel, or in a window of its own for wide fan-outs.
+- **Background work stays in sight:** a chip counts what Claude Code keeps running after a turn ends (background commands, Monitor watches, background subagents), with Stop for each.
+- **Ultracode**, a switch per tab, lets Claude run workflows of subagents on its own for big tasks.
+
+![The agent map: three Explore subagents that surveyed the project in parallel, the first one selected with its prompt and its report, a table of the scripts it found](docs/screenshots/agents-claude-dark.png)
 
 ### Know how fast you're burning your plan
 
@@ -28,7 +45,7 @@ It isn't a reimplementation. Each tab runs the real `claude` CLI, with your sett
 - **Hit the limit mid-task? Go to bed.** The tab waits for the reset and carries on with the task by itself.
 - **Several computers?** They can share their readings, so every machine's header knows what the others used.
 
-![The detailed usage header: the session chart heading for 90% just before the reset, the week with Fable's own line, a burn rate of 19.2% an hour, and the busiest tabs](docs/screenshots/header-standard-dark.png)
+![The detailed usage header: the session chart heading for 90% just before the reset, the week with Fable's own line, the burn rate per hour, and the busiest tabs](docs/screenshots/header-standard-dark.png)
 
 ### Review every change Claude makes
 
@@ -38,15 +55,15 @@ It isn't a reimplementation. Each tab runs the real `claude` CLI, with your sett
 - **Every turn says what it changed:** *"3 files changed"*, one click from each file's diff for just that turn.
 - **Prefer your own tools?** Send diffs to Beyond Compare, VS Code, WinMerge, Kaleidoscope, Meld, P4Merge or your git difftool, or open the file in your editor.
 
-![The diff view, with the import and the express checkout block Claude added to PaymentMethods.tsx](docs/screenshots/diff-standard-dark.png)
+![The diff view of StarfallCharacter.cpp: the include, the air control change and the grappling hook's component and bindings Claude added](docs/screenshots/diff-standard-dark.png)
 
 ### A conversation built for code
 
 - Replies render as Markdown with syntax-highlighted code blocks and one-click **Copy**. Tool calls are compact rows that expand when you want the detail.
 - **Permission prompts, questions and plans are cards**, not walls of text: Allow, Always allow, Deny, a plan to approve or send back, a question with its choices.
-- **Steer while Claude works:** messages you send mid-turn reach it at the next tool call. If a turn goes quiet for too long, Claudette checks in, and if nothing answers it flags the tab as possibly stuck so it doesn't burn your plan unnoticed.
-- **Rewind and branch** from any earlier message, putting the files back too. **Find**, **export** to Markdown or a web page, **quote** part of a reply in your answer.
-- **A composer that keeps up:** slash commands and `@` file autocomplete, images and large pastes as attachments, prompt recall, drafts that survive a restart, a stash for half-written ideas, and quick suffixes for the instructions you add every time.
+- **Steer while Claude works:** messages you send mid-turn reach it at the next tool call, or wait for the turn to end if you'd rather, with **Send now** for one that can't wait. If a turn goes quiet for too long, Claudette checks in, and if nothing answers it flags the tab as possibly stuck so it doesn't burn your plan unnoticed.
+- **Rewind and branch** from any earlier message, putting the files back too, or edit a message and send it again. **Find**, **export** to Markdown or a web page, **quote** part of a reply in your answer.
+- **A composer that keeps up:** slash commands and `@` autocomplete for files, tabs and agents, images and large pastes as attachments, prompt recall, drafts that survive a restart, a stash for half-written ideas, and quick suffixes for the instructions you add every time.
 - **Per-tab model, effort and permission mode,** switched from the composer bar.
 
 ### Pick up anywhere
@@ -58,9 +75,8 @@ It isn't a reimplementation. Each tab runs the real `claude` CLI, with your sett
 
 ### It knows your project
 
-- **Project tools** for Unreal Engine, Unity and Godot: launch the editor, generate project files, build. Each run gets its log, its status and a Stop button. Any folder can add its own actions and links in a `claudette.json`.
-- **The agent map** shows Claude's subagents as a live tree while they fan out, with what each was asked and what it returned.
-- **The process monitor** lists the dev servers, test runs and builds a tab started, with their CPU and memory.
+- **Project tools** for Unreal Engine, Unity and Godot: launch the editor, generate project files, build, open the solution in your IDE (Rider too). Each run gets its log, its status and a Stop button. Any folder can add its own actions and links in a `claudette.json`.
+- **The process monitor** lists the dev servers, test runs and builds a tab started, as a tree under its `claude`, with their CPU, memory, running time and arguments. Collapse a branch to see what it adds up to, and jump from a process to the command that started it.
 - **MCP servers** at a glance, with their status and the input they ask for.
 - **Perforce, too:** ticket handling and the tab's changelist, with passwords kept in your OS's credential store.
 
@@ -89,7 +105,7 @@ It isn't a reimplementation. Each tab runs the real `claude` CLI, with your sett
 
 ### And the small things
 
-Native notifications and a taskbar or Dock badge when a tab needs you. Sign in from inside the app. Claude Code updates offered as they come out, and Claudette updating itself. A status dot that tells you when Claude itself is having a bad day. Start at login, a compact density, zoom from 80% to 200% and reduced motion. Settings that sync between your machines if you want them to.
+Native notifications and a taskbar or Dock badge when a tab needs you. A side panel whose pages (changed files, agents, tasks, project, processes, MCP servers, the scratch pad) you can drag into your own order. Sign in from inside the app. Claude Code updates offered as they come out, and Claudette updating itself. A status dot that tells you when Claude itself is having a bad day. Start at login, a compact density, zoom from 80% to 200% and reduced motion. Settings that sync between your machines if you want them to.
 
 ## Getting started
 
@@ -105,7 +121,7 @@ You need [Claude Code](https://code.claude.com/docs) installed. Claudette finds 
 
 ### Try it without an account
 
-`tools/Claudette.Demo` builds a demo, the one in these screenshots: three projects, five tabs and a plan usage history, with a stand-in for Claude Code. It needs no account and spends no tokens.
+`tools/Claudette.Demo` builds a demo, the one in these screenshots: three game projects (Unreal in C++, Unity in C#, and Godot), seven tabs including a thread with two sub-threads, and a plan usage history, with a stand-in for Claude Code. It needs no account and spends no tokens.
 
 ```sh
 dotnet run --project tools/Claudette.Demo -- <empty folder>

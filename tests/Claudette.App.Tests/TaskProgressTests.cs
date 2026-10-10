@@ -119,6 +119,7 @@ public class TaskProgressTests
         Assert.Equal("e1", task.Files[0].ToolUseId);
         Assert.Equal(1200, task.Tokens);
         Assert.Equal("· 2 files", task.FilesLinkText);
+        Assert.Equal("· 1.2k tokens", task.TokensSuffix);
         Assert.Empty(tab.TodoList.Items[1].Files);
 
         // With two in progress, the main agent's work counts toward neither.

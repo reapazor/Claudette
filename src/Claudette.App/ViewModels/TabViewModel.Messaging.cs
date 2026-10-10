@@ -69,6 +69,13 @@ public partial class TabViewModel
     [RelayCommand]
     private Task CopyInfoRowAsync(InfoRow? row) => row is { CanCopy: true } ? _services.Platform.SetClipboardTextAsync(row.Value) : Task.CompletedTask;
 
+    /// <summary>Whether the tab has a session yet: not before its first turn, nor after starting afresh until the next.</summary>
+    public bool HasSessionId => State.SessionId is not null;
+
+    /// <summary>The tab's menu's <b>Copy session ID</b>: what <c>claude --resume</c> takes.</summary>
+    [RelayCommand]
+    private Task CopySessionIdAsync() => State.SessionId is { } id ? _services.Platform.SetClipboardTextAsync(id) : Task.CompletedTask;
+
     /// <summary>
     /// Who an <c>@</c> in the composer can name: a thread's sub-threads, the sessions in the other tabs, the other
     /// sessions on this machine, then this tab's subagents, newest first. A tab's session goes by the tab's name in the

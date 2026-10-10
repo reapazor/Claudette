@@ -102,6 +102,29 @@ public class MessagingTests
         Assert.False(tab.InfoRows.Single(r => r.Label == "Folder").CanCopy);
     }
 
+    [Fact]
+    public async Task The_tabs_menu_copies_the_session_id_once_there_is_one()
+    {
+        await using var h = new TabTestHarness();
+        var tab = await h.OpenTabAsync();
+        var changes = new List<string?>();
+        tab.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+        Assert.False(tab.HasSessionId);
+
+        h.Transport.EmitTurn(sessionId: "s7");
+
+        await TabTestHarness.Eventually(() => tab.HasSessionId, "the session's ID");
+        Assert.Contains(nameof(TabViewModel.HasSessionId), changes);
+        await tab.CopySessionIdCommand.ExecuteAsync(null);
+        Assert.Equal("s7", h.Platform.Clipboard);
+
+        // A new session in the same folder has no ID until its first turn.
+        changes.Clear();
+        await tab.StartNewSessionCommand.ExecuteAsync(null);
+        Assert.False(tab.HasSessionId);
+        Assert.Contains(nameof(TabViewModel.HasSessionId), changes);
+    }
+
     // ---- Mentions ------------------------------------------------------------------------------------------------
 
     [Fact]

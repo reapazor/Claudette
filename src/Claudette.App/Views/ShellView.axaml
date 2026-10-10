@@ -384,6 +384,8 @@
 
                                   <MenuItem Header="Export conversation…" Command="{Binding ExportConversationCommand}"
                                             ToolTip.Tip="Save the conversation as a Markdown file or a web page" />
+                                  <MenuItem Header="Copy session ID" Command="{Binding CopySessionIdCommand}" IsVisible="{Binding HasSessionId}"
+                                            ToolTip.Tip="What claude --resume takes" />
                                   <!-- Started without the folder's own configuration (DESIGN.md §7, "Folder trust") -->
                                   <MenuItem Header="Trust this folder" Command="{Binding TrustFolderCommand}" IsVisible="{Binding IsWithoutFolderSettings}"
                                             ToolTip.Tip="Start Claude Code again with this folder's own settings, MCP servers and CLAUDE.md" />
@@ -533,6 +535,8 @@
 
                               <MenuItem Header="Export conversation…" Command="{Binding ExportConversationCommand}"
                                         ToolTip.Tip="Save the conversation as a Markdown file or a web page" />
+                              <MenuItem Header="Copy session ID" Command="{Binding CopySessionIdCommand}" IsVisible="{Binding HasSessionId}"
+                                        ToolTip.Tip="What claude --resume takes" />
                               <!-- Started without the folder's own configuration (DESIGN.md §7, "Folder trust") -->
                               <MenuItem Header="Trust this folder" Command="{Binding TrustFolderCommand}" IsVisible="{Binding IsWithoutFolderSettings}"
                                         ToolTip.Tip="Start Claude Code again with this folder's own settings, MCP servers and CLAUDE.md" />

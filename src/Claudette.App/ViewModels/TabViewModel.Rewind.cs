@@ -261,6 +261,7 @@ public sealed partial class TabViewModel
         if (resumeAt is null || sessionId is null)
         {
             State.SessionId = null;
+            OnPropertyChanged(nameof(HasSessionId));
             State.TranscriptPath = null;
             State.SessionStartedAt = null;
             State.ForkOnNextStart = false;

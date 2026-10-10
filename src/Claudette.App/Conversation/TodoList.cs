@@ -134,7 +134,7 @@ public sealed partial class TodoItem(string content, string? activeForm, string 
     public bool HasTokens => Tokens > 0;
 
     /// <summary>"· 120k tokens", after who, when and the files.</summary>
-    public string TokensSuffix => (HasDetail || HasFiles ? "· " : "") + $"{TokenTotals.Short(Tokens)} tokens";
+    public string TokensSuffix => (HasDetail || HasFiles ? "· " : "") + TokenTotals.Short(Tokens).Replace(" tok", " tokens", StringComparison.Ordinal);
 
     internal void SetCallTokens(string callId, long tokens)
     {

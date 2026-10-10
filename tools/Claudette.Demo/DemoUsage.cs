@@ -20,11 +20,13 @@ internal static class DemoUsage
     /// <summary>Each tab's share of this window's tokens, for the detailed header's busiest tabs.</summary>
     private static readonly Dictionary<string, double> TabShares = new()
     {
-        ["tab-applepay"] = 0.44,
-        ["tab-refunds"] = 0.27,
-        ["tab-pool"] = 0.15,
-        ["tab-flaky"] = 0.09,
-        ["tab-upgrade"] = 0.05,
+        ["tab-input"] = 0.34,
+        ["tab-grapple"] = 0.26,
+        ["tab-ui"] = 0.12,
+        ["tab-inventory"] = 0.1,
+        ["tab-rumble"] = 0.07,
+        ["tab-pool"] = 0.06,
+        ["tab-stamina"] = 0.05,
     };
 
     public static void Write(string database, string answer, DateTimeOffset now, IReadOnlyList<TabState> tabs)

@@ -1437,6 +1437,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         State.ForkOnNextStart = false;
         // The marks were for the old session's changes (DESIGN.md §8, "Reviewed").
         State.ReviewedFiles.Clear();
+        OnPropertyChanged(nameof(HasSessionId));
         _services.SaveState();
         await EnsureStartedAsync();
     }
@@ -1735,6 +1736,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                     // A new session, a copy's or after /clear: the info card shows its ID, and the name it's reached by.
                     State.SessionId = started.Init.SessionId;
                     OnPropertyChanged(nameof(InfoRows));
+                    OnPropertyChanged(nameof(HasSessionId));
                     _services.LiveSessions.Refresh();
                 }
                 OnWorkingFolderReported(started.Init.Cwd);
