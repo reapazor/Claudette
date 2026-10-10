@@ -56,18 +56,19 @@ public readonly record struct MascotRoom(int Left, int Right, int Home)
 internal sealed record MascotStep(string Pose, TimeSpan Duration, int Move = 0, int Drop = 0, IReadOnlyList<MascotProp>? Props = null);
 
 /// <summary>
-/// Claudette on the composer (DESIGN.md §5): what she does, step by step. She stands about and blinks, and every 30 to
-/// 90 seconds does something (walks, looks around, leans on the edge, stretches, waves, hops, and now and then falls
-/// off behind the box and climbs back up). Her walks tend to take her back home, over the Send button. She reacts to the tab she's on (<see cref="MascotMood"/>), ducks behind the
+/// Claudette on the composer (DESIGN.md §5): what she does, step by step. She stands about and blinks, and every 10 to
+/// 30 seconds does something (walks, looks around, leans on the edge, stretches, waves, hops, dances, twirls, yawns,
+/// taps her foot, tosses a ball, looks puzzled, blows a heart, sneezes, and now and then falls off behind the box and
+/// climbs back up). Her walks tend to take her back home, over the Send button. She reacts to the tab she's on (<see cref="MascotMood"/>), ducks behind the
 /// box while something sits on it, and stands still while motion is reduced. Timed by the injected clock; between
 /// steps nothing ticks.
 /// </summary>
 public sealed partial class MascotDirector : ObservableObject, IDisposable
 {
     /// <summary>The shortest and longest wait between the things she does.</summary>
-    public static readonly TimeSpan ShortestCalm = TimeSpan.FromSeconds(30);
+    public static readonly TimeSpan ShortestCalm = TimeSpan.FromSeconds(10);
 
-    public static readonly TimeSpan LongestCalm = TimeSpan.FromSeconds(90);
+    public static readonly TimeSpan LongestCalm = TimeSpan.FromSeconds(30);
 
     /// <summary>She naps once nothing has happened for this long.</summary>
     public static readonly TimeSpan NapAfter = TimeSpan.FromMinutes(5);
@@ -444,6 +445,14 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
             (1, false, MascotAntics.Stretch),
             (1, false, () => MascotAntics.Wave(3)),
             (1, false, MascotAntics.Hop),
+            (2, false, MascotAntics.Dance),
+            (2, false, MascotAntics.Twirl),
+            (1, false, MascotAntics.Yawn),
+            (2, false, MascotAntics.TapFoot),
+            (2, false, MascotAntics.TossBall),
+            (1, false, MascotAntics.Puzzled),
+            (1, false, MascotAntics.BlowHeart),
+            (1, false, MascotAntics.Sneeze),
             (canFall ? 1 : 0, true, () => MascotAntics.TopplesOff(_random).Concat(MascotAntics.ClimbUp())),
         ];
         var pick = _random.Next(choices.Sum(c => c.Weight));

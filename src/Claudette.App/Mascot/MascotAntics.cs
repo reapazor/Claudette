@@ -25,6 +25,12 @@ internal static class MascotAntics
     /// <summary>"!" over her head, at <paramref name="drop"/>.</summary>
     private static MascotProp Bang(int drop) => new("bang", 5, MascotArt.Height - drop + 1);
 
+    /// <summary>"?" over her ponytail.</summary>
+    private static readonly MascotProp Question = new("question", 10, 13);
+
+    /// <summary>The ball, <paramref name="bottom"/> cells up, over her right hand.</summary>
+    private static MascotProp Ball(int bottom) => new("ball", 10, bottom);
+
     private static MascotStep Step(string pose, int ms, int move = 0, int drop = 0, params MascotProp[] props) =>
         new(pose, TimeSpan.FromMilliseconds(ms), move, drop, props);
 
@@ -81,6 +87,85 @@ internal static class MascotAntics
         Step("armsUp", 90, drop: -1),
         Step("stand", 90),
         Step("stand", 110, drop: 1),
+        Step("stand", 0),
+    ];
+
+    /// <summary>A little dance: swaying a cell each way, one arm up, then both, then the other.</summary>
+    public static IEnumerable<MascotStep> Dance() =>
+    [
+        .. Enumerable.Range(0, 3).SelectMany(_ => new[]
+        {
+            Step("wave", 200, move: -1),
+            Step("armsUp", 200, move: 1, drop: -1),
+            Step("waveRight", 200, move: 1),
+            Step("armsUp", 200, move: -1, drop: -1),
+        }),
+        Step("stand", 0),
+    ];
+
+    /// <summary>A twirl, twice round: the back of her head half-way.</summary>
+    public static IEnumerable<MascotStep> Twirl() =>
+    [
+        .. Enumerable.Range(0, 2).SelectMany(_ => new[] { Step("lookLeft", 110), Step("back", 110), Step("lookRight", 110), Step("stand", 110) }),
+        Step("stand", 200),
+        Step("blink", 140),
+        Step("stand", 0),
+    ];
+
+    public static IEnumerable<MascotStep> Yawn() => [Step("stand", 200), Step("yawn", 1400), Step("blink", 250), Step("stand", 0)];
+
+    public static IEnumerable<MascotStep> TapFoot() =>
+        [.. Enumerable.Range(0, 6).SelectMany(_ => new[] { Step("tap", 180), Step("stand", 180) }), Step("blink", 140), Step("stand", 0)];
+
+    /// <summary>She tosses a ball up from her raised hand and catches it, twice.</summary>
+    public static IEnumerable<MascotStep> TossBall() =>
+    [
+        .. Enumerable.Range(0, 2).SelectMany(_ => new[]
+        {
+            Step("waveRight", 250, props: Ball(8)),
+            Step("stand", 90, props: Ball(11)),
+            Step("stand", 90, props: Ball(14)),
+            Step("stand", 110, props: Ball(16)),
+            Step("stand", 160, props: Ball(17)),
+            Step("stand", 110, props: Ball(16)),
+            Step("stand", 90, props: Ball(14)),
+            Step("stand", 90, props: Ball(11)),
+        }),
+        Step("waveRight", 300, props: Ball(8)),
+        Step("stand", 0),
+    ];
+
+    /// <summary>A look each way with a "?" over her.</summary>
+    public static IEnumerable<MascotStep> Puzzled() =>
+    [
+        Step("lookLeft", 600, props: Question),
+        Step("lookRight", 600, props: Question),
+        Step("stand", 700, props: Question),
+        Step("blink", 140),
+        Step("stand", 0),
+    ];
+
+    /// <summary>A little bounce, and a heart floats up from her, drifting.</summary>
+    public static IEnumerable<MascotStep> BlowHeart() =>
+    [
+        Step("stand", 200, drop: 1),
+        Step("armsUp", 150, drop: -1, props: new MascotProp("heart", 4, 14)),
+        Step("stand", 300, props: new MascotProp("heart", 4, 15)),
+        Step("stand", 300, props: new MascotProp("heart", 5, 16)),
+        Step("blink", 300, props: new MascotProp("heart", 5, 17)),
+        Step("stand", 300, props: new MascotProp("heart", 6, 18)),
+        Step("stand", 0),
+    ];
+
+    /// <summary>Eyes shut, her head goes back, and achoo: a puff blows off to her side.</summary>
+    public static IEnumerable<MascotStep> Sneeze() =>
+    [
+        Step("blink", 400),
+        Step("blink", 300, drop: -1),
+        Step("achoo", 140, drop: 1, props: new MascotProp("puff", -4, 7)),
+        Step("stand", 260, props: new MascotProp("puff", -6, 8)),
+        Step("stand", 200, props: new MascotProp("puff", -8, 9)),
+        Step("blink", 140),
         Step("stand", 0),
     ];
 

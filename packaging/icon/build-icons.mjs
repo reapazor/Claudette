@@ -146,6 +146,16 @@ const mascotPoses = {
   climb: climbing,
   climbLookLeft: patched(climbing, lookLeft),
   climbLookRight: patched(climbing, lookRight),
+  // Her right arm up instead, over the ponytail's end: for dancing, and tossing a ball.
+  waveRight: patched(standing, { 4: '..OOOOOOOOOO', 5: '..OEOOOOEOOO', 6: 'OOOOOOOOOO..', 7: 'OOOOOOOOOO..' }),
+  // Half-way through a twirl: the back of her head, all hair.
+  back: patched(standing, { 4: '..HHHHHHHH.H', 5: '..HHHHHHHH..' }),
+  // A big yawn, arms up, eyes shut and mouth open.
+  yawn: patched(standing, { ...armsUp, 5: 'OOOOOOOOOOOO', 6: '..OOOEEOOO..', 7: '..OOOEEOOO..' }),
+  // Achoo: eyes shut, mouth open.
+  achoo: patched(closedEyes(standing), { 6: 'OOOOOEEOOOOO' }),
+  // Tapping a foot: her fourth leg up.
+  tap: patched(standing, { 11: '..O.O..O....' }),
 };
 
 // What she has with her. Z takes the theme's muted text colour, so it reads on light and dark.
@@ -157,6 +167,13 @@ const mascotProps = {
   hands: ['OO........OO', 'OO........OO'],
   // Startled.
   bang: ['ZZ', 'ZZ', 'ZZ', '..', 'ZZ'],
+  // Puzzled.
+  question: ['ZZZ', '..Z', '.Z.', '...', '.Z.'],
+  // The puff of a sneeze.
+  puff: ['.ZZ.', 'ZZZZ', '.ZZ.'],
+  // A heart she blows, and a ball she tosses, in her hair tie's berry.
+  heart: ['.K.K.', 'KKKKK', '.KKK.', '..K..'],
+  ball: ['KK', 'KK'],
   // The back of her laptop's lid, in front of her while she types.
   laptop: ['.LLLLLLLL.', '.LLLLLLLL.', '.LLLLLLLL.', 'BBBBBBBBBB'],
   // While a usage limit holds the task: a small hourglass whose sand runs down.

@@ -32,6 +32,8 @@ public class MascotTests
             MascotAntics.Stretch(), MascotAntics.Wave(2), MascotAntics.Hop(), MascotAntics.Startled(),
             MascotAntics.TopplesOff(random), MascotAntics.ClimbUp(), MascotAntics.Duck(), MascotAntics.Typing(random),
             MascotAntics.Doze(random, hourglass: true, settle: true), MascotAntics.WakeUp(), MascotAntics.StandAbout(TimeSpan.FromSeconds(1)),
+            MascotAntics.Dance(), MascotAntics.Twirl(), MascotAntics.Yawn(), MascotAntics.TapFoot(), MascotAntics.TossBall(),
+            MascotAntics.Puzzled(), MascotAntics.BlowHeart(), MascotAntics.Sneeze(),
         ];
         foreach (var step in all.SelectMany(s => s))
         {
@@ -70,7 +72,7 @@ public class MascotTests
     }
 
     [Fact]
-    public void She_stays_in_her_room_tends_to_go_back_home_and_waits_thirty_to_ninety_seconds_between_the_things_she_does()
+    public void She_stays_in_her_room_tends_to_go_back_home_and_waits_ten_to_thirty_seconds_between_the_things_she_does()
     {
         using var stage = new Stage(seed: 7);
         stage.Show();
@@ -111,7 +113,8 @@ public class MascotTests
 
         Assert.True(calmSpells.Count > 60, $"only {calmSpells.Count} things in two hours");
         Assert.All(calmSpells, spell => Assert.InRange(spell, MascotDirector.ShortestCalm - TimeSpan.FromSeconds(1), MascotDirector.LongestCalm + TimeSpan.FromSeconds(1)));
-        Assert.Superset(new HashSet<string> { "lookLeft", "lean", "stretch", "wave", "armsUp", "lookDown", "climb" }, poses);
+        Assert.Superset(new HashSet<string> { "lookLeft", "lean", "stretch", "wave", "armsUp", "lookDown", "climb", "waveRight", "back", "yawn", "tap", "achoo" }, poses);
+        Assert.Superset(new HashSet<string> { "ball", "heart", "question", "puff" }, stage.Frames.SelectMany(f => f.Frame.Props).Select(p => p.Name).ToHashSet());
         Assert.Contains(poses, p => p.StartsWith("walk", StringComparison.Ordinal));
         // She wanders, but more often than not she's back at home.
         Assert.Contains(calmAt, x => x != Room.HomeX);

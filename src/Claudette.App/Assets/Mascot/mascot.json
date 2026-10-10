@@ -25,13 +25,22 @@
     "leanBlink": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..O.O..O.O..","..O.O..O.O.."],
     "climb": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OEOOOOEO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
     "climbLookLeft": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..EOOOOEOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
-    "climbLookRight": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOEOOOOE..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."]
+    "climbLookRight": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOEOOOOE..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "waveRight": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOOOO","..OEOOOOEOOO","OOOOOOOOOO..","OOOOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "back": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..HHHHHHHH.H","..HHHHHHHH..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "yawn": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOEEOOO..","..OOOEEOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "achoo": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOOOOOOO..","OOOOOEEOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "tap": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OEOOOOEO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O...."]
   },
   "props": {
     "z": ["ZZZZ","..Z.",".Z..","ZZZZ"],
     "bigZ": ["ZZZZZ","...Z.","..Z..",".Z...","ZZZZZ"],
     "hands": ["OO........OO","OO........OO"],
     "bang": ["ZZ","ZZ","ZZ","..","ZZ"],
+    "question": ["ZZZ","..Z",".Z.","...",".Z."],
+    "puff": [".ZZ.","ZZZZ",".ZZ."],
+    "heart": [".K.K.","KKKKK",".KKK.","..K.."],
+    "ball": ["KK","KK"],
     "laptop": [".LLLLLLLL.",".LLLLLLLL.",".LLLLLLLL.","BBBBBBBBBB"],
     "hourglass-0": ["XXXXX",".SSS.","..S..",".GGG.","XXXXX"],
     "hourglass-1": ["XXXXX",".GSG.","..S..",".GSG.","XXXXX"],
