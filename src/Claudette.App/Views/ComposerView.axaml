@@ -556,14 +556,14 @@
                 </Button.Flyout>
               </Button>
   
-              <Button Classes="accent send" Margin="6,0,0,0" Command="{Binding SendCommand}" IsVisible="{Binding !IsWorking}" AutomationProperties.Name="Send">
+              <Button x:Name="SendButton" Classes="accent send" Margin="6,0,0,0" Command="{Binding SendCommand}" IsVisible="{Binding !IsWorking}" AutomationProperties.Name="Send">
                 <Panel>
                   <TextBlock Classes="sendlabel" Text="Send" />
                   <Path Classes="sendarrow" Data="{StaticResource IconSendArrow}" Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8"
                         StrokeLineCap="Round" StrokeJoin="Round" Width="32" Height="32" Stretch="None" />
                 </Panel>
               </Button>
-              <Button Classes="stop" Margin="6,0,0,0" ToolTip.Tip="Stop (Esc)" AutomationProperties.Name="Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsWorking}">
+              <Button x:Name="StopButton" Classes="stop" Margin="6,0,0,0" ToolTip.Tip="Stop (Esc)" AutomationProperties.Name="Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsWorking}">
                 <Panel>
                   <TextBlock Classes="stoplabel" Text="■" />
                   <Path Classes="stopsquare" Data="{StaticResource IconStopRound}" Fill="{Binding $parent[Button].Foreground}" Width="32" Height="32" Stretch="None" />

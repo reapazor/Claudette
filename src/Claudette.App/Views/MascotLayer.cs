@@ -38,6 +38,7 @@ public sealed class MascotLayer : Control
 
     private readonly MascotFigure _figure = new();
     private readonly List<Control> _keepClearOf = [];
+    private Control[] _home = [];
     private MascotDirector? _director;
     private bool _attached;
     private bool _following;
@@ -88,6 +89,9 @@ public sealed class MascotLayer : Control
     /// them, and ducks behind the box while one spans it.
     /// </summary>
     public void KeepClearOf(IEnumerable<Control> controls) => _keepClearOf.AddRange(controls);
+
+    /// <summary>Where she tends to go back to: over the first of <paramref name="controls"/> that shows (Send, or Stop in its place).</summary>
+    public void SetHome(params Control[] controls) => _home = controls;
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -228,9 +232,10 @@ public sealed class MascotLayer : Control
     }
 
     /// <summary>
-    /// The widest stretch of the box's top edge, between its corners, that nothing sits on just above: not the working
-    /// line's words, the suffix chips, a card over the box, or what <see cref="KeepClearOf"/> named. Null when there's
-    /// too little for her.
+    /// Where on the box's top edge she keeps to: its last third, in the rightmost stretch between its corners that nothing
+    /// sits on just above (not the working line's words, the suffix chips, a card over the box, or what
+    /// <see cref="KeepClearOf"/> named) and that she fits in, or that stretch's right end when its part of the last third
+    /// is too small. Her home is over Send. Null when there's no room for her.
     /// </summary>
     private MascotRoom? Room(double cell)
     {
@@ -243,12 +248,19 @@ public sealed class MascotLayer : Control
         {
             free = [.. free.SelectMany(f => Without(f, (taken.Left - cell, taken.Right + cell)))];
         }
-        if (free.Count == 0)
+        // A cell over the least, so rounding to whole cells still leaves her enough.
+        var least = (MascotDirector.LeastRoom + 1) * cell;
+        var fits = free.Where(f => f.Right - f.Left >= least).ToList();
+        if (fits.Count == 0)
         {
             return null;
         }
-        var (left, right) = free.MaxBy(f => f.Right - f.Left);
-        var room = new MascotRoom((int)Math.Ceiling(left / cell), (int)Math.Floor(right / cell));
+        var (left, right) = fits.MaxBy(f => f.Right);
+        left = Math.Max(left, Math.Min(width * 2 / 3, right - least));
+        var home = _home.FirstOrDefault(c => c.IsEffectivelyVisible) is { } anchor && Here(anchor, new Rect(anchor.Bounds.Size)) is { } over
+            ? (int)Math.Round(over.Center.X / cell - MascotArt.Width / 2.0)
+            : int.MaxValue;
+        var room = new MascotRoom((int)Math.Ceiling(left / cell), (int)Math.Floor(right / cell), home);
         return room.Width >= MascotDirector.LeastRoom ? room : null;
     }
 

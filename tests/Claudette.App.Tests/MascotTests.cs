@@ -9,7 +9,8 @@ namespace Claudette.App.Tests;
 /// <summary>Claudette on the composer (DESIGN.md §5): what she does, and when.</summary>
 public class MascotTests
 {
-    private static readonly MascotRoom Room = new(10, 70);
+    /// <summary>Room to walk either side of her home, which is over the Send button.</summary>
+    private static readonly MascotRoom Room = new(10, 70, Home: 50);
 
     [Fact]
     public void Her_poses_and_props_come_from_the_icon_scripts_sprite()
@@ -52,6 +53,8 @@ public class MascotTests
         Assert.True(stage.Frame.IsBehind);
         Assert.True(stage.Frame.IsVisible);
         Assert.Equal(new MascotProp("hands", 0, -1), Assert.Single(stage.Frame.Props));
+        // She comes up at home.
+        Assert.Equal(Room.HomeX, stage.Frame.X);
         stage.Run(TimeSpan.FromSeconds(2.5));
         Assert.Contains(stage.Frames, f => f.Frame.Pose == "climbLookLeft" && f.Frame.Drop == 6);
         stage.Run(TimeSpan.FromSeconds(3));
@@ -67,13 +70,15 @@ public class MascotTests
     }
 
     [Fact]
-    public void She_stays_in_her_room_and_waits_thirty_to_ninety_seconds_between_the_things_she_does()
+    public void She_stays_in_her_room_tends_to_go_back_home_and_waits_thirty_to_ninety_seconds_between_the_things_she_does()
     {
         using var stage = new Stage(seed: 7);
         stage.Show();
         var idle = new HashSet<string> { "stand", "blink" };
         TimeSpan? calmSince = null;
+        int? calmX = null;
         var calmSpells = new List<TimeSpan>();
+        var calmAt = new List<int>();
         var poses = new HashSet<string>();
 
         // Two hours, with the user doing something every minute so she doesn't nap.
@@ -89,6 +94,7 @@ public class MascotTests
             if (calm)
             {
                 calmSince ??= at;
+                calmX ??= frame.X;
             }
             else if (calmSince is { } since)
             {
@@ -96,8 +102,10 @@ public class MascotTests
                 if (at - since > TimeSpan.FromSeconds(2))
                 {
                     calmSpells.Add(at - since);
+                    calmAt.Add(calmX!.Value);
                 }
                 calmSince = null;
+                calmX = null;
             }
         }
 
@@ -105,6 +113,9 @@ public class MascotTests
         Assert.All(calmSpells, spell => Assert.InRange(spell, MascotDirector.ShortestCalm - TimeSpan.FromSeconds(1), MascotDirector.LongestCalm + TimeSpan.FromSeconds(1)));
         Assert.Superset(new HashSet<string> { "lookLeft", "lean", "stretch", "wave", "armsUp", "lookDown", "climb" }, poses);
         Assert.Contains(poses, p => p.StartsWith("walk", StringComparison.Ordinal));
+        // She wanders, but more often than not she's back at home.
+        Assert.Contains(calmAt, x => x != Room.HomeX);
+        Assert.True(calmAt.Count(x => x == Room.HomeX) > calmAt.Count / 2, $"home {calmAt.Count(x => x == Room.HomeX)} times of {calmAt.Count}");
     }
 
     [Fact]
@@ -151,13 +162,13 @@ public class MascotTests
     public void Too_narrow_a_room_is_no_room_and_a_smaller_one_moves_her_into_it()
     {
         using var stage = new Stage();
-        stage.Show(new MascotRoom(60, 100));
+        stage.Show(new MascotRoom(60, 100, Home: 80));
         stage.Run(TimeSpan.FromSeconds(5));
 
-        stage.Director.SetRoom(new MascotRoom(0, 40));
+        stage.Director.SetRoom(new MascotRoom(0, 40, Home: 80));
         Assert.Equal(40 - MascotArt.Width, stage.Frame.X);
 
-        stage.Director.SetRoom(new MascotRoom(0, MascotDirector.LeastRoom - 1));
+        stage.Director.SetRoom(new MascotRoom(0, MascotDirector.LeastRoom - 1, Home: 80));
         stage.Run(TimeSpan.FromSeconds(1));
         Assert.True(stage.Frame.IsBehind);
     }
@@ -250,8 +261,8 @@ public class MascotTests
         stage.Director.SetStill(true);
         stage.Show();
 
-        // No climbing up: she's there, at the right end of her room.
-        Assert.Equal(new MascotFrame("stand", Room.MaxX, 0, []), stage.Frame);
+        // No climbing up: she's there, at home.
+        Assert.Equal(new MascotFrame("stand", Room.HomeX, 0, []), stage.Frame);
         var count = stage.Frames.Count;
         stage.Run(TimeSpan.FromMinutes(10), TimeSpan.FromMilliseconds(100));
         Assert.Equal(count, stage.Frames.Count);

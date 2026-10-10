@@ -37,13 +37,17 @@ public sealed record MascotFrame(string Pose, int X, int Drop, IReadOnlyList<Mas
 
 /// <summary>
 /// The stretch of the box's top edge she may stand on, in cells from its left: her left edge goes from
-/// <see cref="Left"/> to <see cref="Right"/> less her width.
+/// <see cref="Left"/> to <see cref="Right"/> less her width. <see cref="Home"/> is where she tends to go back to, over
+/// the Send button.
 /// </summary>
-public readonly record struct MascotRoom(int Left, int Right)
+public readonly record struct MascotRoom(int Left, int Right, int Home)
 {
     public int Width => Right - Left;
 
     public int MaxX => Math.Max(Left, Right - MascotArt.Width);
+
+    /// <summary>Her home, as near it as the room lets her stand.</summary>
+    public int HomeX => Clamp(Home);
 
     public int Clamp(int x) => Math.Clamp(x, Left, MaxX);
 }
@@ -54,7 +58,7 @@ internal sealed record MascotStep(string Pose, TimeSpan Duration, int Move = 0, 
 /// <summary>
 /// Claudette on the composer (DESIGN.md §5): what she does, step by step. She stands about and blinks, and every 30 to
 /// 90 seconds does something (walks, looks around, leans on the edge, stretches, waves, hops, and now and then falls
-/// off behind the box and climbs back up). She reacts to the tab she's on (<see cref="MascotMood"/>), ducks behind the
+/// off behind the box and climbs back up). Her walks tend to take her back home, over the Send button. She reacts to the tab she's on (<see cref="MascotMood"/>), ducks behind the
 /// box while something sits on it, and stands still while motion is reduced. Timed by the injected clock; between
 /// steps nothing ticks.
 /// </summary>
@@ -136,6 +140,9 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
     /// <summary>What the tab she's on is doing, as she was last told.</summary>
     internal MascotMood Mood => _mood;
 
+    /// <summary>Where on the edge she may stand, as she was last told.</summary>
+    internal MascotRoom? Room => _room;
+
     /// <summary>Whether she's on screen anywhere: a view showing her says so. Out of sight, nothing ticks.</summary>
     public bool IsShown => _views.Count > 0;
 
@@ -185,7 +192,11 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
             Duck();
             return;
         }
-        if (_placed && free.Clamp(Frame.X) != Frame.X)
+        if (_placed && _still)
+        {
+            Frame = Frame with { X = free.HomeX };
+        }
+        else if (_placed && free.Clamp(Frame.X) != Frame.X)
         {
             // The box changed under her, so she doesn't walk there.
             Frame = Frame with { X = free.Clamp(Frame.X) };
@@ -219,7 +230,7 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Motion is reduced (DESIGN.md §3, "Accessibility"): she stands still in the pose for the tab's mood.</summary>
+    /// <summary>Motion is reduced (DESIGN.md §3, "Accessibility"): she stands still at home, in the pose for the tab's mood.</summary>
     public void SetStill(bool still)
     {
         if (_still == still)
@@ -289,14 +300,15 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
         }
         if (_still)
         {
-            Place(room, atRightEnd: true);
+            // At home, where she won't be walking from.
+            _placed = true;
             _activity = Activity.Idle;
-            Frame = StillFrame();
+            Frame = StillFrame() with { X = room.HomeX };
             return;
         }
         if (!_placed || Frame.IsBehind)
         {
-            Place(room, atRightEnd: false);
+            Place(room);
             Play(Activity.Tumble, MascotAntics.ClimbUp());
             return;
         }
@@ -309,13 +321,13 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
         PlanNext();
     }
 
-    /// <summary>Her first place on the edge: anywhere, or at its right end when she won't be walking.</summary>
-    private void Place(MascotRoom room, bool atRightEnd)
+    /// <summary>Her first place on the edge: home.</summary>
+    private void Place(MascotRoom room)
     {
         if (!_placed)
         {
             _placed = true;
-            Frame = Frame with { X = atRightEnd ? room.MaxX : _random.Next(room.Left, room.MaxX + 1) };
+            Frame = Frame with { X = room.HomeX };
         }
     }
 
@@ -419,13 +431,15 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
     private void PlayAntic(MascotRoom room, DateTimeOffset now)
     {
         var canFall = now - _lastFall >= FallsAtMostEvery;
-        var walkTo = _random.Next(room.Left, room.MaxX + 1);
-        // A walk across a wide window would take a while: at most 40 cells at a time.
-        var walk = Math.Clamp(walkTo - Frame.X, -40, 40);
+        // A walk across a wide window would take a while: at most 40 cells at a time. Away from home, a walk is more
+        // likely to take her back there than further off.
+        var wander = Math.Clamp(_random.Next(room.Left, room.MaxX + 1) - Frame.X, -40, 40);
+        var home = Math.Clamp(room.HomeX - Frame.X, -40, 40);
         (int Weight, bool Falls, Func<IEnumerable<MascotStep>> Steps)[] choices =
         [
             (3, false, () => MascotAntics.LookAround(_random)),
-            (Math.Abs(walk) >= 3 ? 3 : 0, false, () => MascotAntics.Walk(walk)),
+            (Math.Abs(wander) >= 3 ? 2 : 0, false, () => MascotAntics.Walk(wander)),
+            (Math.Abs(home) >= 3 ? 5 : 0, false, () => MascotAntics.Walk(home)),
             (2, false, () => MascotAntics.Lean(_random)),
             (1, false, MascotAntics.Stretch),
             (1, false, () => MascotAntics.Wave(3)),

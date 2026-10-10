@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -34,6 +35,23 @@ public class MascotUiTests
         {
             Assert.True(scene.InWindow(clipping).Contains(her), $"{clipping.GetType().Name} clips her");
         }
+    }
+
+    [AvaloniaFact]
+    public async Task She_comes_up_over_Send_and_keeps_to_the_last_third_of_the_box()
+    {
+        await using var scene = await Scene.OpenAsync();
+        await scene.UntilStandingAsync();
+
+        var send = scene.Window.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Send" && b.IsEffectivelyVisible);
+        var box = scene.InWindow(scene.Box);
+        var cell = scene.Layer.Figure.Bounds.Width / MascotArt.Width;
+        Assert.Equal(scene.InWindow(send).Center.X, scene.InWindow(scene.Layer.Figure).Center.X, cell);
+
+        // Her room, which she never leaves (MascotTests), is the box's last third, out to its right corner.
+        var room = scene.Director.Room!.Value;
+        Assert.InRange(room.Left * cell, box.Width * 2 / 3, box.Width * 2 / 3 + cell);
+        Assert.InRange(box.Width - room.Right * cell, scene.Box.CornerRadius.TopRight, scene.Box.CornerRadius.TopRight + 2 + cell);
     }
 
     [AvaloniaFact]

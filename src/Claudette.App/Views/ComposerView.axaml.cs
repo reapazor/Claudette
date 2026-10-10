@@ -26,6 +26,8 @@ public partial class ComposerView : UserControl
         // Tunnel, so these are seen before the multi-line TextBox turns Enter into a new line.
         Composer.AddHandler(KeyDownEvent, OnComposerKeyDown, RoutingStrategies.Tunnel);
         WireComposerAssist();
+        // Claudette on the composer's home is over Send, or Stop in its place (DESIGN.md §5).
+        MascotLayer.SetHome(SendButton, StopButton);
     }
 
     /// <summary>A message was sent from the composer: the conversation follows it to the bottom.</summary>
