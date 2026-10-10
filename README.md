@@ -107,7 +107,7 @@ It isn't a reimplementation. Each tab runs the real `claude` CLI, with your sett
 
 ### Claudette keeps you company
 
-Turn her on in Settings → Appearance and Claudette, the app's pixel mascot, stands on the message box while you work. She blinks and looks around, wanders up and down, leans on the edge, and every so often loses her footing, falls off behind the box and climbs back up. She types on a little laptop while Claude works, waves when Claude needs you, hops when a turn finishes and dozes by an hourglass when you've hit your plan's limit. Click her to startle her (twice and she falls off). She rises with the box as you type, ducks behind it when something needs the space, and stands still if you reduce motion.
+Claudette, the app's pixel mascot, stands on the message box while you work (Settings → Appearance turns her off). She blinks and looks around, wanders up and down, leans on the edge, and every so often loses her footing, falls off behind the box and climbs back up. She types on a little laptop while Claude works, waves when Claude needs you, hops when a turn finishes and dozes by an hourglass when you've hit your plan's limit. Click her to startle her (twice and she falls off). She rises with the box as you type, ducks behind it when something needs the space, and stands still if you reduce motion.
 
 <table>
   <tr>

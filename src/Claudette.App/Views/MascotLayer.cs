@@ -168,7 +168,7 @@ public sealed class MascotLayer : Control
     {
         var frame = _director?.Frame;
         _figure.Frame = frame;
-        _figure.IsVisible = frame is { IsHidden: false };
+        _figure.IsVisible = frame is { IsVisible: true };
         InvalidateArrange();
     }
 

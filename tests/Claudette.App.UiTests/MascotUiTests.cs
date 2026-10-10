@@ -67,11 +67,12 @@ public class MascotUiTests
         Assert.True(scene.InWindow(scene.Layer.Figure).Left > scene.InWindow(words).Right, "she stands clear of the working line");
 
         scene.Tab.AttachmentError = "notes.pdf is too big to attach.";
-        await scene.UntilAsync(() => scene.Director.Frame.IsHidden, "her to duck");
+        await scene.UntilAsync(() => !scene.Director.Frame.IsVisible, "her to duck");
         Assert.False(scene.Layer.Figure.IsVisible);
 
         scene.Tab.AttachmentError = null;
-        await scene.UntilAsync(() => scene.Director.Frame is { IsHidden: false, Pose: "hang" }, "her hands back on the edge");
+        await scene.UntilAsync(() => scene.Director.Frame is { IsVisible: true, Pose: "climb" }, "her hands back on the edge");
+        Assert.True(scene.Layer.Figure.IsVisible);
     }
 
     [AvaloniaFact]
@@ -95,7 +96,8 @@ public class MascotUiTests
     [AvaloniaFact]
     public async Task With_the_setting_off_she_isnt_there()
     {
-        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        await using var h = new TabTestHarness(s => s.Appearance.ShowClaudette = false, dispatcher: new AvaloniaUiDispatcher());
+        h.Services.Mascot.OnSettingsChanged();
         await h.OpenTabAsync();
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
 
@@ -130,8 +132,7 @@ public class MascotUiTests
 
         public static async Task<Scene> OpenAsync()
         {
-            var h = new TabTestHarness(s => s.Appearance.ShowClaudette = true, dispatcher: new AvaloniaUiDispatcher());
-            h.Services.Mascot.OnSettingsChanged();
+            var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
             var tab = await h.OpenTabAsync();
             return new Scene(h, tab, UiText.Show(new ShellView { DataContext = h.Shell }));
         }

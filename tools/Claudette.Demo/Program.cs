@@ -3,8 +3,8 @@
 //   claudette-demo <folder> [--theme system|light|dark] [--style standard|claude] [--projects <folder>] [--still]
 //
 // Makes, in <folder> (replacing what an earlier run made there):
-//   home/           for CLAUDETTE_HOME: settings with fake-claude as Claude Code, the theme and style asked for and
-//                   Claudette on the composer (standing still with --still, which reduces motion, for screenshots),
+//   home/           for CLAUDETTE_HOME: settings with fake-claude as Claude Code and the theme and style asked for
+//                   (--still reduces motion, so Claudette on the composer stands still for screenshots),
 //                   seven tabs over three game projects (Unreal in C++, Unity in C#, Godot): the first with a long
 //                   conversation and changed files, one with every file reviewed, and a thread with two sub-threads,
 //                   a plan, a task list part-way done and three subagents; and a plan usage history that ends now
@@ -99,7 +99,6 @@ settings.ClaudeCode.CheckForUpdates = false;
 settings.ClaudeCode.UseLoginShellEnvironment = false;
 settings.Appearance.Theme = theme;
 settings.Appearance.Style = style;
-settings.Appearance.ShowClaudette = true;
 if (still)
 {
     // Screenshots catch her standing on the composer rather than part-way through falling off it.

@@ -29,7 +29,10 @@ public sealed record MascotProp(string Name, int X, int Bottom);
 public sealed record MascotFrame(string Pose, int X, int Drop, IReadOnlyList<MascotProp> Props)
 {
     /// <summary>All of her is behind the box.</summary>
-    public bool IsHidden => Drop >= MascotArt.HeightOf(Pose);
+    public bool IsBehind => Drop >= MascotArt.HeightOf(Pose);
+
+    /// <summary>Something of her shows: some of her, or her hands on the edge as she starts to climb up.</summary>
+    public bool IsVisible => !IsBehind || Props.Count > 0;
 }
 
 /// <summary>
@@ -251,7 +254,7 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
     /// <summary>A click on her: she jumps, startled. A second click straight after tips her off the edge.</summary>
     public void Poke()
     {
-        if (!IsShown || _still || Frame.IsHidden || _activity is Activity.Tumble or Activity.Ducked)
+        if (!IsShown || _still || Frame.IsBehind || _activity is Activity.Tumble or Activity.Ducked)
         {
             return;
         }
@@ -291,7 +294,7 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
             Frame = StillFrame();
             return;
         }
-        if (!_placed || Frame.IsHidden)
+        if (!_placed || Frame.IsBehind)
         {
             Place(room, atRightEnd: false);
             Play(Activity.Tumble, MascotAntics.ClimbUp());
@@ -321,7 +324,7 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
         _next.Cancel();
         _steps.Clear();
         _activity = Activity.Ducked;
-        if (Frame.IsHidden || _still || !IsShown)
+        if (Frame.IsBehind || _still || !IsShown)
         {
             Frame = Frame with { Drop = Behind, Props = [] };
             return;
@@ -370,7 +373,7 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
             Duck();
             return;
         }
-        if (Frame.IsHidden)
+        if (Frame.IsBehind)
         {
             Play(Activity.Tumble, MascotAntics.ClimbUp());
             return;

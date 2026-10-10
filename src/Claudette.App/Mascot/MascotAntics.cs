@@ -6,6 +6,11 @@ namespace Claudette.App.Mascot;
 /// </summary>
 internal static class MascotAntics
 {
+    /// <summary>Her hands gripping the edge while she climbs up, and as they first reach it, a cell lower.</summary>
+    public static readonly MascotProp Hands = new("hands", 0, 0);
+
+    private static readonly MascotProp Reaching = new("hands", 0, -1);
+
     /// <summary>Her laptop's lid, in front of her while she types.</summary>
     public static readonly MascotProp Laptop = new("laptop", 1, 0);
 
@@ -106,19 +111,23 @@ internal static class MascotAntics
     ];
 
     /// <summary>
-    /// From behind the box: her hands on the edge, then her head, a look each way, and up onto it. Hanging, she's 14
-    /// cells tall, so at 13 only her hands show.
+    /// From behind the box: her hands reach the edge and grip it, and stay there while she pulls herself up between
+    /// them, peeks over and looks each way; once her shoulders are up, her arms are on the edge, and she climbs onto it.
     /// </summary>
     public static IEnumerable<MascotStep> ClimbUp() =>
     [
-        Step("hang", 600, drop: 13),
-        Step("hang", 450, drop: 12),
-        Step("hang", 140, drop: 10),
-        Step("hang", 140, drop: 8),
-        Step("hang", 700, drop: 6),
-        Step("hangLookLeft", 450, drop: 6),
-        Step("hangLookRight", 450, drop: 6),
-        Step("hang", 120, drop: 4),
+        Step("climb", 250, drop: MascotArt.Height, props: Reaching),
+        Step("climb", 600, drop: MascotArt.Height, props: Hands),
+        Step("climb", 110, drop: 11, props: Hands),
+        Step("climb", 110, drop: 10, props: Hands),
+        Step("climb", 110, drop: 9, props: Hands),
+        Step("climb", 110, drop: 8, props: Hands),
+        Step("climb", 110, drop: 7, props: Hands),
+        Step("climb", 700, drop: 6, props: Hands),
+        Step("climbLookLeft", 450, drop: 6, props: Hands),
+        Step("climbLookRight", 450, drop: 6, props: Hands),
+        Step("climb", 130, drop: 5, props: Hands),
+        Step("climb", 160, drop: 4, props: Hands),
         Step("lean", 260, drop: 2),
         Step("stand", 120, drop: 1),
         Step("stand", 0),

@@ -23,13 +23,14 @@
     "typeRight": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OEOOOOEOOO","..OOOOOOOOOO","OOOOOOOOOO..","OOOOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
     "lean": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OEOOOOEO..","..OOOOOOOO..","..OOOOOOOO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..O.O..O.O..","..O.O..O.O.."],
     "leanBlink": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..O.O..O.O..","..O.O..O.O.."],
-    "hang": ["OO........OO","OO........OO","OO......HHOO","OO.....HHHOO","OO.HHHHKH.OO","OOHHHHHHH.OO","OOOOOOOOOOOO","..OEOOOOEO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
-    "hangLookLeft": ["OO........OO","OO........OO","OO......HHOO","OO.....HHHOO","OO.HHHHKH.OO","OOHHHHHHH.OO","OOOOOOOOOOOO","..EOOOOEOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
-    "hangLookRight": ["OO........OO","OO........OO","OO......HHOO","OO.....HHHOO","OO.HHHHKH.OO","OOHHHHHHH.OO","OOOOOOOOOOOO","..OOEOOOOE..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."]
+    "climb": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OEOOOOEO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "climbLookLeft": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..EOOOOEOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "climbLookRight": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOEOOOOE..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."]
   },
   "props": {
     "z": ["ZZZZ","..Z.",".Z..","ZZZZ"],
     "bigZ": ["ZZZZZ","...Z.","..Z..",".Z...","ZZZZZ"],
+    "hands": ["OO........OO","OO........OO"],
     "bang": ["ZZ","ZZ","ZZ","..","ZZ"],
     "laptop": [".LLLLLLLL.",".LLLLLLLL.",".LLLLLLLL.","BBBBBBBBBB"],
     "hourglass-0": ["XXXXX",".SSS.","..S..",".GGG.","XXXXX"],

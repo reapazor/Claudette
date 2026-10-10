@@ -16,8 +16,6 @@ public class MascotTests
     {
         Assert.Equal(MascotArt.Width, MascotArt.Poses["stand"].Width);
         Assert.Equal(MascotArt.Height, MascotArt.Poses["stand"].Height);
-        // Hanging from the edge, her arms make her two cells taller, so at 13 cells down only her hands show.
-        Assert.Equal(14, MascotArt.HeightOf("hang"));
         Assert.All(MascotArt.Poses.Values, pose => Assert.All(pose.Rows, row => Assert.Equal(MascotArt.Width, row.Length)));
         var letters = MascotArt.Poses.Values.Concat(MascotArt.Props.Values).SelectMany(s => s.Rows).SelectMany(r => r).Distinct();
         Assert.All(letters, letter => Assert.True(letter is '.' or MascotArt.ThemeColor || MascotArt.Palette.ContainsKey(letter), $"'{letter}' has no colour"));
@@ -45,18 +43,27 @@ public class MascotTests
     public void She_climbs_up_from_behind_the_box_when_first_shown_and_then_stands_on_its_edge()
     {
         using var stage = new Stage();
-        Assert.True(stage.Frame.IsHidden);
+        Assert.False(stage.Frame.IsVisible);
 
         stage.Show();
 
-        // First her hands on the edge, then her head peeking over it.
-        Assert.Equal(("hang", 13), (stage.Frame.Pose, stage.Frame.Drop));
-        Assert.False(stage.Frame.IsHidden);
+        // First her fingers reach the edge: all of her is still behind the box, but they show.
+        Assert.Equal(("climb", MascotArt.Height), (stage.Frame.Pose, stage.Frame.Drop));
+        Assert.True(stage.Frame.IsBehind);
+        Assert.True(stage.Frame.IsVisible);
+        Assert.Equal(new MascotProp("hands", 0, -1), Assert.Single(stage.Frame.Props));
         stage.Run(TimeSpan.FromSeconds(2.5));
-        Assert.Contains(stage.Frames, f => f.Frame.Pose == "hangLookLeft" && f.Frame.Drop == 6);
+        Assert.Contains(stage.Frames, f => f.Frame.Pose == "climbLookLeft" && f.Frame.Drop == 6);
         stage.Run(TimeSpan.FromSeconds(3));
-        Assert.Equal(0, stage.Frame.Drop);
+        Assert.Equal(("stand", 0), (stage.Frame.Pose, stage.Frame.Drop));
         Assert.InRange(stage.Frame.X, Room.Left, Room.MaxX);
+
+        // She pulls herself up between her hands, which stay gripping the edge where they are.
+        var pulling = stage.Frames.Select(f => f.Frame).Where(f => f.Props.Any(p => p.Name == "hands")).Skip(1).ToList();
+        Assert.All(pulling, f => Assert.Equal(new MascotProp("hands", 0, 0), Assert.Single(f.Props)));
+        Assert.Equal(pulling.Select(f => f.Drop).OrderDescending(), pulling.Select(f => f.Drop));
+        Assert.Equal((MascotArt.Height, 4), (pulling[0].Drop, pulling[^1].Drop));
+        Assert.Equal(1, pulling.Zip(pulling.Skip(1)).Max(p => p.First.Drop - p.Second.Drop));
     }
 
     [Fact]
@@ -96,7 +103,7 @@ public class MascotTests
 
         Assert.True(calmSpells.Count > 60, $"only {calmSpells.Count} things in two hours");
         Assert.All(calmSpells, spell => Assert.InRange(spell, MascotDirector.ShortestCalm - TimeSpan.FromSeconds(1), MascotDirector.LongestCalm + TimeSpan.FromSeconds(1)));
-        Assert.Superset(new HashSet<string> { "lookLeft", "lean", "stretch", "wave", "armsUp", "lookDown", "hang" }, poses);
+        Assert.Superset(new HashSet<string> { "lookLeft", "lean", "stretch", "wave", "armsUp", "lookDown", "climb" }, poses);
         Assert.Contains(poses, p => p.StartsWith("walk", StringComparison.Ordinal));
     }
 
@@ -115,7 +122,7 @@ public class MascotTests
         Assert.NotEmpty(falls);
         Assert.All(falls.Zip(falls.Skip(1)), pair => Assert.True(pair.Second - pair.First >= MascotDirector.FallsAtMostEvery));
         // Each fall drops her out of sight, and she always climbs back.
-        Assert.False(stage.Frame.IsHidden && stage.Frame.Pose != "hang");
+        Assert.False(stage.Frame.IsBehind && stage.Frame.Pose != "climb");
     }
 
     [Fact]
@@ -128,13 +135,13 @@ public class MascotTests
 
         stage.Director.SetRoom(null);
         stage.Run(TimeSpan.FromSeconds(1));
-        Assert.True(stage.Frame.IsHidden);
+        Assert.True(stage.Frame.IsBehind);
         stage.Director.SetMood(MascotMood.Working);
         stage.Run(TimeSpan.FromSeconds(30));
-        Assert.True(stage.Frame.IsHidden);
+        Assert.True(stage.Frame.IsBehind);
 
         stage.Director.SetRoom(Room);
-        Assert.Equal(("hang", 13, x), (stage.Frame.Pose, stage.Frame.Drop, stage.Frame.X));
+        Assert.Equal(("climb", MascotArt.Height, x), (stage.Frame.Pose, stage.Frame.Drop, stage.Frame.X));
         stage.Run(TimeSpan.FromSeconds(5));
         // Back up, she does what the tab's doing.
         Assert.Equal("laptop", Assert.Single(stage.Frame.Props).Name);
@@ -152,7 +159,7 @@ public class MascotTests
 
         stage.Director.SetRoom(new MascotRoom(0, MascotDirector.LeastRoom - 1));
         stage.Run(TimeSpan.FromSeconds(1));
-        Assert.True(stage.Frame.IsHidden);
+        Assert.True(stage.Frame.IsBehind);
     }
 
     [Fact]
@@ -170,14 +177,14 @@ public class MascotTests
         var from = stage.Frames.Count;
         stage.Director.Poke();
         stage.Run(TimeSpan.FromSeconds(3));
-        Assert.True(stage.Frame.IsHidden);
+        Assert.True(stage.Frame.IsBehind);
         // Pokes while she's out of sight do nothing.
         stage.Director.Poke();
         stage.Run(TimeSpan.FromSeconds(8));
 
         var after = stage.Frames.Skip(from).Select(f => f.Frame).ToList();
         Assert.Equal("lookDown", after[0].Pose);
-        Assert.Contains(after, f => f is { Pose: "hang", Drop: 13 });
+        Assert.Contains(after, f => f is { Pose: "climb", Drop: MascotArt.Height, IsVisible: true });
         Assert.Equal(("stand", 0), (stage.Frame.Pose, stage.Frame.Drop));
     }
 
@@ -257,7 +264,7 @@ public class MascotTests
         Assert.Equal(count + 1, stage.Frames.Count);
 
         stage.Director.SetRoom(null);
-        Assert.True(stage.Frame.IsHidden);
+        Assert.True(stage.Frame.IsBehind);
         stage.Director.SetRoom(Room);
         Assert.Equal(("typeLeft", 0), (stage.Frame.Pose, stage.Frame.Drop));
 
@@ -291,26 +298,25 @@ public class MascotTests
     }
 
     [Fact]
-    public async Task The_setting_brings_her_and_her_menu_takes_her_away()
+    public async Task She_is_on_by_default_her_menu_takes_her_away_and_the_setting_brings_her_back()
     {
         await using var h = new TabTestHarness();
+        Assert.True(h.Services.Settings.Appearance.ShowClaudette);
+        Assert.NotNull(h.Services.Mascot.Director);
+
+        h.Services.Mascot.HideCommand.Execute(null);
         Assert.False(h.Services.Settings.Appearance.ShowClaudette);
         Assert.Null(h.Services.Mascot.Director);
 
         h.Services.Settings.Appearance.ShowClaudette = true;
         h.Services.SaveSettings();
         Assert.NotNull(h.Services.Mascot.Director);
-
-        h.Services.Mascot.HideCommand.Execute(null);
-        Assert.False(h.Services.Settings.Appearance.ShowClaudette);
-        Assert.Null(h.Services.Mascot.Director);
     }
 
     [Fact]
     public async Task She_follows_what_the_selected_tab_is_doing()
     {
-        await using var h = new TabTestHarness(s => s.Appearance.ShowClaudette = true);
-        h.Services.Mascot.OnSettingsChanged();
+        await using var h = new TabTestHarness();
         var tab = await h.OpenTabAsync();
         var director = h.Services.Mascot.Director!;
         Assert.True(tab.IsSelected);

@@ -117,19 +117,9 @@ const walkLegs = [
 const armsUp = { 4: 'OOOOOOOOOOOO', 5: 'OOOEOOOOEOOO', 6: '..OOOOOOOO..', 7: '..OOOOOOOO..' };
 // Leaning on the edge: she stands two cells lower, behind it, with her arms on top.
 const leaning = patched(standing, { 6: '..OOOOOOOO..', 7: '..OOOOOOOO..', 8: 'OOOOOOOOOOOO', 9: 'OOOOOOOOOOOO' });
-// Hanging from the edge by her hands, from behind it: two rows taller, her arms up past her hair.
-const hanging = [
-  'OO........OO',
-  'OO........OO',
-  ...patched(hair, { 0: 'OO????????OO', 1: 'OO????????OO', 2: 'OO????????OO', 3: 'OO????????OO' }),
-  'OOOOOOOOOOOO',
-  '..OEOOOOEO..',
-  '..OOOOOOOO..',
-  '..OOOOOOOO..',
-  '..OOOOOOOO..',
-  '..OOOOOOOO..',
-  ...legs,
-];
+// Climbing up from behind the edge: her arms are up on it, so her body is only as wide as she is. Her hands are a prop
+// that stays on the edge while she pulls herself up between them; once her shoulders reach it, they meet her arms.
+const climbing = patched(standing, { 6: '..OOOOOOOO..', 7: '..OOOOOOOO..' });
 const lookLeft = { 5: '..EOOOOEOO..' };
 const lookRight = { 5: '..OOEOOOOE..' };
 
@@ -153,9 +143,9 @@ const mascotPoses = {
   typeRight: claudette(pose.typeRight),
   lean: leaning,
   leanBlink: closedEyes(leaning),
-  hang: hanging,
-  hangLookLeft: patched(hanging, { 7: '..EOOOOEOO..' }),
-  hangLookRight: patched(hanging, { 7: '..OOEOOOOE..' }),
+  climb: climbing,
+  climbLookLeft: patched(climbing, lookLeft),
+  climbLookRight: patched(climbing, lookRight),
 };
 
 // What she has with her. Z takes the theme's muted text colour, so it reads on light and dark.
@@ -163,6 +153,8 @@ const mascotProps = {
   // Asleep: a small z, then a bigger one higher up.
   z: ['ZZZZ', '..Z.', '.Z..', 'ZZZZ'],
   bigZ: ['ZZZZZ', '...Z.', '..Z..', '.Z...', 'ZZZZZ'],
+  // Her hands gripping the edge while she climbs up.
+  hands: ['OO........OO', 'OO........OO'],
   // Startled.
   bang: ['ZZ', 'ZZ', 'ZZ', '..', 'ZZ'],
   // The back of her laptop's lid, in front of her while she types.

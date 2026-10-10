@@ -19,7 +19,7 @@ public static class MascotArt
     /// <summary>Her width in cells, in every pose.</summary>
     public const int Width = 12;
 
-    /// <summary>Her height in cells standing; hanging from the edge, her arms make her taller.</summary>
+    /// <summary>Her height in cells.</summary>
     public const int Height = 12;
 
     /// <summary>The palette letter drawn in the theme's muted text colour rather than one of its own.</summary>

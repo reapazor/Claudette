@@ -334,9 +334,9 @@ public sealed class AppearanceSettings
 
     /// <summary>
     /// Claudette, the app's pixel mascot, standing on the composer and doing little things now and then (DESIGN.md §5,
-    /// "Claudette on the composer"). Off by default.
+    /// "Claudette on the composer"). On by default.
     /// </summary>
-    public bool ShowClaudette { get; set; }
+    public bool ShowClaudette { get; set; } = true;
 
     /// <summary>How much room the conversation, the sidebar's rows and the composer take (DESIGN.md §14).</summary>
     public Density Density { get; set; } = Density.Comfortable;
