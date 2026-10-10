@@ -616,7 +616,7 @@
             Cursor="SizeWestEast" ZIndex="1" IsVisible="{Binding IsSidePanelOpen}" />
 
     <!-- Conversation -->
-    <Grid Grid.Row="0">
+    <Grid x:Name="ConversationArea" Grid.Row="0">
       <DockPanel>
         <!-- Find in the conversation (DESIGN.md §5, "Find"): Enter for the next match, Shift+Enter the one before, Esc closes -->
         <Border DockPanel.Dock="Top" Classes="findbar" IsVisible="{Binding Find.IsOpen}">

@@ -62,6 +62,10 @@
     <CheckBox Content="Show task progress on tab rows" IsChecked="{Binding ShowTaskProgressOnTabs}" />
     <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
                Text="How many of Claude's tasks are done, such as “3/7”, at the right of each tab's second line, and the task Claude is working on in place of the model while it works." />
+    <!-- Claudette on the composer (DESIGN.md §5) -->
+    <CheckBox Content="Show Claudette on the composer" IsChecked="{Binding ShowClaudette}" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
+               Text="Claudette stands on the message box and does little things now and then: she walks about, leans on the edge, and sometimes falls off behind it. She types while Claude works and waves when Claude needs you. Click her to startle her, or right-click to hide her. She stands still when motion is reduced." />
     <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
   </StackPanel>
 </UserControl>

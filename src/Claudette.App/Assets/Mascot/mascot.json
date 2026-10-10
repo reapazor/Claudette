@@ -1,0 +1,39 @@
+{
+  "_comment": "Drawn by packaging/icon/build-icons.mjs; change the poses there. Z is the theme's muted text colour.",
+  "palette": {"O":"#D77757","E":"#141413","H":"#A8492F","K":"#B8336A","L":"#8F8D86","B":"#5F5E59","X":"#8F8D86","G":"#F0EEE6","S":"#D77757"},
+  "poses": {
+    "stand": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OEOOOOEO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "blink": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOOOOOOO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "lookLeft": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..EOOOOEOO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "lookRight": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOEOOOOE..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "lookDown": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOOOOOOO..","OOOEOOOOEOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "walkLeft-0": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..EOOOOEOO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","....O....O.."],
+    "walkRight-0": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOEOOOOE..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","....O....O.."],
+    "walkLeft-1": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..EOOOOEOO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "walkRight-1": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOEOOOOE..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "walkLeft-2": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..EOOOOEOO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O....O...."],
+    "walkRight-2": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOEOOOOE..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O....O...."],
+    "walkLeft-3": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..EOOOOEOO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "walkRight-3": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOEOOOOE..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "wave": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","OOOOOOOOOO.H","OOOEOOOOEO..","..OOOOOOOOOO","..OOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "waveHigh": ["........HHH.",".......HHHHH","...HHHHKH.HH","OOHHHHHHH.HH","OOOOOOOOOO.H","..OEOOOOEO..","..OOOOOOOOOO","..OOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "armsUp": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","OOOOOOOOOOOO","OOOEOOOOEOOO","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "stretch": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "typeLeft": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","OOOEOOOOEO..","OOOOOOOOOO..","..OOOOOOOOOO","..OOOOOOOOOO","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "typeRight": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OEOOOOEOOO","..OOOOOOOOOO","OOOOOOOOOO..","OOOOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "lean": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OEOOOOEO..","..OOOOOOOO..","..OOOOOOOO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..O.O..O.O..","..O.O..O.O.."],
+    "leanBlink": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..O.O..O.O..","..O.O..O.O.."],
+    "hang": ["OO........OO","OO........OO","OO......HHOO","OO.....HHHOO","OO.HHHHKH.OO","OOHHHHHHH.OO","OOOOOOOOOOOO","..OEOOOOEO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "hangLookLeft": ["OO........OO","OO........OO","OO......HHOO","OO.....HHHOO","OO.HHHHKH.OO","OOHHHHHHH.OO","OOOOOOOOOOOO","..EOOOOEOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "hangLookRight": ["OO........OO","OO........OO","OO......HHOO","OO.....HHHOO","OO.HHHHKH.OO","OOHHHHHHH.OO","OOOOOOOOOOOO","..OOEOOOOE..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."]
+  },
+  "props": {
+    "z": ["ZZZZ","..Z.",".Z..","ZZZZ"],
+    "bigZ": ["ZZZZZ","...Z.","..Z..",".Z...","ZZZZZ"],
+    "bang": ["ZZ","ZZ","ZZ","..","ZZ"],
+    "laptop": [".LLLLLLLL.",".LLLLLLLL.",".LLLLLLLL.","BBBBBBBBBB"],
+    "hourglass-0": ["XXXXX",".SSS.","..S..",".GGG.","XXXXX"],
+    "hourglass-1": ["XXXXX",".GSG.","..S..",".GSG.","XXXXX"],
+    "hourglass-2": ["XXXXX",".GGG.","..G..",".SSS.","XXXXX"]
+  }
+}

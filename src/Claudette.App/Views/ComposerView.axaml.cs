@@ -49,6 +49,12 @@ public partial class ComposerView : UserControl
     /// <summary>Opens the quick suffixes menu (DESIGN.md §5), as its shortcut does.</summary>
     internal void ShowSuffixes() => SuffixButton.Flyout?.ShowAt(SuffixButton);
 
+    /// <summary>
+    /// What the conversation can show just above the composer: Claudette on the composer keeps clear of it, or ducks
+    /// behind the box while it spans the box (DESIGN.md §5).
+    /// </summary>
+    internal void KeepMascotClearOf(IEnumerable<Control> controls) => MascotLayer.KeepClearOf(controls);
+
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);

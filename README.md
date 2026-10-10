@@ -6,7 +6,7 @@
 
 It isn't a reimplementation. Each tab runs the real `claude` CLI, with your settings, `CLAUDE.md`, MCP servers, hooks and permissions, and Claudette draws it as proper native UI instead of a terminal. Windows and macOS, built with .NET 10 and Avalonia.
 
-![Claudette: seven tabs over three game projects, a C++ conversation with tool calls and a code block, the Changed files panel, and the plan usage header](docs/screenshots/standard-dark.png)
+![Claudette: seven tabs over three game projects, a C++ conversation with tool calls and a code block, the Changed files panel, the plan usage header, and Claudette herself standing on the message box](docs/screenshots/standard-dark.png)
 
 ## Why you'll want it
 
@@ -102,6 +102,17 @@ It isn't a reimplementation. Each tab runs the real `claude` CLI, with your sett
   <tr>
     <td align="center">Claude, light</td>
     <td align="center">Claude, dark</td>
+  </tr>
+</table>
+
+### Claudette keeps you company
+
+Turn her on in Settings → Appearance and Claudette, the app's pixel mascot, stands on the message box while you work. She blinks and looks around, wanders up and down, leans on the edge, and every so often loses her footing, falls off behind the box and climbs back up. She types on a little laptop while Claude works, waves when Claude needs you, hops when a turn finishes and dozes by an hourglass when you've hit your plan's limit. Click her to startle her (twice and she falls off). She rises with the box as you type, ducks behind it when something needs the space, and stands still if you reduce motion.
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/claudette-standard-dark.png" alt="Claudette standing on the message box, Standard style, dark"></td>
+    <td><img src="docs/screenshots/claudette-claude-light.png" alt="Claudette standing on the message box, Claude style, light"></td>
   </tr>
 </table>
 

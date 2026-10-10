@@ -75,6 +75,11 @@ public sealed partial class TabViewModel
             _recall.Reset();
         }
         DraftChanged();
+        // Typing wakes Claudette on the composer from a nap (DESIGN.md §5).
+        if (IsSelected)
+        {
+            _services.Mascot.Nudge();
+        }
     }
 
     /// <summary>The <c>/</c> and <c>@</c> popup.</summary>

@@ -1,0 +1,385 @@
+using Claudette.App.Mascot;
+using Claudette.App.Services;
+using Claudette.App.Tests.Support;
+using Claudette.App.ViewModels;
+using Microsoft.Extensions.Time.Testing;
+
+namespace Claudette.App.Tests;
+
+/// <summary>Claudette on the composer (DESIGN.md §5): what she does, and when.</summary>
+public class MascotTests
+{
+    private static readonly MascotRoom Room = new(10, 70);
+
+    [Fact]
+    public void Her_poses_and_props_come_from_the_icon_scripts_sprite()
+    {
+        Assert.Equal(MascotArt.Width, MascotArt.Poses["stand"].Width);
+        Assert.Equal(MascotArt.Height, MascotArt.Poses["stand"].Height);
+        // Hanging from the edge, her arms make her two cells taller, so at 13 cells down only her hands show.
+        Assert.Equal(14, MascotArt.HeightOf("hang"));
+        Assert.All(MascotArt.Poses.Values, pose => Assert.All(pose.Rows, row => Assert.Equal(MascotArt.Width, row.Length)));
+        var letters = MascotArt.Poses.Values.Concat(MascotArt.Props.Values).SelectMany(s => s.Rows).SelectMany(r => r).Distinct();
+        Assert.All(letters, letter => Assert.True(letter is '.' or MascotArt.ThemeColor || MascotArt.Palette.ContainsKey(letter), $"'{letter}' has no colour"));
+    }
+
+    [Fact]
+    public void Every_step_she_takes_uses_a_pose_and_props_that_exist()
+    {
+        var random = new Random(3);
+        IEnumerable<MascotStep>[] all =
+        [
+            MascotAntics.LookAround(random), MascotAntics.Walk(-5), MascotAntics.Walk(5), MascotAntics.Lean(random),
+            MascotAntics.Stretch(), MascotAntics.Wave(2), MascotAntics.Hop(), MascotAntics.Startled(),
+            MascotAntics.TopplesOff(random), MascotAntics.ClimbUp(), MascotAntics.Duck(), MascotAntics.Typing(random),
+            MascotAntics.Doze(random, hourglass: true, settle: true), MascotAntics.WakeUp(), MascotAntics.StandAbout(TimeSpan.FromSeconds(1)),
+        ];
+        foreach (var step in all.SelectMany(s => s))
+        {
+            Assert.True(MascotArt.Poses.ContainsKey(step.Pose), step.Pose);
+            Assert.All(step.Props ?? [], prop => Assert.True(MascotArt.Props.ContainsKey(prop.Name), prop.Name));
+        }
+    }
+
+    [Fact]
+    public void She_climbs_up_from_behind_the_box_when_first_shown_and_then_stands_on_its_edge()
+    {
+        using var stage = new Stage();
+        Assert.True(stage.Frame.IsHidden);
+
+        stage.Show();
+
+        // First her hands on the edge, then her head peeking over it.
+        Assert.Equal(("hang", 13), (stage.Frame.Pose, stage.Frame.Drop));
+        Assert.False(stage.Frame.IsHidden);
+        stage.Run(TimeSpan.FromSeconds(2.5));
+        Assert.Contains(stage.Frames, f => f.Frame.Pose == "hangLookLeft" && f.Frame.Drop == 6);
+        stage.Run(TimeSpan.FromSeconds(3));
+        Assert.Equal(0, stage.Frame.Drop);
+        Assert.InRange(stage.Frame.X, Room.Left, Room.MaxX);
+    }
+
+    [Fact]
+    public void She_stays_in_her_room_and_waits_thirty_to_ninety_seconds_between_the_things_she_does()
+    {
+        using var stage = new Stage(seed: 7);
+        stage.Show();
+        var idle = new HashSet<string> { "stand", "blink" };
+        TimeSpan? calmSince = null;
+        var calmSpells = new List<TimeSpan>();
+        var poses = new HashSet<string>();
+
+        // Two hours, with the user doing something every minute so she doesn't nap.
+        for (var minute = 0; minute < 120; minute++)
+        {
+            stage.Director.Nudge();
+            stage.Run(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(50), each: () => Assert.InRange(stage.Frame.X, Room.Left, Room.MaxX));
+        }
+        foreach (var (at, frame) in stage.Frames)
+        {
+            poses.Add(frame.Pose);
+            var calm = idle.Contains(frame.Pose) && frame.Drop == 0 && frame.Props.Count == 0;
+            if (calm)
+            {
+                calmSince ??= at;
+            }
+            else if (calmSince is { } since)
+            {
+                // A moment standing in the middle of something (between looking left and right, say) isn't a spell.
+                if (at - since > TimeSpan.FromSeconds(2))
+                {
+                    calmSpells.Add(at - since);
+                }
+                calmSince = null;
+            }
+        }
+
+        Assert.True(calmSpells.Count > 60, $"only {calmSpells.Count} things in two hours");
+        Assert.All(calmSpells, spell => Assert.InRange(spell, MascotDirector.ShortestCalm - TimeSpan.FromSeconds(1), MascotDirector.LongestCalm + TimeSpan.FromSeconds(1)));
+        Assert.Superset(new HashSet<string> { "lookLeft", "lean", "stretch", "wave", "armsUp", "lookDown", "hang" }, poses);
+        Assert.Contains(poses, p => p.StartsWith("walk", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Falling_off_on_her_own_happens_at_most_every_three_minutes()
+    {
+        using var stage = new Stage(seed: 11);
+        stage.Show();
+        for (var minute = 0; minute < 120; minute++)
+        {
+            stage.Director.Nudge();
+            stage.Run(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(50));
+        }
+
+        var falls = stage.Frames.Where(f => f.Frame.Pose == "lookDown").Select(f => f.At).ToList();
+        Assert.NotEmpty(falls);
+        Assert.All(falls.Zip(falls.Skip(1)), pair => Assert.True(pair.Second - pair.First >= MascotDirector.FallsAtMostEvery));
+        // Each fall drops her out of sight, and she always climbs back.
+        Assert.False(stage.Frame.IsHidden && stage.Frame.Pose != "hang");
+    }
+
+    [Fact]
+    public void With_no_room_on_the_edge_she_ducks_behind_the_box_until_there_is()
+    {
+        using var stage = new Stage();
+        stage.Show();
+        stage.Run(TimeSpan.FromSeconds(5));
+        var x = stage.Frame.X;
+
+        stage.Director.SetRoom(null);
+        stage.Run(TimeSpan.FromSeconds(1));
+        Assert.True(stage.Frame.IsHidden);
+        stage.Director.SetMood(MascotMood.Working);
+        stage.Run(TimeSpan.FromSeconds(30));
+        Assert.True(stage.Frame.IsHidden);
+
+        stage.Director.SetRoom(Room);
+        Assert.Equal(("hang", 13, x), (stage.Frame.Pose, stage.Frame.Drop, stage.Frame.X));
+        stage.Run(TimeSpan.FromSeconds(5));
+        // Back up, she does what the tab's doing.
+        Assert.Equal("laptop", Assert.Single(stage.Frame.Props).Name);
+    }
+
+    [Fact]
+    public void Too_narrow_a_room_is_no_room_and_a_smaller_one_moves_her_into_it()
+    {
+        using var stage = new Stage();
+        stage.Show(new MascotRoom(60, 100));
+        stage.Run(TimeSpan.FromSeconds(5));
+
+        stage.Director.SetRoom(new MascotRoom(0, 40));
+        Assert.Equal(40 - MascotArt.Width, stage.Frame.X);
+
+        stage.Director.SetRoom(new MascotRoom(0, MascotDirector.LeastRoom - 1));
+        stage.Run(TimeSpan.FromSeconds(1));
+        Assert.True(stage.Frame.IsHidden);
+    }
+
+    [Fact]
+    public void A_poke_startles_her_and_a_second_one_straight_after_tips_her_off_the_edge_to_climb_back_up()
+    {
+        using var stage = new Stage();
+        stage.Show();
+        stage.Run(TimeSpan.FromSeconds(5));
+
+        stage.Director.Poke();
+        Assert.Equal("armsUp", stage.Frame.Pose);
+        Assert.True(stage.Frame.Drop < 0);
+        Assert.Equal("bang", Assert.Single(stage.Frame.Props).Name);
+        stage.Run(TimeSpan.FromSeconds(0.5));
+        var from = stage.Frames.Count;
+        stage.Director.Poke();
+        stage.Run(TimeSpan.FromSeconds(3));
+        Assert.True(stage.Frame.IsHidden);
+        // Pokes while she's out of sight do nothing.
+        stage.Director.Poke();
+        stage.Run(TimeSpan.FromSeconds(8));
+
+        var after = stage.Frames.Skip(from).Select(f => f.Frame).ToList();
+        Assert.Equal("lookDown", after[0].Pose);
+        Assert.Contains(after, f => f is { Pose: "hang", Drop: 13 });
+        Assert.Equal(("stand", 0), (stage.Frame.Pose, stage.Frame.Drop));
+    }
+
+    [Fact]
+    public void She_types_while_Claude_works_waves_while_a_prompt_waits_dozes_at_a_limit_and_hops_when_a_turn_finishes()
+    {
+        using var stage = new Stage();
+        stage.Show();
+        stage.Run(TimeSpan.FromSeconds(5));
+
+        var from = stage.Frames.Count;
+        stage.Director.SetMood(MascotMood.Working);
+        stage.Run(TimeSpan.FromSeconds(10));
+        var working = stage.Frames.Skip(from).Select(f => f.Frame).ToList();
+        Assert.Contains(working, f => f.Pose == "typeLeft");
+        Assert.Contains(working, f => f.Pose == "typeRight");
+        Assert.All(working, f => Assert.Equal("laptop", Assert.Single(f.Props).Name));
+
+        from = stage.Frames.Count;
+        stage.Director.SetMood(MascotMood.Waiting);
+        stage.Run(TimeSpan.FromSeconds(20));
+        var waiting = stage.Frames.Skip(from).Select(f => f.Frame).ToList();
+        Assert.Equal("wave", waiting[0].Pose);
+        Assert.Contains(waiting, f => f.Pose == "waveHigh");
+        Assert.True(waiting.Count(f => f.Pose == "wave") >= 8, "she waves straight away and again 15 seconds on");
+
+        from = stage.Frames.Count;
+        stage.Director.SetMood(MascotMood.Resting);
+        stage.Run(TimeSpan.FromSeconds(10));
+        Assert.Contains(stage.Frames.Skip(from), f => f.Frame.Props.Any(p => p.Name.StartsWith("hourglass", StringComparison.Ordinal)));
+        Assert.Contains(stage.Frames.Skip(from), f => f.Frame.Props.Any(p => p.Name == "bigZ"));
+
+        stage.Director.SetMood(MascotMood.Working);
+        stage.Run(TimeSpan.FromSeconds(2));
+        // The turn's result comes before the tab goes idle: she hops once it has.
+        stage.Director.TurnFinished();
+        stage.Run(TimeSpan.FromSeconds(2));
+        from = stage.Frames.Count;
+        stage.Director.SetMood(MascotMood.Idle);
+        stage.Run(TimeSpan.FromSeconds(2));
+        Assert.Contains(stage.Frames.Skip(from), f => f.Frame is { Pose: "armsUp", Drop: -2 });
+    }
+
+    [Fact]
+    public void After_five_quiet_minutes_she_naps_and_typing_wakes_her()
+    {
+        using var stage = new Stage(seed: 5);
+        stage.Show();
+        stage.Run(MascotDirector.NapAfter + TimeSpan.FromMinutes(2), TimeSpan.FromMilliseconds(50));
+        Assert.Equal("leanBlink", stage.Frame.Pose);
+        Assert.Contains(stage.Frames, f => f.Frame.Props.Any(p => p.Name == "z"));
+
+        stage.Director.Nudge();
+        stage.Run(TimeSpan.FromSeconds(2));
+        Assert.Equal(("stand", 0), (stage.Frame.Pose, stage.Frame.Drop));
+        Assert.Empty(stage.Frame.Props);
+    }
+
+    [Fact]
+    public void With_motion_reduced_she_stands_still_in_the_pose_for_the_tabs_mood()
+    {
+        using var stage = new Stage();
+        stage.Director.SetStill(true);
+        stage.Show();
+
+        // No climbing up: she's there, at the right end of her room.
+        Assert.Equal(new MascotFrame("stand", Room.MaxX, 0, []), stage.Frame);
+        var count = stage.Frames.Count;
+        stage.Run(TimeSpan.FromMinutes(10), TimeSpan.FromMilliseconds(100));
+        Assert.Equal(count, stage.Frames.Count);
+        stage.Director.Poke();
+        Assert.Equal(count, stage.Frames.Count);
+
+        stage.Director.SetMood(MascotMood.Working);
+        Assert.Equal(("typeLeft", "laptop"), (stage.Frame.Pose, Assert.Single(stage.Frame.Props).Name));
+        stage.Run(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(100));
+        Assert.Equal(count + 1, stage.Frames.Count);
+
+        stage.Director.SetRoom(null);
+        Assert.True(stage.Frame.IsHidden);
+        stage.Director.SetRoom(Room);
+        Assert.Equal(("typeLeft", 0), (stage.Frame.Pose, stage.Frame.Drop));
+
+        // Motion back on, she carries on from where she stands.
+        stage.Director.SetStill(false);
+        stage.Run(TimeSpan.FromSeconds(1));
+        Assert.Contains(stage.Frames, f => f.Frame.Pose == "typeRight");
+    }
+
+    [Fact]
+    public void Out_of_sight_nothing_ticks_and_she_moves_while_any_view_shows_her()
+    {
+        using var stage = new Stage();
+        var other = new object();
+        stage.Show();
+        stage.Director.SetShown(other, true);
+        stage.Run(TimeSpan.FromSeconds(5));
+
+        // The tab she was on is hidden as the next is shown, in either order.
+        stage.Director.SetShown(stage.View, false);
+        Assert.True(stage.Director.IsShown);
+        stage.Director.SetShown(other, false);
+        Assert.False(stage.Director.IsShown);
+        var count = stage.Frames.Count;
+        stage.Run(TimeSpan.FromMinutes(5), TimeSpan.FromMilliseconds(100));
+        Assert.Equal(count, stage.Frames.Count);
+
+        stage.Director.SetShown(other, true);
+        stage.Run(TimeSpan.FromSeconds(10));
+        Assert.True(stage.Frames.Count > count);
+    }
+
+    [Fact]
+    public async Task The_setting_brings_her_and_her_menu_takes_her_away()
+    {
+        await using var h = new TabTestHarness();
+        Assert.False(h.Services.Settings.Appearance.ShowClaudette);
+        Assert.Null(h.Services.Mascot.Director);
+
+        h.Services.Settings.Appearance.ShowClaudette = true;
+        h.Services.SaveSettings();
+        Assert.NotNull(h.Services.Mascot.Director);
+
+        h.Services.Mascot.HideCommand.Execute(null);
+        Assert.False(h.Services.Settings.Appearance.ShowClaudette);
+        Assert.Null(h.Services.Mascot.Director);
+    }
+
+    [Fact]
+    public async Task She_follows_what_the_selected_tab_is_doing()
+    {
+        await using var h = new TabTestHarness(s => s.Appearance.ShowClaudette = true);
+        h.Services.Mascot.OnSettingsChanged();
+        var tab = await h.OpenTabAsync();
+        var director = h.Services.Mascot.Director!;
+        Assert.True(tab.IsSelected);
+        Assert.Equal(MascotMood.Idle, director.Mood);
+
+        tab.ComposerText = "Refactor the parser";
+        await tab.SendCommand.ExecuteAsync(null);
+        h.Transport.Emit("""{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-5-5","permissionMode":"default"}""");
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Working);
+        Assert.Equal(MascotMood.Working, director.Mood);
+
+        h.Transport.Emit("""{"type":"result","subtype":"success","is_error":false,"session_id":"s1","result":"Done.","duration_ms":10,"num_turns":1}""");
+        await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle);
+        Assert.Equal(MascotMood.Idle, director.Mood);
+    }
+
+    /// <summary>Her director on a fake clock, with every frame she shows and when.</summary>
+    private sealed class Stage : IDisposable
+    {
+        private readonly DateTimeOffset _start;
+
+        public Stage(int seed = 1)
+        {
+            _start = Time.GetUtcNow();
+            Director = new MascotDirector(Time, new Immediately(), new Random(seed));
+            Director.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(MascotDirector.Frame))
+                {
+                    Frames.Add((Time.GetUtcNow() - _start, Director.Frame));
+                }
+            };
+        }
+
+        public FakeTimeProvider Time { get; } = new(DateTimeOffset.Parse("2026-10-10T12:00:00Z"));
+
+        public MascotDirector Director { get; }
+
+        public object View { get; } = new();
+
+        public List<(TimeSpan At, MascotFrame Frame)> Frames { get; } = [];
+
+        public MascotFrame Frame => Director.Frame;
+
+        public void Show(MascotRoom? room = null)
+        {
+            Director.SetRoom(room ?? Room);
+            Director.SetShown(View, true);
+        }
+
+        public void Run(TimeSpan span, TimeSpan? step = null, Action? each = null)
+        {
+            var by = step ?? TimeSpan.FromMilliseconds(10);
+            for (var t = TimeSpan.Zero; t < span; t += by)
+            {
+                Time.Advance(by);
+                each?.Invoke();
+            }
+        }
+
+        public void Dispose() => Director.Dispose();
+    }
+
+    /// <summary>
+    /// Runs what's posted straight away. The fake clock fires her timers on the test's own thread, so she needs no UI
+    /// thread, and two simulated hours don't hold up other tests on the one <see cref="InlineDispatcher"/> shares.
+    /// </summary>
+    private sealed class Immediately : IUiDispatcher
+    {
+        public void Post(Action action) => action();
+    }
+}

@@ -87,6 +87,7 @@ public sealed partial class TabViewModel
                 break;
         }
         OnPropertyChanged(nameof(IsWorkingLineShown));
+        TellMascot();
     }
 
     /// <summary>

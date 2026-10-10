@@ -420,6 +420,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         TellLayoutAboutSidePanel();
         if (value)
         {
+            TellMascot();
             ChangedFiles.RefreshIfStale();
             if (Status == TabStatus.Unread)
             {
@@ -1815,6 +1816,10 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 if (!completed.Result.IsError)
                 {
                     NotifyTurnFinished(completed.Result);
+                    if (IsSelected)
+                    {
+                        _services.Mascot.TurnFinished();
+                    }
                 }
                 // Claude may have edited claudette.json or switched branches: the actions and links follow, and the badge.
                 _ = ProjectTools.RefreshFileAsync();

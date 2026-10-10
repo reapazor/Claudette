@@ -8,6 +8,7 @@
 //   src/Claudette.App/Assets/AppIcon/*.png    the animations' frames (DESIGN.md §10): the taskbar overlay's pulsing
 //                                             spark and running hourglass, and the Dock icon typing, waving and
 //                                             waiting by an hourglass (AppIconAnimations)
+//   src/Claudette.App/Assets/Mascot/mascot.json  Claudette on the composer's poses and props, as cells (DESIGN.md §5)
 // Run from anywhere: node packaging/icon/build-icons.mjs
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -95,6 +96,108 @@ const turn = rows => [...rows[0]].map((_, x) => rows.map((_, y) => rows[rows.len
 // The sand runs down, rests, and the hourglass turns over: once sideways, then full at the top again.
 const sandFrames = [sand(4, 0), sand(3, 1), sand(2, 2), sand(1, 3), sand(0, 4)];
 sandFrames.push(turn(sandFrames[4]));
+
+// ── Claudette on the composer (DESIGN.md §5) ─────────────────────────────
+// Her poses, from the same sprite, and the small things she has with her. The app draws them as cells, so they're
+// written as rows rather than images. Each pose's last row is her feet, on the composer's top edge.
+
+/** Rows with the cells of `patch` written over them, `patch` being { row: 'cells' } with '?' leaving a cell as it was. */
+const patched = (rows, patch) => rows.map((row, y) => patch[y] === undefined ? row
+  : [...row].map((ch, x) => (patch[y][x] ?? '?') === '?' ? ch : patch[y][x]).join(''));
+
+const standing = claudette(pose.stand);
+const closedEyes = rows => patched(rows, { 5: '..OOOOOOOO..' });
+const walkLegs = [
+  { 11: '....O....O..' }, // the first and third legs up
+  {},
+  { 11: '..O....O....' }, // the second and fourth
+  {},
+];
+// Arms up; the right arm covers the ponytail's end.
+const armsUp = { 4: 'OOOOOOOOOOOO', 5: 'OOOEOOOOEOOO', 6: '..OOOOOOOO..', 7: '..OOOOOOOO..' };
+// Leaning on the edge: she stands two cells lower, behind it, with her arms on top.
+const leaning = patched(standing, { 6: '..OOOOOOOO..', 7: '..OOOOOOOO..', 8: 'OOOOOOOOOOOO', 9: 'OOOOOOOOOOOO' });
+// Hanging from the edge by her hands, from behind it: two rows taller, her arms up past her hair.
+const hanging = [
+  'OO........OO',
+  'OO........OO',
+  ...patched(hair, { 0: 'OO????????OO', 1: 'OO????????OO', 2: 'OO????????OO', 3: 'OO????????OO' }),
+  'OOOOOOOOOOOO',
+  '..OEOOOOEO..',
+  '..OOOOOOOO..',
+  '..OOOOOOOO..',
+  '..OOOOOOOO..',
+  '..OOOOOOOO..',
+  ...legs,
+];
+const lookLeft = { 5: '..EOOOOEOO..' };
+const lookRight = { 5: '..OOEOOOOE..' };
+
+const mascotPoses = {
+  stand: standing,
+  blink: closedEyes(standing),
+  lookLeft: patched(standing, lookLeft),
+  lookRight: patched(standing, lookRight),
+  // Looking down at the edge, before she topples off it.
+  lookDown: patched(closedEyes(standing), { 6: 'OOOEOOOOEOOO' }),
+  ...Object.fromEntries(walkLegs.flatMap((step, i) => [
+    [`walkLeft-${i}`, patched(standing, { ...lookLeft, ...step })],
+    [`walkRight-${i}`, patched(standing, { ...lookRight, ...step })],
+  ])),
+  wave: claudette(pose.wave),
+  // The waving arm a row higher, beside her hair.
+  waveHigh: patched(claudette(pose.wave), { 3: 'OO?????????', 5: '..OEOOOOEO..' }),
+  armsUp: patched(standing, armsUp),
+  stretch: patched(standing, { ...armsUp, 5: 'OOOOOOOOOOOO' }),
+  typeLeft: claudette(pose.typeLeft),
+  typeRight: claudette(pose.typeRight),
+  lean: leaning,
+  leanBlink: closedEyes(leaning),
+  hang: hanging,
+  hangLookLeft: patched(hanging, { 7: '..EOOOOEOO..' }),
+  hangLookRight: patched(hanging, { 7: '..OOEOOOOE..' }),
+};
+
+// What she has with her. Z takes the theme's muted text colour, so it reads on light and dark.
+const mascotProps = {
+  // Asleep: a small z, then a bigger one higher up.
+  z: ['ZZZZ', '..Z.', '.Z..', 'ZZZZ'],
+  bigZ: ['ZZZZZ', '...Z.', '..Z..', '.Z...', 'ZZZZZ'],
+  // Startled.
+  bang: ['ZZ', 'ZZ', 'ZZ', '..', 'ZZ'],
+  // The back of her laptop's lid, in front of her while she types.
+  laptop: ['.LLLLLLLL.', '.LLLLLLLL.', '.LLLLLLLL.', 'BBBBBBBBBB'],
+  // While a usage limit holds the task: a small hourglass whose sand runs down.
+  'hourglass-0': ['XXXXX', '.SSS.', '..S..', '.GGG.', 'XXXXX'],
+  'hourglass-1': ['XXXXX', '.GSG.', '..S..', '.GSG.', 'XXXXX'],
+  'hourglass-2': ['XXXXX', '.GGG.', '..G..', '.SSS.', 'XXXXX'],
+};
+
+const mascotPalette = {
+  ...palette,
+  L: '#8F8D86', // the lid, a warm grey that reads on light and dark
+  B: '#5F5E59',
+  X: '#8F8D86',
+  G: tile,
+  S: palette.O,
+};
+
+function mascotJson() {
+  const rows = frames => Object.entries(frames).map(([name, cells]) => `    ${JSON.stringify(name)}: ${JSON.stringify(cells)}`).join(',\n');
+  return [
+    '{',
+    '  "_comment": "Drawn by packaging/icon/build-icons.mjs; change the poses there. Z is the theme\'s muted text colour.",',
+    `  "palette": ${JSON.stringify(mascotPalette)},`,
+    '  "poses": {',
+    rows(mascotPoses),
+    '  },',
+    '  "props": {',
+    rows(mascotProps),
+    '  }',
+    '}',
+    '',
+  ].join('\n');
+}
 
 // Pixels per cell at each size. At 24, 36 and 48, the taskbar at 100%, 150% and 200%, she fills the icon.
 const scale = { 16: 1, 20: 1, 24: 2, 30: 2, 32: 2, 36: 3, 40: 3, 44: 3, 48: 4, 50: 3, 64: 5, 128: 9, 150: 8, 256: 18 };
@@ -293,3 +396,6 @@ const frames = 'src/Claudette.App/Assets/AppIcon';
 [pose.wave, pose.stand].forEach((body, i) => write(`${frames}/waving-${i}.png`, png(macIcon(512, claudette(body)))));
 sandFrames.forEach((rows, i) => write(`${frames}/hourglass-${i}.png`, png(hourglassIcon(rows))));
 sandFrames.forEach((rows, i) => write(`${frames}/waiting-${i}.png`, png(waitingIcon(rows))));
+
+// Claudette on the composer: her poses and props, which the app draws cell by cell (Mascot/MascotArt).
+write('src/Claudette.App/Assets/Mascot/mascot.json', mascotJson());

@@ -46,6 +46,7 @@ public sealed class AppearancePage(SettingsContext context) : SettingsPage(conte
         Entry("Show context on tab rows"),
         Entry("Show git branch on tab rows"),
         Entry("Show task progress on tab rows"),
+        Entry("Show Claudette on the composer"),
         Entry("Density"),
         Entry("Full-width conversation"),
         Entry("Zoom"),
@@ -198,6 +199,13 @@ public sealed class AppearancePage(SettingsContext context) : SettingsPage(conte
     {
         get => Settings.Appearance.ShowTaskProgressOnTabs;
         set => Set(value, v => Settings.Appearance.ShowTaskProgressOnTabs = v);
+    }
+
+    /// <summary>Claudette standing on the composer, doing little things now and then (DESIGN.md §5, "Claudette on the composer").</summary>
+    public bool ShowClaudette
+    {
+        get => Settings.Appearance.ShowClaudette;
+        set => Set(value, v => Settings.Appearance.ShowClaudette = v);
     }
 
     /// <summary>The detailed usage header goes back to its default too, though it's kept with the machine's state.</summary>

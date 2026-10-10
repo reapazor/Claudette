@@ -332,6 +332,12 @@ public sealed class AppearanceSettings
     /// </summary>
     public bool ShowTaskProgressOnTabs { get; set; } = true;
 
+    /// <summary>
+    /// Claudette, the app's pixel mascot, standing on the composer and doing little things now and then (DESIGN.md §5,
+    /// "Claudette on the composer"). Off by default.
+    /// </summary>
+    public bool ShowClaudette { get; set; }
+
     /// <summary>How much room the conversation, the sidebar's rows and the composer take (DESIGN.md §14).</summary>
     public Density Density { get; set; } = Density.Comfortable;
 

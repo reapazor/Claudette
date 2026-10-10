@@ -6,7 +6,9 @@ the diff view, the thread's Tasks page and agent map, the detailed usage header 
 .DESCRIPTION
 For Standard and Claude, dark and light: makes the demo content afresh, starts the Debug build of Claudette on it
 (fake-claude as Claude Code, so no account and no tokens), visits every tab so each shows its model and any reviewed
-icon, opens the Grappling hook tab's Changed files, and captures the window as <style>-<theme>.png. Then it:
+icon, opens the Grappling hook tab's Changed files, and captures the window as <style>-<theme>.png, and Claudette standing on
+the composer, close up, as claudette-<style>-<theme>.png (the demo runs with motion reduced, so she stands still at the
+composer's right rather than being caught part-way through falling off it). Then it:
 - opens the diff of StarfallCharacter.cpp from an Edit card and captures that window as diff-<style>-<theme>.png;
 - selects the Move to the Input System thread, opens its side panel on Tasks and captures the window as
   tasks-<style>-<theme>.png, then on Agents, with the first subagent selected, as agents-<style>-<theme>.png;
@@ -78,6 +80,27 @@ public static class WindowShot
             }
             var to = bottom == 0 ? frame.Bottom : Math.Min(bottom, frame.Bottom);
             var crop = new Rectangle(frame.Left - outer.Left, frame.Top - outer.Top, frame.Right - frame.Left, to - frame.Top);
+            using (var shot = full.Clone(crop, PixelFormat.Format32bppArgb))
+            {
+                shot.Save(path, ImageFormat.Png);
+            }
+        }
+    }
+
+    /// <summary>The part of the window from (<paramref name="left"/>, <paramref name="top"/>) to (<paramref name="right"/>, <paramref name="bottom"/>) on the screen.</summary>
+    public static void SaveRegion(IntPtr hwnd, string path, int left, int top, int right, int bottom)
+    {
+        RECT outer;
+        GetWindowRect(hwnd, out outer);
+        using (var full = new Bitmap(outer.Right - outer.Left, outer.Bottom - outer.Top, PixelFormat.Format32bppArgb))
+        {
+            using (var g = Graphics.FromImage(full))
+            {
+                var hdc = g.GetHdc();
+                PrintWindow(hwnd, hdc, 2 /* PW_RENDERFULLCONTENT */);
+                g.ReleaseHdc(hdc);
+            }
+            var crop = Rectangle.Intersect(new Rectangle(left - outer.Left, top - outer.Top, right - left, bottom - top), new Rectangle(0, 0, full.Width, full.Height));
             using (var shot = full.Clone(crop, PixelFormat.Format32bppArgb))
             {
                 shot.Save(path, ImageFormat.Png);
@@ -211,7 +234,7 @@ $demo = Join-Path $repo 'tools\Claudette.Demo\bin\Debug\net10.0\claudette-demo.e
 foreach ($style in 'standard', 'claude') {
     foreach ($theme in 'dark', 'light') {
         Write-Host "$style $theme"
-        & $demo $Work --theme $theme --style $style --projects $Projects | Out-Null
+        & $demo $Work --theme $theme --style $style --projects $Projects --still | Out-Null
         if ($LASTEXITCODE -ne 0) { throw 'claudette-demo failed.' }
 
         $start = New-Object System.Diagnostics.ProcessStartInfo $app
@@ -236,6 +259,12 @@ foreach ($style in 'standard', 'claude') {
                 Start-Sleep -Seconds 2
             }
             [WindowShot]::Save($window, (Join-Path $Out "$style-$theme.png"), 0)
+
+            # Claudette on the composer, close up: with motion reduced she stands still at its right, over Send.
+            $send = (Find-ByText $window 'Send').Current.BoundingRectangle
+            $scale = [WindowShot]::Scale($window)
+            [WindowShot]::SaveRegion($window, (Join-Path $Out "claudette-$style-$theme.png"), [int] ($send.Right - 616 * $scale),
+                [int] ($send.Top - 150 * $scale), [int] ($send.Right + 24 * $scale), [int] ($send.Bottom + 34 * $scale))
 
             Invoke-OnRow $window (Join-Path $Projects 'starfall\Source\Starfall\Player\StarfallCharacter.cpp') 'Open diff'
             Wait-Until { [WindowShot]::OtherWindow($claudette.Id, $window) -ne [IntPtr]::Zero } 'the diff view' 20

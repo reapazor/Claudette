@@ -1,9 +1,10 @@
 // claudette-demo: demo content for trying Claudette's UI and for its screenshots, with no account and no tokens.
 //
-//   claudette-demo <folder> [--theme system|light|dark] [--style standard|claude] [--projects <folder>]
+//   claudette-demo <folder> [--theme system|light|dark] [--style standard|claude] [--projects <folder>] [--still]
 //
 // Makes, in <folder> (replacing what an earlier run made there):
-//   home/           for CLAUDETTE_HOME: settings with fake-claude as Claude Code and the theme and style asked for,
+//   home/           for CLAUDETTE_HOME: settings with fake-claude as Claude Code, the theme and style asked for and
+//                   Claudette on the composer (standing still with --still, which reduces motion, for screenshots),
 //                   seven tabs over three game projects (Unreal in C++, Unity in C#, Godot): the first with a long
 //                   conversation and changed files, one with every file reviewed, and a thread with two sub-threads,
 //                   a plan, a task list part-way done and three subagents; and a plan usage history that ends now
@@ -21,9 +22,10 @@ using Claudette.Core.Development;
 using Claudette.Core.Settings;
 using Claudette.Demo;
 
-const string Usage = "usage: claudette-demo <folder> [--theme system|light|dark] [--style standard|claude] [--projects <folder>]";
+const string Usage = "usage: claudette-demo <folder> [--theme system|light|dark] [--style standard|claude] [--projects <folder>] [--still]";
 string? folder = null;
 string? projects = null;
+var still = false;
 var theme = ThemeChoice.Dark;
 var style = AppStyle.Standard;
 try
@@ -41,6 +43,9 @@ try
                 break;
             case "--projects":
                 projects = Next(rest);
+                break;
+            case "--still":
+                still = true;
                 break;
             default:
                 folder = folder is null && !arg.StartsWith('-') ? arg : throw new ArgumentException($"Unexpected argument: {arg}");
@@ -94,6 +99,12 @@ settings.ClaudeCode.CheckForUpdates = false;
 settings.ClaudeCode.UseLoginShellEnvironment = false;
 settings.Appearance.Theme = theme;
 settings.Appearance.Style = style;
+settings.Appearance.ShowClaudette = true;
+if (still)
+{
+    // Screenshots catch her standing on the composer rather than part-way through falling off it.
+    settings.Appearance.Motion = MotionSetting.Reduce;
+}
 settings.Sessions.RestoreUnpinnedTabs = true;
 await new JsonFileStore<AppSettings>(paths.SettingsFile).SaveAsync(settings);
 

@@ -31,9 +31,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AvaloniaResource Include="Assets\**" Exclude="Assets\AppIcon\**" />
+    <AvaloniaResource Include="Assets\**" Exclude="Assets\AppIcon\**;Assets\Mascot\**" />
     <!-- The icon's animation frames (AppIconAnimations), read without Avalonia so view model tests can use them. -->
     <EmbeddedResource Include="Assets\AppIcon\*.png" LogicalName="AppIcon.%(Filename)%(Extension)" />
+    <!-- Claudette on the composer's poses (Mascot/MascotArt), read the same way. -->
+    <EmbeddedResource Include="Assets\Mascot\mascot.json" LogicalName="Mascot.mascot.json" />
     <!-- Also a file next to the app: toasts from an unpackaged Claudette show it (WindowsAppIdentity). -->
     <Content Include="Assets\claudette.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

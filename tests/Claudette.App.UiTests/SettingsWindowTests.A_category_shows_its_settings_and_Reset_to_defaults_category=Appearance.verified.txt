@@ -37,6 +37,8 @@
 "The branch each tab's folder has checked out, such as “main”, at the right of its second line. A tab in a worktree shows the worktree's name instead."
 [x] Show task progress on tab rows
 "How many of Claude's tasks are done, such as “3/7”, at the right of each tab's second line, and the task Claude is working on in place of the model while it works."
+[ ] Show Claudette on the composer
+"Claudette stands on the message box and does little things now and then: she walks about, leans on the edge, and sometimes falls off behind it. She types while Claude works and waves when Claude needs you. Click her to startle her, or right-click to hide her. She stands still when motion is reduced."
 [button] Reset to defaults
 [button] Line up
 [button] Page up

@@ -38,6 +38,9 @@ public partial class TabView : UserControl
         // Tunnel, so the prompt's shortcuts are seen before the composer turns Enter into a new line.
         AddHandler(KeyDownEvent, OnPromptKeyDown, RoutingStrategies.Tunnel);
         ComposerPanel.Sent += () => _stickToBottom = true;
+        // Claudette on the composer keeps clear of Jump to latest, and ducks while a thread's strip or a dialog sits over
+        // the composer (DESIGN.md §5).
+        ComposerPanel.KeepMascotClearOf([JumpToLatest, ThreadStrip, .. ConversationArea.Children.OfType<Border>().Where(b => b.Classes.Contains("overlay"))]);
         ConversationScroll.ScrollChanged += OnConversationScrollChanged;
         // Seen even when the scroll viewer handles them.
         ConversationScroll.AddHandler(PointerWheelChangedEvent, (_, e) => _readerScrolling |= e.Delta.Y > 0, RoutingStrategies.Tunnel, handledEventsToo: true);

@@ -128,6 +128,7 @@ public sealed class AppServices : IAsyncDisposable
         ScratchPads = new ScratchPadService(this);
         Drafts = new DraftService(this);
         Worktrees = new WorktreeCleanupService(this);
+        Mascot = new MascotService(this);
         ProtocolLog.DeleteOld(paths.ProtocolLogDirectory, timeProvider.GetUtcNow());
         BeforeContentStore.DeleteOld(paths.BeforeContentDirectory, timeProvider.GetUtcNow());
         Notifications =new NotificationService(this, notifier ?? NullNotifier.Instance);
@@ -145,6 +146,7 @@ public sealed class AppServices : IAsyncDisposable
             UpdateMotion();
             Library.OnSettingsChanged();
             ScratchPads.OnSettingsChanged();
+            Mascot.OnSettingsChanged();
             ClaudeUpdates?.OnSettingsChanged();
             Notifications.OnSettingsChanged();
             RemoteControl.OnSettingsChanged();
@@ -338,6 +340,9 @@ public sealed class AppServices : IAsyncDisposable
 
     /// <summary>Removing worktree tabs' worktrees on their own, as Settings → General says (DESIGN.md §4, "Cleaning up worktrees").</summary>
     public WorktreeCleanupService Worktrees { get; }
+
+    /// <summary>Claudette on the composer, shared by the tabs (DESIGN.md §5).</summary>
+    public MascotService Mascot { get; }
 
     public AppPaths Paths { get; }
 
@@ -623,6 +628,7 @@ public sealed class AppServices : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         Worktrees.Dispose();
+        Mascot.Dispose();
         ScratchPads.Dispose();
         Library.Dispose();
         Notifications.Dispose();
