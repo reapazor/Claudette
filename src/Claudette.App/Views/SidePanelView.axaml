@@ -107,7 +107,7 @@
                 <StackPanel Grid.Column="2">
                   <Grid ColumnDefinitions="*,Auto">
                     <TextBlock Text="{Binding FileName}" TextWrapping="Wrap" />
-                    <TextBlock Grid.Column="1" Classes="mono small muted" Text="{Binding Stats}" VerticalAlignment="Top" Margin="6,2,0,0" />
+                    <TextBlock Grid.Column="1" Classes="mono small muted counts" Text="{Binding Stats}" VerticalAlignment="Top" />
                   </Grid>
                   <TextBlock Classes="muted small" Text="{Binding DisplayPath}" TextWrapping="Wrap" />
                 </StackPanel>
