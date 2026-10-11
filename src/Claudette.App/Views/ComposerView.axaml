@@ -233,12 +233,15 @@
                                 HorizontalContentAlignment="Stretch" Click="OnCompletionClicked">
                           <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
                             <Path Classes="toolicon" Data="{Binding IconKey, Converter={x:Static conv:ToolIcons.Geometry}}" />
+                            <!-- The hint and the description are smaller, the hint monospace: on the title's baseline (Controls/Baseline). -->
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                              <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                              <TextBlock x:Name="CompletionTitle" Text="{Binding Title}" FontWeight="SemiBold" />
                               <TextBlock Classes="muted small mono" Text="{Binding Hint}" VerticalAlignment="Center"
-                                         IsVisible="{Binding Hint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                         IsVisible="{Binding Hint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                         controls:Baseline.AlignWith="{Binding #CompletionTitle}" />
                             </StackPanel>
-                            <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Classes="muted small" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                       controls:Baseline.AlignWith="{Binding #CompletionTitle}" />
                           </Grid>
                         </Button>
                       </DataTemplate>

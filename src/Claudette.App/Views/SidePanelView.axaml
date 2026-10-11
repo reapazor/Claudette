@@ -103,11 +103,14 @@
                 <CheckBox Classes="reviewed" IsChecked="{Binding IsReviewed, Mode=OneWay}"
                           Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.ToggleFileReviewedCommand}" CommandParameter="{Binding}"
                           AutomationProperties.Name="Reviewed" ToolTip.Tip="Reviewed. Unticks when Claude changes the file again." />
-                <TextBlock Grid.Column="1" Classes="mono" FontWeight="SemiBold" Text="{Binding Status}" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsDeleted}" />
+                <!-- The letter and the counts are monospace, beside the name: on its baseline (Controls/Baseline). -->
+                <TextBlock Grid.Column="1" Classes="mono" FontWeight="SemiBold" Text="{Binding Status}" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsDeleted}"
+                           controls:Baseline.AlignWith="{Binding #FileName}" />
                 <StackPanel Grid.Column="2">
                   <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Text="{Binding FileName}" TextWrapping="Wrap" />
-                    <TextBlock Grid.Column="1" Classes="mono small muted counts" Text="{Binding Stats}" VerticalAlignment="Top" />
+                    <TextBlock x:Name="FileName" Text="{Binding FileName}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Column="1" Classes="mono small muted" Text="{Binding Stats}" VerticalAlignment="Top" Margin="6,0,0,0"
+                               controls:Baseline.AlignWith="{Binding #FileName}" />
                   </Grid>
                   <TextBlock Classes="muted small" Text="{Binding DisplayPath}" TextWrapping="Wrap" />
                 </StackPanel>

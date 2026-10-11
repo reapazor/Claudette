@@ -354,14 +354,6 @@
   <Style Selector="Grid.changedfile.reviewed > TextBlock, Grid.changedfile.reviewed > StackPanel">
     <Setter Property="Opacity" Value="0.5" />
   </Style>
-  <!-- The status letter and the counts are monospace, a size smaller than the file's name beside them: three pixels down
-       puts them on the name's baseline rather than above it. -->
-  <Style Selector="Grid.changedfile TextBlock.mono">
-    <Setter Property="Margin" Value="0,3,0,0" />
-  </Style>
-  <Style Selector="Grid.changedfile TextBlock.mono.counts">
-    <Setter Property="Margin" Value="6,3,0,0" />
-  </Style>
   <!-- Fluent's padding, with the right side wide enough to keep a row's counts clear of the scroll bar -->
   <Style Selector="ListBox#ChangedFilesList ListBoxItem">
     <Setter Property="Padding" Value="12,9,16,12" />

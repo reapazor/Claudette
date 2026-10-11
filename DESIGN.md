@@ -182,6 +182,8 @@ Settings → Appearance → **Style** picks one of two looks, in light and dark 
 
 How it's built: `Themes/ClaudeColors.axaml` holds the Claude values of Claudette's own tokens, and `Themes/AppColors` swaps them in and gives Fluent a matching palette (the window background, text, controls, and the accent it derives its shades from). Fluent reads most palette colors only when its resources are first used, so switching loads a fresh Fluent theme with the palette already set. The shapes are styles under the `claude` class, which the main view takes, as Density's are under `compact`. The replies' font is the `ReplyFont` resource. Code blocks take their syntax colors through `Views/CodeBlockTheme` rather than LiveMarkdown's own property, because LiveMarkdown re-highlights a block already shown by setting its code again, which empties a one-line block.
 
+In both styles, text in a different font or size beside other text sits on its baseline: a changed file's status letter and counts beside its name ([§8](#8-file-changes--diff-view)), a tool row's summary and counts beside the tool's name, the autocomplete's hints and descriptions beside their titles. Lining them up by their tops or centres only looks right when the fonts agree, which they don't from one OS to the next or at another code font size (Settings → Appearance). `Controls/Baseline` puts one text block's first baseline on another's after each layout pass, on whole screen pixels, with a render transform, so the row's layout doesn't change.
+
 ### Accessibility
 
 - **Names.** Every control has a name a screen reader can say: a text button its text, and an icon-only button an `AutomationProperties.Name` ([CLAUDE.md](CLAUDE.md)).

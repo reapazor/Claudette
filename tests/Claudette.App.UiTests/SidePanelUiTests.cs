@@ -526,6 +526,51 @@ public class SidePanelUiTests
         UiText.Settle(window);
     }
 
+    [AvaloniaFact]
+    public async Task A_changed_files_letter_and_counts_and_a_tool_rows_summary_sit_on_their_names_baseline_at_any_code_size()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        tab.IsSidePanelOpen = true;
+        UiText.Settle(window);
+        var file = Path.Combine(h.WorkFolder, "auth.cs");
+        await File.WriteAllTextAsync(file, "b\n", TestContext.Current.CancellationToken);
+        h.Transport.Emit(Edit("e1", file));
+        h.Transport.Emit(EditResult("e1", file));
+        var list = window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "ChangedFilesList");
+        await UiText.SettleUntilAsync(window, () => Boxes(list).Count == 1, "the changed file");
+        var row = list.GetVisualDescendants().OfType<Grid>().Single(g => g.Classes.Contains("changedfile"));
+        var name = row.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "FileName");
+        var aligned = row.GetVisualDescendants().OfType<TextBlock>().Where(t => Baseline.GetAlignWith(t) == name).ToList();
+        var tool = window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "ToolName" && t.Text == "Edit");
+        var summary = window.GetVisualDescendants().OfType<TextBlock>().Where(t => Baseline.GetAlignWith(t) == tool && t.IsEffectivelyVisible).ToList();
+
+        // The status letter and the counts; the tool's summary and its counts.
+        Assert.Equal(2, aligned.Count);
+        Assert.Equal(2, summary.Count);
+        void AllOnBaseline()
+        {
+            UiText.Settle(window);
+            Assert.All(aligned, text => BaselineTests.AssertOnBaseline(text, name, window));
+            Assert.All(summary, text => BaselineTests.AssertOnBaseline(text, tool, window));
+        }
+        AllOnBaseline();
+        var resources = Avalonia.Application.Current!.Resources;
+        var size = resources["CodeFontSize"];
+        try
+        {
+            resources["CodeFontSize"] = 22.0;
+            AllOnBaseline();
+            resources["CodeFontSize"] = 9.0;
+            AllOnBaseline();
+        }
+        finally
+        {
+            resources["CodeFontSize"] = size;
+        }
+    }
+
     private static JsonObject Edit(string id, string path) => new()
     {
         ["type"] = "assistant",

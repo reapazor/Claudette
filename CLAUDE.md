@@ -41,6 +41,7 @@ The backlog is the open GitHub issues on `reapazor/Claudette` assigned to `reapa
   - The Claude style (Settings → Appearance → Style) overrides surface, text, accent and caution tokens from `Themes/ClaudeColors.axaml`, and `Themes/AppColors` gives Fluent a matching palette. A new token of those kinds needs a Claude value there too, in light and dark. Its shapes are styles under the `claude` class (as Density's are under `compact`); put a view's own look in a style rather than in attributes, so the class can change it.
   - Reference `Application.Resources` from `Application.Styles` with `DynamicResource`, because styles load before resources.
   - Give icon-only buttons an `AutomationProperties.Name`.
+  - Put text in another font or size beside other text (monospace beside the interface font) on its baseline with `controls:Baseline.AlignWith="{Binding #Name}"`, not a margin tuned by eye.
 - The visual reference is Claude Code's VS Code extension for the Standard style, and the Claude apps (iOS, claude.ai) for the Claude style (§3, "Visual style").
 
 ## Rules that keep the code testable (§15)

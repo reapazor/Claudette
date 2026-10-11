@@ -203,10 +203,12 @@
               <TextBlock Classes="status" Classes.busy="{Binding !IsComplete}" Classes.ok="{Binding IsComplete}" Classes.failed="{Binding IsError}"
                          Text="●" VerticalAlignment="Center" Margin="0,0,8,0" />
               <Path Grid.Column="1" Classes="toolicon" Data="{Binding IconKey, Converter={x:Static conv:ToolIcons.Geometry}}" Margin="0,0,6,0" />
-              <TextBlock Grid.Column="2" FontWeight="SemiBold" Text="{Binding Name}" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <!-- The summary and the counts are monospace, beside the tool's name: on its baseline (Controls/Baseline). -->
+              <TextBlock x:Name="ToolName" Grid.Column="2" FontWeight="SemiBold" Text="{Binding Name}" VerticalAlignment="Center" Margin="0,0,8,0" />
               <TextBlock Grid.Column="3" Classes="mono muted" Text="{Binding Summary}" MaxWidth="560" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
-                         ToolTip.Tip="{Binding FullSummary}" />
-              <TextBlock Grid.Column="5" Classes="mono small" Text="{Binding DiffStats}" IsVisible="{Binding HasDiff}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                         ToolTip.Tip="{Binding FullSummary}" controls:Baseline.AlignWith="{Binding #ToolName}" />
+              <TextBlock Grid.Column="5" Classes="mono small" Text="{Binding DiffStats}" IsVisible="{Binding HasDiff}" VerticalAlignment="Center" Margin="12,0,0,0"
+                         controls:Baseline.AlignWith="{Binding #ToolName}" />
             </Grid>
           </Button>
           <!-- Edit / Write: the file in the diff view (DESIGN.md §5, §8) -->
