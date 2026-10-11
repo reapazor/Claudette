@@ -348,8 +348,11 @@
     <Setter Property="MinWidth" Value="0" />
     <Setter Property="MinHeight" Value="0" />
     <Setter Property="Padding" Value="0" />
-    <Setter Property="Margin" Value="0,0,6,0" />
     <Setter Property="VerticalAlignment" Value="Top" />
+  </Style>
+  <!-- The status letter, midway between the box and the file's name: its column fits it at any code size. -->
+  <Style Selector="Grid.changedfile > TextBlock.mono">
+    <Setter Property="Margin" Value="8,0" />
   </Style>
   <Style Selector="Grid.changedfile.reviewed > TextBlock, Grid.changedfile.reviewed > StackPanel">
     <Setter Property="Opacity" Value="0.5" />

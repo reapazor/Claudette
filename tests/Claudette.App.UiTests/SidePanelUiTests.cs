@@ -530,17 +530,7 @@ public class SidePanelUiTests
     public async Task A_changed_files_letter_and_counts_and_a_tool_rows_summary_sit_on_their_names_baseline_at_any_code_size()
     {
         await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
-        var tab = await h.OpenTabAsync();
-        var window = UiText.Show(new ShellView { DataContext = h.Shell });
-        tab.IsSidePanelOpen = true;
-        UiText.Settle(window);
-        var file = Path.Combine(h.WorkFolder, "auth.cs");
-        await File.WriteAllTextAsync(file, "b\n", TestContext.Current.CancellationToken);
-        h.Transport.Emit(Edit("e1", file));
-        h.Transport.Emit(EditResult("e1", file));
-        var list = window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "ChangedFilesList");
-        await UiText.SettleUntilAsync(window, () => Boxes(list).Count == 1, "the changed file");
-        var row = list.GetVisualDescendants().OfType<Grid>().Single(g => g.Classes.Contains("changedfile"));
+        var (window, row) = await ShowChangedFileAsync(h);
         var name = row.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "FileName");
         var aligned = row.GetVisualDescendants().OfType<TextBlock>().Where(t => Baseline.GetAlignWith(t) == name).ToList();
         var tool = window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "ToolName" && t.Text == "Edit");
@@ -569,6 +559,55 @@ public class SidePanelUiTests
         {
             resources["CodeFontSize"] = size;
         }
+    }
+
+    [AvaloniaFact]
+    public async Task A_changed_files_letter_sits_midway_between_its_box_and_its_name_at_any_code_size()
+    {
+        await using var h = new TabTestHarness(dispatcher: new AvaloniaUiDispatcher());
+        var (window, row) = await ShowChangedFileAsync(h);
+        var box = row.Children.OfType<CheckBox>().Single();
+        var letter = row.Children.OfType<TextBlock>().Single();
+        var name = row.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "FileName");
+
+        void Midway()
+        {
+            UiText.Settle(window);
+            var before = letter.Bounds.Left - box.Bounds.Right;
+            var after = name.TranslatePoint(default, row)!.Value.X - letter.Bounds.Right;
+            Assert.True(before > 0, $"The letter touches the box ({before}).");
+            Assert.Equal(before, after, 0.5);
+        }
+        Midway();
+        var resources = Avalonia.Application.Current!.Resources;
+        var size = resources["CodeFontSize"];
+        try
+        {
+            resources["CodeFontSize"] = 28.0;
+            Midway();
+            resources["CodeFontSize"] = 8.0;
+            Midway();
+        }
+        finally
+        {
+            resources["CodeFontSize"] = size;
+        }
+    }
+
+    /// <summary>A tab with its side panel open on one file Claude edited, and that file's row.</summary>
+    private static async Task<(Window Window, Grid Row)> ShowChangedFileAsync(TabTestHarness h)
+    {
+        var tab = await h.OpenTabAsync();
+        var window = UiText.Show(new ShellView { DataContext = h.Shell });
+        tab.IsSidePanelOpen = true;
+        UiText.Settle(window);
+        var file = Path.Combine(h.WorkFolder, "auth.cs");
+        await File.WriteAllTextAsync(file, "b\n", TestContext.Current.CancellationToken);
+        h.Transport.Emit(Edit("e1", file));
+        h.Transport.Emit(EditResult("e1", file));
+        var list = window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "ChangedFilesList");
+        await UiText.SettleUntilAsync(window, () => Boxes(list).Count == 1, "the changed file");
+        return (window, list.GetVisualDescendants().OfType<Grid>().Single(g => g.Classes.Contains("changedfile")));
     }
 
     private static JsonObject Edit(string id, string path) => new()

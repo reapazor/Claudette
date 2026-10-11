@@ -98,7 +98,7 @@
                  Tapped="OnChangedFileTapped" DoubleTapped="OnChangedFileDoubleTapped">
           <ListBox.ItemTemplate>
             <DataTemplate DataType="vm:ChangedFileRow">
-              <Grid Classes="changedfile" Classes.reviewed="{Binding IsReviewed}" ColumnDefinitions="Auto,18,*" ToolTip.Tip="{Binding StatusText}" Background="Transparent">
+              <Grid Classes="changedfile" Classes.reviewed="{Binding IsReviewed}" ColumnDefinitions="Auto,Auto,*" ToolTip.Tip="{Binding StatusText}" Background="Transparent">
                 <!-- DESIGN.md §8, "Reviewed": unticks when Claude changes the file again -->
                 <CheckBox Classes="reviewed" IsChecked="{Binding IsReviewed, Mode=OneWay}"
                           Command="{Binding $parent[UserControl].((vm:TabViewModel)DataContext).ChangedFiles.ToggleFileReviewedCommand}" CommandParameter="{Binding}"
