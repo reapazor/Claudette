@@ -65,7 +65,18 @@
     <!-- Claudette on the composer (DESIGN.md §5) -->
     <CheckBox Content="Show Claudette on the composer" IsChecked="{Binding ShowClaudette}" />
     <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="28,-8,0,0"
-               Text="Claudette stands on the message box and does little things every so often: she walks about, dances, twirls, tosses a ball, leans on the edge, and sometimes falls off behind it. She types while Claude works and waves when Claude needs you. Click her to startle her, or right-click to hide her. She stands still when motion is reduced." />
+               Text="Claudette stands on the message box and does little things every so often: she walks about, dances, juggles, sits on the edge, and sometimes falls off behind it. While Claude works she works too, with whatever suits what it's doing, and she points out other tabs that need you. Click her to startle her, drag her about, or right-click to hide her. She stands still when motion is reduced." />
+    <Grid ColumnDefinitions="142,*" RowDefinitions="Auto,Auto" RowSpacing="10" Margin="28,0,0,0" IsEnabled="{Binding ShowClaudette}">
+      <TextBlock Classes="label" Text="Size" />
+      <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ClaudetteSizes}" SelectedItem="{Binding ClaudetteSize}"
+                AutomationProperties.Name="Claudette's size" />
+      <TextBlock Grid.Row="1" Classes="label" Text="How often" />
+      <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ClaudetteLivelinesses}" SelectedItem="{Binding ClaudetteLiveliness}"
+                AutomationProperties.Name="How often Claudette does something" />
+    </Grid>
+    <CheckBox Content="Claudette shares tips" IsChecked="{Binding ClaudetteTips}" IsEnabled="{Binding ShowClaudette}" Margin="28,0,0,0" />
+    <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="56,-8,0,0"
+               Text="Now and then, at most every ten minutes and never while you're typing, she holds up a tip, such as a shortcut you might not know." />
     <Button Content="Reset to defaults" Command="{Binding ResetCommand}" />
   </StackPanel>
 </UserControl>

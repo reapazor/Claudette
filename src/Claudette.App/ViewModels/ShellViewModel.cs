@@ -136,6 +136,8 @@ public sealed partial class ShellViewModel : ViewModelBase, IAsyncDisposable
             AllTabs.Count(t => t.Status == TabStatus.Working));
         // A closed tab's processes leave the header's total.
         OnTabProcessesSampled();
+        // Claudette on the composer points out the other tabs waiting on the user (DESIGN.md §5).
+        SelectedTab?.TellMascot();
         TabStatusChanged?.Invoke();
     }
 

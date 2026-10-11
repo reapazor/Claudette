@@ -38,7 +38,13 @@
 [x] Show task progress on tab rows
 "How many of Claude's tasks are done, such as “3/7”, at the right of each tab's second line, and the task Claude is working on in place of the model while it works."
 [x] Show Claudette on the composer
-"Claudette stands on the message box and does little things every so often: she walks about, dances, twirls, tosses a ball, leans on the edge, and sometimes falls off behind it. She types while Claude works and waves when Claude needs you. Click her to startle her, or right-click to hide her. She stands still when motion is reduced."
+"Claudette stands on the message box and does little things every so often: she walks about, dances, juggles, sits on the edge, and sometimes falls off behind it. While Claude works she works too, with whatever suits what it's doing, and she points out other tabs that need you. Click her to startle her, drag her about, or right-click to hide her. She stands still when motion is reduced."
+"Size"
+[choice] "Medium"
+"How often"
+[choice] "Lively: every 10 to 30 seconds"
+[x] Claudette shares tips
+"Now and then, at most every ten minutes and never while you're typing, she holds up a tip, such as a shortcut you might not know."
 [button] Reset to defaults
 [button] Line up
 [button] Page up

@@ -42,7 +42,7 @@ public partial class ComposerView
         Composer.PastingFromClipboard += OnComposerPasting;
         ComposerBox.AddHandler(DragDrop.DragEnterEvent, OnComposerDragOver, handledEventsToo: true);
         ComposerBox.AddHandler(DragDrop.DragOverEvent, OnComposerDragOver, handledEventsToo: true);
-        ComposerBox.AddHandler(DragDrop.DragLeaveEvent, (_, _) => ComposerBox.Classes.Set("dropping", false), handledEventsToo: true);
+        ComposerBox.AddHandler(DragDrop.DragLeaveEvent, (_, _) => SetDropping(false), handledEventsToo: true);
         ComposerBox.AddHandler(DragDrop.DropEvent, OnComposerDrop, handledEventsToo: true);
     }
 
@@ -186,13 +186,20 @@ public partial class ComposerView
     {
         var accepts = e.DataTransfer.Contains(DataFormat.File) || e.DataTransfer.Contains(DataFormat.Bitmap);
         e.DragEffects = accepts ? DragDropEffects.Copy : DragDropEffects.None;
-        ComposerBox.Classes.Set("dropping", accepts);
+        SetDropping(accepts);
         e.Handled = true;
+    }
+
+    /// <summary>A file is over the composer, ready to drop, or no longer is: Claudette on the composer gets ready to catch it.</summary>
+    private void SetDropping(bool dropping)
+    {
+        ComposerBox.Classes.Set("dropping", dropping);
+        ViewModel?.Mascot.DragHover(dropping);
     }
 
     private async void OnComposerDrop(object? sender, DragEventArgs e)
     {
-        ComposerBox.Classes.Set("dropping", false);
+        SetDropping(false);
         if (ViewModel is not { } tab)
         {
             return;
@@ -207,7 +214,10 @@ public partial class ComposerView
         {
             using (bitmap)
             {
-                tab.AddImage(ImageFiles.Encode(bitmap), "Dropped image");
+                if (tab.AddImage(ImageFiles.Encode(bitmap), "Dropped image"))
+                {
+                    tab.Mascot.Caught();
+                }
             }
         }
     }

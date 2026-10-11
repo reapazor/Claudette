@@ -338,6 +338,15 @@ public sealed class AppearanceSettings
     /// </summary>
     public bool ShowClaudette { get; set; } = true;
 
+    /// <summary>How big she is: 2, 3 or 4 screen pixels a cell of her sprite.</summary>
+    public ClaudetteSize ClaudetteSize { get; set; } = ClaudetteSize.Medium;
+
+    /// <summary>How often she does something: every 10 to 30 seconds, or every 30 to 90.</summary>
+    public ClaudetteLiveliness ClaudetteLiveliness { get; set; } = ClaudetteLiveliness.Lively;
+
+    /// <summary>She shares a tip now and then, such as a shortcut.</summary>
+    public bool ClaudetteTips { get; set; } = true;
+
     /// <summary>How much room the conversation, the sidebar's rows and the composer take (DESIGN.md §14).</summary>
     public Density Density { get; set; } = Density.Comfortable;
 
@@ -367,6 +376,24 @@ public enum MotionSetting
 
     /// <summary>Always animate.</summary>
     Full,
+}
+
+/// <summary>Settings → Appearance → Claudette's size (DESIGN.md §5, "Claudette on the composer").</summary>
+public enum ClaudetteSize
+{
+    Small,
+    Medium,
+    Large,
+}
+
+/// <summary>Settings → Appearance → how often Claudette does something (DESIGN.md §5, "Claudette on the composer").</summary>
+public enum ClaudetteLiveliness
+{
+    /// <summary>Every 10 to 30 seconds.</summary>
+    Lively,
+
+    /// <summary>Every 30 to 90 seconds.</summary>
+    Calm,
 }
 
 /// <summary>Settings → Appearance → Density: Compact tightens spacing and padding (DESIGN.md §14).</summary>

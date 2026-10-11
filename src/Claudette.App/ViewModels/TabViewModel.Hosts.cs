@@ -41,7 +41,16 @@ public sealed partial class TabViewModel : IProcessMonitorHost, IChangedFilesHos
 
     bool IChangedFilesHost.IsSelected => IsSelected;
 
-    void IChangedFilesHost.AllReviewedChanged() => MarkShownChanged();
+    void IChangedFilesHost.AllReviewedChanged()
+    {
+        MarkShownChanged();
+        // Claudette on the composer stamps it (DESIGN.md §5). Not while the tab is still being made: a restored tab's saved
+        // state sets it before ChangedFiles is there.
+        if (IsSelected && ChangedFiles is { AllReviewed: true })
+        {
+            TellMascot(mascot => mascot.AllReviewed());
+        }
+    }
 
     // ---- Project tools ---------------------------------------------------------------------------------------------
 

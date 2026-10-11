@@ -688,6 +688,19 @@ items:
     usedIn: src/Claudette.App/ViewModels/TabViewModel.cs
     docs: https://code.claude.com/docs/en/headless
     test: TabViewModelTests
+  - id: "compacting"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.Core/Protocol/SystemNotices.cs, src/Claudette.App/ViewModels/TabViewModel.cs
+    docs: https://code.claude.com/docs/en/agent-sdk/typescript
+    test: MessageParserTests, MascotTabTests
+  - id: "built-in tool names"
+    kind: field
+    status: documented
+    usedIn: src/Claudette.App/Mascot/MascotModel.cs, src/Claudette.App/Conversation/ToolActivity.cs
+    docs: https://code.claude.com/docs/en/settings
+    test: MascotTabTests, ToolActivityTests
+    fallback: "Read, Grep, Glob, Edit, MultiEdit, Write, NotebookEdit, Bash, PowerShell, BashOutput, Monitor, WebFetch, WebSearch, Agent and Task, by name, for what the working line says and what Claudette on the composer works with. A renamed tool shows as Using <name> and gets her laptop until it's added."
   - id: "--fork-session"
     kind: flag
     status: documented

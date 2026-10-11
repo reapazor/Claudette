@@ -50,6 +50,14 @@ public sealed partial class TabGroupViewModel : ObservableObject
 
     public IBrush SoftBrush => new SolidColorBrush(Color, 0.18);
 
+    partial void OnColorChanged(Color value)
+    {
+        foreach (var tab in Tabs)
+        {
+            tab.GroupColor = value;
+        }
+    }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsExpanded), nameof(CollapseMenuText))]
     public partial bool IsCollapsed { get; set; }
@@ -73,6 +81,8 @@ public sealed partial class TabGroupViewModel : ObservableObject
         foreach (var tab in e.NewItems?.OfType<TabViewModel>() ?? [])
         {
             tab.PropertyChanged += OnTabPropertyChanged;
+            // Claudette on the composer's hair tie takes the group's colour (DESIGN.md §5).
+            tab.GroupColor = Color;
         }
         foreach (var tab in e.OldItems?.OfType<TabViewModel>() ?? [])
         {

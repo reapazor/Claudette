@@ -155,11 +155,13 @@
     </Grid>
 
     <!-- Claudette on the composer (DESIGN.md §5): she stands on the box's top edge, in a layer behind it, so the box hides
-         her when she drops behind it and she rises and falls with it as it grows. She stands over the conversation's
-         foot, so the composer doesn't clip what it draws. -->
+         her when she drops behind it and she rises and falls with it as it grows; a layer after it draws what goes in
+         front of it, her legs over it while she sits on the edge. She stands over the conversation's foot, so the
+         composer doesn't clip what it draws. -->
     <Panel x:Name="ComposerStage">
       <views:MascotLayer x:Name="MascotLayer" Director="{Binding Mascot.Director}" Box="{Binding #ComposerBox}"
-                         HideCommand="{Binding Mascot.HideCommand}" ThemeBrush="{DynamicResource MutedTextBrush}" />
+                         HideCommand="{Binding Mascot.HideCommand}" ThemeBrush="{DynamicResource MutedTextBrush}"
+                         HairTie="{Binding GroupColor}" PixelsPerCell="{Binding Mascot.PixelsPerCell}" />
       <Border x:Name="ComposerBox" Classes="composer" Classes.bypass="{Binding IsBypassMode}" DragDrop.AllowDrop="True">
         <Grid RowDefinitions="Auto,Auto,Auto">
           <StackPanel>
@@ -573,6 +575,8 @@
           </controls:ControlBarPanel>
         </Grid>
       </Border>
+      <views:MascotLayer x:Name="MascotFront" IsFront="True" Director="{Binding Mascot.Director}"
+                         ThemeBrush="{DynamicResource MutedTextBrush}" HairTie="{Binding GroupColor}" PixelsPerCell="{Binding Mascot.PixelsPerCell}" />
     </Panel>
 
     <!-- Status line (DESIGN.md §5, "Composer"); at its right, how Claude's plan and tasks are going, which opens the Tasks page -->

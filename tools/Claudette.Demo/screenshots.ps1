@@ -15,7 +15,8 @@ composer's right rather than being caught part-way through falling off it). Then
 - expands the usage header and captures the top of the window as header-<style>-<theme>.png;
 - collapses it again, selects Grappling hook, opens History, picks starfall's chip and captures the window as
   history-<style>-<theme>.png;
-and closes Claudette by its window, as a user would.
+and closes Claudette by its window, as a user would. Last, it has MascotPictureTests draw Claudette on the composer's
+animation from her art and steps, as claudette.gif.
 
 Captures go through PrintWindow, so other windows over Claudette's don't matter, and clicks through UI Automation.
 
@@ -311,5 +312,15 @@ foreach ($style in 'standard', 'claude') {
             if (-not $claudette.WaitForExit(30000)) { Write-Warning "Claudette (pid $($claudette.Id)) didn't close." }
         }
     }
+}
+# Claudette on the composer's animation, drawn from her art and steps rather than captured, so it's the same every time.
+Write-Host "Claudette's animation"
+$env:CLAUDETTE_MASCOT_GIF = Join-Path $Out 'claudette.gif'
+try {
+    & dotnet test (Join-Path $repo 'tests\Claudette.App.Tests\Claudette.App.Tests.csproj') --filter 'FullyQualifiedName~MascotPictureTests' -v q -nologo | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Drawing her animation failed.' }
+}
+finally {
+    Remove-Item Env:CLAUDETTE_MASCOT_GIF
 }
 Write-Host "Saved to $Out"

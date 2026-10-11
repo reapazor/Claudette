@@ -112,6 +112,99 @@ public class MascotUiTests
     }
 
     [AvaloniaFact]
+    public async Task Her_hair_tie_takes_the_groups_colour_and_her_size_comes_from_Settings()
+    {
+        await using var scene = await Scene.OpenAsync();
+        await scene.UntilStandingAsync();
+        Assert.Equal(scene.H.Shell.Groups.Single().Color, scene.Layer.HairTie);
+        Assert.Equal(MascotArt.Width * 3, scene.Layer.Figure.Bounds.Width, precision: 1);
+
+        scene.H.Services.Settings.Appearance.ClaudetteSize = Core.Settings.ClaudetteSize.Large;
+        scene.H.Services.SaveSettings();
+        UiText.Settle(scene.Window);
+
+        Assert.Equal(MascotArt.Width * 4, scene.Layer.Figure.Bounds.Width, precision: 1);
+        Assert.Equal(scene.InWindow(scene.Box).Top, scene.InWindow(scene.Layer.Figure).Bottom, precision: 1);
+    }
+
+    [AvaloniaFact]
+    public async Task What_she_says_shows_in_a_bubble_over_her()
+    {
+        await using var scene = await Scene.OpenAsync();
+        await scene.UntilStandingAsync();
+        Assert.False(scene.Layer.Bubble.IsVisible);
+
+        scene.Director.Perform(MascotAntics.PointToSidebar("Another tab needs you · Ctrl+J"));
+        UiText.Settle(scene.Window);
+
+        Assert.True(scene.Layer.Bubble.IsVisible);
+        Assert.Equal("Another tab needs you · Ctrl+J", ((TextBlock)scene.Layer.Bubble.Child!).Text);
+        var bubble = scene.InWindow(scene.Layer.Bubble);
+        Assert.True(bubble.Bottom <= scene.InWindow(scene.Layer.Figure).Top, "over her head");
+        Assert.InRange(bubble.Left, scene.InWindow(scene.Box).Left, scene.InWindow(scene.Box).Right - bubble.Width);
+
+        await scene.UntilAsync(() => scene.Director.Frame.Say is null, "her to finish");
+        Assert.False(scene.Layer.Bubble.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task Sitting_on_the_edge_her_legs_are_drawn_in_front_of_the_box()
+    {
+        await using var scene = await Scene.OpenAsync();
+        await scene.UntilStandingAsync();
+        var front = scene.Window.GetVisualDescendants().OfType<MascotLayer>().Single(l => l.IsEffectivelyVisible && l.IsFront);
+        Assert.False(front.Figure.IsVisible);
+        var stage = (Panel)scene.Box.Parent!;
+        Assert.True(stage.Children.IndexOf(front) > stage.Children.IndexOf(scene.Box), "after the box, so over it");
+        Assert.False(front.IsHitTestVisible);
+
+        scene.Director.Perform(MascotAntics.Sit(new Random(1)));
+        await scene.UntilAsync(() => scene.Director.Frame.Pose == "lean", "her to sit");
+
+        Assert.True(front.Figure.IsVisible);
+        Assert.True(scene.InWindow(front.Figure).Bottom > scene.InWindow(scene.Box).Top, "her legs hang over the box");
+    }
+
+    [AvaloniaFact]
+    public async Task Dragged_she_hangs_from_the_pointer_and_lands_where_she_is_let_go()
+    {
+        await using var scene = await Scene.OpenAsync();
+        await scene.UntilStandingAsync();
+        var her = scene.InWindow(scene.Layer.Figure);
+        var x = scene.Director.Frame.X;
+
+        scene.Window.MouseDown(her.Center, MouseButton.Left);
+        scene.Window.MouseMove(her.Center + new Point(-60, -30), RawInputModifiers.LeftMouseButton);
+        UiText.Settle(scene.Window);
+
+        Assert.True(scene.Director.IsCarried);
+        Assert.Equal("carried", scene.Director.Frame.Pose);
+        Assert.Equal(x - 20, scene.Director.Frame.X);
+        Assert.Equal(-10, scene.Director.Frame.Drop, precision: 1);
+
+        scene.Window.MouseUp(her.Center + new Point(-60, -30), MouseButton.Left);
+        UiText.Settle(scene.Window);
+        Assert.False(scene.Director.IsCarried);
+        await scene.UntilAsync(() => scene.Director.Frame.Drop == 0, "her to land");
+        Assert.Equal(x - 20, scene.Director.Frame.X);
+    }
+
+    [AvaloniaFact]
+    public async Task Standing_about_she_looks_toward_the_pointer()
+    {
+        await using var scene = await Scene.OpenAsync();
+        await scene.UntilStandingAsync();
+        var her = scene.InWindow(scene.Layer.Figure);
+
+        scene.Window.MouseMove(new Point(her.Left - 120, her.Top - 200));
+        Assert.Equal("lookLeft", scene.Director.Frame.Pose);
+        scene.Window.MouseMove(new Point(Math.Min(her.Right + 30, scene.Window.Bounds.Width - 2), her.Top - 200));
+        Assert.Equal("lookRight", scene.Director.Frame.Pose);
+        scene.Window.MouseMove(new Point(her.Center.X, her.Top - 200));
+        Assert.Equal("stand", scene.Director.Frame.Pose);
+    }
+
+    [AvaloniaFact]
     public async Task With_the_setting_off_she_isnt_there()
     {
         await using var h = new TabTestHarness(s => s.Appearance.ShowClaudette = false, dispatcher: new AvaloniaUiDispatcher());
@@ -119,7 +212,7 @@ public class MascotUiTests
         await h.OpenTabAsync();
         var window = UiText.Show(new ShellView { DataContext = h.Shell });
 
-        var layer = window.GetVisualDescendants().OfType<MascotLayer>().Single(l => l.IsEffectivelyVisible);
+        var layer = window.GetVisualDescendants().OfType<MascotLayer>().Single(l => l.IsEffectivelyVisible && !l.IsFront);
         Assert.Null(layer.Director);
         Assert.False(layer.Figure.IsVisible);
     }
@@ -132,7 +225,7 @@ public class MascotUiTests
             H = h;
             Tab = tab;
             Window = window;
-            Layer = window.GetVisualDescendants().OfType<MascotLayer>().Single(l => l.IsEffectivelyVisible);
+            Layer = window.GetVisualDescendants().OfType<MascotLayer>().Single(l => l.IsEffectivelyVisible && !l.IsFront);
             Box = window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "ComposerBox" && b.IsEffectivelyVisible);
         }
 

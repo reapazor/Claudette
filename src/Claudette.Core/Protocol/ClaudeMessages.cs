@@ -44,6 +44,9 @@ public sealed record SystemMessage(string Subtype, JsonObject Raw) : ClaudeMessa
     /// <summary><c>compact_boundary</c>: the conversation was compacted.</summary>
     public CompactBoundaryNotice? CompactBoundary => CompactBoundaryNotice.From(this);
 
+    /// <summary><c>status</c>: what Claude Code is busy with, such as compacting the conversation.</summary>
+    public StatusNotice? Status => StatusNotice.From(this);
+
     /// <summary><c>informational</c>: one of Claude Code's notices, or a hook's message to the user.</summary>
     public InformationalNotice? Informational => InformationalNotice.From(this);
 

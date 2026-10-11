@@ -4,83 +4,38 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Claudette.App.Mascot;
 
-/// <summary>What the tab she stands on is doing, which she reacts to (DESIGN.md §5, "Claudette on the composer").</summary>
-public enum MascotMood
-{
-    Idle,
-
-    /// <summary>Claude is working: she types on her laptop.</summary>
-    Working,
-
-    /// <summary>A prompt waits on the user: she waves now and then.</summary>
-    Waiting,
-
-    /// <summary>A usage limit holds the task: she dozes by an hourglass.</summary>
-    Resting,
-}
-
-/// <summary>A prop drawn with her: <see cref="X"/> cells from her left, its bottom row <see cref="Bottom"/> cells above the edge.</summary>
-public sealed record MascotProp(string Name, int X, int Bottom);
-
 /// <summary>
-/// How she looks now. <see cref="X"/> is her left edge, in cells from the composer box's left; <see cref="Drop"/> is how
-/// many cells lower she is than standing on its top edge, behind the box, or higher when it's negative (a hop).
-/// </summary>
-public sealed record MascotFrame(string Pose, int X, int Drop, IReadOnlyList<MascotProp> Props)
-{
-    /// <summary>All of her is behind the box.</summary>
-    public bool IsBehind => Drop >= MascotArt.HeightOf(Pose);
-
-    /// <summary>Something of her shows: some of her, or her hands on the edge as she starts to climb up.</summary>
-    public bool IsVisible => !IsBehind || Props.Count > 0;
-}
-
-/// <summary>
-/// The stretch of the box's top edge she may stand on, in cells from its left: her left edge goes from
-/// <see cref="Left"/> to <see cref="Right"/> less her width. <see cref="Home"/> is where she tends to go back to, over
-/// the Send button.
-/// </summary>
-public readonly record struct MascotRoom(int Left, int Right, int Home)
-{
-    public int Width => Right - Left;
-
-    public int MaxX => Math.Max(Left, Right - MascotArt.Width);
-
-    /// <summary>Her home, as near it as the room lets her stand.</summary>
-    public int HomeX => Clamp(Home);
-
-    public int Clamp(int x) => Math.Clamp(x, Left, MaxX);
-}
-
-/// <summary>One step of what she's doing: a pose held for a while, a step sideways, how far down she is.</summary>
-internal sealed record MascotStep(string Pose, TimeSpan Duration, int Move = 0, int Drop = 0, IReadOnlyList<MascotProp>? Props = null);
-
-/// <summary>
-/// Claudette on the composer (DESIGN.md §5): what she does, step by step. She stands about and blinks, and every 10 to
-/// 30 seconds does something (walks, looks around, leans on the edge, stretches, waves, hops, dances, twirls, yawns,
-/// taps her foot, tosses a ball, looks puzzled, blows a heart, sneezes, and now and then falls off behind the box and
-/// climbs back up). Her walks tend to take her back home, over the Send button. She reacts to the tab she's on (<see cref="MascotMood"/>), ducks behind the
-/// box while something sits on it, and stands still while motion is reduced. Timed by the injected clock; between
-/// steps nothing ticks.
+/// Claudette on the composer (DESIGN.md §5): what she does, step by step. She stands about and blinks, and every so
+/// often (<see cref="MascotSpell"/>) does something: walks, looks around, leans or sits on the edge, dances, juggles and
+/// the rest, and now and then falls off behind the box and climbs back up. Her walks tend to take her back home, over
+/// the Send button. She reacts to the tab she's on (<see cref="MascotSituation"/>) and to what happens in it (the
+/// one-off reactions in <c>MascotDirector.Events.cs</c>), ducks behind the box while something sits on it, and stands
+/// still while motion is reduced. Timed by the injected clock; between steps nothing ticks.
 /// </summary>
 public sealed partial class MascotDirector : ObservableObject, IDisposable
 {
-    /// <summary>The shortest and longest wait between the things she does.</summary>
-    public static readonly TimeSpan ShortestCalm = TimeSpan.FromSeconds(10);
-
-    public static readonly TimeSpan LongestCalm = TimeSpan.FromSeconds(30);
-
-    /// <summary>She naps once nothing has happened for this long.</summary>
+    /// <summary>She naps once nothing has happened for this long; sooner late at night.</summary>
     public static readonly TimeSpan NapAfter = TimeSpan.FromMinutes(5);
+
+    public static readonly TimeSpan NapAfterAtNight = TimeSpan.FromMinutes(3);
 
     /// <summary>Falling off the edge on her own stays a surprise: at most this often.</summary>
     public static readonly TimeSpan FallsAtMostEvery = TimeSpan.FromMinutes(3);
 
-    /// <summary>A second poke this soon after the first tips her off the edge.</summary>
-    public static readonly TimeSpan DoublePoke = TimeSpan.FromSeconds(1.5);
-
     /// <summary>While a prompt waits, she waves this often.</summary>
     public static readonly TimeSpan WaveEvery = TimeSpan.FromSeconds(15);
+
+    /// <summary>While another tab waits on the user, she points it out this often.</summary>
+    public static readonly TimeSpan PointEvery = TimeSpan.FromSeconds(20);
+
+    /// <summary>A turn running this long, she fetches a coffee.</summary>
+    public static readonly TimeSpan CoffeeAfter = TimeSpan.FromMinutes(3);
+
+    /// <summary>With the context nearly full, she wipes her brow this often while Claude works.</summary>
+    public static readonly TimeSpan SweatEvery = TimeSpan.FromSeconds(25);
+
+    /// <summary>A tip at most this often, and not while the user is typing.</summary>
+    public static readonly TimeSpan TipsAtMostEvery = TimeSpan.FromMinutes(10);
 
     /// <summary>A <see cref="MascotFrame.Drop"/> that has all of her behind the box, in any pose.</summary>
     public const int Behind = 16;
@@ -90,27 +45,39 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
 
     private readonly TimeProvider _time;
     private readonly Random _random;
+    private readonly IMascotLines? _lines;
     private readonly UiTimeout _next;
     private readonly Queue<MascotStep> _steps = new();
     private readonly HashSet<object> _views = [];
     private Activity _activity;
+    private MascotStep? _showing;
     private MascotRoom? _room;
-    private MascotMood _mood;
+    private MascotSituation _situation = MascotSituation.Quiet;
+    private MascotSpell _spell = MascotSpell.Lively;
     private bool _still;
+    private bool _tips = true;
     private bool _placed;
     private bool _cheerPending;
+    private bool _coffee;
+    private int _gaze;
     private DateTimeOffset _nextAntic;
     private DateTimeOffset _lastActivity;
+    private DateTimeOffset _lastTyped = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastTip;
     private DateTimeOffset _lastFall = DateTimeOffset.MinValue;
-    private DateTimeOffset _lastPoke = DateTimeOffset.MinValue;
     private DateTimeOffset _lastWave = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastPoint = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastSweat = DateTimeOffset.MinValue;
+    private DateTimeOffset _workingSince;
 
-    public MascotDirector(TimeProvider time, IUiDispatcher dispatcher, Random random)
+    /// <param name="lines">What she says: tips, and that another tab needs the user. Null says nothing.</param>
+    public MascotDirector(TimeProvider time, IUiDispatcher dispatcher, Random random, IMascotLines? lines = null)
     {
         _time = time;
         _random = random;
+        _lines = lines;
         _next = new UiTimeout(time, dispatcher);
-        _lastActivity = _nextAntic = Now;
+        _lastActivity = _nextAntic = _lastTip = Now;
     }
 
     private enum Activity
@@ -121,17 +88,23 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
         /// <summary>One of the things she does every so often.</summary>
         Antic,
 
-        /// <summary>What the tab's mood has her doing: typing, waving, dozing.</summary>
+        /// <summary>What the tab has her doing: working, waving, dozing, sweeping.</summary>
         Mood,
 
         /// <summary>Asleep on the edge after a long quiet spell.</summary>
         Nap,
+
+        /// <summary>A reaction to something that happened: what the tab does next waits for it to finish.</summary>
+        Reaction,
 
         /// <summary>Falling off behind the box, or climbing up from behind it: only losing her room stops it.</summary>
         Tumble,
 
         /// <summary>Behind the box while something sits on it.</summary>
         Ducked,
+
+        /// <summary>Picked up by the user, and carried.</summary>
+        Carried,
     }
 
     /// <summary>How she looks now.</summary>
@@ -139,7 +112,9 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
     public partial MascotFrame Frame { get; private set; } = new("stand", 0, Behind, []);
 
     /// <summary>What the tab she's on is doing, as she was last told.</summary>
-    internal MascotMood Mood => _mood;
+    internal MascotSituation Situation => _situation;
+
+    internal MascotMood Mood => _situation.Mood;
 
     /// <summary>Where on the edge she may stand, as she was last told.</summary>
     internal MascotRoom? Room => _room;
@@ -147,7 +122,12 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
     /// <summary>Whether she's on screen anywhere: a view showing her says so. Out of sight, nothing ticks.</summary>
     public bool IsShown => _views.Count > 0;
 
+    /// <summary>The user has picked her up.</summary>
+    public bool IsCarried => _activity == Activity.Carried;
+
     private DateTimeOffset Now => _time.GetUtcNow();
+
+    private bool IsNight => MascotCalendar.IsNight(_time.GetLocalNow());
 
     /// <summary>A view shows her, or stops: she moves while any view does.</summary>
     public void SetShown(object view, bool shown)
@@ -169,6 +149,10 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
         {
             _next.Cancel();
             _steps.Clear();
+            if (_activity == Activity.Carried)
+            {
+                _activity = Activity.Idle;
+            }
             return;
         }
         _lastActivity = Now;
@@ -197,10 +181,10 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
         {
             Frame = Frame with { X = free.HomeX };
         }
-        else if (_placed && free.Clamp(Frame.X) != Frame.X)
+        else if (_placed && _activity != Activity.Carried && Within(free, Frame.X) != Frame.X)
         {
             // The box changed under her, so she doesn't walk there.
-            Frame = Frame with { X = free.Clamp(Frame.X) };
+            Frame = Frame with { X = Within(free, Frame.X) };
         }
         if (!had)
         {
@@ -208,30 +192,61 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>The tab she's on: she types while Claude works, waves while a prompt waits, dozes at a usage limit.</summary>
-    public void SetMood(MascotMood mood)
+    /// <summary>What the tab she's on is doing now.</summary>
+    public void SetSituation(MascotSituation situation)
     {
-        if (_mood == mood)
+        var was = _situation;
+        if (situation == was)
         {
             return;
         }
-        _mood = mood;
-        _lastActivity = Now;
-        if (mood != MascotMood.Idle)
+        _situation = situation;
+        if (situation.Mood != was.Mood)
         {
-            _cheerPending = false;
+            _lastActivity = Now;
+            if (situation.Mood != MascotMood.Idle)
+            {
+                _cheerPending = false;
+            }
+            if (situation.Mood == MascotMood.Waiting)
+            {
+                _lastWave = DateTimeOffset.MinValue;
+            }
+            if (situation.Mood == MascotMood.Working)
+            {
+                _workingSince = Now;
+            }
+            else
+            {
+                _coffee = false;
+            }
         }
-        if (mood == MascotMood.Waiting)
+        if (situation.OthersWaiting > was.OthersWaiting)
         {
-            _lastWave = DateTimeOffset.MinValue;
+            // A tab newly waiting is pointed out straight away.
+            _lastPoint = DateTimeOffset.MinValue;
         }
-        if (_activity is not (Activity.Tumble or Activity.Ducked))
+        if (_still)
+        {
+            Restart();
+            return;
+        }
+        // A change of tool doesn't stop what she's doing: tools change many times a second, so her next burst of work
+        // takes up the newest.
+        var changed = situation.Mood != was.Mood
+            || situation.Compacting != was.Compacting
+            || situation.OthersWaiting > was.OthersWaiting
+            || situation.Planning != was.Planning && _activity == Activity.Idle;
+        if (changed && _activity is not (Activity.Tumble or Activity.Ducked or Activity.Carried or Activity.Reaction))
         {
             Restart();
         }
     }
 
-    /// <summary>Motion is reduced (DESIGN.md §3, "Accessibility"): she stands still at home, in the pose for the tab's mood.</summary>
+    /// <summary>The tab she's on now does only <paramref name="mood"/>, nothing else she reacts to.</summary>
+    public void SetMood(MascotMood mood) => SetSituation(_situation with { Mood = mood });
+
+    /// <summary>Motion is reduced (DESIGN.md §3, "Accessibility"): she stands still at home, in the pose for what the tab is doing.</summary>
     public void SetStill(bool still)
     {
         if (_still == still)
@@ -242,46 +257,42 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
         Restart();
     }
 
-    /// <summary>The tab's turn finished: she hops, once she's free to.</summary>
-    public void TurnFinished()
+    /// <summary>How long she waits between the things she does (Settings → Appearance).</summary>
+    public void SetSpell(MascotSpell spell)
     {
-        _cheerPending = true;
-        if (_mood == MascotMood.Idle && _activity is Activity.Idle or Activity.Nap)
+        _spell = spell;
+        if (_nextAntic > Now + spell.Longest)
         {
-            Restart();
+            _nextAntic = Now + Calm();
+        }
+    }
+
+    /// <summary>Whether she shares a tip now and then (Settings → Appearance).</summary>
+    public void SetTips(bool tips) => _tips = tips;
+
+    /// <summary>Which way the pointer is from her: she looks that way while she stands about.</summary>
+    public void SetGaze(int direction)
+    {
+        direction = Math.Sign(direction);
+        if (direction == _gaze)
+        {
+            return;
+        }
+        _gaze = direction;
+        if (!_still && _activity != Activity.Carried && _showing is { Pose: "stand" })
+        {
+            Frame = Frame with { Pose = Gazing("stand") };
         }
     }
 
     /// <summary>The user did something, such as typing: it wakes her from a nap, and puts the next one off.</summary>
     public void Nudge()
     {
-        _lastActivity = Now;
-        if (_activity == Activity.Nap && _mood == MascotMood.Idle && IsShown && !_still)
+        _lastActivity = _lastTyped = Now;
+        if (_activity == Activity.Nap && _situation.Mood == MascotMood.Idle && IsShown && !_still)
         {
             _nextAntic = Now + Calm();
             Play(Activity.Idle, MascotAntics.WakeUp());
-        }
-    }
-
-    /// <summary>A click on her: she jumps, startled. A second click straight after tips her off the edge.</summary>
-    public void Poke()
-    {
-        if (!IsShown || _still || Frame.IsBehind || _activity is Activity.Tumble or Activity.Ducked)
-        {
-            return;
-        }
-        var now = Now;
-        _lastActivity = now;
-        var twice = now - _lastPoke <= DoublePoke;
-        _lastPoke = twice ? DateTimeOffset.MinValue : now;
-        if (twice)
-        {
-            _lastFall = now;
-            Play(Activity.Tumble, [.. MascotAntics.TopplesOff(_random), .. MascotAntics.ClimbUp()]);
-        }
-        else
-        {
-            Play(Activity.Antic, MascotAntics.Startled());
         }
     }
 
@@ -290,7 +301,7 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
     {
         _next.Cancel();
         _steps.Clear();
-        if (!IsShown)
+        if (!IsShown || _activity == Activity.Carried)
         {
             return;
         }
@@ -304,7 +315,8 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
             // At home, where she won't be walking from.
             _placed = true;
             _activity = Activity.Idle;
-            Frame = StillFrame() with { X = room.HomeX };
+            _showing = null;
+            Frame = StillFrame(room);
             return;
         }
         if (!_placed || Frame.IsBehind)
@@ -339,13 +351,14 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
         _activity = Activity.Ducked;
         if (Frame.IsBehind || _still || !IsShown)
         {
-            Frame = Frame with { Drop = Behind, Props = [] };
+            _showing = null;
+            Frame = Frame with { Drop = Behind, Props = [], Say = null };
             return;
         }
         Play(Activity.Ducked, MascotAntics.Duck());
     }
 
-    private void Play(Activity activity, IEnumerable<MascotStep> steps)
+    private void Play(Activity activity, IEnumerable<MascotStep> steps, bool grumpy = false)
     {
         _next.Cancel();
         _steps.Clear();
@@ -354,6 +367,7 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
             _steps.Enqueue(step);
         }
         _activity = activity;
+        _grumpy = grumpy;
         Advance();
     }
 
@@ -365,18 +379,38 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
         }
         if (_steps.TryDequeue(out var step))
         {
-            var x = Frame.X + step.Move;
-            Frame = new MascotFrame(step.Pose, _room is { } room ? room.Clamp(x) : x, step.Drop, step.Props ?? []);
+            Show(step);
             _next.Restart(step.Duration, Advance);
             return;
         }
         // Done with something, or back up on the edge: a calm spell before the next thing.
-        if (_activity is Activity.Antic or Activity.Tumble)
+        if (_activity is Activity.Antic or Activity.Tumble or Activity.Reaction)
         {
             _nextAntic = Now + Calm();
         }
+        _grumpy = false;
         PlanNext();
     }
+
+    /// <summary>Her place on <paramref name="room"/>: in her patch, or on the free edge while she's been set down outside it.</summary>
+    private int Within(MascotRoom room, int x) => room.InPatch(Frame.X) ? room.Clamp(x) : room.ClampToEdge(x);
+
+    /// <summary>Steps she's told to take, for the README's animation and tests: a reaction, which nothing interrupts.</summary>
+    internal void Perform(IEnumerable<MascotStep> steps) => Play(Activity.Reaction, steps);
+
+    private void Show(MascotStep step)
+    {
+        _showing = step;
+        var x = Frame.X + step.Move;
+        Frame = new MascotFrame(Gazing(step.Pose), _room is { } room ? Within(room, x) : x, step.Drop, step.Props ?? [])
+        {
+            Hat = MascotCalendar.HatAt(_time.GetLocalNow()),
+            Say = step.Say,
+        };
+    }
+
+    /// <summary>Standing about, she looks the way the pointer is.</summary>
+    private string Gazing(string pose) => pose == "stand" && !_still && _gaze != 0 ? _gaze < 0 ? "lookLeft" : "lookRight" : pose;
 
     /// <summary>What she does once she's done with the last thing.</summary>
     private void PlanNext()
@@ -391,12 +425,42 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
             Play(Activity.Tumble, MascotAntics.ClimbUp());
             return;
         }
+        if (_pending.TryDequeue(out var reaction))
+        {
+            Play(Activity.Reaction, reaction());
+            return;
+        }
         var now = Now;
         var napping = _activity == Activity.Nap;
-        switch (_mood)
+        var situation = _situation;
+        if (_dragHover)
         {
+            Play(Activity.Mood, MascotAntics.Excited());
+            return;
+        }
+        if (situation.Compacting)
+        {
+            Play(Activity.Mood, MascotAntics.Sweep());
+            return;
+        }
+        if (situation.OthersWaiting > 0 && situation.Mood != MascotMood.Waiting && _lines is { } lines && now - _lastPoint >= PointEvery)
+        {
+            _lastPoint = now;
+            Play(Activity.Antic, MascotAntics.PointToSidebar(lines.OthersWaiting(situation.OthersWaiting)));
+            return;
+        }
+        switch (situation.Mood)
+        {
+            case MascotMood.Working when !_coffee && now - _workingSince >= CoffeeAfter:
+                _coffee = true;
+                Play(Activity.Mood, MascotAntics.FetchCoffee());
+                return;
+            case MascotMood.Working when situation.ContextFull && now - _lastSweat >= SweatEvery:
+                _lastSweat = now;
+                Play(Activity.Mood, MascotAntics.WipeBrow());
+                return;
             case MascotMood.Working:
-                Play(Activity.Mood, MascotAntics.Typing(_random));
+                Play(Activity.Mood, MascotAntics.Work(situation, _random, _coffee));
                 return;
             case MascotMood.Waiting when now - _lastWave >= WaveEvery:
                 _lastWave = now;
@@ -415,7 +479,7 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
             Play(Activity.Antic, MascotAntics.Hop());
             return;
         }
-        if (now - _lastActivity >= NapAfter)
+        if (now - _lastActivity >= (IsNight ? NapAfterAtNight : NapAfter))
         {
             Play(Activity.Nap, MascotAntics.Doze(_random, hourglass: false, settle: !napping));
             return;
@@ -425,62 +489,85 @@ public sealed partial class MascotDirector : ObservableObject, IDisposable
             PlayAntic(room, now);
             return;
         }
-        Play(Activity.Idle, MascotAntics.StandAbout(Min(BlinkWait(), _nextAntic - now)));
+        Play(Activity.Idle, MascotAntics.StandAbout(Min(BlinkWait(), _nextAntic - now), situation.Planning));
     }
 
     /// <summary>Something she does every so often, picked by weight.</summary>
     private void PlayAntic(MascotRoom room, DateTimeOffset now)
     {
         var canFall = now - _lastFall >= FallsAtMostEvery;
+        var tip = _tips && _lines is { } lines && now - _lastTip >= TipsAtMostEvery && now - _lastTyped >= TimeSpan.FromSeconds(30)
+            ? lines.Tip(_random)
+            : null;
         // A walk across a wide window would take a while: at most 40 cells at a time. Away from home, a walk is more
-        // likely to take her back there than further off.
+        // likely to take her back there than further off, and set down outside her patch, she's soon on her way back.
         var wander = Math.Clamp(_random.Next(room.Left, room.MaxX + 1) - Frame.X, -40, 40);
         var home = Math.Clamp(room.HomeX - Frame.X, -40, 40);
-        (int Weight, bool Falls, Func<IEnumerable<MascotStep>> Steps)[] choices =
+        (int Weight, Activity Activity, Func<IEnumerable<MascotStep>> Steps)[] choices =
         [
-            (3, false, () => MascotAntics.LookAround(_random)),
-            (Math.Abs(wander) >= 3 ? 2 : 0, false, () => MascotAntics.Walk(wander)),
-            (Math.Abs(home) >= 3 ? 5 : 0, false, () => MascotAntics.Walk(home)),
-            (2, false, () => MascotAntics.Lean(_random)),
-            (1, false, MascotAntics.Stretch),
-            (1, false, () => MascotAntics.Wave(3)),
-            (1, false, MascotAntics.Hop),
-            (2, false, MascotAntics.Dance),
-            (2, false, MascotAntics.Twirl),
-            (1, false, MascotAntics.Yawn),
-            (2, false, MascotAntics.TapFoot),
-            (2, false, MascotAntics.TossBall),
-            (1, false, MascotAntics.Puzzled),
-            (1, false, MascotAntics.BlowHeart),
-            (1, false, MascotAntics.Sneeze),
-            (canFall ? 1 : 0, true, () => MascotAntics.TopplesOff(_random).Concat(MascotAntics.ClimbUp())),
+            (3, Activity.Antic, () => MascotAntics.LookAround(_random)),
+            (Math.Abs(wander) >= 3 ? 2 : 0, Activity.Antic, () => MascotAntics.Walk(wander)),
+            (Math.Abs(home) >= 3 ? room.InPatch(Frame.X) ? 5 : 40 : 0, Activity.Antic, () => MascotAntics.Walk(home)),
+            (2, Activity.Antic, () => MascotAntics.Lean(_random)),
+            (2, Activity.Antic, () => MascotAntics.Sit(_random)),
+            (1, Activity.Antic, MascotAntics.Stretch),
+            (1, Activity.Antic, () => MascotAntics.Wave(3)),
+            (1, Activity.Antic, MascotAntics.Hop),
+            (2, Activity.Antic, MascotAntics.Dance),
+            (2, Activity.Antic, MascotAntics.Twirl),
+            (IsNight ? 5 : 1, Activity.Antic, MascotAntics.Yawn),
+            (2, Activity.Antic, MascotAntics.TapFoot),
+            (2, Activity.Antic, MascotAntics.TossBall),
+            (1, Activity.Antic, MascotAntics.Puzzled),
+            (1, Activity.Antic, MascotAntics.BlowHeart),
+            (1, Activity.Antic, MascotAntics.Sneeze),
+            (_situation.ContextFull ? 3 : 0, Activity.Antic, MascotAntics.WipeBrow),
+            // The tip and the fall stay last: the tip's place is how its time is kept.
+            (tip is not null ? 2 : 0, Activity.Antic, () => MascotAntics.Tip(tip!)),
+            (canFall ? 1 : 0, Activity.Tumble, () => MascotAntics.TopplesOff(_random).Concat(MascotAntics.ClimbUp())),
         ];
         var pick = _random.Next(choices.Sum(c => c.Weight));
-        foreach (var (weight, falls, steps) in choices)
+        for (var i = 0; i < choices.Length; i++)
         {
+            var (weight, activity, steps) = choices[i];
             if (pick < weight)
             {
-                if (falls)
+                if (activity == Activity.Tumble)
                 {
                     _lastFall = now;
                 }
-                Play(falls ? Activity.Tumble : Activity.Antic, steps());
+                if (i == choices.Length - 2)
+                {
+                    _lastTip = now;
+                }
+                Play(activity, steps());
                 return;
             }
             pick -= weight;
         }
     }
 
-    /// <summary>Her pose while motion is reduced: the first frame of what the tab's mood has her doing.</summary>
-    private MascotFrame StillFrame() => _mood switch
+    /// <summary>Her pose while motion is reduced, at home: the first frame of what the tab has her doing.</summary>
+    private MascotFrame StillFrame(MascotRoom room)
     {
-        MascotMood.Working => new("typeLeft", Frame.X, 0, [MascotAntics.Laptop]),
-        MascotMood.Waiting => new("wave", Frame.X, 0, []),
-        MascotMood.Resting => new("leanBlink", Frame.X, 2, [MascotAntics.SmallZ, MascotAntics.Hourglass(0)]),
-        _ => new("stand", Frame.X, 0, []),
-    };
+        var situation = _situation;
+        var step = situation switch
+        {
+            { Compacting: true } => MascotAntics.Sweep().First(),
+            { OthersWaiting: > 0, Mood: not MascotMood.Waiting } when _lines is { } lines => MascotAntics.StillPoint(lines.OthersWaiting(situation.OthersWaiting)),
+            { Mood: MascotMood.Working } => MascotAntics.StillWork(situation),
+            { Mood: MascotMood.Waiting } => new MascotStep("wave", TimeSpan.Zero),
+            { Mood: MascotMood.Resting } => new MascotStep("leanBlink", TimeSpan.Zero, Drop: 2, Props: [MascotAntics.SmallZ, MascotAntics.Hourglass(0)]),
+            _ => MascotAntics.StandAbout(TimeSpan.Zero, situation.Planning).First(),
+        };
+        return new MascotFrame(step.Pose, room.HomeX, step.Drop, step.Props ?? [])
+        {
+            Hat = MascotCalendar.HatAt(_time.GetLocalNow()),
+            Say = step.Say,
+        };
+    }
 
-    private TimeSpan Calm() => ShortestCalm + (LongestCalm - ShortestCalm) * _random.NextDouble();
+    private TimeSpan Calm() => _spell.Shortest + (_spell.Longest - _spell.Shortest) * _random.NextDouble();
 
     /// <summary>Three to six seconds between blinks.</summary>
     private TimeSpan BlinkWait() => TimeSpan.FromSeconds(3 + 3 * _random.NextDouble());

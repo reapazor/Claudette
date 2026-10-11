@@ -107,7 +107,15 @@ It isn't a reimplementation. Each tab runs the real `claude` CLI, with your sett
 
 ### Claudette keeps you company
 
-Claudette, the app's pixel mascot, stands on the message box while you work (Settings → Appearance turns her off). She blinks and looks around, wanders about near the Send button, dances, twirls, tosses a ball, yawns, sneezes, leans on the edge, and every so often loses her footing, falls off behind the box and climbs back up. She types on a little laptop while Claude works, waves when Claude needs you, hops when a turn finishes and dozes by an hourglass when you've hit your plan's limit. Click her to startle her (twice and she falls off). She rises with the box as you type, ducks behind it when something needs the space, and stands still if you reduce motion.
+![Claudette climbing up onto the message box, then dancing, tossing a ball, sitting on the edge, juggling, hammering, bursting into confetti, twirling, blowing a heart and falling off behind the box to climb back up](docs/screenshots/claudette.gif)
+
+Claudette, the app's pixel mascot, stands on the message box while you work, near the Send button.
+
+- **She keeps herself busy:** she wanders about, dances, twirls, juggles, sits on the edge swinging her legs, yawns and sneezes, and every so often loses her footing and falls off behind the box, to pull herself back up.
+- **She works when Claude does,** with whatever suits the job: a magnifying glass while it reads, a hammer while it edits, a little terminal while it runs commands, a globe on the web, and a ball for each subagent to juggle. Long turns get a coffee; a nearly full context makes her sweat; compacting gets the broom out.
+- **She keeps an eye out:** she waves when Claude needs you, points at the sidebar when another tab does (with the shortcut to get there), throws confetti when the task list is done, stamps it when you've reviewed every change, and gets dizzy when a turn fails.
+- **She notices you:** her eyes follow your pointer, your messages fly off as paper planes, she catches files you drop, staggers under huge pastes and waves back when you type her name. Click to startle her, drag her about, and try not to poke her too often.
+- **She dresses for the occasion,** wears your tab group's colour in her hair, and stands still if you reduce motion. Settings → Appearance sets her size and how lively she is, or turns her off.
 
 <table>
   <tr>

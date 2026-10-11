@@ -145,5 +145,7 @@ public sealed partial class TabViewModel
             SelectedAgent = null;
         }
         AgentTicker.Run(Agents.IsTicking);
+        // Claudette on the composer juggles a ball for each subagent running (DESIGN.md §5).
+        TellMascot();
     }
 }

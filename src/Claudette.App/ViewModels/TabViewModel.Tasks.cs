@@ -155,6 +155,11 @@ public sealed partial class TabViewModel
         {
             case nameof(Conversation.TodoList.HasTasksLeft):
                 OnPropertyChanged(nameof(ShowTaskProgressBadge));
+                // The last of Claude's tasks just done, as it works (not a transcript loading): confetti (DESIGN.md §5).
+                if (TodoList.AllDone && Status is TabStatus.Working or TabStatus.NeedsInput)
+                {
+                    TellMascot(mascot => mascot.AllTasksDone());
+                }
                 break;
             case nameof(Conversation.TodoList.Current) or nameof(Conversation.TodoList.InfoText):
                 OnPropertyChanged(nameof(RowDetail));

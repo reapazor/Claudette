@@ -288,6 +288,25 @@ public class MessageParserTests
         Assert.Equal(((string?)null, false), (bare!.Trigger, bare.IsAutomatic));
     }
 
+    [Fact]
+    public void Reads_whether_Claude_Code_is_compacting_from_its_status()
+    {
+        var statuses = ParseAll<SystemMessage>("10-compact").Select(m => m.Status).OfType<StatusNotice>().ToList();
+        // Recorded: requesting, then compacting, then done.
+        Assert.Equal(["requesting", "compacting", null], statuses.Select(s => s.Status));
+        Assert.Equal([false, true, false], statuses.Select(s => s.IsCompacting));
+        var compacting = statuses[1];
+        var done = Parse<SystemMessage>("""{"type":"system","subtype":"status","status":null,"session_id":"s"}""").Status;
+        var mode = Parse<SystemMessage>("""{"type":"system","subtype":"status","permissionMode":"plan"}""").Status;
+        var other = Parse<SystemMessage>("""{"type":"system","subtype":"status","status":"thinking-hard"}""").Status;
+
+        Assert.True(compacting.IsCompacting);
+        Assert.False(done!.IsCompacting);
+        Assert.Equal(((string?)null, false), (mode!.Status, mode.IsCompacting));
+        Assert.False(other!.IsCompacting);
+        Assert.Null(Parse<SystemMessage>("""{"type":"system","subtype":"compact_boundary"}""").Status);
+    }
+
     [Theory]
     [InlineData("info", NoticeLevel.Info)]
     [InlineData("notice", NoticeLevel.Notice)]

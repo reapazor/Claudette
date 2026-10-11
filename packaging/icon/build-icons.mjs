@@ -156,6 +156,11 @@ const mascotPoses = {
   achoo: patched(closedEyes(standing), { 6: 'OOOOOEEOOOOO' }),
   // Tapping a foot: her fourth leg up.
   tap: patched(standing, { 11: '..O.O..O....' }),
+  // Waving toward the sidebar, to her left, when another tab needs the user.
+  waveLookLeft: patched(claudette(pose.wave), { 5: 'OOEOOOOEOO..' }),
+  waveHighLookLeft: patched(claudette(pose.wave), { 3: 'OO?????????', 5: '..EOOOOEOO..' }),
+  // Picked up and carried: arms up, mouth open.
+  carried: patched(standing, { ...armsUp, 7: '..OOOEEOOO..' }),
 };
 
 // What she has with her. Z takes the theme's muted text colour, so it reads on light and dark.
@@ -171,15 +176,71 @@ const mascotProps = {
   question: ['ZZZ', '..Z', '.Z.', '...', '.Z.'],
   // The puff of a sneeze.
   puff: ['.ZZ.', 'ZZZZ', '.ZZ.'],
-  // A heart she blows, and a ball she tosses, in her hair tie's berry.
+  // A heart she blows, and a ball she tosses, the colour of her hair tie.
   heart: ['.K.K.', 'KKKKK', '.KKK.', '..K..'],
   ball: ['KK', 'KK'],
+
+  // While Claude works, what she works with depends on the tool it's running. Reading or searching: a magnifying glass
+  // held out to her right, the handle in her hand.
+  magnifier: ['...XX.', '..XDDX', '..XDDX', '...XX.', '..N...', '.N....'],
+  // Editing: a hammer, raised, and striking the edge.
+  'hammer-up': ['XXX', 'XXX', '.N.', '.N.', '.N.'],
+  'hammer-down': ['N...', '.N..', '..XX', '..XX'],
+  // Running commands: a little terminal on the edge in front of her, its output scrolling, the cursor blinking.
+  'terminal-0': ['LLLLLLLLLL', 'LVVVVEEEEL', 'LVVEEEEEEL', 'LVEWEEEEEL', 'LLLLLLLLLL'],
+  'terminal-1': ['LLLLLLLLLL', 'LVVEEEEEEL', 'LVVVVVEEEL', 'LVEEEEEEEL', 'LLLLLLLLLL'],
+  'terminal-2': ['LLLLLLLLLL', 'LVVVVVEEEL', 'LVVVEEEEEL', 'LVEWEEEEEL', 'LLLLLLLLLL'],
+  // The web: a globe on a stand beside her, turning.
+  'globe-0': ['.DDD.', 'DVVDD', 'DDVVD', 'DDDVD', '.DDD.', '..X..', '.XXX.'],
+  'globe-1': ['.DDD.', 'DDVVD', 'DDDVV', 'VDDDV', '.DDD.', '..X..', '.XXX.'],
+  'globe-2': ['.DDD.', 'DDDVV', 'VDDDV', 'VVDDD', '.DDD.', '..X..', '.XXX.'],
+  // Plan mode: a clipboard she writes on.
+  clipboard: ['...XX...', 'NNNNNNNN', 'NWWWWWWN', 'NWZZZZWN', 'NWWWWWWN', 'NWZZZWWN', 'NNNNNNNN'],
+  // A long turn: a mug of coffee on the edge beside her, steaming.
+  'mug-0': ['Z.Z.', '.Z.Z', 'LLL.', 'LBLL', 'LLLL', 'LLL.'],
+  'mug-1': ['.Z.Z', 'Z.Z.', 'LLL.', 'LBLL', 'LLLL', 'LLL.'],
+  // The context nearly full: a drop of sweat.
+  sweat: ['D', 'D'],
+  // Compacting: a broom she sweeps the edge with.
+  broom: ['.N.', '.N.', '.N.', '.N.', '.N.', 'YYY', 'YYY'],
+  // A failed turn: stars going round her head.
+  star: ['.Y.', 'YYY', '.Y.'],
+  // Another tab needs the user: an arrow toward the sidebar.
+  arrow: ['..Z.', '.Z..', 'ZZZZ', '.Z..', '..Z.'],
+  // A file dropped on the composer, caught; and a huge paste, a heavy crate.
+  file: ['ZZZZ.', 'ZWWZZ', 'ZLLWZ', 'ZWWWZ', 'ZLLLZ', 'ZZZZZ'],
+  crate: ['NNNNNNNN', 'NBNNNNBN', 'NNBNNBNN', 'NNNBBNNN', 'NNBNNBNN', 'NBNNNNBN', 'NNNNNNNN'],
+  // A message sent: a paper plane she throws up into the conversation.
+  plane: ['Z....', 'ZWZ..', '.ZWWZ', '..ZZZ'],
+  // All of Claude's tasks done: confetti.
+  'confetti-y': ['Y'],
+  'confetti-r': ['R'],
+  'confetti-d': ['D'],
+  'confetti-v': ['V'],
+  'confetti-k': ['K'],
+  // Every changed file reviewed: a rubber stamp, and the check mark it leaves.
+  stamp: ['.NN.', '.NN.', 'NNNN', 'RRRR'],
+  check: ['.....V', '....VV', 'V..VV.', 'VVVV..', '.VV...'],
+  // Poked once too often: a storm cloud over her.
+  cloud: ['.ZZZ..', 'ZZZZZZ', '.ZZZZ.', '..Y...', '.Y....'],
+  // Sitting on the edge: her legs over the front of the box, swinging. Drawn in front of it.
+  'dangle-0': ['..O.O..O.O..', '..O.O..O.O..'],
+  'dangle-1': ['..O.O..O.O..', '..O.O.......'],
+  'dangle-2': ['..O.O..O.O..', '.......O.O..'],
   // The back of her laptop's lid, in front of her while she types.
   laptop: ['.LLLLLLLL.', '.LLLLLLLL.', '.LLLLLLLL.', 'BBBBBBBBBB'],
   // While a usage limit holds the task: a small hourglass whose sand runs down.
   'hourglass-0': ['XXXXX', '.SSS.', '..S..', '.GGG.', 'XXXXX'],
   'hourglass-1': ['XXXXX', '.GSG.', '..S..', '.GSG.', 'XXXXX'],
   'hourglass-2': ['XXXXX', '.GGG.', '..G..', '.SSS.', 'XXXXX'],
+};
+
+// What she wears on her head, drawn over her hair: `y` is the row of her sprite the hat's top row goes on (negative is
+// above her), `x` the column. A witch's hat for Halloween, Santa's in December, a nightcap late at night.
+const mascotHats = {
+  witch: { x: 0, y: -2, rows: ['.......P....', '......PP....', '.....PPP....', '....PPPP....', '...PYYYPP...', 'QQQQQQQQQQQQ'] },
+  santa: { x: 0, y: -2, rows: ['..........GG', '.......RRRGG', '.....RRRRR..', '...RRRRRRR..', '..GGGGGGGGG.'] },
+  nightcap: { x: 0, y: -2, rows: ['G...........', 'GDD.........', '.DDDDDD.....', '..DDDDDDD...', '..GGGGGGGGG.'] },
 };
 
 const mascotPalette = {
@@ -189,6 +250,14 @@ const mascotPalette = {
   X: '#8F8D86',
   G: tile,
   S: palette.O,
+  Y: '#E3B341', // gold: stars, confetti, a broom's bristles
+  D: '#5B9BD5', // blue: sweat, the sea, a nightcap
+  V: '#4CAF6A', // green: land, a terminal's output, the check mark
+  R: '#D2453C', // red: Santa's hat, a stamp's rubber, confetti
+  W: '#F5F4EF', // paper
+  N: '#8B5E3C', // wood: handles, a clipboard, a crate
+  P: '#7B5BB0', // a witch's hat, and its brim
+  Q: '#4B3470',
 };
 
 function mascotJson() {
@@ -202,6 +271,9 @@ function mascotJson() {
     '  },',
     '  "props": {',
     rows(mascotProps),
+    '  },',
+    '  "hats": {',
+    Object.entries(mascotHats).map(([name, hat]) => `    ${JSON.stringify(name)}: ${JSON.stringify(hat)}`).join(',\n'),
     '  }',
     '}',
     '',

@@ -75,11 +75,9 @@ public sealed partial class TabViewModel
             _recall.Reset();
         }
         DraftChanged();
-        // Typing wakes Claudette on the composer from a nap (DESIGN.md §5).
-        if (IsSelected)
-        {
-            _services.Mascot.Nudge();
-        }
+        // Typing wakes Claudette on the composer from a nap, and her name has her wave back (DESIGN.md §5).
+        TellMascot(mascot => mascot.Nudge());
+        GreetMascot(value);
     }
 
     /// <summary>The <c>/</c> and <c>@</c> popup.</summary>
@@ -178,6 +176,11 @@ public sealed partial class TabViewModel
             }
         }
         AttachmentError = errors.Count > 0 ? string.Join(" ", errors) : null;
+        if (errors.Count < paths.Count)
+        {
+            // Claudette on the composer catches it (DESIGN.md §5).
+            TellMascot(mascot => mascot.Caught());
+        }
         return mentions.Count > 0 ? string.Join(" ", mentions) + " " : null;
     }
 
@@ -215,7 +218,10 @@ public sealed partial class TabViewModel
         }
         if (await platform.GetClipboardImageAsync() is { } image)
         {
-            AddImage(image, "Pasted image");
+            if (AddImage(image, "Pasted image"))
+            {
+                TellMascot(mascot => mascot.Caught());
+            }
             return "";
         }
         return null;
@@ -257,6 +263,8 @@ public sealed partial class TabViewModel
     {
         PastedTexts.Add(new PastedTextAttachment(text));
         SendCommand.NotifyCanExecuteChanged();
+        // Claudette on the composer staggers under it (DESIGN.md §5).
+        TellMascot(mascot => mascot.HeavyPaste());
     }
 
     [RelayCommand]

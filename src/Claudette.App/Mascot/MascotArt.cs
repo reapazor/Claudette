@@ -10,6 +10,9 @@ public sealed record MascotSprite(IReadOnlyList<string> Rows)
     public int Height => Rows.Count;
 }
 
+/// <summary>A hat: its sprite, drawn over her with its top-left corner at column <see cref="X"/> and row <see cref="Y"/> of hers.</summary>
+public sealed record MascotHat(MascotSprite Sprite, int X, int Y);
+
 /// <summary>
 /// Claudette on the composer's poses and props (DESIGN.md §5). <c>packaging/icon/build-icons.mjs</c> draws them from
 /// the icon's sprite into <c>Assets/Mascot/mascot.json</c>, embedded as <c>Mascot.mascot.json</c>.
@@ -25,6 +28,9 @@ public static class MascotArt
     /// <summary>The palette letter drawn in the theme's muted text colour rather than one of its own.</summary>
     public const char ThemeColor = 'Z';
 
+    /// <summary>Her hair tie's letter, which takes the colour of the tab's group when it has one.</summary>
+    public const char HairTie = 'K';
+
     private static readonly Lazy<Art> Loaded = new(Load);
 
     /// <summary>Her poses, by name.</summary>
@@ -32,6 +38,9 @@ public static class MascotArt
 
     /// <summary>What she has with her: the z's, the laptop, the hourglass.</summary>
     public static IReadOnlyDictionary<string, MascotSprite> Props => Loaded.Value.Props;
+
+    /// <summary>What she wears on her head, by name.</summary>
+    public static IReadOnlyDictionary<string, MascotHat> Hats => Loaded.Value.Hats;
 
     /// <summary>Each palette letter's colour, as <c>#RRGGBB</c>.</summary>
     public static IReadOnlyDictionary<char, string> Palette => Loaded.Value.Palette;
@@ -42,6 +51,7 @@ public static class MascotArt
     private sealed record Art(
         IReadOnlyDictionary<string, MascotSprite> Poses,
         IReadOnlyDictionary<string, MascotSprite> Props,
+        IReadOnlyDictionary<string, MascotHat> Hats,
         IReadOnlyDictionary<char, string> Palette);
 
     private static Art Load()
@@ -53,12 +63,15 @@ public static class MascotArt
         return new Art(
             Sprites(root.GetProperty("poses")),
             Sprites(root.GetProperty("props")),
+            root.GetProperty("hats").EnumerateObject().ToDictionary(
+                p => p.Name,
+                p => new MascotHat(Sprite(p.Value.GetProperty("rows")), p.Value.GetProperty("x").GetInt32(), p.Value.GetProperty("y").GetInt32()),
+                StringComparer.Ordinal),
             root.GetProperty("palette").EnumerateObject().ToDictionary(p => p.Name[0], p => p.Value.GetString() ?? "#000000"));
     }
 
     private static Dictionary<string, MascotSprite> Sprites(JsonElement element) =>
-        element.EnumerateObject().ToDictionary(
-            p => p.Name,
-            p => new MascotSprite([.. p.Value.EnumerateArray().Select(row => row.GetString() ?? "")]),
-            StringComparer.Ordinal);
+        element.EnumerateObject().ToDictionary(p => p.Name, p => Sprite(p.Value), StringComparer.Ordinal);
+
+    private static MascotSprite Sprite(JsonElement rows) => new([.. rows.EnumerateArray().Select(row => row.GetString() ?? "")]);
 }

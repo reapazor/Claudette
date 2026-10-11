@@ -96,6 +96,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         RemoteControl = new RemoteControlViewModel(services, this);
         Perforce = new PerforceViewModel(services, this);
         Context = new ContextViewModel(services, this);
+        WatchForMascot();
         Agents = new AgentMap(services.Time, ModelDisplayName);
         Agents.Changed += OnAgentsChanged;
         Tasks = new RunningTasks(services.Time, Agents);
@@ -873,6 +874,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
         var suffixText = suffixes.Length > 0 ? string.Join("\n", suffixes) : null;
 
         ComposerText = "";
+        TellMascot(mascot => mascot.MessageSent());
         foreach (var chip in Chips.Where(c => !c.IsKept).ToArray())
         {
             Chips.Remove(chip);
@@ -1788,9 +1790,11 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
             case ElicitationCancelled withdrawn:
                 PermissionResolved(withdrawn.RequestId);
                 break;
-            case SystemNotice { Message.Subtype: "status" }:
+            case SystemNotice { Message.Subtype: "status" } status:
                 // Claude Code reports mode changes it makes itself, such as leaving plan mode.
                 PermissionMode = session.PermissionMode ?? PermissionMode;
+                // And when it's compacting the conversation: Claudette on the composer sweeps up (DESIGN.md §5).
+                SetCompacting(status.Message.Status?.IsCompacting == true);
                 break;
             case SystemNotice { Message.Subtype: "bridge_state" or "worker_shutting_down" } remote:
                 RemoteControl.OnNotice(remote.Message);
@@ -1816,11 +1820,14 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 if (!completed.Result.IsError)
                 {
                     NotifyTurnFinished(completed.Result);
-                    if (IsSelected)
-                    {
-                        _services.Mascot.TurnFinished();
-                    }
+                    TellMascot(mascot => mascot.TurnFinished());
                 }
+                else if (completed.Result.TerminalReason != "aborted_streaming")
+                {
+                    // A turn that failed, rather than one the user stopped.
+                    TellMascot(mascot => mascot.TurnFailed());
+                }
+                SetCompacting(false);
                 // Claude may have edited claudette.json or switched branches: the actions and links follow, and the badge.
                 _ = ProjectTools.RefreshFileAsync();
                 RefreshBranch();
@@ -1855,6 +1862,7 @@ public sealed partial class TabViewModel : ViewModelBase, IAsyncDisposable
                 break;
             case SessionExited exited:
                 _session = null;
+                SetCompacting(false);
                 _claudeName = null;
                 RemoteControl.Reset();
                 SetRunningVersion(null);

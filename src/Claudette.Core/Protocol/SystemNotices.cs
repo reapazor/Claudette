@@ -115,6 +115,18 @@ public sealed record CompactBoundaryNotice(string? Trigger)
         message.Subtype == "compact_boundary" ? new CompactBoundaryNotice(message.Raw.GetObject("compact_metadata")?.GetString("trigger")) : null;
 }
 
+/// <summary>
+/// <c>system/status</c>: what Claude Code is busy with. Its <c>status</c> is <c>compacting</c> while it compacts the
+/// conversation, and null once it's done.
+/// </summary>
+public sealed record StatusNotice(string? Status)
+{
+    public bool IsCompacting => Status == "compacting";
+
+    internal static StatusNotice? From(SystemMessage message) =>
+        message.Subtype == "status" ? new StatusNotice(message.Raw.GetString("status")) : null;
+}
+
 /// <summary>How much an informational notice matters (its <c>level</c>).</summary>
 public enum NoticeLevel
 {

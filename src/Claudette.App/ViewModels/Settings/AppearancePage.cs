@@ -19,6 +19,23 @@ public sealed record MotionChoice(MotionSetting Setting)
     };
 }
 
+/// <summary>Claudette's sizes in Settings → Appearance (DESIGN.md §5, "Claudette on the composer").</summary>
+public sealed record ClaudetteSizeChoice(ClaudetteSize Size)
+{
+    public override string ToString() => Size switch
+    {
+        ClaudetteSize.Small => "Small",
+        ClaudetteSize.Large => "Large",
+        _ => "Medium",
+    };
+}
+
+/// <summary>How often Claudette does something, in Settings → Appearance (DESIGN.md §5, "Claudette on the composer").</summary>
+public sealed record ClaudetteLivelinessChoice(ClaudetteLiveliness Liveliness)
+{
+    public override string ToString() => Liveliness == ClaudetteLiveliness.Calm ? "Calm: every 30 to 90 seconds" : "Lively: every 10 to 30 seconds";
+}
+
 /// <summary>Settings → Appearance → Zoom's steps (DESIGN.md §3, "Accessibility").</summary>
 public sealed record ZoomChoice(int Percent)
 {
@@ -47,6 +64,9 @@ public sealed class AppearancePage(SettingsContext context) : SettingsPage(conte
         Entry("Show git branch on tab rows"),
         Entry("Show task progress on tab rows"),
         Entry("Show Claudette on the composer"),
+        Entry("Claudette's size", pageText: "Size"),
+        Entry("How often Claudette does something", pageText: "How often"),
+        Entry("Claudette shares tips"),
         Entry("Density"),
         Entry("Full-width conversation"),
         Entry("Zoom"),
@@ -206,6 +226,33 @@ public sealed class AppearancePage(SettingsContext context) : SettingsPage(conte
     {
         get => Settings.Appearance.ShowClaudette;
         set => Set(value, v => Settings.Appearance.ShowClaudette = v);
+    }
+
+    public IReadOnlyList<ClaudetteSizeChoice> ClaudetteSizes { get; } =
+        [new(Core.Settings.ClaudetteSize.Small), new(Core.Settings.ClaudetteSize.Medium), new(Core.Settings.ClaudetteSize.Large)];
+
+    /// <summary>How big she is: 24, 36 or 48 pixels tall at 100%.</summary>
+    public ClaudetteSizeChoice ClaudetteSize
+    {
+        get => ClaudetteSizes.FirstOrDefault(c => c.Size == Settings.Appearance.ClaudetteSize) ?? ClaudetteSizes[1];
+        set => Set(value?.Size ?? Core.Settings.ClaudetteSize.Medium, v => Settings.Appearance.ClaudetteSize = v);
+    }
+
+    public IReadOnlyList<ClaudetteLivelinessChoice> ClaudetteLivelinesses { get; } =
+        [new(Core.Settings.ClaudetteLiveliness.Lively), new(Core.Settings.ClaudetteLiveliness.Calm)];
+
+    /// <summary>How often she does something.</summary>
+    public ClaudetteLivelinessChoice ClaudetteLiveliness
+    {
+        get => ClaudetteLivelinesses.FirstOrDefault(c => c.Liveliness == Settings.Appearance.ClaudetteLiveliness) ?? ClaudetteLivelinesses[0];
+        set => Set(value?.Liveliness ?? Core.Settings.ClaudetteLiveliness.Lively, v => Settings.Appearance.ClaudetteLiveliness = v);
+    }
+
+    /// <summary>She shares a tip now and then, such as a shortcut.</summary>
+    public bool ClaudetteTips
+    {
+        get => Settings.Appearance.ClaudetteTips;
+        set => Set(value, v => Settings.Appearance.ClaudetteTips = v);
     }
 
     /// <summary>The detailed usage header goes back to its default too, though it's kept with the machine's state.</summary>

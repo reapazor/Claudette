@@ -44,6 +44,20 @@
   <Style Selector="StackPanel.composerarea">
     <Setter Property="MaxWidth" Value="948" />
   </Style>
+  <!-- What Claudette on the composer says (DESIGN.md §5): a small bubble over her head. -->
+  <Style Selector="Border.mascotbubble">
+    <Setter Property="Background" Value="{DynamicResource ComposerBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="8,3" />
+    <Setter Property="MaxWidth" Value="280" />
+  </Style>
+  <Style Selector=".claude Border.mascotbubble">
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="BoxShadow" Value="0 1 6 0 #22000000" />
+  </Style>
   <Style Selector=".fullwidth ItemsControl#ConversationItems, .fullwidth StackPanel.column, .fullwidth StackPanel.composerarea">
     <Setter Property="MaxWidth" Value="Infinity" />
   </Style>

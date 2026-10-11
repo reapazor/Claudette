@@ -1,6 +1,6 @@
 {
   "_comment": "Drawn by packaging/icon/build-icons.mjs; change the poses there. Z is the theme's muted text colour.",
-  "palette": {"O":"#D77757","E":"#141413","H":"#A8492F","K":"#B8336A","L":"#8F8D86","B":"#5F5E59","X":"#8F8D86","G":"#F0EEE6","S":"#D77757"},
+  "palette": {"O":"#D77757","E":"#141413","H":"#A8492F","K":"#B8336A","L":"#8F8D86","B":"#5F5E59","X":"#8F8D86","G":"#F0EEE6","S":"#D77757","Y":"#E3B341","D":"#5B9BD5","V":"#4CAF6A","R":"#D2453C","W":"#F5F4EF","N":"#8B5E3C","P":"#7B5BB0","Q":"#4B3470"},
   "poses": {
     "stand": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OEOOOOEO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
     "blink": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOOOOOOO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
@@ -30,7 +30,10 @@
     "back": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..HHHHHHHH.H","..HHHHHHHH..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
     "yawn": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOEEOOO..","..OOOEEOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
     "achoo": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OOOOOOOO..","OOOOOEEOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
-    "tap": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OEOOOOEO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O...."]
+    "tap": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","..OOOOOOOO.H","..OEOOOOEO..","OOOOOOOOOOOO","OOOOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O...."],
+    "waveLookLeft": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","OOOOOOOOOO.H","OOEOOOOEOO..","..OOOOOOOOOO","..OOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "waveHighLookLeft": ["........HHH.",".......HHHHH","...HHHHKH.HH","OOHHHHHHH.HH","OOOOOOOOOO.H","..EOOOOEOO..","..OOOOOOOOOO","..OOOOOOOOOO","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."],
+    "carried": ["........HHH.",".......HHHHH","...HHHHKH.HH","..HHHHHHH.HH","OOOOOOOOOOOO","OOOEOOOOEOOO","..OOOOOOOO..","..OOOEEOOO..","..OOOOOOOO..","..OOOOOOOO..","..O.O..O.O..","..O.O..O.O.."]
   },
   "props": {
     "z": ["ZZZZ","..Z.",".Z..","ZZZZ"],
@@ -41,9 +44,44 @@
     "puff": [".ZZ.","ZZZZ",".ZZ."],
     "heart": [".K.K.","KKKKK",".KKK.","..K.."],
     "ball": ["KK","KK"],
+    "magnifier": ["...XX.","..XDDX","..XDDX","...XX.","..N...",".N...."],
+    "hammer-up": ["XXX","XXX",".N.",".N.",".N."],
+    "hammer-down": ["N...",".N..","..XX","..XX"],
+    "terminal-0": ["LLLLLLLLLL","LVVVVEEEEL","LVVEEEEEEL","LVEWEEEEEL","LLLLLLLLLL"],
+    "terminal-1": ["LLLLLLLLLL","LVVEEEEEEL","LVVVVVEEEL","LVEEEEEEEL","LLLLLLLLLL"],
+    "terminal-2": ["LLLLLLLLLL","LVVVVVEEEL","LVVVEEEEEL","LVEWEEEEEL","LLLLLLLLLL"],
+    "globe-0": [".DDD.","DVVDD","DDVVD","DDDVD",".DDD.","..X..",".XXX."],
+    "globe-1": [".DDD.","DDVVD","DDDVV","VDDDV",".DDD.","..X..",".XXX."],
+    "globe-2": [".DDD.","DDDVV","VDDDV","VVDDD",".DDD.","..X..",".XXX."],
+    "clipboard": ["...XX...","NNNNNNNN","NWWWWWWN","NWZZZZWN","NWWWWWWN","NWZZZWWN","NNNNNNNN"],
+    "mug-0": ["Z.Z.",".Z.Z","LLL.","LBLL","LLLL","LLL."],
+    "mug-1": [".Z.Z","Z.Z.","LLL.","LBLL","LLLL","LLL."],
+    "sweat": ["D","D"],
+    "broom": [".N.",".N.",".N.",".N.",".N.","YYY","YYY"],
+    "star": [".Y.","YYY",".Y."],
+    "arrow": ["..Z.",".Z..","ZZZZ",".Z..","..Z."],
+    "file": ["ZZZZ.","ZWWZZ","ZLLWZ","ZWWWZ","ZLLLZ","ZZZZZ"],
+    "crate": ["NNNNNNNN","NBNNNNBN","NNBNNBNN","NNNBBNNN","NNBNNBNN","NBNNNNBN","NNNNNNNN"],
+    "plane": ["Z....","ZWZ..",".ZWWZ","..ZZZ"],
+    "confetti-y": ["Y"],
+    "confetti-r": ["R"],
+    "confetti-d": ["D"],
+    "confetti-v": ["V"],
+    "confetti-k": ["K"],
+    "stamp": [".NN.",".NN.","NNNN","RRRR"],
+    "check": [".....V","....VV","V..VV.","VVVV..",".VV..."],
+    "cloud": [".ZZZ..","ZZZZZZ",".ZZZZ.","..Y...",".Y...."],
+    "dangle-0": ["..O.O..O.O..","..O.O..O.O.."],
+    "dangle-1": ["..O.O..O.O..","..O.O......."],
+    "dangle-2": ["..O.O..O.O..",".......O.O.."],
     "laptop": [".LLLLLLLL.",".LLLLLLLL.",".LLLLLLLL.","BBBBBBBBBB"],
     "hourglass-0": ["XXXXX",".SSS.","..S..",".GGG.","XXXXX"],
     "hourglass-1": ["XXXXX",".GSG.","..S..",".GSG.","XXXXX"],
     "hourglass-2": ["XXXXX",".GGG.","..G..",".SSS.","XXXXX"]
+  },
+  "hats": {
+    "witch": {"x":0,"y":-2,"rows":[".......P....","......PP....",".....PPP....","....PPPP....","...PYYYPP...","QQQQQQQQQQQQ"]},
+    "santa": {"x":0,"y":-2,"rows":["..........GG",".......RRRGG",".....RRRRR..","...RRRRRRR..","..GGGGGGGGG."]},
+    "nightcap": {"x":0,"y":-2,"rows":["G...........","GDD.........",".DDDDDD.....","..DDDDDDD...","..GGGGGGGGG."]}
   }
 }

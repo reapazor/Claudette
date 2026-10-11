@@ -1,16 +1,13 @@
 using Claudette.App.Mascot;
-using Claudette.App.Services;
 using Claudette.App.Tests.Support;
 using Claudette.App.ViewModels;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Claudette.App.Tests;
 
 /// <summary>Claudette on the composer (DESIGN.md §5): what she does, and when.</summary>
 public class MascotTests
 {
-    /// <summary>Room to walk either side of her home, which is over the Send button.</summary>
-    private static readonly MascotRoom Room = new(10, 70, Home: 50);
+    private static readonly MascotRoom Room = MascotStage.DefaultRoom;
 
     [Fact]
     public void Her_poses_and_props_come_from_the_icon_scripts_sprite()
@@ -45,7 +42,7 @@ public class MascotTests
     [Fact]
     public void She_climbs_up_from_behind_the_box_when_first_shown_and_then_stands_on_its_edge()
     {
-        using var stage = new Stage();
+        using var stage = new MascotStage();
         Assert.False(stage.Frame.IsVisible);
 
         stage.Show();
@@ -74,7 +71,7 @@ public class MascotTests
     [Fact]
     public void She_stays_in_her_room_tends_to_go_back_home_and_waits_ten_to_thirty_seconds_between_the_things_she_does()
     {
-        using var stage = new Stage(seed: 7);
+        using var stage = new MascotStage(seed: 7);
         stage.Show();
         var idle = new HashSet<string> { "stand", "blink" };
         TimeSpan? calmSince = null;
@@ -112,7 +109,7 @@ public class MascotTests
         }
 
         Assert.True(calmSpells.Count > 60, $"only {calmSpells.Count} things in two hours");
-        Assert.All(calmSpells, spell => Assert.InRange(spell, MascotDirector.ShortestCalm - TimeSpan.FromSeconds(1), MascotDirector.LongestCalm + TimeSpan.FromSeconds(1)));
+        Assert.All(calmSpells, spell => Assert.InRange(spell, MascotSpell.Lively.Shortest - TimeSpan.FromSeconds(1), MascotSpell.Lively.Longest + TimeSpan.FromSeconds(1)));
         Assert.Superset(new HashSet<string> { "lookLeft", "lean", "stretch", "wave", "armsUp", "lookDown", "climb", "waveRight", "back", "yawn", "tap", "achoo" }, poses);
         Assert.Superset(new HashSet<string> { "ball", "heart", "question", "puff" }, stage.Frames.SelectMany(f => f.Frame.Props).Select(p => p.Name).ToHashSet());
         Assert.Contains(poses, p => p.StartsWith("walk", StringComparison.Ordinal));
@@ -124,7 +121,7 @@ public class MascotTests
     [Fact]
     public void Falling_off_on_her_own_happens_at_most_every_three_minutes()
     {
-        using var stage = new Stage(seed: 11);
+        using var stage = new MascotStage(seed: 11);
         stage.Show();
         for (var minute = 0; minute < 120; minute++)
         {
@@ -142,7 +139,7 @@ public class MascotTests
     [Fact]
     public void With_no_room_on_the_edge_she_ducks_behind_the_box_until_there_is()
     {
-        using var stage = new Stage();
+        using var stage = new MascotStage();
         stage.Show();
         stage.Run(TimeSpan.FromSeconds(5));
         var x = stage.Frame.X;
@@ -164,7 +161,7 @@ public class MascotTests
     [Fact]
     public void Too_narrow_a_room_is_no_room_and_a_smaller_one_moves_her_into_it()
     {
-        using var stage = new Stage();
+        using var stage = new MascotStage();
         stage.Show(new MascotRoom(60, 100, Home: 80));
         stage.Run(TimeSpan.FromSeconds(5));
 
@@ -179,7 +176,7 @@ public class MascotTests
     [Fact]
     public void A_poke_startles_her_and_a_second_one_straight_after_tips_her_off_the_edge_to_climb_back_up()
     {
-        using var stage = new Stage();
+        using var stage = new MascotStage();
         stage.Show();
         stage.Run(TimeSpan.FromSeconds(5));
 
@@ -205,7 +202,7 @@ public class MascotTests
     [Fact]
     public void She_types_while_Claude_works_waves_while_a_prompt_waits_dozes_at_a_limit_and_hops_when_a_turn_finishes()
     {
-        using var stage = new Stage();
+        using var stage = new MascotStage();
         stage.Show();
         stage.Run(TimeSpan.FromSeconds(5));
 
@@ -239,13 +236,13 @@ public class MascotTests
         from = stage.Frames.Count;
         stage.Director.SetMood(MascotMood.Idle);
         stage.Run(TimeSpan.FromSeconds(2));
-        Assert.Contains(stage.Frames.Skip(from), f => f.Frame is { Pose: "armsUp", Drop: -2 });
+        Assert.Contains(stage.Frames.Skip(from), f => f.Frame is { Pose: "armsUp", Drop: < -1.5 });
     }
 
     [Fact]
     public void After_five_quiet_minutes_she_naps_and_typing_wakes_her()
     {
-        using var stage = new Stage(seed: 5);
+        using var stage = new MascotStage(seed: 5);
         stage.Show();
         stage.Run(MascotDirector.NapAfter + TimeSpan.FromMinutes(2), TimeSpan.FromMilliseconds(50));
         Assert.Equal("leanBlink", stage.Frame.Pose);
@@ -260,7 +257,7 @@ public class MascotTests
     [Fact]
     public void With_motion_reduced_she_stands_still_in_the_pose_for_the_tabs_mood()
     {
-        using var stage = new Stage();
+        using var stage = new MascotStage();
         stage.Director.SetStill(true);
         stage.Show();
 
@@ -291,7 +288,7 @@ public class MascotTests
     [Fact]
     public void Out_of_sight_nothing_ticks_and_she_moves_while_any_view_shows_her()
     {
-        using var stage = new Stage();
+        using var stage = new MascotStage();
         var other = new object();
         stage.Show();
         stage.Director.SetShown(other, true);
@@ -345,61 +342,5 @@ public class MascotTests
         h.Transport.Emit("""{"type":"result","subtype":"success","is_error":false,"session_id":"s1","result":"Done.","duration_ms":10,"num_turns":1}""");
         await TabTestHarness.Eventually(() => tab.Status == TabStatus.Idle);
         Assert.Equal(MascotMood.Idle, director.Mood);
-    }
-
-    /// <summary>Her director on a fake clock, with every frame she shows and when.</summary>
-    private sealed class Stage : IDisposable
-    {
-        private readonly DateTimeOffset _start;
-
-        public Stage(int seed = 1)
-        {
-            _start = Time.GetUtcNow();
-            Director = new MascotDirector(Time, new Immediately(), new Random(seed));
-            Director.PropertyChanged += (_, e) =>
-            {
-                if (e.PropertyName == nameof(MascotDirector.Frame))
-                {
-                    Frames.Add((Time.GetUtcNow() - _start, Director.Frame));
-                }
-            };
-        }
-
-        public FakeTimeProvider Time { get; } = new(DateTimeOffset.Parse("2026-10-10T12:00:00Z"));
-
-        public MascotDirector Director { get; }
-
-        public object View { get; } = new();
-
-        public List<(TimeSpan At, MascotFrame Frame)> Frames { get; } = [];
-
-        public MascotFrame Frame => Director.Frame;
-
-        public void Show(MascotRoom? room = null)
-        {
-            Director.SetRoom(room ?? Room);
-            Director.SetShown(View, true);
-        }
-
-        public void Run(TimeSpan span, TimeSpan? step = null, Action? each = null)
-        {
-            var by = step ?? TimeSpan.FromMilliseconds(10);
-            for (var t = TimeSpan.Zero; t < span; t += by)
-            {
-                Time.Advance(by);
-                each?.Invoke();
-            }
-        }
-
-        public void Dispose() => Director.Dispose();
-    }
-
-    /// <summary>
-    /// Runs what's posted straight away. The fake clock fires her timers on the test's own thread, so she needs no UI
-    /// thread, and two simulated hours don't hold up other tests on the one <see cref="InlineDispatcher"/> shares.
-    /// </summary>
-    private sealed class Immediately : IUiDispatcher
-    {
-        public void Post(Action action) => action();
     }
 }

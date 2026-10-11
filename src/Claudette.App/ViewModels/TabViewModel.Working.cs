@@ -67,6 +67,8 @@ public sealed partial class TabViewModel
         {
             (string Name, JsonObject Input)[] running = [.. _runningTools.Select(t => (t.Name, t.Input))];
             Working.SetActivity(ToolActivity.Describe(running), ToolActivity.Details(running));
+            // What Claudette on the composer works with goes by the newest tool (DESIGN.md §5).
+            TellMascot();
         }
     }
 
